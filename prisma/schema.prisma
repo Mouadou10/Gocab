@@ -1,0 +1,39 @@
+// GoCab CRM — Prisma Schema
+// Defines the Lead pipeline and Blacklist models for the Kanban CRM.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// The four Kanban columns a lead progresses through.
+enum BoardColumn {
+  NEW_LEADS
+  BRAND_PRE_FILTER
+  TRAINING_PIPELINE
+  VEHICLE_ASSIGNMENT
+}
+
+/// A prospective driver lead flowing through the onboarding pipeline.
+model Lead {
+  id              String      @id @default(uuid())
+  raw_name        String
+  sanitized_phone String      @unique
+  campaign_source String
+  board_column    BoardColumn @default(NEW_LEADS)
+  brand_status    String?
+  training_status String?
+  reminder_date   DateTime?
+  created_at      DateTime    @default(now())
+}
+
+/// Phone numbers permanently excluded from the pipeline.
+model Blacklist {
+  id              String @id @default(uuid())
+  sanitized_phone String @unique
+  reason          String
+}
