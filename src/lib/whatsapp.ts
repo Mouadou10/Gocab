@@ -1,23 +1,33 @@
 /**
  * WhatsApp URL Helpers
  *
- * Generates wa.me deep-links with pre-filled Arabic messages
+ * Generates wa.me deep-links with pre-filled messages
  * for training invitations and post-acceptance thank-you notes.
  */
 
+const DEFAULT_INVITE_TEMPLATE =
+  "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time}.\nنتطلع للقائكم في GoCab.\nشكراً لكم.";
+
 /**
- * Generates a WhatsApp invitation URL with session time based on day of week.
- * - Monday–Thursday → 3:00 PM
- * - Friday → 11:00 AM
+ * Generates a WhatsApp invitation URL with custom template.
+ * Substitutes {name}, {date}, and {time}.
+ * - Monday–Thursday → 3:00 PM (3:00 مساءً)
+ * - Friday → 11:00 AM (11:00 صباحاً)
  *
- * @param phone - Sanitized phone number (e.g., "+212612345678")
- * @param date  - The training session date
- * @returns     - Full wa.me URL with encoded Arabic message
+ * @param phone    - Sanitized phone number (e.g., "+212612345678")
+ * @param name     - Lead raw name
+ * @param date     - The training session date
+ * @param template - Custom template string from settings
+ * @returns        - Full wa.me URL with encoded message
  */
-export function generateTrainingInviteURL(phone: string, date: Date): string {
+export function generateTrainingInviteURL(
+  phone: string,
+  name: string,
+  date: Date,
+  template?: string
+): string {
   const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
   const isFriday = dayOfWeek === 5;
-  const sessionTime = isFriday ? "11:00" : "15:00";
   const sessionLabel = isFriday ? "11:00 صباحاً" : "3:00 مساءً";
 
   // Format the date as DD/MM/YYYY
@@ -27,11 +37,12 @@ export function generateTrainingInviteURL(phone: string, date: Date): string {
     year: "numeric",
   });
 
-  const message =
-    `السلام عليكم،\n` +
-    `تم تأكيد موعد التدريب الخاص بكم يوم ${formattedDate} على الساعة ${sessionLabel}.\n` +
-    `نتطلع للقائكم في GoCab.\n` +
-    `شكراً لكم.`;
+  const activeTemplate = template || DEFAULT_INVITE_TEMPLATE;
+
+  const message = activeTemplate
+    .replace(/{name}/g, name)
+    .replace(/{date}/g, formattedDate)
+    .replace(/{time}/g, sessionLabel);
 
   // Strip the "+" for wa.me format
   const cleanPhone = phone.replace("+", "");

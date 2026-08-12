@@ -8,7 +8,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { BoardColumn } from "@prisma/client";
 
 export async function PATCH(
   request: NextRequest,
@@ -20,14 +19,20 @@ export async function PATCH(
 
     // Build the update payload from provided fields
     const updateData: {
-      board_column?: BoardColumn;
+      board_column?: string;
       brand_status?: string;
       training_status?: string;
       reminder_date?: Date | null;
+      preorder_amount?: number | null;
+      city?: string | null;
+      has_cin?: boolean;
+      has_fiche_anthropometrique?: boolean;
+      has_confirmation_adresse?: boolean;
+      has_permis?: boolean;
     } = {};
 
     if (body.board_column !== undefined) {
-      updateData.board_column = body.board_column as BoardColumn;
+      updateData.board_column = body.board_column as string;
     }
     if (body.brand_status !== undefined) {
       updateData.brand_status = body.brand_status;
@@ -39,6 +44,35 @@ export async function PATCH(
       updateData.reminder_date = body.reminder_date
         ? new Date(body.reminder_date)
         : null;
+    }
+    if (body.preorder_amount !== undefined) {
+      updateData.preorder_amount = body.preorder_amount !== null 
+        ? Number(body.preorder_amount) 
+        : null;
+    }
+    if (body.city !== undefined) {
+      updateData.city = body.city;
+    }
+    if (body.has_cin !== undefined) {
+      updateData.has_cin = Boolean(body.has_cin);
+    }
+    if (body.has_fiche_anthropometrique !== undefined) {
+      updateData.has_fiche_anthropometrique = Boolean(body.has_fiche_anthropometrique);
+    }
+    if (body.has_confirmation_adresse !== undefined) {
+      updateData.has_confirmation_adresse = Boolean(body.has_confirmation_adresse);
+    }
+    if (body.has_permis !== undefined) {
+      updateData.has_permis = Boolean(body.has_permis);
+    }
+
+    // If the lead is being moved out of NEW_LEADS, stamp when it happened
+    if (updateData.board_column && updateData.board_column !== 'NEW_LEADS') {
+      // Check if the lead is currently in NEW_LEADS before stamping
+      const currentLead = await prisma.lead.findUnique({ where: { id }, select: { board_column: true, status_changed_at: true } });
+      if (currentLead && currentLead.board_column === 'NEW_LEADS') {
+        (updateData as any).status_changed_at = new Date();
+      }
     }
 
     const updatedLead = await prisma.lead.update({

@@ -119,14 +119,13 @@ export async function POST(request: NextRequest) {
     // Bulk insert
     let insertedCount = 0;
     if (uniqueLeads.length > 0) {
-      const result = await prisma.lead.createMany({
+       const result = await prisma.lead.createMany({
         data: uniqueLeads.map((lead) => ({
           raw_name: lead.raw_name,
           sanitized_phone: lead.sanitized_phone,
           campaign_source: lead.campaign_source,
           board_column: "NEW_LEADS" as const,
         })),
-        skipDuplicates: true,
       });
       insertedCount = result.count;
     }

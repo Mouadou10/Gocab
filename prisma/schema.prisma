@@ -1,34 +1,193 @@
-// GoCab CRM — Prisma Schema
-// Defines the Lead pipeline and Blacklist models for the Kanban CRM.
+// GoCab CRM — Prisma Schema (SQLite Version)
+// Defines Lead pipeline, Blacklist, Vehicle Fleet, and Setting models.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-/// The four Kanban columns a lead progresses through.
-enum BoardColumn {
-  NEW_LEADS
-  BRAND_PRE_FILTER
-  TRAINING_PIPELINE
-  VEHICLE_ASSIGNMENT
+  provider = "sqlite"
 }
 
 /// A prospective driver lead flowing through the onboarding pipeline.
 model Lead {
-  id              String      @id @default(uuid())
-  raw_name        String
-  sanitized_phone String      @unique
-  campaign_source String
-  board_column    BoardColumn @default(NEW_LEADS)
-  brand_status    String?
-  training_status String?
-  reminder_date   DateTime?
-  created_at      DateTime    @default(now())
+  id                         String    @id @default(uuid())
+  raw_name                   String
+  sanitized_phone            String    @unique
+  campaign_source            String
+  board_column               String    @default("NEW_LEADS") // NEW_LEADS, BRAND_PRE_FILTER, TRAINING_PIPELINE, VEHICLE_ASSIGNMENT
+  brand_status               String?
+  training_status            String?
+  reminder_date              DateTime?
+  preorder_amount            Float?    // Amount given as preorder of the vehicle
+  city                       String?   // Moroccan city (Casablanca, Rabat, etc.)
+  has_cin                    Boolean   @default(false)
+  has_fiche_anthropometrique Boolean   @default(false)
+  has_confirmation_adresse   Boolean   @default(false)
+  has_permis                 Boolean   @default(false)
+  status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @default(now()) @updatedAt
+}
+
+/// A physical vehicle asset in the GoCab fleet.
+model Vehicle {
+  id                          String    @id @default(uuid())
+  plate_number                String    @unique // e.g. "12345-A-6"
+  make_model                  String    // e.g. "Dacia Logan 1.5 dCi"
+  year                        Int       // e.g. 2023
+  vin                         String?   // Financial & Maintenance
+  current_mileage             Int       @default(0) // Odometer KM (for vidange tracking)
+  total_downtime_days         Int       @default(0)
+  hub_city                    String    // Casablanca, Rabat, Marrakech, Tangier, Agadir
+  status                      String    @default("Available") // Available, Actif, In garage, In service, Accident, impounded by police
+  
+  // Regulatory & Compliance Expirations
+  insurance_expiry_date       DateTime? // Insurance Expiration Date
+  insurance_policy_number     String?   // Insurance Policy Number
+  vignette_expiry_date        DateTime? // Annual Vignette Tax Expiration / Due Date
+  autorisation_expiry_date    DateTime? // Autorisation de Circulation Expiration
+  technical_inspection_expiry DateTime? // Visite Technique Expiration
+  
+  assigned_driver_name        String?   // Driver name if assigned
+  assigned_driver_phone       String?   // Driver phone if assigned
+  
+  // Staff Assignment — each supervisor handles ~150 vehicles
+  assigned_supervisor         String?   // Field Supervisor name responsible for this vehicle
+  assigned_collector          String?   // Fleet Performance agent who collects cash for this vehicle
+  
+  notes                       String?   // Fleet operational notes
+  
+  // New Fields from VehicleAsset (Dashboard Spec)
+  isInsuranceActive Boolean   @default(false)
+  lastVidangeOdoKM  Int       @default(0)
+  adBlueLevelPct    Int       @default(100)
+  isGpsConnected    Boolean   @default(true)
+  lastGpsPing       DateTime  @default(now())
+  
+  // Relations to new Command Dashboard models
+  driverProfile     DriverProfile?
+  supportTickets    SupportTicket[]
+  fieldInspections  FieldInspectionNew[]
+  accidentClaims    AccidentClaim[]
+  
+  created_at                  DateTime  @default(now())
+  updated_at                  DateTime  @updatedAt
+}
+
+/// A driver support / fleet maintenance ticket (Vidange, AdBleu, Repair, Accident).
+model MaintenanceTicket {
+  id             String    @id @default(uuid())
+  vehicle_id     String
+  plate_number   String
+  driver_name    String?
+  driver_phone   String?
+  ticket_type    String    // Vidange, AdBleu, Repair, Accident
+  description    String
+  status         String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CANCELLED
+  priority       String    @default("Normal") // Normal, Urgent, Critical
+  
+  // Field Supervisor handoff status
+  field_status   String?   // null, READY_FOR_PICKUP, PICKED_UP, COMPLETED
+  
+  // Fleet Performance Payment Waiver Tool
+  payment_waived Boolean   @default(false)
+  waived_days    Float     @default(0.0)
+  waiver_reason  String?
+  
+  // Repair Financials & Tracking
+  repair_cost    Float?
+  garage_name    String?
+  resolution_notes String?
+  
+  created_at     DateTime  @default(now())
+  resolved_at    DateTime?
+  updated_at     DateTime  @updatedAt
+}
+
+/// Daily cash collection summary — one entry per collector per day.
+/// The Fleet Performance agent writes the total expected in the morning,
+/// and the total collected at end of day.
+model DailyCollection {
+  id                   String    @id @default(uuid())
+  date                 DateTime  // The business day
+  collector_name       String    // Fleet Performance agent name
+  expected_total       Float     // Total MAD expected to collect today
+  collected_total      Float     @default(0.0) // Total MAD actually collected
+  notes                String?   // Daily notes
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+}
+
+/// Individual driver payment cancellation — tracked per driver per day.
+model PaymentCancellation {
+  id               String    @id @default(uuid())
+  date                 DateTime  // The business day
+  driver_name      String
+  driver_phone     String?
+  plate_number     String?
+  vehicle_id       String?
+  reason           String    // Manual reason or "Auto: Vidange/AdBleu >5h downtime"
+  linked_ticket_id String?   // If triggered by a maintenance ticket
+  auto_waiver      Boolean   @default(false) // True if system-flagged (>5h Vidange/AdBleu)
+  approved         Boolean   @default(false) // True when Fleet Performance approves
+  collection_id    String?   // Link to the DailyCollection record
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+}
+
+/// Field Supervisor work items — vehicle recovery, garage pickup, monthly checkups.
+model FieldTask {
+  id               String    @id @default(uuid())
+  task_type        String    // VEHICLE_RECOVERY, MONTHLY_CHECKUP, GARAGE_PICKUP
+  vehicle_id       String?
+  plate_number     String?
+  driver_name      String?
+  driver_phone     String?
+  description      String
+  status           String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED
+  priority         String    @default("Normal") // Normal, Urgent, Critical
+  failure_reason   String?
+  linked_ticket_id String?   // Which ticket generated this?
+  
+  assigned_to      String?   // ID of Field Supervisor (simplified string for now) this task
+  due_date         DateTime? // For monthly checkups
+  completed_at     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+}
+
+/// Monthly mechanical inspection report for a vehicle — scored checklist.
+/// Each checkpoint is rated 1-5 (1=Critical, 5=Excellent).
+/// Overall health_score is averaged from all checkpoints.
+model VehicleInspection {
+  id               String    @id @default(uuid())
+  vehicle_id       String
+  plate_number     String
+  inspector_name   String    // Field Supervisor who performed the inspection
+  inspection_date  DateTime  @default(now())
+  current_mileage  Int       @default(0) // Odometer at time of inspection
+
+  // Mechanical Checkpoints (1-5 scale: 1=Critical, 2=Poor, 3=Fair, 4=Good, 5=Excellent)
+  brakes_score           Int    @default(0) // Brake pads, discs, fluid
+  tires_score            Int    @default(0) // Tread depth, pressure, condition
+  engine_score           Int    @default(0) // Engine noise, performance, leaks
+  oil_level_score        Int    @default(0) // Oil level, color, viscosity
+  lights_score           Int    @default(0) // Headlights, tail, indicators, brake lights
+  suspension_score       Int    @default(0) // Shocks, springs, ride comfort
+  body_condition_score   Int    @default(0) // Dents, scratches, rust, paint
+  interior_score         Int    @default(0) // Seats, dashboard, AC, cleanliness
+  battery_score          Int    @default(0) // Battery health, terminals
+  exhaust_score          Int    @default(0) // Exhaust system, emissions (AdBleu)
+
+  // Computed overall score (average of all checkpoints)
+  health_score           Float  @default(0.0) // Average 1-5
+  previous_health_score  Float  @default(0.0) // Last month's score for comparison
+
+  notes                  String? // Inspector remarks, issues found
+  linked_task_id         String? // Link to the MONTHLY_CHECKUP FieldTask
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
 }
 
 /// Phone numbers permanently excluded from the pipeline.
@@ -36,4 +195,121 @@ model Blacklist {
   id              String @id @default(uuid())
   sanitized_phone String @unique
   reason          String
+}
+
+/// System settings stored in the database.
+model Setting {
+  key   String @id
+  value String
+}
+
+// --- NEW COMMAND DASHBOARD MODELS ---
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  fullName      String
+  role          String   // e.g. DIRECTOR_OF_OPS, BRAND_MANAGER, FIELD_SUPERVISOR...
+  region        String   // e.g. CASABLANCA_HQ, CASABLANCA_HUB...
+  assignedCars  Int      @default(0)
+  created_at    DateTime @default(now())
+
+  tickets       SupportTicket[]
+  inspections   FieldInspectionNew[]
+}
+
+model DriverProfile {
+  id                String        @id @default(uuid())
+  cinNumber         String        @unique
+  fullName          String
+  phoneSanitized    String        @unique
+  age               Int
+  licenseSeniority  Int           
+  isKycVerified     Boolean       @default(false)
+  contractType      String        
+  monthlyTripCount  Int           @default(0)
+  currentArrearsMAD Float         @default(0.00) // Changed from Decimal to Float for SQLite
+  defaultStage      String        @default("NOMINAL") // NOMINAL, DAY_1_WARNING...
+  
+  assignedVehicleId String?       @unique
+  assignedVehicle   Vehicle?      @relation(fields: [assignedVehicleId], references: [id])
+  
+  tickets           SupportTicket[]
+  payments          PaymentLedger[]
+  accidentClaims    AccidentClaim[]
+}
+
+model SupportTicket {
+  id           String    @id @default(uuid())
+  ticketNumber String    @unique
+  category     String    
+  status       String    @default("OPEN")
+  description  String
+  
+  driverId     String
+  driver       DriverProfile @relation(fields: [driverId], references: [id])
+  
+  vehicleId    String
+  vehicle      Vehicle       @relation(fields: [vehicleId], references: [id])
+  
+  assignedToId String?
+  assignedTo   User?         @relation(fields: [assignedToId], references: [id])
+  
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+}
+
+model FieldInspectionNew {
+  id            String    @id @default(uuid())
+  vehicleId     String
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id])
+  
+  inspectorId   String
+  inspector     User      @relation(fields: [inspectorId], references: [id])
+  
+  vcrData       String    // Changed from Json to String for SQLite
+  odometerRead  Int
+  inspectedAt   DateTime  @default(now())
+}
+
+model PaymentLedger {
+  id            String        @id @default(uuid())
+  driverId      String
+  driver        DriverProfile @relation(fields: [driverId], references: [id])
+  
+  expectedMAD   Float
+  clearedMAD    Float
+  loggedAt      DateTime      @default(now())
+}
+
+model WeeklyObjective {
+  id          String   @id @default(uuid())
+  weekStart   DateTime
+  role        String   // e.g., "FIELD_SUPERVISOR", "BRAND_MANAGER"
+  region      String?  // Optional region targeting
+  metricKey   String   // Identifier for the KPI
+  targetValue Float    // Numerical target
+  createdAt   DateTime @default(now())
+}
+
+
+
+model AccidentClaim {
+  id                String    @id @default(uuid())
+  vehicle_id        String
+  vehicle           Vehicle   @relation(fields: [vehicle_id], references: [id])
+  
+  driver_id         String?
+  driver            DriverProfile? @relation(fields: [driver_id], references: [id])
+  driver_name       String?
+  driver_phone      String?
+  
+  severity          String?   // HARD, SOFT
+  fault             String?   // DRIVER, THIRD_PARTY
+  
+  timeline_step     String    @default("NEW_ACCIDENT") // NEW_ACCIDENT, CAR_IN_GARAGE, STARTING_REPAIR, INSURANCE_DOCS, READY_FOR_PICKUP, VEHICLE_BACK
+  step_updated_at   DateTime  @default(now())
+  
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
 }

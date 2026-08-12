@@ -8,10 +8,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const leads = await prisma.lead.findMany({
-      orderBy: { created_at: "desc" },
+      orderBy: { created_at: "asc" },
     });
 
     return NextResponse.json({ leads });
