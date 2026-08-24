@@ -30,6 +30,10 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  // Eligibility guardrail fields
+  age?: number | null;
+  permis_seniority_years?: number | null;
+  is_resident?: boolean | null;
 }
 
 interface LeadCardProps {
@@ -61,6 +65,14 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
     lead.has_confirmation_adresse,
     lead.has_permis,
   ].filter(Boolean).length;
+
+  // Eligibility guardrail violations — show lock badge on card
+  const guardrailViolations: string[] = [];
+  if (lead.age != null && lead.age < 22) guardrailViolations.push(`Age ${lead.age} (min 22)`);
+  if (lead.permis_seniority_years != null && lead.permis_seniority_years < 2)
+    guardrailViolations.push(`Permis ${lead.permis_seniority_years}yr (min 2)`);
+  if (lead.is_resident === false) guardrailViolations.push("Non-resident");
+  const isEligibilityBlocked = guardrailViolations.length > 0;
 
   return (
     <div
@@ -141,6 +153,18 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
           }`}>
             <span>📁</span> KYC Check: {kycCount}/4
           </p>
+        )}
+
+        {/* Eligibility lock badge */}
+        {isEligibilityBlocked && (
+          <div className="flex items-start gap-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
+            <span className="text-[10px]">🔒</span>
+            <div>
+              {guardrailViolations.map((v, i) => (
+                <p key={i} className="text-[9px] text-red-600 font-semibold leading-tight">{v}</p>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Reminder indicator */}

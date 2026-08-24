@@ -14,6 +14,7 @@ import {
   Cell,
 } from "recharts";
 import { LayoutDashboard, Users, Car, Wrench, ShieldAlert } from "lucide-react";
+import OpsTargetAlertsBanner from "./OpsTargetAlertsBanner";
 
 export default function DashboardView() {
   const [stats, setStats] = useState<any>(null);
@@ -94,15 +95,20 @@ export default function DashboardView() {
     <div className="flex flex-col gap-6 animate-fade-in max-w-[1400px] mx-auto w-full pb-10">
       
       {/* Header */}
-      <div className="flex items-center gap-3 mb-2">
-        <div className="p-3 bg-white rounded-2xl shadow-sm border border-gray-100">
-          <LayoutDashboard className="w-6 h-6 text-navy" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Executive Dashboard</h2>
-          <p className="text-sm text-gray-500 font-medium">Overview of GoCab operational performance</p>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <LayoutDashboard className="w-6 h-6 text-navy" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Executive Dashboard</h2>
+            <p className="text-sm text-gray-500 font-medium">Overview of GoCab operational performance across 3 pillars</p>
+          </div>
         </div>
       </div>
+
+      {/* Automated Target vs Actual Alerts & Weekly Report Strip */}
+      <OpsTargetAlertsBanner />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

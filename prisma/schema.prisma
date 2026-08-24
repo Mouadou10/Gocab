@@ -26,6 +26,12 @@ model Lead {
   has_confirmation_adresse   Boolean   @default(false)
   has_permis                 Boolean   @default(false)
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
+  
+  // Eligibility Guardrails (Strict Eligibility per Ops Structure)
+  age                        Int?      // Must be 22+
+  permis_seniority_years     Int?      // Must be 2+ years
+  is_resident                Boolean?  // Non-residents strictly blocked
+  
   created_at                 DateTime  @default(now())
   updated_at                 DateTime  @default(now()) @updatedAt
 }
@@ -89,6 +95,10 @@ model MaintenanceTicket {
   
   // Field Supervisor handoff status
   field_status   String?   // null, READY_FOR_PICKUP, PICKED_UP, COMPLETED
+  
+  // 24-Hour SLA Tracking (Driver Support KPI: 95% resolution within 24h)
+  sla_deadline   DateTime? // Auto-set to createdAt + 24h on creation
+  sla_breached   Boolean   @default(false) // True when deadline passed and still OPEN
   
   // Fleet Performance Payment Waiver Tool
   payment_waived Boolean   @default(false)
@@ -208,11 +218,15 @@ model Setting {
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
+  name          String   // Display name shown in UI header
   fullName      String
-  role          String   // e.g. DIRECTOR_OF_OPS, BRAND_MANAGER, FIELD_SUPERVISOR...
-  region        String   // e.g. CASABLANCA_HQ, CASABLANCA_HUB...
+  role          String   // LEAD_ACQUISITION_JR | FLEET_PERF_MANAGER | FIELD_SUPERVISOR | FINANCE_OFFICER | OPS_MANAGER | ADMIN
+  region        String   @default("CASABLANCA") // e.g. CASABLANCA, RABAT
   assignedCars  Int      @default(0)
-  created_at    DateTime @default(now())
+  passwordHash        String?  // bcrypt hash — set during seed, changeable via admin panel
+  mustChangePassword  Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  created_at          DateTime @default(now())
 
   tickets       SupportTicket[]
   inspections   FieldInspectionNew[]
@@ -312,4 +326,18 @@ model AccidentClaim {
   
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
+}
+
+/// Logs driver contract terminations (churn events).
+/// Auto-created by the backend when a Fleet Perf Manager unlinks a driver
+/// from a vehicle (vehicle status: Actif → Available, driver unassigned).
+model ChurnEvent {
+  id              String   @id @default(uuid())
+  vehicle_id      String
+  plate_number    String
+  driver_name     String?
+  driver_phone    String?
+  reason          String?  // Optional reason entered by Fleet Perf Manager
+  churned_at      DateTime @default(now())
+  created_at      DateTime @default(now())
 }

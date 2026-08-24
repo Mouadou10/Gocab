@@ -6,7 +6,7 @@ Market Scope: Morocco Operations (Casablanca HQ + Regional Hubs: Casa, Marrakech
 ## 1. Role-by-Role Individual KPI Engine
 This section codifies the individual performance metrics, mathematical formulas, and system enforcement thresholds for each of the seven core operational roles across Level 1 (HQ) and Level 2 (Regional Hubs).
 
-                                    ┌──────────────────────────┐
+                                  
                                   │  Director of Operations  │
                                   └────────────┬─────────────┘
                                                │
@@ -19,8 +19,9 @@ This section codifies the individual performance metrics, mathematical formulas,
                │                                                               │
  ├── Brand Manager                                               ├── Onboarding Specialist
  ├── Lead Acquisition Junior                                     ├── Field Supervisor (1:150)
- ├── Driver Support (1:150)                                      └── Senior Field Supervisor
+ ├── Driver Support (1:150)                                      
  └── Fleet Performance Mgr (1:150)
+ └── Senior Field Supervisor
 
 ### TIER 1: CASABLANCA NATIONAL HQ (CENTRAL GROUP FUNCTIONS)
 

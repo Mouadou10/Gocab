@@ -67,14 +67,18 @@ export default function FleetView() {
   }, [fetchVehicles]);
 
   async function handleDelete(id: string, plate: string) {
-    if (!confirm(`Are you sure you want to delete vehicle ${plate}?`)) return;
+    if (!confirm(`Are you sure you want to delete vehicle ${plate}? This will also remove its linked tickets, inspections, and accident claims.`)) return;
     try {
       const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
       if (res.ok) {
         fetchVehicles();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to delete vehicle. Please try again.");
       }
     } catch (err) {
       console.error("Failed to delete vehicle:", err);
+      alert("Network error — could not delete vehicle.");
     }
   }
 

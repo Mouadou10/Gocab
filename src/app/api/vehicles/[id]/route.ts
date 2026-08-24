@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 /**
  * PATCH /api/vehicles/[id]
  * Updates vehicle metadata, mileage, status, and compliance dates.
+ * Automations:
+ *  - Accident status → auto-creates AccidentClaim
+ *  - Mileage update ≥8,000 KM delta → auto-creates Urgent Vidange ticket
+ *  - Actif→Available + driver unlinked → logs ChurnEvent (contract termination)
  */
 export async function PATCH(
   request: Request,
@@ -13,6 +17,8 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Snapshot vehicle state BEFORE update for churn detection
+    const prevVehicle = await prisma.vehicle.findUnique({ where: { id } });
     const updateData: any = {};
 
     if (body.plate_number !== undefined) updateData.plate_number = body.plate_number.trim();
@@ -108,7 +114,62 @@ export async function PATCH(
       }
     }
 
+    // ── Churn Detection: Actif → Available + Driver Unlinked ────────────────
+    // When Fleet Perf Manager terminates a contract, they set vehicle to Available
+    // and unlink the driver. This transition is the definition of churn.
+    if (
+      body.status === "Available" &&
+      prevVehicle &&
+      (prevVehicle.status === "Actif") &&
+      prevVehicle.assigned_driver_name
+    ) {
+      await prisma.churnEvent.create({
+        data: {
+          vehicle_id: id,
+          plate_number: vehicle.plate_number,
+          driver_name: prevVehicle.assigned_driver_name,
+          driver_phone: prevVehicle.assigned_driver_phone,
+          reason: body.churn_reason || null,
+        },
+      }).catch((e: any) => console.warn("Failed to log ChurnEvent:", e));
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
+    // ── Predictive Maintenance: 8,000 KM Vidange Auto-Trigger ───────────────
+
+    // When mileage is updated and the delta from lastVidangeOdoKM >= 8,000 KM,
+    // auto-create an Urgent Vidange ticket and reset the lastVidangeOdoKM counter.
+    if (body.current_mileage !== undefined) {
+      const currentMileage = Number(body.current_mileage);
+      const lastVidange = vehicle.lastVidangeOdoKM || 0;
+      const delta = currentMileage - lastVidange;
+
+      if (delta >= 8000) {
+        const slaDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await prisma.maintenanceTicket.create({
+          data: {
+            vehicle_id: id,
+            plate_number: vehicle.plate_number,
+            driver_name: vehicle.assigned_driver_name,
+            driver_phone: vehicle.assigned_driver_phone,
+            ticket_type: "Vidange",
+            description: `⚙️ Auto-trigger: Vehicle has reached ${delta.toLocaleString()} KM since last oil change (current: ${currentMileage.toLocaleString()} KM). Vidange required immediately.`,
+            priority: "Urgent",
+            status: "OPEN",
+            sla_deadline: slaDeadline,
+          },
+        });
+        // Reset the vidange odometer checkpoint
+        await prisma.vehicle.update({
+          where: { id },
+          data: { lastVidangeOdoKM: currentMileage },
+        });
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     return NextResponse.json({ vehicle });
+
   } catch (error) {
     console.error("PATCH /api/vehicles/[id] error:", error);
     return NextResponse.json(
@@ -120,7 +181,9 @@ export async function PATCH(
 
 /**
  * DELETE /api/vehicles/[id]
- * Deletes a vehicle record from the database.
+ * Deletes a vehicle and all related records (cascade).
+ * SQLite does not support onDelete: Cascade in this schema, so we
+ * manually delete child records in the correct FK order first.
  */
 export async function DELETE(
   request: Request,
@@ -128,14 +191,48 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // 1. Unlink any DriverProfile assigned to this vehicle
+    await prisma.driverProfile.updateMany({
+      where: { assignedVehicleId: id },
+      data: { assignedVehicleId: null },
+    });
+
+    // 2. Delete SupportTickets linked to this vehicle
+    await prisma.supportTicket.deleteMany({
+      where: { vehicleId: id },
+    });
+
+    // 3. Delete FieldInspections linked to this vehicle
+    await prisma.fieldInspectionNew.deleteMany({
+      where: { vehicleId: id },
+    });
+
+    // 4. Delete AccidentClaims linked to this vehicle
+    await prisma.accidentClaim.deleteMany({
+      where: { vehicle_id: id },
+    });
+
+    // 5. Delete MaintenanceTickets linked to this vehicle
+    await prisma.maintenanceTicket.deleteMany({
+      where: { vehicle_id: id },
+    });
+
+    // 6. Delete ChurnEvents linked to this vehicle
+    await prisma.churnEvent.deleteMany({
+      where: { vehicle_id: id },
+    });
+
+    // 7. Finally delete the vehicle itself
     await prisma.vehicle.delete({
       where: { id },
     });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/vehicles/[id] error:", error);
     return NextResponse.json(
-      { error: "Failed to delete vehicle" },
+      { error: "Failed to delete vehicle. It may have related records that could not be removed." },
       { status: 500 }
     );
   }

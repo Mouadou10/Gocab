@@ -72,6 +72,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const slaDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h from now
+
     const ticket = await prisma.maintenanceTicket.create({
       data: {
         vehicle_id,
@@ -82,6 +84,7 @@ export async function POST(request: Request) {
         description: description.trim(),
         priority: priority || "Normal",
         status: "OPEN",
+        sla_deadline: slaDeadline,
       },
     });
 

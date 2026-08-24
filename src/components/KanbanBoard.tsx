@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession, signOut } from "next-auth/react";
 import {
   DndContext,
   DragEndEvent,
@@ -36,6 +37,7 @@ import LeadsScorecard from "./LeadsScorecard";
 import TrainingScorecard from "./TrainingScorecard";
 import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
+import PasswordChangeModal from "./PasswordChangeModal";
 import GoCabLogo from "./GoCabLogo";
 import { generateThankYouURL } from "@/lib/whatsapp";
 
@@ -55,7 +57,38 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  age?: number | null;
+  permis_seniority_years?: number | null;
+  is_resident?: boolean | null;
 }
+
+// Default Role → tabs fallback
+const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
+  LEAD_ACQUISITION_JR:  ["dashboard", "leads", "training"],
+  FLEET_PERF_MANAGER:   ["dashboard", "fleet", "tickets", "performance"],
+  FIELD_SUPERVISOR:     ["dashboard", "fleet", "field", "tickets"],
+  FINANCE_OFFICER:      ["dashboard", "performance", "insurance"],
+  OPS_MANAGER:          ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  ADMIN:                ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+};
+
+const DEFAULT_ROLE_LABELS: Record<string, string> = {
+  LEAD_ACQUISITION_JR: "Lead Acquisition",
+  FLEET_PERF_MANAGER:  "Fleet Performance",
+  FIELD_SUPERVISOR:    "Field Supervisor",
+  FINANCE_OFFICER:     "Finance Officer",
+  OPS_MANAGER:         "Ops Manager",
+  ADMIN:               "Admin",
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  LEAD_ACQUISITION_JR: "bg-blue-100 text-blue-700",
+  FLEET_PERF_MANAGER:  "bg-amber-100 text-amber-700",
+  FIELD_SUPERVISOR:    "bg-green-100 text-green-700",
+  FINANCE_OFFICER:     "bg-purple-100 text-purple-700",
+  OPS_MANAGER:         "bg-navy/10 text-navy",
+  ADMIN:               "bg-red-100 text-red-700",
+};
 
 type TabType = "dashboard" | "leads" | "training" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
 
@@ -85,11 +118,28 @@ const TRAINING_COLUMNS = [
 ] as const;
 
 export default function KanbanBoard() {
+  const { data: session } = useSession();
+  const userRole = session?.user?.role || "ADMIN";
+  const userName = session?.user?.name || "";
+
+  const [rolePermissions, setRolePermissions] = useState<Record<string, TabType[]>>(DEFAULT_ROLE_PERMISSIONS);
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
+
+  const allowedTabs = rolePermissions[userRole] || rolePermissions.ADMIN || DEFAULT_ROLE_PERMISSIONS.ADMIN;
+
+  const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+
+  useEffect(() => {
+    if (session?.user && (session.user as any).mustChangePassword) {
+      setShowPasswordChangeModal(true);
+    }
+  }, [session]);
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   
-  // Navigation & Settings State
+  // Navigation & Settings State — default to first allowed tab
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
 
@@ -121,8 +171,22 @@ export default function KanbanBoard() {
     try {
       const res = await fetch("/api/settings");
       const data = await res.json();
-      if (data.settings && data.settings.whatsapp_invite_template) {
-        setWhatsappTemplate(data.settings.whatsapp_invite_template);
+      if (data.settings) {
+        if (data.settings.whatsapp_invite_template) {
+          setWhatsappTemplate(data.settings.whatsapp_invite_template);
+        }
+        if (data.settings.role_tab_permissions) {
+          try {
+            const parsed = JSON.parse(data.settings.role_tab_permissions);
+            setRolePermissions(parsed);
+          } catch (e) {}
+        }
+        if (data.settings.custom_role_labels) {
+          try {
+            const parsedLabels = JSON.parse(data.settings.custom_role_labels);
+            setRoleLabels((prev) => ({ ...prev, ...parsedLabels }));
+          } catch (e) {}
+        }
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -461,128 +525,168 @@ export default function KanbanBoard() {
             </div>
           </div>
 
-          {/* Navigation Tabs - Pill Shaped */}
+          {/* Navigation Tabs - Pill Shaped with Role Gating */}
           <div className="flex flex-wrap items-center bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200/50">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "dashboard"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              📊 Home
-            </button>
-
-            <button
-              onClick={() => setActiveTab("leads")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "leads"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              💼 Leads
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full ${
-                  activeTab === "leads" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
+            {allowedTabs.includes("dashboard") && (
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "dashboard"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                {leadsCount}
-              </span>
-            </button>
+                📊 Home
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                setActiveTab("training");
-                fetchSettings();
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "training"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              🎓 Training
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full ${
-                  activeTab === "training" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
+            {allowedTabs.includes("leads") && (
+              <button
+                onClick={() => setActiveTab("leads")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "leads"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                {trainingCount}
-              </span>
-            </button>
+                💼 Leads
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    activeTab === "leads" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {leadsCount}
+                </span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("fleet")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "fleet"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              🚗 Fleet
-            </button>
+            {allowedTabs.includes("training") && (
+              <button
+                onClick={() => {
+                  setActiveTab("training");
+                  fetchSettings();
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "training"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                🎓 Training
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    activeTab === "training" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {trainingCount}
+                </span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("tickets")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "tickets"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              🔧 Support
-            </button>
+            {allowedTabs.includes("fleet") && (
+              <button
+                onClick={() => setActiveTab("fleet")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "fleet"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                🚗 Fleet
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("performance")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "performance"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              📈 Perf
-            </button>
+            {allowedTabs.includes("tickets") && (
+              <button
+                onClick={() => setActiveTab("tickets")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "tickets"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                🔧 Support
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("field")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "field"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              🛡️ Field
-            </button>
+            {allowedTabs.includes("performance") && (
+              <button
+                onClick={() => setActiveTab("performance")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "performance"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                📈 Perf
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("insurance")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "insurance"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              📝 Insurance
-            </button>
+            {allowedTabs.includes("field") && (
+              <button
+                onClick={() => setActiveTab("field")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "field"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                🛡️ Field
+              </button>
+            )}
 
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeTab === "settings"
-                  ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
-              }`}
-            >
-              ⚙️
-            </button>
+            {allowedTabs.includes("insurance") && (
+              <button
+                onClick={() => setActiveTab("insurance")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "insurance"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                📝 Insurance
+              </button>
+            )}
+
+            {allowedTabs.includes("settings") && (
+              <button
+                onClick={() => setActiveTab("settings")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "settings"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                ⚙️
+              </button>
+            )}
           </div>
 
-          {/* CSV File Upload Section */}
-          <div className="flex items-center gap-4">
+          {/* Right side: CSV uploader + User badge + Sign out */}
+          <div className="flex items-center gap-3">
             {(activeTab === "leads" || activeTab === "training") && <CSVUploader onUploadComplete={fetchLeads} />}
+            
+            {/* User info badge */}
+            {userName && (
+              <div className="hidden xl:flex items-center gap-2 pl-3 border-l border-gray-200">
+                <div className="text-right">
+                  <p className="text-xs font-bold text-gray-800 leading-none">{userName}</p>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${ROLE_COLORS[userRole] || "bg-gray-100 text-gray-600"}`}>
+                    {roleLabels[userRole] || DEFAULT_ROLE_LABELS[userRole] || userRole}
+                  </span>
+                </div>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  title="Sign out"
+                  className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="hidden xl:flex items-center gap-2 text-gray-500 text-xs font-medium px-3 py-1.5 bg-gray-100 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               SQLite (Sync)
@@ -655,6 +759,15 @@ export default function KanbanBoard() {
           onClose={() => setSelectedLead(null)}
           onUpdate={handleLeadUpdate}
           whatsappTemplate={whatsappTemplate}
+        />
+      )}
+
+      {/* Mandatory First-Login Password Change Modal */}
+      {showPasswordChangeModal && session?.user && (
+        <PasswordChangeModal
+          userEmail={session.user.email}
+          userName={session.user.name}
+          onPasswordChanged={() => setShowPasswordChangeModal(false)}
         />
       )}
 

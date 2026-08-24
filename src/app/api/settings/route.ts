@@ -11,6 +11,14 @@ import { prisma } from "@/lib/prisma";
 const DEFAULT_SETTINGS: Record<string, string> = {
   whatsapp_invite_template:
     "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time}.\nنتطلع للقائكم في GoCab.\nشكراً لكم.",
+  role_tab_permissions: JSON.stringify({
+    LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
+    FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],
+    FIELD_SUPERVISOR: ["dashboard", "fleet", "field", "tickets"],
+    FINANCE_OFFICER: ["dashboard", "performance", "insurance"],
+    OPS_MANAGER: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+    ADMIN: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  }),
 };
 
 export async function GET() {

@@ -67,6 +67,10 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  // Eligibility guardrail fields
+  age?: number | null;
+  permis_seniority_years?: number | null;
+  is_resident?: boolean | null;
 }
 
 interface LeadDrawerProps {
@@ -102,6 +106,16 @@ export default function LeadDrawer({
     lead.preorder_amount !== null ? String(lead.preorder_amount) : ""
   );
 
+  // Eligibility Guardrail State
+  const [age, setAge] = useState<string>(lead.age != null ? String(lead.age) : "");
+  const [permisSeniority, setPermisSeniority] = useState<string>(
+    lead.permis_seniority_years != null ? String(lead.permis_seniority_years) : ""
+  );
+  const [isResident, setIsResident] = useState<string>(
+    lead.is_resident === true ? "yes" : lead.is_resident === false ? "no" : ""
+  );
+  const [guardrailViolations, setGuardrailViolations] = useState<string[]>([]);
+
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -118,11 +132,15 @@ export default function LeadDrawer({
 
   async function handleSave() {
     setValidationError("");
+    setGuardrailViolations([]);
     setIsSubmitting(true);
 
     try {
       const payload: Record<string, any> = {
         city: city || null,
+        age: age ? parseInt(age) : null,
+        permis_seniority_years: permisSeniority ? parseInt(permisSeniority) : null,
+        is_resident: isResident === "yes" ? true : isResident === "no" ? false : null,
       };
 
       if (boardType === "leads") {
@@ -199,6 +217,11 @@ export default function LeadDrawer({
         toast.success("Lead updated successfully");
         onUpdate(data.lead);
         handleClose();
+      } else if (res.status === 422) {
+        // Eligibility guardrail blocked the move
+        const data = await res.json();
+        setGuardrailViolations(data.violations || [data.error]);
+        toast.error("Move blocked by eligibility guardrail");
       } else {
         toast.error("Failed to update lead");
       }
@@ -272,6 +295,87 @@ export default function LeadDrawer({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Eligibility Guardrails Section */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+              🛡️ Eligibility Guardrails
+              <span className="text-[10px] font-normal text-amber-600">(Required to advance to Training)</span>
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Age</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 25"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 ${
+                    age && parseInt(age) < 22 ? 'border-red-400 bg-red-50 focus:ring-red-300' : 'border-gray-300 focus:ring-navy/30'
+                  }`}
+                />
+                {age && parseInt(age) < 22 && (
+                  <p className="text-[10px] text-red-500 mt-0.5">Must be 22+</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Permis Seniority (years)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 3"
+                  value={permisSeniority}
+                  onChange={(e) => setPermisSeniority(e.target.value)}
+                  className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 ${
+                    permisSeniority && parseInt(permisSeniority) < 2 ? 'border-red-400 bg-red-50 focus:ring-red-300' : 'border-gray-300 focus:ring-navy/30'
+                  }`}
+                />
+                {permisSeniority && parseInt(permisSeniority) < 2 && (
+                  <p className="text-[10px] text-red-500 mt-0.5">Must be 2+ years</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Resident Status</label>
+              <div className="flex gap-2">
+                {["yes", "no"].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setIsResident(val)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      isResident === val
+                        ? val === "no"
+                          ? "bg-red-600 text-white border-red-600"
+                          : "bg-green-600 text-white border-green-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {val === "yes" ? "✅ Resident" : "🚫 Non-Resident"}
+                  </button>
+                ))}
+              </div>
+              {isResident === "no" && (
+                <p className="text-[10px] text-red-600 font-semibold mt-1">⛔ Non-residents are strictly blocked from the pipeline.</p>
+              )}
+            </div>
+
+            {/* Guardrail violation feedback from API */}
+            {guardrailViolations.length > 0 && (
+              <div className="bg-red-50 border border-red-300 rounded-lg p-3">
+                <p className="text-xs font-bold text-red-700 mb-1">🚫 Move Blocked — Eligibility Violations:</p>
+                <ul className="space-y-0.5">
+                  {guardrailViolations.map((v, i) => (
+                    <li key={i} className="text-xs text-red-600">• {v}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Status Dropdowns & Board Specific Flow */}

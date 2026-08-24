@@ -30,6 +30,7 @@ interface FieldTask {
   assigned_to: string | null;
   due_date: string | null;
   completed_at: string | null;
+  failure_reason?: string | null;
   created_at: string;
 }
 
@@ -125,7 +126,7 @@ export default function FieldSupervisorView() {
   });
 
   // Past inspections viewer
-  const [viewInspections, setViewInspections] = useState<VehicleInspection[]>([]);
+  const [viewInspections, setViewInspections] = useState<VehicleInspection[] | null>(null);
   const [viewPlate, setViewPlate] = useState("");
 
   const [failingTask, setFailingTask] = useState<FieldTask | null>(null);

@@ -5,10 +5,11 @@
  * 
  * Features:
  * 1. Live Downtime Counter: Real-time calculation of elapsed days/hours/minutes per open ticket.
- * 2. Fleet Performance Decision Tool: Allows managers to evaluate downtime and record
+ * 2. 24h SLA Tracking: Countdown badge per ticket; KPI bar shows resolution rate vs 95% target.
+ * 3. Fleet Performance Decision Tool: Allows managers to evaluate downtime and record
  *    payment waivers / cancelled payment days for drivers.
- * 3. Status updates & resolution with vehicle status restoration options.
- * 4. Drag and Drop Kanban Board UI.
+ * 4. Status updates & resolution with vehicle status restoration options.
+ * 5. Drag and Drop Kanban Board UI.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -24,9 +25,15 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import toast from "react-hot-toast";
-import TicketDrawer, { MaintenanceTicket } from "./TicketDrawer";
+import TicketDrawer, { MaintenanceTicket as BaseMaintenanceTicket } from "./TicketDrawer";
 import TicketKanbanColumn from "./TicketKanbanColumn";
 import TicketKanbanCard from "./TicketKanbanCard";
+
+// Extend with SLA fields added in Sprint 2
+export type MaintenanceTicket = BaseMaintenanceTicket & {
+  sla_deadline?: string | null;
+  sla_breached?: boolean;
+};
 
 const TICKET_COLUMNS = ["OPEN", "IN_PROGRESS", "RESOLVED"] as const;
 
@@ -35,6 +42,7 @@ export default function SupportTicketsView() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedType, setSelectedType] = useState("");
+  const [showBreachedOnly, setShowBreachedOnly] = useState(false);
   
   // DND State
   const [activeDragTicket, setActiveDragTicket] = useState<MaintenanceTicket | null>(null);
@@ -307,13 +315,41 @@ export default function SupportTicketsView() {
   };
 
   function getTicketsByStatus(status: string) {
-    return tickets.filter((t) => t.status === status);
+    let filtered = tickets.filter((t) => t.status === status);
+    if (showBreachedOnly) {
+      filtered = filtered.filter((t) => {
+        if (!t.sla_deadline) return false;
+        return new Date(t.sla_deadline).getTime() < Date.now() && t.status !== "RESOLVED";
+      });
+    }
+    return filtered;
   }
+
+  /** Computes SLA countdown label for a ticket */
+  function getSlaLabel(ticket: MaintenanceTicket): { label: string; color: string } | null {
+    if (!ticket.sla_deadline || ticket.status === "RESOLVED") return null;
+    const msLeft = new Date(ticket.sla_deadline).getTime() - Date.now();
+    if (msLeft <= 0) return { label: "SLA BREACHED", color: "red" };
+    const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
+    const minsLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
+    if (hoursLeft < 2) return { label: `⏰ ${hoursLeft}h ${minsLeft}m left`, color: "amber" };
+    return { label: `✅ ${hoursLeft}h left`, color: "green" };
+  }
+
+  // SLA KPI calculations
+  const openAndInProgress = tickets.filter((t) => t.status !== "RESOLVED");
+  const breachedCount = openAndInProgress.filter(
+    (t) => t.sla_deadline && new Date(t.sla_deadline).getTime() < Date.now()
+  ).length;
+  const resolvedCount = tickets.filter((t) => t.status === "RESOLVED").length;
+  const totalClosed = tickets.length;
+  const slaResolutionRate = totalClosed > 0 ? Math.round((resolvedCount / totalClosed) * 100) : 0;
+  const slaTarget = 95;
 
   return (
     <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 shrink-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4 shrink-0">
         <div>
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <span>🔧</span> Driver Support Kanban
@@ -348,11 +384,50 @@ export default function SupportTicketsView() {
           </select>
 
           <button
+            onClick={() => setShowBreachedOnly((v) => !v)}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              showBreachedOnly
+                ? "bg-red-600 text-white border-red-600"
+                : "bg-white text-red-600 border-red-200 hover:bg-red-50"
+            }`}
+          >
+            🚨 Breached SLA{breachedCount > 0 ? ` (${breachedCount})` : ""}
+          </button>
+
+          <button
             onClick={() => setIsDrawerOpen(true)}
             className="px-4 py-2 bg-navy hover:bg-navy/95 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2"
           >
             <span>➕</span> New Ticket
           </button>
+        </div>
+      </div>
+
+      {/* SLA KPI Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 mb-4 shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-700">24h SLA Resolution Rate</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              slaResolutionRate >= slaTarget ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            }`}>
+              {slaResolutionRate}% / Target: {slaTarget}%
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {breachedCount > 0 && (
+              <span className="text-red-600 font-semibold">🚨 {breachedCount} ticket{breachedCount > 1 ? "s" : ""} breached SLA</span>
+            )}
+            <span>{resolvedCount} resolved of {totalClosed} total</span>
+          </div>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-2">
+          <div
+            className={`h-2 rounded-full transition-all duration-500 ${
+              slaResolutionRate >= slaTarget ? "bg-green-500" : "bg-amber-500"
+            }`}
+            style={{ width: `${Math.min(slaResolutionRate, 100)}%` }}
+          />
         </div>
       </div>
 
