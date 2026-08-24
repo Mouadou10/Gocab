@@ -9,9 +9,11 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 import WeeklyReportModal from "./WeeklyReportModal";
 
 export default function OpsTargetAlertsBanner() {
+  const { t } = useLanguage();
   const [reportData, setReportData] = useState<any | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,17 +48,17 @@ export default function OpsTargetAlertsBanner() {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white tracking-tight">
-                Operations Performance & KPI Health
+                {t.opsPerformanceKpiHealth}
               </h3>
               {alerts.length > 0 ? (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   criticalCount > 0 ? "bg-red-500 text-white" : "bg-amber-400 text-navy"
                 }`}>
-                  {alerts.length} KPI Alert{alerts.length > 1 ? "s" : ""} Active
+                  {alerts.length} {t.alertsActive}
                 </span>
               ) : (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-400 text-navy">
-                  All Targets Met
+                  ✓ {t.targetAchieved}
                 </span>
               )}
             </div>
@@ -64,8 +66,8 @@ export default function OpsTargetAlertsBanner() {
             {/* Sub-text preview of top alert */}
             <p className="text-xs text-white/70 mt-1 max-w-2xl leading-relaxed">
               {alerts.length > 0
-                ? `${alerts[0].metric}: ${alerts[0].actual}${alerts[0].unit} vs ${alerts[0].target}${alerts[0].unit} target (${alerts[0].variance}${alerts[0].unit} variance). ${alerts.length > 1 ? `+${alerts.length - 1} other alerts.` : ""}`
-                : "Active Fleet at " + reportData.summary?.activeFleetRate + "%. 24h SLA compliance and physical inspections on track."}
+                ? `${alerts[0].metric}: ${alerts[0].actual}${alerts[0].unit} vs ${alerts[0].target}${alerts[0].unit} (${alerts[0].variance}${alerts[0].unit}). ${alerts.length > 1 ? `+${alerts.length - 1}...` : ""}`
+                : t.targetAchieved}
             </p>
           </div>
         </div>
@@ -76,7 +78,7 @@ export default function OpsTargetAlertsBanner() {
             onClick={() => setIsReportModalOpen(true)}
             className="px-4 py-2 bg-[#f5c842] hover:bg-[#f5c842]/90 active:scale-95 text-navy font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
           >
-            <span>📑</span> Weekly Executive Report
+            <span>📑</span> {t.weeklyExecutiveReport}
           </button>
         </div>
       </div>

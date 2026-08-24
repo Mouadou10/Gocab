@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 
 type TabType = "dashboard" | "leads" | "training" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
@@ -92,6 +93,7 @@ interface UserRecord {
 }
 
 export default function SettingsView() {
+  const { t, language } = useLanguage();
   const [activeSection, setActiveSection] = useState<"targets" | "roles" | "users" | "whatsapp">("targets");
   const [targets, setTargets] = useState<DepartmentTargets>(DEFAULT_TARGETS);
   const [permissions, setPermissions] = useState<Record<string, TabType[]>>(DEFAULT_ROLE_PERMISSIONS);

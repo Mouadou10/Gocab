@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
+import { LanguageProvider } from "@/context/LanguageContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,21 +30,23 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-[#f4f6fb]">
         <SessionProviderWrapper>
-          {children}
-          <Toaster 
-            position="bottom-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#fff',
-                color: '#1e293b',
-                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                borderRadius: '12px',
-                fontSize: '14px',
-                fontWeight: 500,
-              },
-            }} 
-          />
+          <LanguageProvider>
+            {children}
+            <Toaster 
+              position="bottom-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#fff',
+                  color: '#1e293b',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                },
+              }} 
+            />
+          </LanguageProvider>
         </SessionProviderWrapper>
       </body>
     </html>

@@ -8,6 +8,7 @@
  */
 
 import React, { useState } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 
 interface WeeklyReportData {
@@ -26,6 +27,7 @@ interface WeeklyReportModalProps {
 }
 
 export default function WeeklyReportModal({ report, onClose }: WeeklyReportModalProps) {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<"overview" | "pillar1" | "pillar2" | "pillar3" | "alerts">("overview");
 
   const formattedDate = new Date(report.reportDate).toLocaleDateString("en-GB", {

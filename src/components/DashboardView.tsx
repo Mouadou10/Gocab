@@ -14,9 +14,11 @@ import {
   Cell,
 } from "recharts";
 import { LayoutDashboard, Users, Car, Wrench, ShieldAlert } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 import OpsTargetAlertsBanner from "./OpsTargetAlertsBanner";
 
 export default function DashboardView() {
+  const { t } = useLanguage();
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -101,8 +103,8 @@ export default function DashboardView() {
             <LayoutDashboard className="w-6 h-6 text-navy" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Executive Dashboard</h2>
-            <p className="text-sm text-gray-500 font-medium">Overview of GoCab operational performance across 3 pillars</p>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t.executiveDashboard}</h2>
+            <p className="text-sm text-gray-500 font-medium">{t.executiveSubtitle}</p>
           </div>
         </div>
       </div>
@@ -118,7 +120,7 @@ export default function DashboardView() {
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
           <div className="flex justify-between items-start relative z-10">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Lead Conversion</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t.leadConversion}</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-gray-900">{stats?.conversionRate}%</h3>
                 <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Active</span>
@@ -128,7 +130,7 @@ export default function DashboardView() {
               <Users className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">{stats?.totalLeads} total leads imported</p>
+          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">{stats?.totalLeads} {t.totalLeadsImported}</p>
         </div>
 
         {/* KPI 2 */}
@@ -136,16 +138,17 @@ export default function DashboardView() {
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
           <div className="flex justify-between items-start relative z-10">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fleet Utilization</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t.fleetUtilization}</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-gray-900">{stats?.utilizationRate}%</h3>
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Optimal</span>
               </div>
             </div>
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
               <Car className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">Vehicles on the road</p>
+          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">{stats?.activeVehicles} / {stats?.totalVehicles} {t.vehiclesOnRoad}</p>
         </div>
 
         {/* KPI 3 */}
@@ -153,16 +156,17 @@ export default function DashboardView() {
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-rose-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
           <div className="flex justify-between items-start relative z-10">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Total Downtime</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t.totalDowntime}</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-gray-900">{stats?.totalDowntime} <span className="text-lg text-gray-400 font-medium">Days</span></h3>
+                <h3 className="text-3xl font-bold text-gray-900">{stats?.totalDowntimeDays}</h3>
+                <span className="text-xs font-medium text-rose-600">Days</span>
               </div>
             </div>
             <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
               <Wrench className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">Cumulative lost operational days</p>
+          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">{t.cumulativeDowntimeDays}</p>
         </div>
 
         {/* KPI 4 */}
@@ -170,16 +174,21 @@ export default function DashboardView() {
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
           <div className="flex justify-between items-start relative z-10">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Field Task Completion</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">24h SLA Support</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-gray-900">{stats?.taskCompletionRate}%</h3>
+                <h3 className="text-3xl font-bold text-gray-900">{stats?.slaComplianceRate}%</h3>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  stats?.slaComplianceRate >= 95 ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                }`}>
+                  {stats?.slaComplianceRate >= 95 ? "Target Met" : "At Risk"}
+                </span>
               </div>
             </div>
             <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
               <ShieldAlert className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">Tasks resolved on time</p>
+          <p className="text-xs text-gray-500 mt-4 relative z-10 font-medium">{stats?.openTickets} open support tickets</p>
         </div>
 
       </div>

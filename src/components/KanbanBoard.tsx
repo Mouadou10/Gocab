@@ -39,6 +39,7 @@ import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
 import PasswordChangeModal from "./PasswordChangeModal";
 import GoCabLogo from "./GoCabLogo";
+import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
 
 interface Lead {
@@ -118,6 +119,7 @@ const TRAINING_COLUMNS = [
 ] as const;
 
 export default function KanbanBoard() {
+  const { language, setLanguage, t, dir } = useLanguage();
   const { data: session } = useSession();
   const userRole = session?.user?.role || "ADMIN";
   const userName = session?.user?.name || "";
@@ -518,9 +520,9 @@ export default function KanbanBoard() {
           <div className="flex items-center gap-4">
             <GoCabLogo className="w-10 h-10" />
             <div>
-              <h1 className="text-gray-900 text-lg font-extrabold tracking-tight">GoCab CRM</h1>
+              <h1 className="text-gray-900 text-lg font-extrabold tracking-tight">{t.appName}</h1>
               <p className="text-gray-500 text-[10px] font-semibold tracking-widest uppercase">
-                Growth & KYC Module
+                {t.appSubtitle}
               </p>
             </div>
           </div>
@@ -532,11 +534,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("dashboard")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "dashboard"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                📊 Home
+                📊 {t.home}
               </button>
             )}
 
@@ -545,11 +547,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("leads")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "leads"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                💼 Leads
+                💼 {t.leads}
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full ${
                     activeTab === "leads" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
@@ -568,11 +570,11 @@ export default function KanbanBoard() {
                 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "training"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                🎓 Training
+                🎓 {t.training}
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full ${
                     activeTab === "training" ? "bg-navy/10 text-navy" : "bg-gray-200 text-gray-500"
@@ -588,11 +590,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("fleet")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "fleet"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                🚗 Fleet
+                🚗 {t.fleet}
               </button>
             )}
 
@@ -601,11 +603,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("tickets")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "tickets"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                🔧 Support
+                🔧 {t.support}
               </button>
             )}
 
@@ -614,11 +616,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("performance")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "performance"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                📈 Perf
+                📈 {t.perf}
               </button>
             )}
 
@@ -627,11 +629,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("field")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "field"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                🛡️ Field
+                🛡️ {t.field}
               </button>
             )}
 
@@ -640,11 +642,11 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("insurance")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "insurance"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                📝 Insurance
+                📝 {t.insurance}
               </button>
             )}
 
@@ -653,17 +655,51 @@ export default function KanbanBoard() {
                 onClick={() => setActiveTab("settings")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "settings"
-                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                ⚙️
+                ⚙️ {t.settings}
               </button>
             )}
           </div>
 
-          {/* Right side: CSV uploader + User badge + Sign out */}
+          {/* Right side: Language Selector + CSV uploader + User badge + Sign out */}
           <div className="flex items-center gap-3">
+            {/* Language Switcher Pill */}
+            <div className="flex items-center bg-gray-100/90 p-1 rounded-xl border border-gray-200/60 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setLanguage("fr")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                  language === "fr" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="Français"
+              >
+                🇫🇷 FR
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("ar")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                  language === "ar" ? "bg-white text-navy shadow-sm font-semibold" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="العربية (Arabic)"
+              >
+                🇲🇦 عربي
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("en")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                  language === "en" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="English"
+              >
+                🇬🇧 EN
+              </button>
+            </div>
+
             {(activeTab === "leads" || activeTab === "training") && <CSVUploader onUploadComplete={fetchLeads} />}
             
             {/* User info badge */}
@@ -677,7 +713,7 @@ export default function KanbanBoard() {
                 </div>
                 <button
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  title="Sign out"
+                  title={t.signOut}
                   className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -686,11 +722,6 @@ export default function KanbanBoard() {
                 </button>
               </div>
             )}
-
-            <div className="hidden xl:flex items-center gap-2 text-gray-500 text-xs font-medium px-3 py-1.5 bg-gray-100 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              SQLite (Sync)
-            </div>
           </div>
 
         </div>
