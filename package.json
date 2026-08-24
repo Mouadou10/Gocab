@@ -7,7 +7,9 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:wipe": "tsx scripts/wipe-db.ts",
+    "db:seed": "tsx prisma/seed-team.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
