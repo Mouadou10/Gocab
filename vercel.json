@@ -1,4 +1,4 @@
 {
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "prisma generate && prisma db push && tsx prisma/seed-team.ts && next build"
+  "buildCommand": "prisma generate && tsx prisma/sync-db.ts && next build"
 }

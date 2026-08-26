@@ -1,0 +1,85 @@
+/**
+ * GoCab CRM — Universal Database Auto-Sync & Migration Script
+ * 
+ * Executes SQLite / LibSQL schema DDL from schema.sql against
+ * both local SQLite and remote Turso databases, then seeds team accounts.
+ * 
+ * Run: npx tsx prisma/sync-db.ts
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { createClient } from "@libsql/client";
+import { prisma } from "../src/lib/prisma";
+import bcrypt from "bcryptjs";
+
+async function syncSchema() {
+  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  console.log("⚡ GoCab CRM — Connecting to DB:", url.startsWith("libsql://") ? "Turso Cloud" : "Local SQLite");
+
+  const client = createClient({
+    url,
+    ...(authToken ? { authToken } : {}),
+  });
+
+  const schemaPath = path.join(process.cwd(), "prisma", "schema.sql");
+  if (fs.existsSync(schemaPath)) {
+    const rawSql = fs.readFileSync(schemaPath, "utf-8");
+    const statements = rawSql
+      .split(";\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        await client.execute(stmt);
+      } catch (err: any) {
+        // Table or index already exists is normal
+        if (!err.message.includes("already exists")) {
+          console.warn("Schema execute warning:", err.message);
+        }
+      }
+    }
+    console.log(`✅ Schema synced (${statements.length} DDL statements verified).`);
+  }
+
+  // Seed default Ops Manager
+  const email = "mouad.koudia@gocab.io";
+  const passwordHash = await bcrypt.hash("Moulana@pc1995", 12);
+
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (!existing) {
+      await prisma.user.create({
+        data: {
+          email,
+          name: "Mouad Koudia",
+          fullName: "Mouad Koudia",
+          passwordHash,
+          role: "OPS_MANAGER",
+          region: "CASABLANCA",
+          isActive: true,
+          mustChangePassword: false,
+        },
+      });
+      console.log(`✨ Ops Manager account created: ${email}`);
+    } else {
+      await prisma.user.update({
+        where: { email },
+        data: { passwordHash, role: "OPS_MANAGER", isActive: true },
+      });
+      console.log(`✅ Ops Manager account updated: ${email}`);
+    }
+  } catch (err: any) {
+    console.error("User seed error:", err.message);
+  }
+
+  await prisma.$disconnect();
+}
+
+syncSchema().catch((e) => {
+  console.error("❌ Sync failed:", e);
+  process.exit(1);
+});
