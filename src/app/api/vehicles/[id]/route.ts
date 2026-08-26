@@ -125,6 +125,49 @@ export async function PATCH(
       }
     }
 
+    // If status changed to Accident, auto-create an AccidentClaim
+    if (body.status === "Accident" && prevVehicle?.status !== "Accident") {
+      const existingClaim = await prisma.accidentClaim.findFirst({
+        where: {
+          vehicle_id: id,
+          timeline_step: { not: "VEHICLE_BACK" },
+        },
+      });
+
+      if (!existingClaim) {
+        const driver = await prisma.driverProfile.findFirst({
+          where: { assignedVehicleId: id },
+        });
+
+        await prisma.accidentClaim.create({
+          data: {
+            vehicle_id: id,
+            driver_id: driver?.id || null,
+            driver_name: vehicle.assigned_driver_name || driver?.fullName || null,
+            driver_phone: vehicle.assigned_driver_phone || driver?.phoneSanitized || null,
+            timeline_step: "NEW_ACCIDENT",
+            severity: "HARD",
+            step_updated_at: new Date(),
+          },
+        });
+
+        // Also create an urgent accident maintenance ticket
+        await prisma.maintenanceTicket.create({
+          data: {
+            vehicle_id: id,
+            plate_number: vehicle.plate_number,
+            driver_name: vehicle.assigned_driver_name || driver?.fullName || null,
+            driver_phone: vehicle.assigned_driver_phone || driver?.phoneSanitized || null,
+            ticket_type: "Accident",
+            description: `💥 Vehicle reported in Accident status. Repair & insurance workflow initiated.`,
+            priority: "Urgent",
+            status: "OPEN",
+            sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          },
+        }).catch((e: any) => console.warn("Could not create accident maintenance ticket:", e));
+      }
+    }
+
     // ── Churn Detection: Actif → Available + Driver Unlinked ────────────────
     // When Fleet Perf Manager terminates a contract, they set vehicle to Available
     // and unlink the driver. This transition is the definition of churn.

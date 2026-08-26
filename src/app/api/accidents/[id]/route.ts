@@ -79,6 +79,18 @@ export async function PATCH(req: Request, context: any) {
       }
     }
 
+    // When vehicle is recovered and back in service (VEHICLE_BACK)
+    if (isStatusChange && updatedClaim.timeline_step === 'VEHICLE_BACK') {
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
+      if (vehicle && vehicle.status === "Accident") {
+        const hasDriver = !!vehicle.assigned_driver_name;
+        await prisma.vehicle.update({
+          where: { id: updatedClaim.vehicle_id },
+          data: { status: hasDriver ? "Actif" : "Available" },
+        });
+      }
+    }
+
     return NextResponse.json({ success: true, claim: updatedClaim });
   } catch (error: any) {
     console.error("Error updating accident claim:", error);
