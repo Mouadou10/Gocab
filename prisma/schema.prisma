@@ -242,24 +242,27 @@ model User {
 }
 
 model DriverProfile {
-  id                String        @id @default(uuid())
-  cinNumber         String        @unique
-  fullName          String
-  phoneSanitized    String        @unique
-  age               Int
-  licenseSeniority  Int           
-  isKycVerified     Boolean       @default(false)
-  contractType      String        
-  monthlyTripCount  Int           @default(0)
-  currentArrearsMAD Float         @default(0.00) // Changed from Decimal to Float for SQLite
-  defaultStage      String        @default("NOMINAL") // NOMINAL, DAY_1_WARNING...
+  id                    String        @id @default(uuid())
+  cinNumber             String        @unique
+  fullName              String
+  phoneSanitized        String        @unique
+  age                   Int?          @default(28)
+  licenseSeniority      Int?          @default(3)
+  isKycVerified         Boolean       @default(false)
+  contractType          String        @default("DAILY") // "DAILY" (300 MAD/j Lun-Sam) or "WEEKLY" (1800 MAD/Lundi)
+  monthlyTripCount      Int           @default(0)
+  currentArrearsMAD     Float         @default(0.00) // Changed from Decimal to Float for SQLite
+  defaultStage          String        @default("NOMINAL") // NOMINAL, DAY_1_WARNING, DAY_2_ACTION, DAY_3_BLOCK
+  consecutiveUnpaidDays Int           @default(0) // Track days without payment (>=2 means 3rd day in RED)
+  lastPaymentDate       DateTime?
+  lastDailyChargeDate   DateTime?
   
-  assignedVehicleId String?       @unique
-  assignedVehicle   Vehicle?      @relation(fields: [assignedVehicleId], references: [id])
+  assignedVehicleId     String?       @unique
+  assignedVehicle       Vehicle?      @relation(fields: [assignedVehicleId], references: [id])
   
-  tickets           SupportTicket[]
-  payments          PaymentLedger[]
-  accidentClaims    AccidentClaim[]
+  tickets               SupportTicket[]
+  payments              PaymentLedger[]
+  accidentClaims        AccidentClaim[]
 }
 
 model SupportTicket {
@@ -300,8 +303,11 @@ model PaymentLedger {
   driverId      String
   driver        DriverProfile @relation(fields: [driverId], references: [id])
   
-  expectedMAD   Float
-  clearedMAD    Float
+  paymentDate   DateTime      @default(now())
+  expectedMAD   Float         @default(0.0)
+  clearedMAD    Float         @default(0.0)
+  arrearsMAD    Float         @default(0.0)
+  notes         String?
   loggedAt      DateTime      @default(now())
 }
 

@@ -130,22 +130,24 @@ export async function POST(request: NextRequest) {
       ]);
       const cinNumber = (rawCin ? rawCin.replace(/\s+/g, "") : `CIN-${phoneSanitized.slice(-6)}`).toUpperCase();
 
-      const rawAge = getField(row, ["age", "âge"]);
-      const age = rawAge && !isNaN(Number(rawAge)) ? Number(rawAge) : 28;
-
-      const rawSeniority = getField(row, [
-        "seniority", "anciennete", "ancienneté", "permis", "anciennete permis", "license seniority"
-      ]);
-      const licenseSeniority = rawSeniority && !isNaN(Number(rawSeniority)) ? Number(rawSeniority) : 3;
-
-      const contractType = getField(row, ["contract", "contrat", "type contrat", "contract type"]) || "STANDARD";
+      // Contract Type: "WEEKLY" (1800 MAD every Monday) or "DAILY" (300 MAD/day Mon-Sat)
+      const rawContract = getField(row, ["type contrat", "contrat", "contract", "type", "contract type", "formule"]);
+      let contractType = "DAILY";
+      if (rawContract) {
+        const norm = rawContract.toLowerCase();
+        if (norm.includes("week") || norm.includes("hebdo") || norm.includes("1800") || norm.includes("lundi")) {
+          contractType = "WEEKLY";
+        } else {
+          contractType = "DAILY";
+        }
+      }
 
       // Parse Balance / Arrears (Negative balance like -2000 means 2000 MAD debt)
-      const rawBalance = getField(row, ["balance", "solde", "arrears", "impayes", "impayés", "dette", "impayes mad"]);
+      const rawBalance = getField(row, ["impayes mad", "impayes", "impayés", "balance", "solde", "arrears", "dette"]);
       let currentArrearsMAD = 0.0;
       if (rawBalance && !isNaN(Number(rawBalance))) {
         const num = Number(rawBalance);
-        currentArrearsMAD = num < 0 ? Math.abs(num) : 0.0;
+        currentArrearsMAD = num < 0 ? Math.abs(num) : num > 0 ? num : 0.0;
       }
 
       // Default stage from arrears or explicit stage column
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
 
       // Match vehicle by Vehicles / Immatriculation
       const rawPlate = getField(row, [
-        "vehicles", "vehicle", "plate", "immatriculation", "matricule", "vehicule", "vehicules", "immat", "plate number", "registration", "old number"
+        "immatriculation", "immatriculatio", "vehicles", "vehicle", "plate", "matricule", "vehicule", "vehicules", "immat", "plate number", "registration", "old number"
       ]);
       
       let assignedVehicleId: string | null = null;
@@ -187,11 +189,12 @@ export async function POST(request: NextRequest) {
             fullName,
             phoneSanitized,
             cinNumber,
-            age,
-            licenseSeniority,
+            age: 28,
+            licenseSeniority: 3,
             contractType,
             currentArrearsMAD,
             defaultStage,
+            consecutiveUnpaidDays: currentArrearsMAD >= 600 ? 2 : currentArrearsMAD >= 300 ? 1 : 0,
             isKycVerified: true,
             monthlyTripCount: 0,
             assignedVehicleId,
@@ -220,10 +223,9 @@ export async function POST(request: NextRequest) {
             fullName,
             phoneSanitized: rawPhone ? phoneSanitized : existing.phoneSanitized,
             cinNumber: rawCin ? cinNumber : existing.cinNumber,
-            age,
-            licenseSeniority,
-            contractType,
-            currentArrearsMAD: currentArrearsMAD > 0 ? currentArrearsMAD : existing.currentArrearsMAD,
+            contractType: rawContract ? contractType : existing.contractType,
+            currentArrearsMAD: rawBalance ? currentArrearsMAD : existing.currentArrearsMAD,
+            consecutiveUnpaidDays: currentArrearsMAD >= 600 ? 2 : currentArrearsMAD >= 300 ? 1 : existing.consecutiveUnpaidDays,
             defaultStage,
             assignedVehicleId: finalVehicleId,
           },

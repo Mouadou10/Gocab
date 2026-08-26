@@ -42,6 +42,25 @@ async function syncSchema() {
         }
       }
     }
+
+    // Safe Alter Table Column Migrations for SQLite / Turso
+    const migrations = [
+      "ALTER TABLE DriverProfile ADD COLUMN consecutiveUnpaidDays INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE DriverProfile ADD COLUMN lastPaymentDate DATETIME",
+      "ALTER TABLE DriverProfile ADD COLUMN lastDailyChargeDate DATETIME",
+      "ALTER TABLE PaymentLedger ADD COLUMN paymentDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+      "ALTER TABLE PaymentLedger ADD COLUMN arrearsMAD REAL NOT NULL DEFAULT 0.0",
+      "ALTER TABLE PaymentLedger ADD COLUMN notes TEXT",
+    ];
+
+    for (const migration of migrations) {
+      try {
+        await client.execute(migration);
+      } catch (err: any) {
+        // Column duplicate is expected if already added
+      }
+    }
+
     console.log(`✅ Schema synced (${statements.length} DDL statements verified).`);
   }
 

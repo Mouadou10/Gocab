@@ -46,9 +46,9 @@ export default function DriverCSVUploader({
   }
 
   function downloadSampleCSV() {
-    const sampleHeaders = "Nom Complet,Telephone,CIN,Age,Anciennete Permis,Type Contrat,Immatriculation,Impayes MAD\n";
-    const sampleRow1 = "Karim Benali,0661234567,BE123456,32,5,STANDARD,12345-A-1,0\n";
-    const sampleRow2 = "Youssef Idrissi,0678901234,BK987654,29,3,STANDARD,,150\n";
+    const sampleHeaders = "Nom Complet,Telephone,CIN,Type Contrat,Immatriculation,Impayes MAD\n";
+    const sampleRow1 = "MOUSSAID ADIL,0661234567,BE123456,DAILY,26607-Y-6,0\n";
+    const sampleRow2 = "Youssef Idrissi,0678901234,BK987654,WEEKLY,WW964990,300\n";
     const blob = new Blob([sampleHeaders + sampleRow1 + sampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -128,7 +128,7 @@ export default function DriverCSVUploader({
           <div className="flex items-center justify-between p-3.5 bg-amber-50 rounded-2xl border border-amber-200/60 text-xs">
             <div className="flex items-center gap-2 text-amber-900 font-medium">
               <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-              <span>Format attendu : Nom, Téléphone, CIN, Permis, Immatriculation...</span>
+              <span>Format attendu : Nom Complet, Téléphone, CIN, Type Contrat (DAILY / WEEKLY), Immatriculation, Impayés MAD</span>
             </div>
             <button
               onClick={downloadSampleCSV}

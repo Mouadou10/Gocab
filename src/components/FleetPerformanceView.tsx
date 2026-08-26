@@ -1,550 +1,572 @@
 "use client";
 
 /**
- * FleetPerformanceView — Daily Cash Collection & Payment Management
+ * FleetPerformanceView — Daily Driver Collections, 300/1800 DH Contract Automation & 3rd-Day Red Alert
  *
- * Features:
- * 1. Morning Setup: Enter daily expected collection total per collector.
- * 2. End of Day: Record total collected.
- * 3. Manual Payment Cancellation: Cancel individual driver's payment for the day.
- * 4. Auto-Waiver Queue: Vidange/AdBleu tickets >5h flagged for one-click approval.
- * 5. Date navigation to review past days.
+ * Core GoCab Business Rules:
+ * 1. Contract Types:
+ *    - WEEKLY: 1,800 MAD every Monday
+ *    - DAILY: 300 MAD per day Monday to Saturday (Sunday off)
+ * 2. Manager Enters Amount Paid by Driver Each Day:
+ *    - Reduces driver's arrears balance.
+ * 3. 3rd-Day Non-Payment Red Alert:
+ *    - If a driver does not pay for 2 days, on the 3rd day he appears in vibrant RED with critical recovery alert.
+ * 4. Automatic Arrears Additions:
+ *    - Accumulated unpaid days display as cumulative debt (+300 MAD, +600 MAD...).
  */
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  Calendar,
+  DollarSign,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Search,
+  Filter,
+  Phone,
+  MessageSquare,
+  Car,
+  User,
+  ShieldAlert,
+  ArrowRight,
+  TrendingDown,
+  RefreshCw,
+  Clock,
+  Send,
+  Zap,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { useLanguage } from "@/context/LanguageContext";
 
-interface DailyCollection {
+interface DriverDailyItem {
   id: string;
-  date: string;
-  collector_name: string;
-  expected_total: number;
-  collected_total: number;
-  notes: string | null;
-  created_at: string;
+  fullName: string;
+  phoneSanitized: string;
+  cinNumber: string;
+  contractType: "DAILY" | "WEEKLY";
+  vehicle: {
+    id: string;
+    plate_number: string;
+    make_model: string;
+    status: string;
+  } | null;
+  currentArrearsMAD: number;
+  consecutiveUnpaidDays: number;
+  isCriticalRed: boolean;
+  expectedTodayMAD: number;
+  clearedTodayMAD: number;
+  isPaidToday: boolean;
+  paymentNote: string | null;
+  paymentLedgerId: string | null;
 }
 
-interface PaymentCancellation {
-  id: string;
-  date: string;
-  driver_name: string;
-  driver_phone: string | null;
-  plate_number: string | null;
-  vehicle_id: string | null;
-  reason: string;
-  linked_ticket_id: string | null;
-  auto_waiver: boolean;
-  approved: boolean;
-  collection_id: string | null;
-  created_at: string;
-}
-
-interface AutoWaiverTicket {
-  id: string;
-  plate_number: string;
-  driver_name: string | null;
-  driver_phone: string | null;
-  ticket_type: string;
-  description: string;
-  vehicle_id: string;
-  created_at: string;
-  downtime_hours: number;
+interface DailySummary {
+  totalDrivers: number;
+  totalExpectedTodayMAD: number;
+  totalClearedTodayMAD: number;
+  remainingToCollectMAD: number;
+  totalArrearsAllMAD: number;
+  criticalRedCount: number;
 }
 
 export default function FleetPerformanceView() {
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const now = new Date();
-    return now.toISOString().split("T")[0];
-  });
-
-  // Collection state
-  const [collections, setCollections] = useState<DailyCollection[]>([]);
-  const [cancellations, setCancellations] = useState<PaymentCancellation[]>([]);
+  const { t, language } = useLanguage();
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [drivers, setDrivers] = useState<DriverDailyItem[]>([]);
+  const [summary, setSummary] = useState<DailySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Auto-waiver tickets
-  const [waiverTickets, setWaiverTickets] = useState<AutoWaiverTicket[]>([]);
+  // Filter & Search states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<"ALL" | "RED" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
 
-  // Add collection form
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formCollector, setFormCollector] = useState("");
-  const [formExpected, setFormExpected] = useState("");
-  const [formNotes, setFormNotes] = useState("");
+  // Local inputs state for editing cleared amounts
+  const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
+  const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
 
-  // Update collected modal
-  const [editCollection, setEditCollection] = useState<DailyCollection | null>(null);
-  const [editCollected, setEditCollected] = useState("");
-
-  // Cancel payment modal
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelDriver, setCancelDriver] = useState("");
-  const [cancelPhone, setCancelPhone] = useState("");
-  const [cancelPlate, setCancelPlate] = useState("");
-  const [cancelReason, setCancelReason] = useState("");
-
-  // Live timer for auto-waiver detection
-  const [nowTimestamp, setNowTimestamp] = useState(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNowTimestamp(Date.now()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchData = useCallback(async () => {
+  const fetchDriverCollections = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch collections & cancellations for selected date
-      const colRes = await fetch(`/api/collections?date=${selectedDate}`);
-      const colData = await colRes.json();
-      setCollections(colData.collections || []);
-      setCancellations(colData.cancellations || []);
+      const res = await fetch(`/api/collections/driver-daily?date=${selectedDate}`);
+      const data = await res.json();
 
-      // Fetch open Vidange/AdBleu tickets to check for >5h auto-waiver eligibility
-      const tickRes = await fetch(`/api/tickets?status=OPEN`);
-      const tickData = await tickRes.json();
-      const tickets = tickData.tickets || [];
+      if (data.drivers) {
+        setDrivers(data.drivers);
+        setSummary(data.summary);
 
-      const now = Date.now();
-      const eligible: AutoWaiverTicket[] = tickets
-        .filter((t: any) =>
-          (t.ticket_type === "Vidange" || t.ticket_type === "AdBleu") &&
-          (t.status === "OPEN" || t.status === "IN_PROGRESS")
-        )
-        .map((t: any) => {
-          const elapsed = (now - new Date(t.created_at).getTime()) / (1000 * 60 * 60);
-          return { ...t, downtime_hours: Math.round(elapsed * 10) / 10 };
-        })
-        .filter((t: AutoWaiverTicket) => t.downtime_hours >= 5);
-
-      setWaiverTickets(eligible);
+        // Pre-populate input values with cleared amounts
+        const initialInputs: Record<string, number> = {};
+        for (const d of data.drivers) {
+          initialInputs[d.id] = d.clearedTodayMAD > 0 ? d.clearedTodayMAD : d.expectedTodayMAD;
+        }
+        setPaymentInputs(initialInputs);
+      }
     } catch (err) {
-      console.error("Failed to fetch performance data:", err);
+      console.error("Failed to load driver collections:", err);
+      toast.error("Erreur de chargement des encaissements");
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDate, nowTimestamp]);
+  }, [selectedDate]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchDriverCollections();
+  }, [fetchDriverCollections]);
 
-  // Add daily collection
-  const handleAddCollection = async () => {
-    if (!formCollector || !formExpected) return;
+  // Handle Recording / Saving a Driver's Payment for the day
+  async function handleSavePayment(driver: DriverDailyItem) {
+    const amount = paymentInputs[driver.id] !== undefined ? paymentInputs[driver.id] : driver.expectedTodayMAD;
+    setSavingDriverId(driver.id);
+
     try {
-      await fetch("/api/collections", {
+      const res = await fetch("/api/collections/driver-daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          driverId: driver.id,
           date: selectedDate,
-          collector_name: formCollector,
-          expected_total: Number(formExpected),
-          notes: formNotes || null,
-        }),
-      });
-      setShowAddForm(false);
-      setFormCollector("");
-      setFormExpected("");
-      setFormNotes("");
-      fetchData();
-    } catch (err) {
-      console.error("Failed to add collection:", err);
-    }
-  };
-
-  // Update collected total
-  const handleUpdateCollected = async () => {
-    if (!editCollection) return;
-    try {
-      await fetch(`/api/collections/${editCollection.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collected_total: Number(editCollected) }),
-      });
-      setEditCollection(null);
-      setEditCollected("");
-      fetchData();
-    } catch (err) {
-      console.error("Failed to update collected:", err);
-    }
-  };
-
-  // Cancel driver payment
-  const handleCancelPayment = async () => {
-    if (!cancelDriver || !cancelReason) return;
-    try {
-      await fetch("/api/cancellations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: selectedDate,
-          driver_name: cancelDriver,
-          driver_phone: cancelPhone || null,
-          plate_number: cancelPlate || null,
-          reason: cancelReason,
-          collection_id: collections[0]?.id || null,
-        }),
-      });
-      setShowCancelModal(false);
-      setCancelDriver("");
-      setCancelPhone("");
-      setCancelPlate("");
-      setCancelReason("");
-      fetchData();
-    } catch (err) {
-      console.error("Failed to cancel payment:", err);
-    }
-  };
-
-  // Approve auto-waiver
-  const handleApproveWaiver = async (ticket: AutoWaiverTicket) => {
-    try {
-      // Create a cancellation record
-      await fetch("/api/cancellations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: selectedDate,
-          driver_name: ticket.driver_name || "Unknown Driver",
-          driver_phone: ticket.driver_phone || null,
-          plate_number: ticket.plate_number,
-          vehicle_id: ticket.vehicle_id,
-          reason: `Auto: ${ticket.ticket_type} >5h downtime (${ticket.downtime_hours}h)`,
-          linked_ticket_id: ticket.id,
-          auto_waiver: true,
-          collection_id: collections[0]?.id || null,
+          clearedMAD: amount,
+          notes: `Encaissé via Fleet Perf (${selectedDate})`,
         }),
       });
 
-      // Also mark the ticket as payment waived
-      await fetch(`/api/tickets/${ticket.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payment_waived: true,
-          waived_days: 1,
-          waiver_reason: `Auto-waiver: ${ticket.ticket_type} downtime ${ticket.downtime_hours}h`,
-        }),
-      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Échec de l'enregistrement");
+        return;
+      }
 
-      fetchData();
+      toast.success(
+        amount >= driver.expectedTodayMAD
+          ? `✅ Paiement de ${amount} MAD validé pour ${driver.fullName}`
+          : `⚠️ Paiement partiel de ${amount} MAD enregistré pour ${driver.fullName}`
+      );
+
+      fetchDriverCollections();
     } catch (err) {
-      console.error("Failed to approve waiver:", err);
+      toast.error("Erreur réseau");
+    } finally {
+      setSavingDriverId(null);
     }
-  };
+  }
 
-  // Delete collection
-  const handleDeleteCollection = async (id: string) => {
-    try {
-      await fetch(`/api/collections/${id}`, { method: "DELETE" });
-      fetchData();
-    } catch (err) {
-      console.error("Failed to delete collection:", err);
-    }
-  };
+  // Generate WhatsApp reminder link
+  function getWhatsAppReminderURL(driver: DriverDailyItem) {
+    const cleanPhone = driver.phoneSanitized.replace(/[^0-9]/g, "");
+    const amountDue = driver.currentArrearsMAD > 0 ? driver.currentArrearsMAD : driver.expectedTodayMAD;
+    const contractText = driver.contractType === "WEEKLY" ? "hebdomadaire (1,800 MAD/lundi)" : "journalier (300 MAD/jour)";
 
-  // Totals
-  const totalExpected = collections.reduce((s, c) => s + c.expected_total, 0);
-  const totalCollected = collections.reduce((s, c) => s + c.collected_total, 0);
-  const collectionRate = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
-  const totalCancellations = cancellations.filter((c) => c.approved).length;
+    const message = encodeURIComponent(
+      `Bonjour ${driver.fullName},\n\nNous vous contactons concernant votre versement GoCab (${contractText}).\n` +
+      `Votre solde actuel est de : ${amountDue} MAD.\n` +
+      `Merci de procéder au règlement pour éviter tout blocage du véhicule (${driver.vehicle?.plate_number || ""}).\n\n` +
+      `L'équipe GoCab Operations.`
+    );
+
+    return `https://wa.me/${cleanPhone}?text=${message}`;
+  }
+
+  // Filtered driver list
+  const filteredDrivers = drivers.filter((d) => {
+    const matchesSearch =
+      d.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.phoneSanitized.includes(searchQuery) ||
+      (d.vehicle?.plate_number && d.vehicle.plate_number.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (filterType === "RED" && !d.isCriticalRed) return false;
+    if (filterType === "UNPAID" && d.isPaidToday) return false;
+    if (filterType === "DAILY" && d.contractType !== "DAILY") return false;
+    if (filterType === "WEEKLY" && d.contractType !== "WEEKLY") return false;
+
+    return true;
+  });
+
+  const selectedDateObj = new Date(`${selectedDate}T00:00:00.000Z`);
+  const dayName = selectedDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div style={{ padding: "20px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+    <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-fadeIn">
+      {/* Top Header & Date Bar */}
+      <div className="bg-gradient-to-r from-navy via-[#1b3453] to-[#0d1e38] text-white p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a1a2e" }}>
-            📊 Fleet Performance — Daily Collections
-          </h2>
-          <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 14 }}>
-            Track daily cash collection targets, record actual receipts, and manage payment cancellations.
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-gold/20 text-gold rounded-xl border border-gold/30">
+              <DollarSign className="w-6 h-6" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+              Encaissements Chauffeurs & Suivi Journalier (300 / 1800 MAD)
+            </h1>
+          </div>
+          <p className="text-white/70 text-xs mt-1">
+            Saisie quotidienne des versements, automatisation des contrats et alerte rouge au <span className="text-red-300 font-bold">3ème jour sans paiement</span>.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+
+        {/* Date Selector Pill */}
+        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl border border-white/20">
+          <Calendar className="w-4 h-4 text-gold ml-2" />
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }}
+            className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer pr-2"
           />
           <button
-            onClick={() => setShowAddForm(true)}
-            style={{
-              padding: "8px 16px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-              color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14,
-            }}
+            onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+            className="px-2.5 py-1 bg-white text-navy font-bold text-2xs rounded-xl hover:bg-gold transition-colors"
           >
-            + Morning Target
+            Aujourd'hui
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Summary Cards Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Expected Today */}
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+          <span className="text-2xs font-bold text-gray-500 uppercase">Attendu Aujourd'hui ({dayName})</span>
+          <p className="text-2xl font-black text-navy mt-1.5">
+            {summary?.totalExpectedTodayMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+          </p>
+          <p className="text-2xs text-gray-400 mt-1">
+            300 DH/j (Lun-Sam) + 1,800 DH (Lundi)
+          </p>
+        </div>
+
+        {/* Collected Today */}
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+          <span className="text-2xs font-bold text-gray-500 uppercase">Encaissé Aujourd'hui</span>
+          <p className="text-2xl font-black text-emerald-600 mt-1.5">
+            {summary?.totalClearedTodayMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+          </p>
+          <div className="w-full h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full"
+              style={{
+                width: `${
+                  summary && summary.totalExpectedTodayMAD > 0
+                    ? Math.min(100, Math.round((summary.totalClearedTodayMAD / summary.totalExpectedTodayMAD) * 100))
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Remaining to collect */}
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+          <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
+          <p className="text-2xl font-black text-amber-600 mt-1.5">
+            {summary?.remainingToCollectMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+          </p>
+          <p className="text-2xs text-amber-700 mt-1 font-medium">
+            Cumul total impayés flotte : {summary?.totalArrearsAllMAD.toLocaleString()} MAD
+          </p>
+        </div>
+
+        {/* Critical 3rd Day Red Alert Count */}
+        <div
+          onClick={() => setFilterType(filterType === "RED" ? "ALL" : "RED")}
+          className={`p-5 rounded-3xl border shadow-xs cursor-pointer transition-all ${
+            summary && summary.criticalRedCount > 0
+              ? "bg-red-50 border-red-300 hover:border-red-500 animate-pulse-subtle"
+              : "bg-white border-gray-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-2xs font-bold text-red-700 uppercase flex items-center gap-1">
+              <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
+              Alerte Rouge (3e Jour)
+            </span>
+            <span className="text-2xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">
+              {summary?.criticalRedCount || 0}
+            </span>
+          </div>
+          <p className="text-2xl font-black text-red-700 mt-1.5">
+            {summary?.criticalRedCount} <span className="text-xs font-medium text-red-600">Chauffeurs</span>
+          </p>
+          <p className="text-2xs text-red-600 mt-1 font-medium">
+            ≥ 2-3 jours sans versement (Risque d'immobilisation)
+          </p>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            placeholder="Rechercher par chauffeur, téléphone, immatriculation..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-navy/20"
+          />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setFilterType("ALL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterType === "ALL" ? "bg-navy text-white shadow-2xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            Tous ({drivers.length})
           </button>
           <button
-            onClick={() => setShowCancelModal(true)}
-            style={{
-              padding: "8px 16px", background: "linear-gradient(135deg, #ef4444, #dc2626)",
-              color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14,
-            }}
+            onClick={() => setFilterType("RED")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+              filterType === "RED" ? "bg-red-600 text-white shadow-2xs" : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+            }`}
           >
-            ✕ Cancel Payment
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>🔴 Alerte Rouge ({summary?.criticalRedCount || 0})</span>
+          </button>
+          <button
+            onClick={() => setFilterType("UNPAID")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterType === "UNPAID" ? "bg-amber-600 text-white shadow-2xs" : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+            }`}
+          >
+            Non Encaissés
+          </button>
+          <button
+            onClick={() => setFilterType("DAILY")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterType === "DAILY" ? "bg-blue-600 text-white shadow-2xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            Journalier (300 DH)
+          </button>
+          <button
+            onClick={() => setFilterType("WEEKLY")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterType === "WEEKLY" ? "bg-purple-600 text-white shadow-2xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            Hebdo (1800 DH)
+          </button>
+          <button
+            onClick={fetchDriverCollections}
+            className="p-2 text-gray-400 hover:text-navy rounded-xl hover:bg-gray-100 transition-colors"
+            title="Rafraîchir"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      {/* KPI Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "linear-gradient(135deg, #eff6ff, #dbeafe)", padding: 18, borderRadius: 12, border: "1px solid #bfdbfe" }}>
-          <div style={{ fontSize: 12, color: "#3b82f6", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Expected Today</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#1e40af", marginTop: 4 }}>{totalExpected.toLocaleString()} MAD</div>
-        </div>
-        <div style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", padding: 18, borderRadius: 12, border: "1px solid #bbf7d0" }}>
-          <div style={{ fontSize: 12, color: "#16a34a", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Collected</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#15803d", marginTop: 4 }}>{totalCollected.toLocaleString()} MAD</div>
-        </div>
-        <div style={{ background: collectionRate >= 90 ? "linear-gradient(135deg, #f0fdf4, #dcfce7)" : collectionRate >= 50 ? "linear-gradient(135deg, #fffbeb, #fef3c7)" : "linear-gradient(135deg, #fef2f2, #fecaca)", padding: 18, borderRadius: 12, border: `1px solid ${collectionRate >= 90 ? "#bbf7d0" : collectionRate >= 50 ? "#fde68a" : "#fca5a5"}` }}>
-          <div style={{ fontSize: 12, color: collectionRate >= 90 ? "#16a34a" : collectionRate >= 50 ? "#d97706" : "#dc2626", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Collection Rate</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: collectionRate >= 90 ? "#15803d" : collectionRate >= 50 ? "#b45309" : "#b91c1c", marginTop: 4 }}>{collectionRate}%</div>
-        </div>
-        <div style={{ background: "linear-gradient(135deg, #fef2f2, #fecaca)", padding: 18, borderRadius: 12, border: "1px solid #fca5a5" }}>
-          <div style={{ fontSize: 12, color: "#dc2626", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Cancelled Payments</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#b91c1c", marginTop: 4 }}>{totalCancellations}</div>
-        </div>
-      </div>
-
-      {/* Auto-Waiver Queue */}
-      {waiverTickets.length > 0 && (
-        <div style={{
-          background: "linear-gradient(135deg, #fffbeb, #fef3c7)", border: "2px solid #f59e0b",
-          borderRadius: 12, padding: 18, marginBottom: 24,
-        }}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#92400e" }}>
-            ⚠️ Auto-Waiver Queue — Vidange/AdBleu Tickets &gt; 5 Hours
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {waiverTickets.map((t) => (
-              <div key={t.id} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                background: "#fff", borderRadius: 8, padding: "10px 14px", border: "1px solid #fde68a",
-              }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 700, color: "#1a1a2e" }}>{t.plate_number}</span>
-                  <span style={{ margin: "0 8px", color: "#6b7280" }}>•</span>
-                  <span style={{ color: "#6b7280" }}>{t.driver_name || "Unknown Driver"}</span>
-                  <span style={{ margin: "0 8px", color: "#6b7280" }}>•</span>
-                  <span style={{
-                    padding: "2px 8px", borderRadius: 4, fontSize: 12, fontWeight: 600,
-                    background: t.ticket_type === "Vidange" ? "#dbeafe" : "#e0e7ff",
-                    color: t.ticket_type === "Vidange" ? "#2563eb" : "#4f46e5",
-                  }}>{t.ticket_type}</span>
-                  <span style={{ margin: "0 8px", color: "#6b7280" }}>•</span>
-                  <span style={{ fontWeight: 700, color: "#dc2626" }}>⏱ {t.downtime_hours}h downtime</span>
-                </div>
-                <button
-                  onClick={() => handleApproveWaiver(t)}
-                  style={{
-                    padding: "6px 14px", background: "linear-gradient(135deg, #16a34a, #15803d)",
-                    color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, cursor: "pointer", fontSize: 13,
-                  }}
-                >
-                  ✅ Approve Auto-Waiver
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Collections Table */}
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 24 }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1a1a2e" }}>📋 Daily Collection Entries</h3>
-        </div>
-        {isLoading ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Loading...</div>
-        ) : collections.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
-            No collection entries for this date. Click <strong>+ Morning Target</strong> to add one.
-          </div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#f3f4f6" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Collector</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Expected (MAD)</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Collected (MAD)</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Rate</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Notes</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Actions</th>
+      {/* Driver Daily Collections Table */}
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-gray-600">
+            <thead className="bg-gray-50/90 uppercase text-2xs tracking-wider text-gray-500 border-b border-gray-100 font-bold">
+              <tr>
+                <th className="py-4 px-6">Chauffeur & Contact</th>
+                <th className="py-4 px-4">Véhicule</th>
+                <th className="py-4 px-4">Type Contrat</th>
+                <th className="py-4 px-4 text-center">Attendu Aujourd'hui</th>
+                <th className="py-4 px-4 text-center">Montant Encaissé (MAD)</th>
+                <th className="py-4 px-4 text-center">Jours Sans Versement</th>
+                <th className="py-4 px-4 text-right">Total Impayés (Cumul)</th>
+                <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {collections.map((c) => {
-                const rate = c.expected_total > 0 ? Math.round((c.collected_total / c.expected_total) * 100) : 0;
-                return (
-                  <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: "12px 14px", fontWeight: 600, color: "#1a1a2e" }}>{c.collector_name}</td>
-                    <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 600, color: "#2563eb" }}>{c.expected_total.toLocaleString()}</td>
-                    <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 600, color: c.collected_total > 0 ? "#16a34a" : "#9ca3af" }}>{c.collected_total.toLocaleString()}</td>
-                    <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                      <span style={{
-                        padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700,
-                        background: rate >= 90 ? "#dcfce7" : rate >= 50 ? "#fef3c7" : "#fecaca",
-                        color: rate >= 90 ? "#15803d" : rate >= 50 ? "#b45309" : "#b91c1c",
-                      }}>{rate}%</span>
-                    </td>
-                    <td style={{ padding: "12px 14px", color: "#6b7280", fontSize: 13 }}>{c.notes || "—"}</td>
-                    <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                      <button
-                        onClick={() => { setEditCollection(c); setEditCollected(String(c.collected_total)); }}
-                        style={{ padding: "4px 10px", background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, marginRight: 6 }}
-                      >
-                        💰 Update Collected
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCollection(c.id)}
-                        style={{ padding: "4px 10px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}
-                      >
-                        🗑
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Cancellations Table */}
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb", background: "#fef2f2" }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#991b1b" }}>🚫 Payment Cancellations — {selectedDate}</h3>
-        </div>
-        {cancellations.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: "#9ca3af" }}>No payment cancellations for this date.</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#f3f4f6" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Driver</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Phone</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Vehicle</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Reason</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Type</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase" }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cancellations.map((c) => (
-                <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "12px 14px", fontWeight: 600, color: "#1a1a2e" }}>{c.driver_name}</td>
-                  <td style={{ padding: "12px 14px", color: "#6b7280", fontSize: 13 }}>{c.driver_phone || "—"}</td>
-                  <td style={{ padding: "12px 14px", color: "#6b7280", fontSize: 13 }}>{c.plate_number || "—"}</td>
-                  <td style={{ padding: "12px 14px", color: "#374151", fontSize: 13 }}>{c.reason}</td>
-                  <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: c.auto_waiver ? "#fef3c7" : "#e0e7ff",
-                      color: c.auto_waiver ? "#92400e" : "#4338ca",
-                    }}>{c.auto_waiver ? "⚡ Auto-Waiver" : "✋ Manual"}</span>
-                  </td>
-                  <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: c.approved ? "#dcfce7" : "#fef3c7",
-                      color: c.approved ? "#15803d" : "#92400e",
-                    }}>{c.approved ? "✅ Approved" : "⏳ Pending"}</span>
+            <tbody className="divide-y divide-gray-100">
+              {filteredDrivers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
+                    Aucun chauffeur trouvé pour ces critères.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredDrivers.map((driver) => {
+                  const isRed = driver.isCriticalRed;
+                  const isSaving = savingDriverId === driver.id;
+                  const currentInputValue = paymentInputs[driver.id] ?? driver.expectedTodayMAD;
+
+                  return (
+                    <tr
+                      key={driver.id}
+                      className={`transition-colors ${
+                        isRed
+                          ? "bg-red-50/90 hover:bg-red-100/90 border-l-4 border-l-red-600"
+                          : driver.isPaidToday
+                          ? "bg-emerald-50/30 hover:bg-emerald-50/60"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      {/* Driver Info */}
+                      <td className="py-4 px-6 font-semibold">
+                        <div className="space-y-0.5">
+                          <p className={`font-bold text-sm ${isRed ? "text-red-900" : "text-navy"}`}>
+                            {driver.fullName}
+                          </p>
+                          <p className="font-mono text-2xs text-gray-500 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-gray-400" />
+                            {driver.phoneSanitized} · CIN: {driver.cinNumber}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Vehicle Immatriculation */}
+                      <td className="py-4 px-4">
+                        {driver.vehicle ? (
+                          <div className="space-y-0.5">
+                            <span className="font-mono font-bold text-xs bg-navy/5 text-navy px-2 py-0.5 rounded-lg border border-navy/10 inline-block">
+                              {driver.vehicle.plate_number}
+                            </span>
+                            <p className="text-2xs text-gray-400 truncate max-w-[120px]">
+                              {driver.vehicle.make_model}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-2xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200">
+                            Non assigné
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Contract Type */}
+                      <td className="py-4 px-4">
+                        {driver.contractType === "WEEKLY" ? (
+                          <span className="text-2xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200">
+                            🗓️ Hebdo (1800 DH / Lun)
+                          </span>
+                        ) : (
+                          <span className="text-2xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200">
+                            📅 Journalier (300 DH / j)
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Expected Today */}
+                      <td className="py-4 px-4 text-center font-mono font-bold text-gray-700">
+                        {driver.expectedTodayMAD > 0 ? (
+                          <span>{driver.expectedTodayMAD} MAD</span>
+                        ) : (
+                          <span className="text-gray-400 text-2xs">0 MAD (Repos)</span>
+                        )}
+                      </td>
+
+                      {/* Amount Paid Input Field */}
+                      <td className="py-4 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div className="relative w-28">
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={currentInputValue}
+                              onChange={(e) =>
+                                setPaymentInputs({
+                                  ...paymentInputs,
+                                  [driver.id]: parseFloat(e.target.value) || 0,
+                                })
+                              }
+                              className={`w-full px-2 py-1.5 text-center font-mono font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
+                                driver.isPaidToday
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900 focus:ring-emerald-200"
+                                  : "border-gray-200 bg-white text-navy focus:ring-navy/20"
+                              }`}
+                            />
+                            <span className="absolute right-2 top-2 text-3xs font-bold text-gray-400">DH</span>
+                          </div>
+
+                          {/* Quick autofill expected amount */}
+                          {driver.expectedTodayMAD > 0 && currentInputValue !== driver.expectedTodayMAD && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPaymentInputs({
+                                  ...paymentInputs,
+                                  [driver.id]: driver.expectedTodayMAD,
+                                })
+                              }
+                              className="p-1.5 bg-gray-100 hover:bg-gray-200 text-navy rounded-lg text-2xs font-bold"
+                              title="Remplir montant attendu"
+                            >
+                              <Zap className="w-3 h-3 text-gold" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Consecutive Unpaid Days */}
+                      <td className="py-4 px-4 text-center font-bold">
+                        {isRed ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="text-2xs font-extrabold text-white bg-red-600 px-2 py-0.5 rounded-full animate-pulse">
+                              🔴 {driver.consecutiveUnpaidDays || 3}e JOUR SANS PAIEMENT
+                            </span>
+                            <span className="text-3xs text-red-700 font-semibold mt-0.5">
+                              Risque Immobilisation
+                            </span>
+                          </div>
+                        ) : driver.consecutiveUnpaidDays === 1 ? (
+                          <span className="text-2xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                            ⚠️ 1 jour impayé
+                          </span>
+                        ) : (
+                          <span className="text-2xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            ✓ À jour (0 j)
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Total Arrears / Debt Addition */}
+                      <td className="py-4 px-4 text-right">
+                        <div className="space-y-0.5">
+                          <p className={`font-mono font-black text-sm ${driver.currentArrearsMAD > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                            {driver.currentArrearsMAD.toLocaleString()} MAD
+                          </p>
+                          {driver.currentArrearsMAD > 0 && (
+                            <span className="text-3xs text-red-500 font-semibold block">
+                              +{driver.currentArrearsMAD} DH d'arriérés
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Actions: Save & WhatsApp */}
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleSavePayment(driver)}
+                            disabled={isSaving}
+                            className="px-3 py-1.5 bg-navy hover:bg-navy/90 text-white rounded-xl font-bold text-2xs shadow-2xs transition-all flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {isSaving ? (
+                              <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-3 h-3 text-gold" />
+                            )}
+                            <span>Valider</span>
+                          </button>
+
+                          <a
+                            href={getWhatsAppReminderURL(driver)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-2xs transition-colors"
+                            title="Relancer sur WhatsApp avec le solde exact"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
-        )}
+        </div>
       </div>
-
-      {/* === MODALS === */}
-
-      {/* Add Morning Target Modal */}
-      {showAddForm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 25px 50px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>🌅 Morning Collection Target</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Collector Name *</label>
-                <input value={formCollector} onChange={(e) => setFormCollector(e.target.value)} placeholder="Fleet Performance Agent name"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Expected Total (MAD) *</label>
-                <input type="number" value={formExpected} onChange={(e) => setFormExpected(e.target.value)} placeholder="e.g. 12500"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Notes (optional)</label>
-                <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={2} placeholder="Any notes for today..."
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, resize: "vertical", boxSizing: "border-box" }} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowAddForm(false)} style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleAddCollection} style={{ padding: "8px 18px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Save Target</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Update Collected Modal */}
-      {editCollection && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 380, maxWidth: "90vw", boxShadow: "0 25px 50px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>💰 Update Collected Amount</h3>
-            <p style={{ margin: "0 0 14px", color: "#6b7280", fontSize: 14 }}>
-              Collector: <strong>{editCollection.collector_name}</strong><br />
-              Expected: <strong>{editCollection.expected_total.toLocaleString()} MAD</strong>
-            </p>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Total Collected (MAD)</label>
-              <input type="number" value={editCollected} onChange={(e) => setEditCollected(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
-              <button onClick={() => { setEditCollection(null); setEditCollected(""); }} style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleUpdateCollected} style={{ padding: "8px 18px", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Cancel Payment Modal */}
-      {showCancelModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 25px 50px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700, color: "#dc2626" }}>🚫 Cancel Driver Payment</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Driver Name *</label>
-                <input value={cancelDriver} onChange={(e) => setCancelDriver(e.target.value)} placeholder="Driver full name"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Phone</label>
-                <input value={cancelPhone} onChange={(e) => setCancelPhone(e.target.value)} placeholder="+212..."
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Vehicle Plate</label>
-                <input value={cancelPlate} onChange={(e) => setCancelPlate(e.target.value)} placeholder="e.g. 12345-A-6"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Reason *</label>
-                <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={2} placeholder="Reason for cancelling today's payment..."
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, resize: "vertical", boxSizing: "border-box" }} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowCancelModal(false)} style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Close</button>
-              <button onClick={handleCancelPayment} style={{ padding: "8px 18px", background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel Payment</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

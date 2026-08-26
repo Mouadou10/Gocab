@@ -28,6 +28,7 @@ import {
   Search,
   Filter,
   ArrowUpRight,
+  ArrowRight,
   ShieldCheck,
   CreditCard,
   Building2,
@@ -105,6 +106,8 @@ export default function DashboardView() {
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [vehicles, setVehicles] = useState<VehicleFinancialItem[]>([]);
   const [agentTargets, setAgentTargets] = useState<Record<string, AgentTargetGroup>>({});
+  const [dailyCollectionsSummary, setDailyCollectionsSummary] = useState<any>(null);
+  const [redDrivers, setRedDrivers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters & Search
@@ -116,13 +119,23 @@ export default function DashboardView() {
   const fetchFinancialReport = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("/api/reports/financial");
-      const data = await res.json();
+      const [finRes, colRes] = await Promise.all([
+        fetch("/api/reports/financial"),
+        fetch("/api/collections/driver-daily"),
+      ]);
 
-      if (data.summary) {
-        setSummary(data.summary);
-        setVehicles(data.vehicles || []);
-        setAgentTargets(data.agentTargets || {});
+      const finData = await finRes.json();
+      const colData = await colRes.json();
+
+      if (finData.summary) {
+        setSummary(finData.summary);
+        setVehicles(finData.vehicles || []);
+        setAgentTargets(finData.agentTargets || {});
+      }
+
+      if (colData.drivers) {
+        setDailyCollectionsSummary(colData.summary);
+        setRedDrivers(colData.drivers.filter((d: any) => d.isCriticalRed));
       }
     } catch (err) {
       console.error("Failed to load financial report:", err);
@@ -490,6 +503,105 @@ export default function DashboardView() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* 🚨 Driver Payment Collections & Critical Red Alert Section */}
+      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-red-100 text-red-600 rounded-xl">
+                <ShieldAlert className="w-5 h-5" />
+              </span>
+              <h2 className="text-lg font-bold text-navy">
+                Suivi des Encaissements & Alertes Rouges Chauffeurs (300 / 1800 MAD)
+              </h2>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Contrats Journaliers (300 DH/j du Lun au Sam) & Hebdomadaires (1800 DH chaque Lundi). Alerte rouge déclenchée au <strong>3ème jour sans versement</strong>.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className="text-2xs font-bold text-gray-400 uppercase">Collecté Aujourd'hui</span>
+              <p className="text-base font-black text-emerald-600">
+                {dailyCollectionsSummary?.totalClearedTodayMAD?.toLocaleString() || 0} / {dailyCollectionsSummary?.totalExpectedTodayMAD?.toLocaleString() || 0} MAD
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Critical Red Drivers List */}
+        {redDrivers.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-red-700 uppercase flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
+                {redDrivers.length} Chauffeurs en Non-Paiement Critique (3e jour sans versement)
+              </span>
+              <span className="text-2xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200">
+                Intervention Terrain / Risque Immobilisation
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {redDrivers.map((driver) => {
+                const cleanPhone = driver.phoneSanitized?.replace(/[^0-9]/g, "");
+                const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                  `Bonjour ${driver.fullName},\n\nNous constatons 3 jours consécutifs sans versement pour votre véhicule GoCab (${driver.vehicle?.plate_number || ""}).\nVotre solde d'arriérés est de : ${driver.currentArrearsMAD} MAD.\nMerci de régulariser immédiatement pour éviter l'immobilisation du véhicule.`
+                )}`;
+
+                return (
+                  <div
+                    key={driver.id}
+                    className="p-4 bg-red-50/80 rounded-2xl border-2 border-red-200 shadow-2xs flex flex-col justify-between space-y-3 hover:border-red-400 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-sm text-red-950">{driver.fullName}</p>
+                        <p className="text-2xs font-mono text-gray-500">{driver.phoneSanitized}</p>
+                        {driver.vehicle && (
+                          <span className="font-mono font-bold text-2xs bg-white text-navy px-2 py-0.5 rounded-md border border-red-200 inline-block mt-1">
+                            🚗 {driver.vehicle.plate_number}
+                          </span>
+                        )}
+                      </div>
+
+                      <span className="text-3xs font-extrabold bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">
+                        {driver.consecutiveUnpaidDays || 3}j impayés
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-red-200/60">
+                      <div>
+                        <span className="text-3xs text-gray-500 block">Total Impayés :</span>
+                        <strong className="text-red-700 text-sm font-black">
+                          {driver.currentArrearsMAD.toLocaleString()} MAD
+                        </strong>
+                      </div>
+
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs rounded-xl shadow-2xs transition-colors flex items-center gap-1"
+                      >
+                        <span>WhatsApp</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center gap-3 text-xs text-emerald-900">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <span>Aucun chauffeur en alerte rouge (3ème jour sans paiement). Tous les versements sont à jour.</span>
+          </div>
+        )}
       </div>
 
       {/* 🎯 Clear Agent Role Targets & Accountability Matrix */}

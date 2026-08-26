@@ -89,6 +89,20 @@ export interface Translations {
   currentRole: string;
   changeRole: string;
   whatsappTemplates: string;
+
+  // Collections & Financial Ledger
+  dailyContract: string;
+  weeklyContract: string;
+  redAlert3rdDay: string;
+  expectedToday: string;
+  collectedToday: string;
+  remainingToCollect: string;
+  totalArrears: string;
+  consecutiveUnpaidDays: string;
+  riskImmobilization: string;
+  opportunityLoss: string;
+  recordPayment: string;
+  onTrack: string;
 }
 
 export const DICTIONARY: Record<Language, Translations> = {
@@ -101,7 +115,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     drivers: "Drivers",
     fleet: "Fleet",
     support: "Support",
-    perf: "Perf",
+    perf: "Collections & Perf",
     field: "Field",
     insurance: "Insurance",
     settings: "Settings",
@@ -120,6 +134,20 @@ export const DICTIONARY: Record<Language, Translations> = {
     all: "All",
     status: "Status",
     actions: "Actions",
+
+    // Collections & Financial Ledger
+    dailyContract: "Daily (300 MAD/day Mon-Sat)",
+    weeklyContract: "Weekly (1,800 MAD every Monday)",
+    redAlert3rdDay: "Critical Non-Payment (3rd Day)",
+    expectedToday: "Expected Today",
+    collectedToday: "Collected Today",
+    remainingToCollect: "Remaining to Collect",
+    totalArrears: "Total Accumulated Arrears",
+    consecutiveUnpaidDays: "Unpaid Days",
+    riskImmobilization: "Risk of Immobilization",
+    opportunityLoss: "Opportunity Loss (250 MAD/day)",
+    recordPayment: "Validate Payment",
+    onTrack: "Up to Date",
 
     executiveDashboard: "Executive Dashboard",
     executiveSubtitle: "Overview of GoCab operational performance across 3 pillars",
@@ -183,7 +211,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     drivers: "Chauffeurs",
     fleet: "Flotte",
     support: "Support",
-    perf: "Performance",
+    perf: "Encaissements & Perf",
     field: "Terrain",
     insurance: "Assurance",
     settings: "Paramètres",
@@ -202,6 +230,20 @@ export const DICTIONARY: Record<Language, Translations> = {
     all: "Tous",
     status: "Statut",
     actions: "Actions",
+
+    // Collections & Financial Ledger
+    dailyContract: "Journalier (300 DH/j Lun-Sam)",
+    weeklyContract: "Hebdomadaire (1 800 DH chaque Lundi)",
+    redAlert3rdDay: "Non-Paiement Critique (3e Jour)",
+    expectedToday: "Attendu Aujourd'hui",
+    collectedToday: "Encaissé Aujourd'hui",
+    remainingToCollect: "Reste à Encaisser",
+    totalArrears: "Total Arriérés & Impayés",
+    consecutiveUnpaidDays: "Jours sans versement",
+    riskImmobilization: "Risque d'Immobilisation Véhicule",
+    opportunityLoss: "Perte d'Opportunité (250 DH/j)",
+    recordPayment: "Valider Paiement",
+    onTrack: "À Jour",
 
     executiveDashboard: "Tableau de Bord Exécutif",
     executiveSubtitle: "Aperçu des performances opérationnelles de GoCab sur les 3 piliers",
@@ -265,7 +307,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     drivers: "السائقين",
     fleet: "الأسطول",
     support: "الدعم الفني",
-    perf: "الأداء",
+    perf: "التحصيل والأداء",
     field: "الميدان",
     insurance: "التأمين",
     settings: "الإعدادات",
@@ -284,6 +326,20 @@ export const DICTIONARY: Record<Language, Translations> = {
     all: "الكل",
     status: "الحالة",
     actions: "الإجراءات",
+
+    // Collections & Financial Ledger
+    dailyContract: "يومي (300 درهم/يوم من الإثنين للسبت)",
+    weeklyContract: "أسبوعي (1,800 درهم كل إثنين)",
+    redAlert3rdDay: "تنبيه أحمر حرج (اليوم الثالث بدون سداد)",
+    expectedToday: "المبلغ المتوقع اليوم",
+    collectedToday: "المحصل اليوم",
+    remainingToCollect: "المتبقي للتحصيل",
+    totalArrears: "إجمالي المستحقات المتأخرة",
+    consecutiveUnpaidDays: "أيام عدم السداد",
+    riskImmobilization: "خطر إيقاف وحجز المركبة",
+    opportunityLoss: "فقدان فرصة الدخل (250 درهم/يوم)",
+    recordPayment: "تأكيد الدفع",
+    onTrack: "مستوفى السداد",
 
     executiveDashboard: "لوحة التحكم التنفيذية",
     executiveSubtitle: "نظرة عامة على الأداء التشغيلي لـ GoCab عبر الركائز الثلاث",

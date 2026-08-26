@@ -66,13 +66,16 @@ CREATE TABLE "DriverProfile" (
     "cinNumber" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
     "phoneSanitized" TEXT NOT NULL,
-    "age" INTEGER NOT NULL,
-    "licenseSeniority" INTEGER NOT NULL,
+    "age" INTEGER DEFAULT 28,
+    "licenseSeniority" INTEGER DEFAULT 3,
     "isKycVerified" BOOLEAN NOT NULL DEFAULT false,
-    "contractType" TEXT NOT NULL,
+    "contractType" TEXT NOT NULL DEFAULT 'DAILY',
     "monthlyTripCount" INTEGER NOT NULL DEFAULT 0,
     "currentArrearsMAD" REAL NOT NULL DEFAULT 0.00,
     "defaultStage" TEXT NOT NULL DEFAULT 'NOMINAL',
+    "consecutiveUnpaidDays" INTEGER NOT NULL DEFAULT 0,
+    "lastPaymentDate" DATETIME,
+    "lastDailyChargeDate" DATETIME,
     "assignedVehicleId" TEXT,
     CONSTRAINT "DriverProfile_assignedVehicleId_fkey" FOREIGN KEY ("assignedVehicleId") REFERENCES "Vehicle" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -107,10 +110,13 @@ CREATE TABLE "FieldInspectionNew" (
 CREATE TABLE "PaymentLedger" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "driverId" TEXT NOT NULL,
-    "expectedMAD" REAL NOT NULL,
-    "clearedMAD" REAL NOT NULL,
+    "paymentDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expectedMAD" REAL NOT NULL DEFAULT 0.0,
+    "clearedMAD" REAL NOT NULL DEFAULT 0.0,
+    "arrearsMAD" REAL NOT NULL DEFAULT 0.0,
+    "notes" TEXT,
     "loggedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "PaymentLedger_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "DriverProfile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "PaymentLedger_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "DriverProfile" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE "WeeklyObjective" (
