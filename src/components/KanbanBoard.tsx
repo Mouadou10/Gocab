@@ -129,7 +129,8 @@ export default function KanbanBoard() {
   const [rolePermissions, setRolePermissions] = useState<Record<string, TabType[]>>(DEFAULT_ROLE_PERMISSIONS);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
 
-  const allowedTabs = rolePermissions[userRole] || rolePermissions.ADMIN || DEFAULT_ROLE_PERMISSIONS.ADMIN;
+  const userRoleTabs = rolePermissions[userRole] || DEFAULT_ROLE_PERMISSIONS[userRole] || DEFAULT_ROLE_PERMISSIONS.ADMIN || [];
+  const allowedTabs = userRoleTabs.includes("drivers") ? userRoleTabs : [...userRoleTabs, "drivers"];
 
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
 
@@ -183,7 +184,15 @@ export default function KanbanBoard() {
         if (data.settings.role_tab_permissions) {
           try {
             const parsed = JSON.parse(data.settings.role_tab_permissions);
-            setRolePermissions(parsed);
+            const merged: Record<string, TabType[]> = { ...DEFAULT_ROLE_PERMISSIONS };
+            for (const [k, v] of Object.entries(parsed)) {
+              const tabs = Array.isArray(v) ? (v as TabType[]) : [];
+              if (!tabs.includes("drivers")) {
+                tabs.push("drivers");
+              }
+              merged[k] = tabs;
+            }
+            setRolePermissions(merged);
           } catch (e) {}
         }
         if (data.settings.custom_role_labels) {

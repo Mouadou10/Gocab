@@ -14,12 +14,13 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 
-type TabType = "dashboard" | "leads" | "training" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
+type TabType = "dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
 
 const ALL_TABS: { id: TabType; label: string; icon: string; description: string }[] = [
   { id: "dashboard", label: "Home", icon: "📊", description: "KPI overview & command metrics" },
   { id: "leads", label: "Leads", icon: "💼", description: "Lead acquisition Kanban & intake" },
   { id: "training", label: "Training", icon: "🎓", description: "Driver training pipeline & KYC checks" },
+  { id: "drivers", label: "Drivers", icon: "🚖", description: "Driver fleet profiles & CSV imports" },
   { id: "fleet", label: "Fleet", icon: "🚗", description: "Vehicle fleet inventory & assignments" },
   { id: "tickets", label: "Support", icon: "🔧", description: "Maintenance & 24h SLA tickets" },
   { id: "performance", label: "Perf", icon: "📈", description: "Fleet performance, collections & waivers" },
@@ -29,12 +30,12 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
-  FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],
-  FIELD_SUPERVISOR: ["dashboard", "fleet", "field", "tickets"],
-  FINANCE_OFFICER: ["dashboard", "performance", "insurance"],
-  OPS_MANAGER: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
-  ADMIN: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  LEAD_ACQUISITION_JR: ["dashboard", "leads", "training", "drivers"],
+  FLEET_PERF_MANAGER: ["dashboard", "drivers", "fleet", "tickets", "performance"],
+  FIELD_SUPERVISOR: ["dashboard", "drivers", "fleet", "field", "tickets"],
+  FINANCE_OFFICER: ["dashboard", "drivers", "performance", "insurance"],
+  OPS_MANAGER: ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  ADMIN: ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
