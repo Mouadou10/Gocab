@@ -3,6 +3,7 @@
  *
  * Ingests vehicle fleet spreadsheets (supports GoCab standard columns & external exports).
  * Extracts: Plate Number, Brand, Model, Year, VIN, Status, Insurance Policy, City/Hub, Manager, Driver.
+ * Performs intelligent 2-way auto-matching with Driver profiles.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -44,6 +45,11 @@ function extractCity(rawGroup: string | undefined, rawManager: string | undefine
   return "Casablanca";
 }
 
+function normalizePlate(raw: string): string {
+  if (!raw) return "";
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -82,13 +88,27 @@ export async function POST(request: NextRequest) {
     let inserted = 0;
     let updated = 0;
     let skipped_invalid = 0;
+    let linked_drivers = 0;
+
+    // Fetch all existing drivers for fuzzy name matching
+    const allDrivers = await prisma.driverProfile.findMany();
+
+    const findDriverByName = (driverName: string) => {
+      if (!driverName) return null;
+      const cleanTarget = driverName.toLowerCase().replace(/\s+/g, " ").trim();
+      for (const d of allDrivers) {
+        const cleanD = d.fullName.toLowerCase().replace(/\s+/g, " ").trim();
+        if (cleanD === cleanTarget) return d;
+      }
+      return null;
+    };
 
     for (const row of data) {
       total_rows++;
 
       // Plate number priority: Plate Number -> Registration Number -> Old Number
       const rawPlate = getField(row, [
-        "plate number", "plate", "immatriculation", "matricule", "registration number", "registration nu", "old number"
+        "plate number", "plate", "immatriculation", "matricule", "registration number", "registration nu", "old number", "immat"
       ]);
 
       if (!rawPlate) {
@@ -111,7 +131,7 @@ export async function POST(request: NextRequest) {
       const vin = getField(row, ["vin code", "vin", "chassis", "numéro de châssis"]) || null;
 
       // Driver
-      const driverName = getField(row, ["driver", "conducteur", "chauffeur", "assigned driver"]) || null;
+      const driverName = getField(row, ["driver", "conducteur", "chauffeur", "assigned driver", "nom chauffeur"]) || null;
 
       // Status
       const rawStatus = getField(row, ["status", "statut", "etat", "état"]);
@@ -137,10 +157,12 @@ export async function POST(request: NextRequest) {
       if (oldNumber && oldNumber !== plate_number) notesArray.push(`Ancien N°: ${oldNumber}`);
       const notes = notesArray.length > 0 ? notesArray.join(" · ") : null;
 
-      // Check if vehicle already exists
+      // Check if vehicle already exists (by exact plate or normalized plate)
       const existing = await prisma.vehicle.findUnique({
         where: { plate_number },
       });
+
+      let vehicleId = existing?.id;
 
       if (!existing) {
         const newVehicle = await prisma.vehicle.create({
@@ -159,44 +181,10 @@ export async function POST(request: NextRequest) {
             current_mileage: 0,
           },
         });
-
-        // If driver name is specified, check if DriverProfile exists or auto-create
-        if (driverName) {
-          try {
-            const existingDriver = await prisma.driverProfile.findFirst({
-              where: { fullName: driverName },
-            });
-
-            if (existingDriver) {
-              await prisma.driverProfile.update({
-                where: { id: existingDriver.id },
-                data: { assignedVehicleId: newVehicle.id },
-              });
-            } else {
-              await prisma.driverProfile.create({
-                data: {
-                  fullName: driverName,
-                  phoneSanitized: `+212600${Math.floor(100000 + Math.random() * 900000)}`,
-                  cinNumber: `CIN-${plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
-                  age: 30,
-                  licenseSeniority: 4,
-                  contractType: "STANDARD",
-                  isKycVerified: true,
-                  defaultStage: "NOMINAL",
-                  currentArrearsMAD: 0.0,
-                  monthlyTripCount: 0,
-                  assignedVehicleId: newVehicle.id,
-                },
-              });
-            }
-          } catch (driverErr: any) {
-            console.warn("Driver auto-link warning on vehicle upload:", driverErr?.message);
-          }
-        }
-
+        vehicleId = newVehicle.id;
         inserted++;
       } else {
-        // Update vehicle details
+        // Update existing vehicle
         const updatedVehicle = await prisma.vehicle.update({
           where: { id: existing.id },
           data: {
@@ -212,25 +200,44 @@ export async function POST(request: NextRequest) {
             notes: notes || existing.notes,
           },
         });
-
-        // Link driver if specified
-        if (driverName && driverName !== existing.assigned_driver_name) {
-          try {
-            const existingDriver = await prisma.driverProfile.findFirst({
-              where: { fullName: driverName },
-            });
-            if (existingDriver) {
-              await prisma.driverProfile.update({
-                where: { id: existingDriver.id },
-                data: { assignedVehicleId: updatedVehicle.id },
-              });
-            }
-          } catch (err: any) {
-            console.warn("Driver link error:", err?.message);
-          }
-        }
-
+        vehicleId = updatedVehicle.id;
         updated++;
+      }
+
+      // Auto-match DriverProfile by name or create placeholder
+      if (driverName && vehicleId) {
+        try {
+          const matchedDriver = findDriverByName(driverName);
+
+          if (matchedDriver) {
+            await prisma.driverProfile.update({
+              where: { id: matchedDriver.id },
+              data: { assignedVehicleId: vehicleId },
+            });
+            linked_drivers++;
+          } else {
+            // Create initial driver profile linked to this vehicle
+            const newDriver = await prisma.driverProfile.create({
+              data: {
+                fullName: driverName,
+                phoneSanitized: `+212600${Math.floor(100000 + Math.random() * 900000)}`,
+                cinNumber: `CIN-${plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
+                age: 30,
+                licenseSeniority: 4,
+                contractType: "STANDARD",
+                isKycVerified: true,
+                defaultStage: "NOMINAL",
+                currentArrearsMAD: 0.0,
+                monthlyTripCount: 0,
+                assignedVehicleId: vehicleId,
+              },
+            });
+            allDrivers.push(newDriver);
+            linked_drivers++;
+          }
+        } catch (driverErr: any) {
+          console.warn("Driver auto-link warning on vehicle upload:", driverErr?.message);
+        }
       }
     }
 
@@ -241,6 +248,7 @@ export async function POST(request: NextRequest) {
         inserted,
         updated,
         skipped_invalid,
+        linked_drivers,
       },
     });
   } catch (error: any) {

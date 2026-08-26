@@ -1,8 +1,9 @@
 /**
  * Bulk Driver CSV Upload API — POST /api/upload-drivers
  *
- * Parses CSV containing existing drivers, auto-sanitizes Moroccan phone numbers,
- * links vehicles if plate number matches, and bulk-inserts/upserts DriverProfile records.
+ * Parses CSV containing drivers, auto-sanitizes Moroccan phone numbers,
+ * performs intelligent multi-pattern matching to vehicles by immatriculation / old WW number / VIN / name,
+ * and bulk-inserts/upserts DriverProfile records.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +17,12 @@ function sanitizePhone(raw: string): string {
   if (cleaned.startsWith("212")) cleaned = cleaned.slice(3);
   cleaned = cleaned.replace(/^0+/, "");
   return `+212${cleaned}`;
+}
+
+/** Normalize plate number for fuzzy matching (strips dashes, spaces, slashes, pipes) */
+function normalizePlate(raw: string): string {
+  if (!raw) return "";
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 export async function POST(request: NextRequest) {
@@ -58,68 +65,101 @@ export async function POST(request: NextRequest) {
     let skipped_invalid = 0;
     let linked_vehicles = 0;
 
-    // Fetch all vehicles to auto-link by plate number if present
+    // Fetch all vehicles to enable multi-pattern fuzzy matching
     const allVehicles = await prisma.vehicle.findMany();
-    const vehicleByPlate = new Map<string, typeof allVehicles[0]>();
-    for (const v of allVehicles) {
-      vehicleByPlate.set(v.plate_number.replace(/\s+/g, "").toUpperCase(), v);
-    }
+
+    // Helper to find vehicle by immat
+    const findMatchingVehicle = (rawPlate: string) => {
+      if (!rawPlate) return null;
+      const targetNorm = normalizePlate(rawPlate);
+      if (!targetNorm) return null;
+
+      // 1. Direct normalized match on plate_number
+      for (const v of allVehicles) {
+        if (normalizePlate(v.plate_number) === targetNorm) return v;
+      }
+
+      // 2. WW prefix vs suffix match (e.g. 860502-WW vs WW860502)
+      const targetDigits = targetNorm.replace(/WW/g, "");
+      if (targetDigits.length >= 4) {
+        for (const v of allVehicles) {
+          const vNorm = normalizePlate(v.plate_number);
+          const vDigits = vNorm.replace(/WW/g, "");
+          if (vDigits === targetDigits) return v;
+        }
+      }
+
+      // 3. Search in vehicle notes (e.g. "Ancien N°: 860533-WW" or "Old Number")
+      for (const v of allVehicles) {
+        if (v.notes && normalizePlate(v.notes).includes(targetNorm)) {
+          return v;
+        }
+      }
+
+      // 4. VIN match if provided
+      for (const v of allVehicles) {
+        if (v.vin && normalizePlate(v.vin) === targetNorm) {
+          return v;
+        }
+      }
+
+      return null;
+    };
 
     for (const row of data) {
       total_rows++;
 
       const fullName = getField(row, [
-        "full name", "fullname", "nom complet", "nom", "name", "chauffeur", "driver"
+        "full name", "fullname", "nom complet", "nom", "name", "chauffeur", "driver", "conducteur"
       ]);
       const rawPhone = getField(row, [
-        "phone", "telephone", "téléphone", "mobile", "tel", "phone number", "numero"
+        "phone", "telephone", "téléphone", "mobile", "tel", "phone number", "numero", "numéro"
       ]);
 
-      if (!fullName || !rawPhone) {
+      if (!fullName) {
         skipped_invalid++;
         continue;
       }
 
-      const phoneSanitized = sanitizePhone(rawPhone);
-      if (phoneSanitized.length < 10) {
-        skipped_invalid++;
-        continue;
-      }
+      const phoneSanitized = rawPhone ? sanitizePhone(rawPhone) : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
 
-      const rawCin = getField(row, ["cin", "cnie", "national id", "carte nationale"]);
+      const rawCin = getField(row, ["cin", "cnie", "national id", "carte nationale", "n° cin"]);
       const cinNumber = (rawCin || `CIN-${phoneSanitized.slice(-6)}`).toUpperCase();
 
       const rawAge = getField(row, ["age", "âge"]);
       const age = rawAge && !isNaN(Number(rawAge)) ? Number(rawAge) : 28;
 
-      const rawSeniority = getField(row, ["seniority", "anciennete", "ancienneté", "permis"]);
+      const rawSeniority = getField(row, ["seniority", "anciennete", "ancienneté", "permis", "anciennete permis"]);
       const licenseSeniority = rawSeniority && !isNaN(Number(rawSeniority)) ? Number(rawSeniority) : 3;
 
       const contractType = getField(row, ["contract", "contrat", "type contrat", "contract type"]) || "STANDARD";
 
-      const rawArrears = getField(row, ["arrears", "impayes", "impayés", "dette", "solde"]);
+      const rawArrears = getField(row, ["arrears", "impayes", "impayés", "dette", "solde", "impayes mad"]);
       const currentArrearsMAD = rawArrears && !isNaN(Number(rawArrears)) ? Number(rawArrears) : 0.0;
 
-      const defaultStage = getField(row, ["stage", "statut", "default stage"]) || "NOMINAL";
+      const defaultStage = getField(row, ["stage", "statut", "default stage", "recouvrement"]) || "NOMINAL";
 
-      const rawPlate = getField(row, ["plate", "immatriculation", "matricule", "vehicule", "vehicle"]);
+      // Match vehicle by Immatriculation
+      const rawPlate = getField(row, [
+        "plate", "immatriculation", "matricule", "vehicule", "vehicle", "immat", "plate number", "registration", "old number"
+      ]);
+      
       let assignedVehicleId: string | null = null;
+      let matchedVehicle = rawPlate ? findMatchingVehicle(rawPlate) : null;
 
-      if (rawPlate) {
-        const normalizedPlate = rawPlate.replace(/\s+/g, "").toUpperCase();
-        const matchedVehicle = vehicleByPlate.get(normalizedPlate);
-        if (matchedVehicle) {
-          assignedVehicleId = matchedVehicle.id;
-        }
+      if (matchedVehicle) {
+        assignedVehicleId = matchedVehicle.id;
       }
 
-      // Check if driver already exists by phone or CIN
+      // Check if driver already exists by phone, CIN, exact Name, or previous placeholder vehicle link
       const existing = await prisma.driverProfile.findFirst({
         where: {
           OR: [
-            { phoneSanitized },
-            { cinNumber },
-          ],
+            { phoneSanitized: rawPhone ? phoneSanitized : undefined },
+            { cinNumber: rawCin ? cinNumber : undefined },
+            { fullName: { equals: fullName } },
+            ...(assignedVehicleId ? [{ assignedVehicleId }] : []),
+          ].filter(Boolean) as any,
         },
       });
 
@@ -145,31 +185,39 @@ export async function POST(request: NextRequest) {
             where: { id: assignedVehicleId },
             data: {
               status: "Actif",
+              assigned_driver_name: created.fullName,
+              assigned_driver_phone: created.phoneSanitized,
             },
           });
           linked_vehicles++;
         }
         inserted++;
       } else {
-        // Update existing driver profile
-        await prisma.driverProfile.update({
+        // Update existing driver profile with real contact info, while preserving or updating vehicle
+        const finalVehicleId = assignedVehicleId || existing.assignedVehicleId;
+
+        const updatedDriver = await prisma.driverProfile.update({
           where: { id: existing.id },
           data: {
             fullName,
+            phoneSanitized: rawPhone ? phoneSanitized : existing.phoneSanitized,
+            cinNumber: rawCin ? cinNumber : existing.cinNumber,
             age,
             licenseSeniority,
             contractType,
-            currentArrearsMAD,
+            currentArrearsMAD: currentArrearsMAD > 0 ? currentArrearsMAD : existing.currentArrearsMAD,
             defaultStage,
-            assignedVehicleId: assignedVehicleId || existing.assignedVehicleId,
+            assignedVehicleId: finalVehicleId,
           },
         });
 
-        if (assignedVehicleId && assignedVehicleId !== existing.assignedVehicleId) {
+        if (finalVehicleId) {
           await prisma.vehicle.update({
-            where: { id: assignedVehicleId },
+            where: { id: finalVehicleId },
             data: {
               status: "Actif",
+              assigned_driver_name: updatedDriver.fullName,
+              assigned_driver_phone: updatedDriver.phoneSanitized,
             },
           });
           linked_vehicles++;
@@ -184,8 +232,8 @@ export async function POST(request: NextRequest) {
         total_rows,
         inserted,
         updated,
-        linked_vehicles,
         skipped_invalid,
+        linked_vehicles,
       },
     });
   } catch (error: any) {
