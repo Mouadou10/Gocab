@@ -24,10 +24,10 @@ export async function GET() {
     });
 
     return NextResponse.json({ users });
-  } catch (error) {
+  } catch (error: any) {
     console.error("GET /api/users error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch users" },
+      { error: error?.message || "Failed to fetch users", details: String(error) },
       { status: 500 }
     );
   }
@@ -81,10 +81,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ user }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/users error:", error);
     return NextResponse.json(
-      { error: "Failed to create user" },
+      { error: error?.message || "Failed to create user", details: String(error) },
       { status: 500 }
     );
   }
