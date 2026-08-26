@@ -259,6 +259,45 @@ export default function DriverDrawer({
             {/* Arrears & Stage Status */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Recouvrement & Finance</h3>
+
+              {/* Payment / Contract Type */}
+              <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200/70 space-y-2">
+                <label className="block text-2xs font-bold uppercase tracking-wider text-blue-900">
+                  Type de Paiement / Formule Contrat
+                </label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setContractType("DAILY")}
+                    className={`py-2 px-3 rounded-xl border text-center font-bold transition-all flex flex-col items-center gap-0.5 ${
+                      contractType === "DAILY" || contractType === "STANDARD"
+                        ? "bg-navy text-white border-navy shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span>📅 Journalier (DAILY)</span>
+                    <span className={`text-3xs font-normal ${contractType === "DAILY" || contractType === "STANDARD" ? "text-gold" : "text-gray-500"}`}>
+                      300 MAD / jour (Lun-Sam)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setContractType("WEEKLY")}
+                    className={`py-2 px-3 rounded-xl border text-center font-bold transition-all flex flex-col items-center gap-0.5 ${
+                      contractType === "WEEKLY"
+                        ? "bg-navy text-white border-navy shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span>🗓️ Hebdo (WEEKLY)</span>
+                    <span className={`text-3xs font-normal ${contractType === "WEEKLY" ? "text-gold" : "text-gray-500"}`}>
+                      1 800 MAD chaque Lundi
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-2xs font-semibold text-gray-700 mb-1">

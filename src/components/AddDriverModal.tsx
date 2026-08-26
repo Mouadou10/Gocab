@@ -232,17 +232,15 @@ export default function AddDriverModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Type de Contrat
+                  Formule Contrat / Type de Paiement
                 </label>
                 <select
                   value={contractType}
                   onChange={(e) => setContractType(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
                 >
-                  <option value="STANDARD">STANDARD (Location standard)</option>
-                  <option value="PREMIUM">PREMIUM (Option prioritaire)</option>
-                  <option value="FLEX">FLEX (Location courte durée)</option>
-                  <option value="PROBATION">PÉRIODE D'ESSAI</option>
+                  <option value="DAILY">📅 Journalier — 300 MAD / jour (Lun-Sam)</option>
+                  <option value="WEEKLY">🗓️ Hebdomadaire — 1 800 MAD chaque Lundi</option>
                 </select>
               </div>
 
