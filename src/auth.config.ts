@@ -5,8 +5,11 @@ import type { NextAuthConfig } from "next-auth";
  * Does NOT import Prisma or native Node modules so it runs cleanly on the Edge.
  */
 export const authConfig: NextAuthConfig = {
+  trustHost: true,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "gocab-ops-secret-key-2026-mouad",
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
