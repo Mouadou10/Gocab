@@ -37,6 +37,7 @@ import LeadsScorecard from "./LeadsScorecard";
 import TrainingScorecard from "./TrainingScorecard";
 import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
+import DriversView from "./DriversView";
 import PasswordChangeModal from "./PasswordChangeModal";
 import AddLeadModal from "./AddLeadModal";
 import GoCabLogo from "./GoCabLogo";
@@ -66,12 +67,12 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:  ["dashboard", "leads", "training"],
-  FLEET_PERF_MANAGER:   ["dashboard", "fleet", "tickets", "performance"],
-  FIELD_SUPERVISOR:     ["dashboard", "fleet", "field", "tickets"],
-  FINANCE_OFFICER:      ["dashboard", "performance", "insurance"],
-  OPS_MANAGER:          ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
-  ADMIN:                ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  LEAD_ACQUISITION_JR:  ["dashboard", "leads", "training", "drivers"],
+  FLEET_PERF_MANAGER:   ["dashboard", "drivers", "fleet", "tickets", "performance"],
+  FIELD_SUPERVISOR:     ["dashboard", "drivers", "fleet", "field", "tickets"],
+  FINANCE_OFFICER:      ["dashboard", "drivers", "performance", "insurance"],
+  OPS_MANAGER:          ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  ADMIN:                ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -92,7 +93,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:               "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "leads" | "training" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
+type TabType = "dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
 
 
 const LEADS_COLUMNS = [
@@ -587,6 +588,19 @@ export default function KanbanBoard() {
               </button>
             )}
 
+            {allowedTabs.includes("drivers") && (
+              <button
+                onClick={() => setActiveTab("drivers")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "drivers"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                🚖 {t.drivers || "Chauffeurs"}
+              </button>
+            )}
+
             {allowedTabs.includes("fleet") && (
               <button
                 onClick={() => setActiveTab("fleet")}
@@ -748,6 +762,8 @@ export default function KanbanBoard() {
           <DashboardView />
         ) : activeTab === "settings" ? (
           <SettingsView />
+        ) : activeTab === "drivers" ? (
+          <DriversView />
         ) : activeTab === "fleet" ? (
           <FleetView />
         ) : activeTab === "tickets" ? (

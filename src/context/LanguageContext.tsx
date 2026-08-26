@@ -11,6 +11,7 @@ export interface Translations {
   home: string;
   leads: string;
   training: string;
+  drivers: string;
   fleet: string;
   support: string;
   perf: string;
@@ -97,6 +98,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "Home",
     leads: "Leads",
     training: "Training",
+    drivers: "Drivers",
     fleet: "Fleet",
     support: "Support",
     perf: "Perf",
@@ -178,13 +180,14 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "Accueil",
     leads: "Prospects",
     training: "Formation",
+    drivers: "Chauffeurs",
     fleet: "Flotte",
     support: "Support",
     perf: "Performance",
     field: "Terrain",
     insurance: "Assurance",
     settings: "Paramètres",
-    signOut: "Se Déconnecter",
+    signOut: "Déconnexion",
     autoClosing: "fermeture auto",
     reminderDue: "Rappel en attente",
     followUpWhatsapp: "Relancer sur WhatsApp",
@@ -259,6 +262,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "الرئيسية",
     leads: "المرشحين",
     training: "التدريب",
+    drivers: "السائقين",
     fleet: "الأسطول",
     support: "الدعم الفني",
     perf: "الأداء",

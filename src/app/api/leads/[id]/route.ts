@@ -131,6 +131,59 @@ export async function PATCH(
       data: updateData,
     });
 
+    // ── Auto-Convert Lead to DriverProfile on "Accept offer" ────────────────
+    if (
+      updatedLead.training_status === "Accept offer" ||
+      updatedLead.board_column === "VEHICLE_ASSIGNMENT"
+    ) {
+      try {
+        const cinNumber =
+          (updatedLead as any).national_id?.trim() ||
+          `CIN-${updatedLead.sanitized_phone.replace(/\D/g, "").slice(-6)}`;
+
+        const existingDriver = await prisma.driverProfile.findFirst({
+          where: {
+            OR: [
+              { phoneSanitized: updatedLead.sanitized_phone },
+              { cinNumber: cinNumber },
+            ],
+          },
+        });
+
+        if (!existingDriver) {
+          await prisma.driverProfile.create({
+            data: {
+              fullName: updatedLead.raw_name,
+              phoneSanitized: updatedLead.sanitized_phone,
+              cinNumber,
+              age: (updatedLead as any).age || 28,
+              licenseSeniority: (updatedLead as any).permis_seniority_years || 2,
+              isKycVerified: true,
+              contractType: "STANDARD",
+              monthlyTripCount: 0,
+              currentArrearsMAD: 0.0,
+              defaultStage: "NOMINAL",
+              assignedVehicleId: (updatedLead as any).assigned_vehicle_id || null,
+            },
+          });
+          console.log(`✨ Auto-converted Lead ${updatedLead.raw_name} to DriverProfile (${updatedLead.sanitized_phone})`);
+        } else {
+          // Update KYC status and vehicle if changed
+          await prisma.driverProfile.update({
+            where: { id: existingDriver.id },
+            data: {
+              fullName: updatedLead.raw_name,
+              isKycVerified: true,
+              assignedVehicleId: (updatedLead as any).assigned_vehicle_id || existingDriver.assignedVehicleId,
+            },
+          });
+        }
+      } catch (driverErr: any) {
+        console.error("Auto-convert to DriverProfile warning:", driverErr?.message);
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     return NextResponse.json({ lead: updatedLead });
   } catch (error) {
     console.error("Error updating lead:", error);
