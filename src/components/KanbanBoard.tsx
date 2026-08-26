@@ -38,6 +38,7 @@ import TrainingScorecard from "./TrainingScorecard";
 import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
 import PasswordChangeModal from "./PasswordChangeModal";
+import AddLeadModal from "./AddLeadModal";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
@@ -147,6 +148,7 @@ export default function KanbanBoard() {
 
   // Drawer state
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
 
   // Configure drag sensors
   const sensors = useSensors(
@@ -700,7 +702,20 @@ export default function KanbanBoard() {
               </button>
             </div>
 
-            {(activeTab === "leads" || activeTab === "training") && <CSVUploader onUploadComplete={fetchLeads} />}
+            {(activeTab === "leads" || activeTab === "training") && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddLeadModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all hover:shadow cursor-pointer"
+                  title={language === "fr" ? "Ajouter un prospect manuellement" : language === "ar" ? "إضافة مرشح جديد يدوياً" : "Add lead manually"}
+                >
+                  <span>👤➕</span>
+                  <span>{language === "fr" ? "Nouveau Prospect" : language === "ar" ? "إضافة مرشح" : "Add Lead"}</span>
+                </button>
+                <CSVUploader onUploadComplete={fetchLeads} />
+              </div>
+            )}
             
             {/* User info badge */}
             {userName && (
@@ -801,6 +816,13 @@ export default function KanbanBoard() {
           onPasswordChanged={() => setShowPasswordChangeModal(false)}
         />
       )}
+
+      {/* Manual Add Lead Modal */}
+      <AddLeadModal
+        isOpen={isAddLeadModalOpen}
+        onClose={() => setIsAddLeadModalOpen(false)}
+        onLeadAdded={fetchLeads}
+      />
 
       {/* Reminder Alerts */}
       <ReminderAlert leads={leads} />
