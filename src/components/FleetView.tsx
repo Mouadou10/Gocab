@@ -14,6 +14,8 @@ import { useState, useEffect, useCallback } from "react";
 import VehicleDrawer, { Vehicle } from "./VehicleDrawer";
 import TicketDrawer from "./TicketDrawer";
 import VehicleCSVUploader from "./VehicleCSVUploader";
+import AddExpenseModal from "./AddExpenseModal";
+import VehicleExpensesDrawer from "./VehicleExpensesDrawer";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -41,6 +43,12 @@ export default function FleetView() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  // Expense states
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
+  const [expenseVehicle, setExpenseVehicle] = useState<Vehicle | null>(null);
+  const [expenseCategory, setExpenseCategory] = useState<string>("REPAIR");
 
   // Ticket Drawer state
   const [ticketVehicle, setTicketVehicle] = useState<Vehicle | null>(null);
@@ -201,12 +209,30 @@ export default function FleetView() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsExpenseDrawerOpen(true)}
+            className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-200 shadow-2xs transition-all flex items-center justify-center gap-1.5"
+          >
+            <span>💸</span> Frais & Dépenses
+          </button>
+
+          <button
+            onClick={() => {
+              setExpenseVehicle(null);
+              setExpenseCategory("REPAIR");
+              setIsExpenseModalOpen(true);
+            }}
+            className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs rounded-xl border border-amber-200 shadow-2xs transition-all flex items-center justify-center gap-1.5"
+          >
+            <span>➕</span> Ajouter Frais
+          </button>
+
           <button
             onClick={() => setIsCsvModalOpen(true)}
-            className="px-4 py-2.5 bg-white hover:bg-gray-50 text-navy font-bold text-xs rounded-xl border border-gray-200 shadow-2xs transition-all flex items-center justify-center gap-2"
+            className="px-3.5 py-2.5 bg-white hover:bg-gray-50 text-navy font-bold text-xs rounded-xl border border-gray-200 shadow-2xs transition-all flex items-center justify-center gap-1.5"
           >
-            <span>📥</span> Importer Flotte (CSV)
+            <span>📥</span> Importer CSV
           </button>
 
           <button
@@ -214,9 +240,9 @@ export default function FleetView() {
               setEditingVehicle(null);
               setIsDrawerOpen(true);
             }}
-            className="px-4 py-2.5 bg-navy hover:bg-navy/95 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+            className="px-4 py-2.5 bg-navy hover:bg-navy/95 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
           >
-            <span>➕</span> Register New Vehicle
+            <span>➕</span> Nouveau Véhicule
           </button>
         </div>
       </div>
@@ -412,6 +438,18 @@ export default function FleetView() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => {
+                            setExpenseVehicle(v);
+                            setExpenseCategory(v.status === "impounded by police" ? "POLICE" : "REPAIR");
+                            setIsExpenseModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 border border-amber-200 rounded-lg text-xs transition-colors font-semibold"
+                          title="Enregistrer un frais de réparation, fourrière ou entretien pour ce véhicule"
+                        >
+                          💸 Frais
+                        </button>
+
+                        <button
+                          onClick={() => {
                             setTicketVehicle(v);
                             setIsTicketDrawerOpen(true);
                           }}
@@ -475,6 +513,29 @@ export default function FleetView() {
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         onUploadSuccess={fetchVehicles}
+      />
+
+      {/* Add Expense Modal */}
+      <AddExpenseModal
+        isOpen={isExpenseModalOpen}
+        onClose={() => {
+          setIsExpenseModalOpen(false);
+          setExpenseVehicle(null);
+        }}
+        onSuccess={fetchVehicles}
+        initialVehicle={expenseVehicle}
+        initialCategory={expenseCategory}
+      />
+
+      {/* Vehicle Expenses Drawer */}
+      <VehicleExpensesDrawer
+        isOpen={isExpenseDrawerOpen}
+        onClose={() => setIsExpenseDrawerOpen(false)}
+        onOpenAddModal={(v, cat) => {
+          setExpenseVehicle(v || null);
+          setExpenseCategory(cat || "REPAIR");
+          setIsExpenseModalOpen(true);
+        }}
       />
     </div>
   );

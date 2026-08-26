@@ -275,3 +275,25 @@ CREATE UNIQUE INDEX "Lead_sanitized_phone_key" ON "Lead"("sanitized_phone");
 CREATE UNIQUE INDEX "Vehicle_plate_number_key" ON "Vehicle"("plate_number");
 
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+CREATE TABLE IF NOT EXISTS "VehicleExpense" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "vehicle_id" TEXT NOT NULL,
+    "plate_number" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "amount_mad" REAL NOT NULL DEFAULT 0.0,
+    "description" TEXT,
+    "invoice_number" TEXT,
+    "paid_by" TEXT NOT NULL DEFAULT 'COMPANY',
+    "is_rechargeable" BOOLEAN NOT NULL DEFAULT false,
+    "paid_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "recorded_by" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PAID',
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "VehicleExpense_vehicle_id_fkey" FOREIGN KEY ("vehicle_id") REFERENCES "Vehicle" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "VehicleExpense_vehicle_id_idx" ON "VehicleExpense"("vehicle_id");
+CREATE INDEX IF NOT EXISTS "VehicleExpense_plate_number_idx" ON "VehicleExpense"("plate_number");
+CREATE INDEX IF NOT EXISTS "VehicleExpense_category_idx" ON "VehicleExpense"("category");

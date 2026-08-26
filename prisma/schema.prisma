@@ -76,6 +76,7 @@ model Vehicle {
   supportTickets    SupportTicket[]
   fieldInspections  FieldInspectionNew[]
   accidentClaims    AccidentClaim[]
+  expenses          VehicleExpense[]
   
   created_at                  DateTime  @default(now())
   updated_at                  DateTime  @updatedAt
@@ -348,4 +349,29 @@ model ChurnEvent {
   reason          String?  // Optional reason entered by Fleet Perf Manager
   churned_at      DateTime @default(now())
   created_at      DateTime @default(now())
+}
+
+/// Financial expense, repair, police impound, towing or maintenance fee logged against a vehicle.
+model VehicleExpense {
+  id              String    @id @default(uuid())
+  vehicle_id      String
+  vehicle         Vehicle   @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  plate_number    String
+  
+  category        String    // POLICE, REPAIR, MAINTENANCE, ACCIDENT, TOWING, PARKING, TIRES, ADMINISTRATIVE, OTHER
+  amount_mad      Float     @default(0.0) // Amount in MAD (can be 0 MAD)
+  
+  description     String?   // Garage, ticket reason, police station, receipt details
+  invoice_number  String?   // Invoice or receipt #
+  
+  paid_by         String    @default("COMPANY") // COMPANY, DRIVER, INSURANCE
+  is_rechargeable Boolean   @default(false)     // If true, charged to driver arrears
+  
+  paid_at         DateTime  @default(now())
+  recorded_by     String?
+  
+  status          String    @default("PAID")    // PAID, PENDING, REIMBURSED
+  
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
 }

@@ -15,6 +15,8 @@
 
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import AddExpenseModal, { EXPENSE_CATEGORIES } from "./AddExpenseModal";
+import { Plus, DollarSign, Receipt, Calendar } from "lucide-react";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -98,6 +100,8 @@ export default function VehicleDrawer({
   const [notes, setNotes] = useState(vehicle?.notes || "");
 
   const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
+  const [vehicleExpenses, setVehicleExpenses] = useState<any[]>([]);
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,6 +111,19 @@ export default function VehicleDrawer({
     const timer = setTimeout(() => setIsVisible(true), 50);
     return () => clearTimeout(timer);
   }, []);
+
+  async function loadExpenses() {
+    if (!vehicle?.id) return;
+    try {
+      const res = await fetch(`/api/expenses?vehicle_id=${vehicle.id}`);
+      const data = await res.json();
+      if (data.expenses) {
+        setVehicleExpenses(data.expenses);
+      }
+    } catch (err) {
+      console.error("Failed to load vehicle expenses:", err);
+    }
+  }
 
   useEffect(() => {
     async function loadDrivers() {
@@ -120,6 +137,7 @@ export default function VehicleDrawer({
       }
     }
     loadDrivers();
+    loadExpenses();
   }, [vehicle?.id]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -453,8 +471,77 @@ export default function VehicleDrawer({
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-navy/30 focus:outline-none"
               />
             </div>
+
+            {/* Section 4: Financial & Expenses History (When viewing existing vehicle) */}
+            {vehicle && (
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-navy uppercase tracking-wider flex items-center gap-1.5">
+                    <span>💸</span> Frais & Réparations ({vehicleExpenses.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddExpenseOpen(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-navy bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Ajouter Frais</span>
+                  </button>
+                </div>
+
+                {vehicleExpenses.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="p-3 bg-navy/5 rounded-xl flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-medium">Total Dépenses Véhicule :</span>
+                      <span className="font-extrabold text-navy text-sm">
+                        {vehicleExpenses.reduce((s, e) => s + (e.amount_mad || 0), 0).toLocaleString()} MAD
+                      </span>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                      {vehicleExpenses.map((exp: any) => (
+                        <div
+                          key={exp.id}
+                          className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs flex items-center justify-between gap-2"
+                        >
+                          <div className="space-y-0.5">
+                            <span className="font-semibold text-gray-800">
+                              {EXPENSE_CATEGORIES.find((c) => c.key === exp.category)?.label || exp.category}
+                            </span>
+                            {exp.description && (
+                              <p className="text-2xs text-gray-500 truncate max-w-[200px]">{exp.description}</p>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-bold text-navy">{exp.amount_mad.toLocaleString()} MAD</p>
+                            <p className="text-2xs text-gray-400">
+                              {new Date(exp.paid_at).toLocaleDateString("fr-FR")}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-50 rounded-xl text-center text-xs text-gray-400">
+                    Aucun frais enregistré pour ce véhicule.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </form>
+
+        {/* Add Expense Modal */}
+        <AddExpenseModal
+          isOpen={isAddExpenseOpen}
+          onClose={() => setIsAddExpenseOpen(false)}
+          onSuccess={() => {
+            loadExpenses();
+            onSaveSuccess();
+          }}
+          initialVehicle={vehicle}
+        />
 
         {/* Footer Actions */}
         <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 flex justify-end gap-3">
