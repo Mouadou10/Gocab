@@ -1,8 +1,9 @@
 /**
  * Bulk Driver CSV Upload API — POST /api/upload-drivers
  *
- * Parses CSV containing drivers, auto-sanitizes Moroccan phone numbers,
- * performs intelligent multi-pattern matching to vehicles by immatriculation / old WW number / VIN / name,
+ * Parses CSV containing drivers (handles GoCab spreadsheet with Phone Number, Name, Gender, Balance, ID Number, Vehicles),
+ * auto-sanitizes Moroccan phone numbers, computes debt/arrears from negative balance,
+ * performs intelligent multi-pattern matching to vehicles by immatriculation / WW variations,
  * and bulk-inserts/upserts DriverProfile records.
  */
 
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
         if (normalizePlate(v.plate_number) === targetNorm) return v;
       }
 
-      // 2. WW prefix vs suffix match (e.g. 860502-WW vs WW860502)
+      // 2. WW prefix vs suffix match (e.g. 860502-WW vs WW860502, WW964990 vs 964990-WW)
       const targetDigits = targetNorm.replace(/WW/g, "");
       if (targetDigits.length >= 4) {
         for (const v of allVehicles) {
@@ -110,10 +111,10 @@ export async function POST(request: NextRequest) {
       total_rows++;
 
       const fullName = getField(row, [
-        "full name", "fullname", "nom complet", "nom", "name", "chauffeur", "driver", "conducteur"
+        "name", "full name", "fullname", "nom complet", "nom", "driver", "chauffeur", "conducteur"
       ]);
       const rawPhone = getField(row, [
-        "phone", "telephone", "téléphone", "mobile", "tel", "phone number", "numero", "numéro"
+        "phone number", "phone", "telephone", "téléphone", "mobile", "tel", "numero", "numéro"
       ]);
 
       if (!fullName) {
@@ -123,25 +124,42 @@ export async function POST(request: NextRequest) {
 
       const phoneSanitized = rawPhone ? sanitizePhone(rawPhone) : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
 
-      const rawCin = getField(row, ["cin", "cnie", "national id", "carte nationale", "n° cin"]);
-      const cinNumber = (rawCin || `CIN-${phoneSanitized.slice(-6)}`).toUpperCase();
+      // ID Number (CIN)
+      const rawCin = getField(row, [
+        "id number", "cin", "cnie", "id", "national id", "carte nationale", "n° cin", "id num"
+      ]);
+      const cinNumber = (rawCin ? rawCin.replace(/\s+/g, "") : `CIN-${phoneSanitized.slice(-6)}`).toUpperCase();
 
       const rawAge = getField(row, ["age", "âge"]);
       const age = rawAge && !isNaN(Number(rawAge)) ? Number(rawAge) : 28;
 
-      const rawSeniority = getField(row, ["seniority", "anciennete", "ancienneté", "permis", "anciennete permis"]);
+      const rawSeniority = getField(row, [
+        "seniority", "anciennete", "ancienneté", "permis", "anciennete permis", "license seniority"
+      ]);
       const licenseSeniority = rawSeniority && !isNaN(Number(rawSeniority)) ? Number(rawSeniority) : 3;
 
       const contractType = getField(row, ["contract", "contrat", "type contrat", "contract type"]) || "STANDARD";
 
-      const rawArrears = getField(row, ["arrears", "impayes", "impayés", "dette", "solde", "impayes mad"]);
-      const currentArrearsMAD = rawArrears && !isNaN(Number(rawArrears)) ? Number(rawArrears) : 0.0;
+      // Parse Balance / Arrears (Negative balance like -2000 means 2000 MAD debt)
+      const rawBalance = getField(row, ["balance", "solde", "arrears", "impayes", "impayés", "dette", "impayes mad"]);
+      let currentArrearsMAD = 0.0;
+      if (rawBalance && !isNaN(Number(rawBalance))) {
+        const num = Number(rawBalance);
+        currentArrearsMAD = num < 0 ? Math.abs(num) : 0.0;
+      }
 
-      const defaultStage = getField(row, ["stage", "statut", "default stage", "recouvrement"]) || "NOMINAL";
+      // Default stage from arrears or explicit stage column
+      const explicitStage = getField(row, ["stage", "statut", "default stage", "recouvrement"]);
+      let defaultStage = explicitStage || "NOMINAL";
+      if (!explicitStage && currentArrearsMAD > 0) {
+        if (currentArrearsMAD >= 1500) defaultStage = "DAY_3_BLOCK";
+        else if (currentArrearsMAD >= 1000) defaultStage = "DAY_2_ACTION";
+        else defaultStage = "DAY_1_WARNING";
+      }
 
-      // Match vehicle by Immatriculation
+      // Match vehicle by Vehicles / Immatriculation
       const rawPlate = getField(row, [
-        "plate", "immatriculation", "matricule", "vehicule", "vehicle", "immat", "plate number", "registration", "old number"
+        "vehicles", "vehicle", "plate", "immatriculation", "matricule", "vehicule", "vehicules", "immat", "plate number", "registration", "old number"
       ]);
       
       let assignedVehicleId: string | null = null;
@@ -151,7 +169,7 @@ export async function POST(request: NextRequest) {
         assignedVehicleId = matchedVehicle.id;
       }
 
-      // Check if driver already exists by phone, CIN, exact Name, or previous placeholder vehicle link
+      // Check if driver already exists by phone, CIN, Name, or previous vehicle link
       const existing = await prisma.driverProfile.findFirst({
         where: {
           OR: [
