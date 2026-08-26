@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from "react";
 import VehicleDrawer, { Vehicle } from "./VehicleDrawer";
 import TicketDrawer from "./TicketDrawer";
+import VehicleCSVUploader from "./VehicleCSVUploader";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -39,6 +40,7 @@ export default function FleetView() {
   // Drawer states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   // Ticket Drawer state
   const [ticketVehicle, setTicketVehicle] = useState<Vehicle | null>(null);
@@ -199,15 +201,24 @@ export default function FleetView() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingVehicle(null);
-            setIsDrawerOpen(true);
-          }}
-          className="px-4 py-2.5 bg-navy hover:bg-navy/95 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
-        >
-          <span>➕</span> Register New Vehicle
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsCsvModalOpen(true)}
+            className="px-4 py-2.5 bg-white hover:bg-gray-50 text-navy font-bold text-xs rounded-xl border border-gray-200 shadow-2xs transition-all flex items-center justify-center gap-2"
+          >
+            <span>📥</span> Importer Flotte (CSV)
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingVehicle(null);
+              setIsDrawerOpen(true);
+            }}
+            className="px-4 py-2.5 bg-navy hover:bg-navy/95 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+          >
+            <span>➕</span> Register New Vehicle
+          </button>
+        </div>
       </div>
 
       {/* Regulatory Expiration Alert Banners */}
@@ -458,6 +469,13 @@ export default function FleetView() {
           onSaveSuccess={fetchVehicles}
         />
       )}
+
+      {/* Vehicle CSV Uploader Modal */}
+      <VehicleCSVUploader
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        onUploadSuccess={fetchVehicles}
+      />
     </div>
   );
 }
