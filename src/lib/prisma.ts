@@ -18,7 +18,11 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
+  let url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
+  // Convert libsql:// to https:// for fast, reliable serverless HTTP on Vercel
+  if (url.startsWith("libsql://")) {
+    url = url.replace("libsql://", "https://");
+  }
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
   const adapter = new PrismaLibSql({
