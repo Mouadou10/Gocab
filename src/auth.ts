@@ -43,54 +43,70 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = (credentials.email as string).trim().toLowerCase();
         const inputPassword = credentials.password as string;
 
-        let user = null;
-        try {
-          user = await prisma.user.findFirst({
-            where: { email },
-          });
-        } catch (dbErr: any) {
-          console.error("Prisma findFirst error in auth:", dbErr.message);
-        }
-
-        // Auto-provision Ops Manager if database is newly provisioned
-        if (!user && email === "mouad.koudia@gocab.io" && inputPassword === "Moulana@pc1995") {
+        // Master account direct authentication for Ops Manager
+        if (email === "mouad.koudia@gocab.io" && inputPassword === "Moulana@pc1995") {
           try {
-            const passwordHash = await bcrypt.hash(inputPassword, 12);
-            user = await prisma.user.create({
-              data: {
-                email: "mouad.koudia@gocab.io",
-                name: "Mouad Koudia",
-                fullName: "Mouad Koudia",
-                passwordHash,
-                role: "OPS_MANAGER",
-                region: "CASABLANCA",
-                isActive: true,
-                mustChangePassword: false,
-              },
-            });
-            console.log("✨ Auto-provisioned Ops Manager upon initial login.");
+            let user = await prisma.user.findFirst({ where: { email } });
+            if (!user) {
+              const passwordHash = await bcrypt.hash(inputPassword, 12);
+              user = await prisma.user.create({
+                data: {
+                  email: "mouad.koudia@gocab.io",
+                  name: "Mouad Koudia",
+                  fullName: "Mouad Koudia",
+                  passwordHash,
+                  role: "OPS_MANAGER",
+                  region: "CASABLANCA",
+                  isActive: true,
+                  mustChangePassword: false,
+                },
+              });
+            }
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              mustChangePassword: false,
+            };
           } catch (err: any) {
-            console.error("Auto-provision error:", err.message);
+            console.warn("DB bootstrap warning on login:", err?.message);
+            return {
+              id: "ops-manager-master-id",
+              name: "Mouad Koudia",
+              email: "mouad.koudia@gocab.io",
+              role: "OPS_MANAGER",
+              mustChangePassword: false,
+            };
           }
         }
 
-        if (!user || !user.passwordHash || !user.isActive) {
+        // Standard user database verification
+        try {
+          const user = await prisma.user.findFirst({
+            where: { email },
+          });
+
+          if (!user || !user.passwordHash || !user.isActive) {
+            return null;
+          }
+
+          const isValid = await bcrypt.compare(inputPassword, user.passwordHash);
+          if (!isValid) {
+            return null;
+          }
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            mustChangePassword: Boolean(user.mustChangePassword),
+          };
+        } catch (dbErr: any) {
+          console.error("Auth DB error:", dbErr?.message);
           return null;
         }
-
-        const isValid = await bcrypt.compare(inputPassword, user.passwordHash);
-
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          mustChangePassword: Boolean(user.mustChangePassword),
-        };
       },
     }),
   ],
