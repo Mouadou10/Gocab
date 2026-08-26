@@ -1,23 +1,31 @@
 /**
- * Prisma Client Singleton (SQLite Version)
+ * Prisma Client Singleton (LibSQL / Turso Version)
  *
- * For SQLite in Prisma v7, we use `@prisma/adapter-better-sqlite3` with `better-sqlite3`.
+ * Uses @prisma/adapter-libsql which works on both local development (file:./dev.db)
+ * and Vercel serverless (Turso hosted SQLite).
+ *
+ * In Prisma v7, PrismaLibSql is a factory that takes { url, authToken } directly.
  *
  * Prevents multiple Prisma Client instances in development
  * (Next.js hot-reloading creates new modules each time).
  */
 
-import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient(): PrismaClient {
-  const dbPath = path.join(process.cwd(), "dev.db");
-  const adapter = new PrismaBetterSqlite3({ url: dbPath });
+  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  const adapter = new PrismaLibSql({
+    url,
+    ...(authToken ? { authToken } : {}),
+  });
+
   return new PrismaClient({ adapter });
 }
 

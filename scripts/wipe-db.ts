@@ -5,14 +5,12 @@
  * inspections, claims, collections, churn logs) while preserving the
  * primary Operations Manager account (mouad.koudia@gocab.io).
  * 
+ * Works with both local SQLite (file:./dev.db) and remote Turso databases.
+ * 
  * Run: npm run db:wipe
  */
 
-import Database from "better-sqlite3";
-import path from "node:path";
-
-const dbPath = path.join(process.cwd(), "dev.db");
-const db = new Database(dbPath);
+import { prisma } from "../src/lib/prisma";
 
 const tables = [
   "MaintenanceTicket",
@@ -32,28 +30,34 @@ const tables = [
   "Blacklist",
 ];
 
-console.log("==========================================");
-console.log("🧹 GOCAB CRM — DATABASE RESET IN PROGRESS");
-console.log("==========================================");
+async function main() {
+  console.log("==========================================");
+  console.log("🧹 GOCAB CRM — DATABASE RESET IN PROGRESS");
+  console.log("==========================================");
 
-for (const t of tables) {
-  try {
-    const info = db.prepare(`DELETE FROM ${t}`).run();
-    console.log(`✓ Wiped table [${t}]: ${info.changes} rows deleted`);
-  } catch (e: any) {
-    console.log(`- Skipping [${t}]: ${e.message}`);
+  for (const t of tables) {
+    try {
+      await prisma.$executeRawUnsafe(`DELETE FROM ${t}`);
+      console.log(`✓ Wiped table [${t}]`);
+    } catch (e: any) {
+      console.log(`- Skipping [${t}]: ${e.message}`);
+    }
   }
+
+  const users = await prisma.user.findMany({
+    select: { email: true, name: true, role: true },
+  });
+
+  console.log("\n==========================================");
+  console.log("👤 PRESERVED USER ACCOUNTS:");
+  console.log("==========================================");
+  console.table(users);
+
+  console.log("\n✅ Database wipe finished successfully! Ready for fresh data intake.\n");
+  await prisma.$disconnect();
 }
 
-// Reclaim unused disk space
-db.prepare("VACUUM").run();
-
-const users = db.prepare("SELECT email, name, role FROM User").all();
-
-console.log("\n==========================================");
-console.log("👤 PRESERVED USER ACCOUNTS:");
-console.log("==========================================");
-console.table(users);
-
-console.log("\n✅ Database wipe finished successfully! Ready for fresh data intake.\n");
-db.close();
+main().catch((e) => {
+  console.error("❌ Wipe failed:", e);
+  process.exit(1);
+});
