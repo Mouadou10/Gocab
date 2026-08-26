@@ -82,34 +82,45 @@ export async function PATCH(
       data: updateData,
     });
 
-    // If status changed to Accident, auto-create an AccidentClaim if one doesn't exist active
-    if (body.status === "Accident") {
-      const activeClaim = await prisma.accidentClaim.findFirst({
-        where: { 
+    // If status changed to Blocked, auto-create a MaintenanceTicket and linked FieldTask for physical recovery
+    if (body.status === "Blocked" && prevVehicle?.status !== "Blocked") {
+      const activeRecoveryTask = await prisma.fieldTask.findFirst({
+        where: {
           vehicle_id: id,
-          timeline_step: { not: "VEHICLE_BACK" }
-        }
+          task_type: "VEHICLE_RECOVERY",
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+        },
       });
-      if (!activeClaim) {
-        // Find driver info if available
-        let driver_id = null;
-        let driver_name = vehicle.assigned_driver_name;
-        let driver_phone = vehicle.assigned_driver_phone;
 
-        const profile = await prisma.driverProfile.findUnique({ where: { assignedVehicleId: id } });
-        if (profile) {
-          driver_id = profile.id;
-          driver_name = profile.fullName;
-          driver_phone = profile.phoneSanitized;
-        }
-
-        await prisma.accidentClaim.create({
+      if (!activeRecoveryTask) {
+        // Create ticket
+        const ticket = await prisma.maintenanceTicket.create({
           data: {
             vehicle_id: id,
-            driver_id,
-            driver_name,
-            driver_phone,
-          }
+            plate_number: vehicle.plate_number,
+            driver_name: vehicle.assigned_driver_name || null,
+            driver_phone: vehicle.assigned_driver_phone || null,
+            ticket_type: "VEHICLE_RECOVERY",
+            description: body.blocked_reason || "Vehicle blocked by Fleet Performance Manager. Physical recovery required.",
+            priority: "Urgent",
+            status: "OPEN",
+            sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          },
+        });
+
+        // Create linked FieldTask
+        await prisma.fieldTask.create({
+          data: {
+            task_type: "VEHICLE_RECOVERY",
+            vehicle_id: id,
+            plate_number: vehicle.plate_number,
+            driver_name: vehicle.assigned_driver_name || null,
+            driver_phone: vehicle.assigned_driver_phone || null,
+            description: `🚨 Vehicle Blocked: ${body.blocked_reason || "Physical recovery required by Field Supervisor"}`,
+            priority: "Urgent",
+            status: "PENDING",
+            linked_ticket_id: ticket.id,
+          },
         });
       }
     }

@@ -31,6 +31,7 @@ export interface MaintenanceTicket {
 }
 
 const TICKET_TYPES = [
+  { id: "VEHICLE_RECOVERY", label: "🚨 Blocage Véhicule / Récupération (Vehicle Recovery)", statusImpact: "Blocked" },
   { id: "Vidange", label: "🛢️ Vidange (Oil Change)", statusImpact: "Actif" },
   { id: "AdBleu", label: "💧 AdBleu Refill", statusImpact: "Actif" },
   { id: "Repair", label: "🔧 Repair / Mechanical", statusImpact: "Actif" },

@@ -27,6 +27,9 @@ const HUB_CITIES = [
 const VEHICLE_STATUSES = [
   "Available",
   "Actif",
+  "Blocked",
+  "In garage",
+  "In service",
   "Accident",
   "impounded by police",
 ] as const;

@@ -88,8 +88,35 @@ export async function POST(request: Request) {
       },
     });
 
-    // Optionally auto-update vehicle status based on ticket request
-    if (update_vehicle_status) {
+    // Auto-update vehicle status and dispatch linked tasks based on ticket type
+    const isRecoveryTicket = 
+      ticket_type === "VEHICLE_RECOVERY" || 
+      ticket_type.includes("Recovery") || 
+      ticket_type.includes("Blocage") ||
+      ticket_type.includes("Blocked");
+
+    if (isRecoveryTicket) {
+      // 1. Set vehicle status to Blocked
+      await prisma.vehicle.update({
+        where: { id: vehicle_id },
+        data: { status: "Blocked" },
+      }).catch((e) => console.warn("Failed to set vehicle to Blocked:", e));
+
+      // 2. Automatically create linked FieldTask for Field Supervisor
+      await prisma.fieldTask.create({
+        data: {
+          task_type: "VEHICLE_RECOVERY",
+          vehicle_id,
+          plate_number: plate_number.trim(),
+          driver_name: driver_name ? driver_name.trim() : null,
+          driver_phone: driver_phone ? driver_phone.trim() : null,
+          description: `🚨 Vehicle Blocked: ${description.trim()}`,
+          priority: priority || "Urgent",
+          status: "PENDING",
+          linked_ticket_id: ticket.id,
+        },
+      }).catch((e) => console.warn("Failed to create linked FieldTask:", e));
+    } else if (update_vehicle_status) {
       let targetStatus = "Actif";
       if (ticket_type === "Accident") {
         targetStatus = "Accident";

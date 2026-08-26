@@ -163,6 +163,14 @@ model FieldTask {
   assigned_to      String?   // ID of Field Supervisor (simplified string for now) this task
   due_date         DateTime? // For monthly checkups
   completed_at     DateTime?
+
+  // Recovery Handover Checklist & KPI
+  has_key                 Boolean   @default(false)
+  has_carte_grise         Boolean   @default(false)
+  has_assurance           Boolean   @default(false)
+  recovery_duration_hours Float?    // Hours elapsed from blocked to recovered
+  recovery_notes          String?
+
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 }

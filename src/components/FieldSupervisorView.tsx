@@ -31,6 +31,11 @@ interface FieldTask {
   due_date: string | null;
   completed_at: string | null;
   failure_reason?: string | null;
+  has_key?: boolean;
+  has_carte_grise?: boolean;
+  has_assurance?: boolean;
+  recovery_duration_hours?: number | null;
+  recovery_notes?: string | null;
   created_at: string;
 }
 
@@ -131,6 +136,53 @@ export default function FieldSupervisorView() {
 
   const [failingTask, setFailingTask] = useState<FieldTask | null>(null);
   const [failureReason, setFailureReason] = useState("");
+
+  // Recovery Handover Checklist Modal State
+  const [recoveryModalTask, setRecoveryModalTask] = useState<FieldTask | null>(null);
+  const [hasKey, setHasKey] = useState(true);
+  const [hasCarteGrise, setHasCarteGrise] = useState(true);
+  const [hasAssurance, setHasAssurance] = useState(true);
+  const [recoveryNotes, setRecoveryNotes] = useState("");
+  const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
+
+  const handleOpenRecoveryModal = (task: FieldTask) => {
+    setRecoveryModalTask(task);
+    setHasKey(true);
+    setHasCarteGrise(true);
+    setHasAssurance(true);
+    setRecoveryNotes("");
+  };
+
+  const handleConfirmRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryModalTask) return;
+    setIsRecoverySubmitting(true);
+    try {
+      const res = await fetch(`/api/field-tasks/${recoveryModalTask.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "COMPLETED",
+          has_key: hasKey,
+          has_carte_grise: hasCarteGrise,
+          has_assurance: hasAssurance,
+          recovery_notes: recoveryNotes,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("✅ Véhicule récupéré avec succès ! Le ticket a été clôturé et le véhicule est désormais Disponible.");
+        setRecoveryModalTask(null);
+        fetchTasks();
+      } else {
+        toast.error("Échec de la validation de la récupération");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la récupération");
+    } finally {
+      setIsRecoverySubmitting(false);
+    }
+  };
 
   const fetchTasks = useCallback(async () => {
     setIsLoading(true);
@@ -340,6 +392,32 @@ export default function FieldSupervisorView() {
           </div>
         )}
 
+        {task.task_type === "VEHICLE_RECOVERY" && (
+          <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{
+              background: "#fee2e2",
+              color: "#991b1b",
+              padding: "3px 8px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4
+            }}>
+              ⏱️ {task.status === "COMPLETED" 
+                ? `Durée: ${task.recovery_duration_hours ?? 'N/A'}h` 
+                : `${Math.max(0.1, (Date.now() - new Date(task.created_at).getTime()) / (1000 * 3600)).toFixed(1)}h depuis blocage`}
+            </span>
+
+            {task.status === "COMPLETED" && (
+              <span style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>
+                [Clé: {task.has_key ? "✓" : "✗"} · CG: {task.has_carte_grise ? "✓" : "✗"} · Assur: {task.has_assurance ? "✓" : "✗"}]
+              </span>
+            )}
+          </div>
+        )}
+
         {task.completed_at && (
           <div style={{ fontSize: 12, color: "#16a34a", marginBottom: 8 }}>
             ✅ Completed: {new Date(task.completed_at).toLocaleString()}
@@ -348,34 +426,58 @@ export default function FieldSupervisorView() {
 
         {!isCompleted && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {task.status === "PENDING" && (
-              <button onClick={() => handleStatusUpdate(task, "IN_PROGRESS")}
-                style={{ padding: "5px 12px", background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                ▶ Start
+            {task.task_type === "VEHICLE_RECOVERY" ? (
+              <button 
+                onClick={() => handleOpenRecoveryModal(task)}
+                style={{ 
+                  padding: "6px 14px", 
+                  background: "#b91c1c", 
+                  color: "#fff", 
+                  border: "none", 
+                  borderRadius: 8, 
+                  fontSize: 12, 
+                  fontWeight: 700, 
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  boxShadow: "0 2px 4px rgba(185, 28, 28, 0.2)"
+                }}
+              >
+                ⚡ Récupérer (Checklist Handover)
               </button>
-            )}
-            {task.task_type === "MONTHLY_CHECKUP" && task.status !== "COMPLETED" && (
-              <button onClick={() => { setInspectionVehicle(task as any); setInspectorName(""); }}
-                style={{ padding: "5px 12px", background: "#e0e7ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                📝 Inspection Form
-              </button>
-            )}
-            {task.task_type === "MONTHLY_CHECKUP" && task.vehicle_id && task.plate_number && (
-              <button onClick={() => handleViewHistory(task.plate_number!, task.vehicle_id!)}
-                style={{ padding: "5px 12px", background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                📊 History
-              </button>
-            )}
-            {(task.status === "IN_PROGRESS" || (task.task_type !== "MONTHLY_CHECKUP")) && (
+            ) : (
               <>
-                <button onClick={() => handleStatusUpdate(task, "COMPLETED")}
-                  style={{ padding: "5px 12px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✅ Complete
-                </button>
-                <button onClick={() => { setFailingTask(task); setFailureReason(""); }}
-                  style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ❌ Fail
-                </button>
+                {task.status === "PENDING" && (
+                  <button onClick={() => handleStatusUpdate(task, "IN_PROGRESS")}
+                    style={{ padding: "5px 12px", background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    ▶ Start
+                  </button>
+                )}
+                {task.task_type === "MONTHLY_CHECKUP" && task.status !== "COMPLETED" && (
+                  <button onClick={() => { setInspectionVehicle(task as any); setInspectorName(""); }}
+                    style={{ padding: "5px 12px", background: "#e0e7ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    📝 Inspection Form
+                  </button>
+                )}
+                {task.task_type === "MONTHLY_CHECKUP" && task.vehicle_id && task.plate_number && (
+                  <button onClick={() => handleViewHistory(task.plate_number!, task.vehicle_id!)}
+                    style={{ padding: "5px 12px", background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    📊 History
+                  </button>
+                )}
+                {(task.status === "IN_PROGRESS" || (task.task_type !== "MONTHLY_CHECKUP")) && (
+                  <>
+                    <button onClick={() => handleStatusUpdate(task, "COMPLETED")}
+                      style={{ padding: "5px 12px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      ✅ Complete
+                    </button>
+                    <button onClick={() => { setFailingTask(task); setFailureReason(""); }}
+                      style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      ❌ Fail
+                    </button>
+                  </>
+                )}
               </>
             )}
             <button onClick={() => handleDeleteTask(task.id)}
@@ -817,6 +919,234 @@ export default function FieldSupervisorView() {
                 <button type="button" onClick={() => setFailingTask(null)} style={{ padding: "8px 16px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
                 <button type="submit" style={{ padding: "8px 16px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Submit Failure</button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle Recovery Handover Checklist Modal */}
+      {recoveryModalTask && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 520, overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", border: "1px solid #fee2e2" }}>
+            
+            {/* Modal Header */}
+            <div style={{ padding: "20px 24px", background: "linear-gradient(135deg, #991b1b, #b91c1c)", color: "#fff" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>🚨</span> Récupération de Véhicule Bloqué
+                </h3>
+                <button 
+                  type="button" 
+                  onClick={() => setRecoveryModalTask(null)} 
+                  style={{ background: "transparent", border: "none", color: "#fff", fontSize: 20, cursor: "pointer", opacity: 0.8 }}
+                >
+                  ✕
+                </button>
+              </div>
+              <p style={{ margin: "4px 0 0", fontSize: 12, opacity: 0.9 }}>
+                Checklist de restitution & réintégration automatique dans le pool Disponible
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmRecovery} style={{ padding: 24 }}>
+              
+              {/* Vehicle & KPI Strip */}
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "#991b1b" }}>
+                    🚗 {recoveryModalTask.plate_number || "Véhicule"}
+                  </span>
+                  <span style={{ background: "#991b1b", color: "#fff", padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
+                    ⏱️ {Math.max(0.1, (Date.now() - new Date(recoveryModalTask.created_at).getTime()) / (1000 * 3600)).toFixed(1)}h écoulées
+                  </span>
+                </div>
+                {recoveryModalTask.driver_name && (
+                  <div style={{ fontSize: 12, color: "#7f1d1d" }}>
+                    Chauffeur: <strong>{recoveryModalTask.driver_name}</strong> {recoveryModalTask.driver_phone && `(${recoveryModalTask.driver_phone})`}
+                  </div>
+                )}
+                {recoveryModalTask.description && (
+                  <div style={{ fontSize: 11, color: "#991b1b", marginTop: 4, fontStyle: "italic" }}>
+                    Motif: {recoveryModalTask.description}
+                  </div>
+                )}
+              </div>
+
+              {/* Document & Key Handover Checklist */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 10 }}>
+                  📋 Checklist des Éléments Récupérés :
+                </label>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  
+                  {/* Key Checkbox */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 14px", borderRadius: 10,
+                    background: hasKey ? "#f0fdf4" : "#fef2f2",
+                    border: `1px solid ${hasKey ? "#bbf7d0" : "#fecaca"}`,
+                    transition: "all 0.2s"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>🔑</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>Clé du Véhicule</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>Clé physique ou double récupéré</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHasKey(!hasKey)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        border: "none",
+                        cursor: "pointer",
+                        background: hasKey ? "#16a34a" : "#dc2626",
+                        color: "#fff"
+                      }}
+                    >
+                      {hasKey ? "✓ Récupérée" : "✗ Manquante"}
+                    </button>
+                  </div>
+
+                  {/* Carte Grise Checkbox */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 14px", borderRadius: 10,
+                    background: hasCarteGrise ? "#f0fdf4" : "#fef2f2",
+                    border: `1px solid ${hasCarteGrise ? "#bbf7d0" : "#fecaca"}`,
+                    transition: "all 0.2s"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>📄</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>Carte Grise Originale</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>Certificat d'immatriculation</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHasCarteGrise(!hasCarteGrise)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        border: "none",
+                        cursor: "pointer",
+                        background: hasCarteGrise ? "#16a34a" : "#dc2626",
+                        color: "#fff"
+                      }}
+                    >
+                      {hasCarteGrise ? "✓ Récupérée" : "✗ Manquante"}
+                    </button>
+                  </div>
+
+                  {/* Assurance Checkbox */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 14px", borderRadius: 10,
+                    background: hasAssurance ? "#f0fdf4" : "#fef2f2",
+                    border: `1px solid ${hasAssurance ? "#bbf7d0" : "#fecaca"}`,
+                    transition: "all 0.2s"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>🛡️</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>Attestation d'Assurance</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>Document d'assurance en cours</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHasAssurance(!hasAssurance)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        border: "none",
+                        cursor: "pointer",
+                        background: hasAssurance ? "#16a34a" : "#dc2626",
+                        color: "#fff"
+                      }}
+                    >
+                      {hasAssurance ? "✓ Récupérée" : "✗ Manquante"}
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Notes & Remarks */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
+                  Remarques / Observations sur l'état du véhicule :
+                </label>
+                <textarea
+                  rows={2}
+                  value={recoveryNotes}
+                  onChange={(e) => setRecoveryNotes(e.target.value)}
+                  placeholder="Ex: Véhicule stationné au dépôt, carrosserie intacte..."
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    boxSizing: "border-box",
+                    outline: "none"
+                  }}
+                />
+              </div>
+
+              {/* Auto Action Note */}
+              <div style={{ fontSize: 11, color: "#64748b", background: "#f8fafc", padding: "8px 12px", borderRadius: 8, marginBottom: 18, border: "1px solid #e2e8f0" }}>
+                ℹ️ <strong>Action automatique :</strong> En validant, le ticket de support sera clôturé (<em>RESOLVED</em>) et le véhicule passera immédiatement au statut <strong>Available</strong>.
+              </div>
+
+              {/* Modal Buttons */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setRecoveryModalTask(null)}
+                  style={{
+                    padding: "10px 18px",
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRecoverySubmitting}
+                  style={{
+                    padding: "10px 20px",
+                    background: "linear-gradient(135deg, #16a34a, #15803d)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(22, 163, 74, 0.3)",
+                    opacity: isRecoverySubmitting ? 0.6 : 1
+                  }}
+                >
+                  {isRecoverySubmitting ? "Validation…" : "✅ Confirmer la Récupération"}
+                </button>
+              </div>
+
             </form>
           </div>
         </div>
