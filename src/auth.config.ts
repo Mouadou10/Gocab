@@ -18,6 +18,7 @@ export const authConfig: NextAuthConfig = {
       const isLoginPage = pathname === "/login";
       const isPublic =
         pathname.startsWith("/api/auth") ||
+        pathname.startsWith("/api/seed") ||
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon");
 

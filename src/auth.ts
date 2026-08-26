@@ -43,9 +43,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = (credentials.email as string).trim().toLowerCase();
         const inputPassword = credentials.password as string;
 
-        let user = await prisma.user.findFirst({
-          where: { email: { equals: email } },
-        });
+        let user = null;
+        try {
+          user = await prisma.user.findFirst({
+            where: { email },
+          });
+        } catch (dbErr: any) {
+          console.error("Prisma findFirst error in auth:", dbErr.message);
+        }
 
         // Auto-provision Ops Manager if database is newly provisioned
         if (!user && email === "mouad.koudia@gocab.io" && inputPassword === "Moulana@pc1995") {
