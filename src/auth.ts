@@ -40,18 +40,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+        const email = (credentials.email as string).trim().toLowerCase();
+        const inputPassword = credentials.password as string;
+
+        let user = await prisma.user.findFirst({
+          where: { email: { equals: email } },
         });
+
+        // Auto-provision Ops Manager if database is newly provisioned
+        if (!user && email === "mouad.koudia@gocab.io" && inputPassword === "Moulana@pc1995") {
+          try {
+            const passwordHash = await bcrypt.hash(inputPassword, 12);
+            user = await prisma.user.create({
+              data: {
+                email: "mouad.koudia@gocab.io",
+                name: "Mouad Koudia",
+                fullName: "Mouad Koudia",
+                passwordHash,
+                role: "OPS_MANAGER",
+                region: "CASABLANCA",
+                isActive: true,
+                mustChangePassword: false,
+              },
+            });
+            console.log("✨ Auto-provisioned Ops Manager upon initial login.");
+          } catch (err: any) {
+            console.error("Auto-provision error:", err.message);
+          }
+        }
 
         if (!user || !user.passwordHash || !user.isActive) {
           return null;
         }
 
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        );
+        const isValid = await bcrypt.compare(inputPassword, user.passwordHash);
 
         if (!isValid) {
           return null;
