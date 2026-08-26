@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existing = await prisma.user.findUnique({
+    const existing = await prisma.user.findFirst({
       where: { email: email.trim().toLowerCase() },
     });
 
     if (existing) {
       return NextResponse.json(
-        { error: "User with this email already exists" },
-        { status: 400 }
+        { error: `An account with email ${email} already exists.` },
+        { status: 409 }
       );
     }
 
