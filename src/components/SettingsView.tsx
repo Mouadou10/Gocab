@@ -101,6 +101,9 @@ export default function SettingsView() {
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [template, setTemplate] = useState("");
+  const [missingDocsTemplate, setMissingDocsTemplate] = useState("");
+  const [paymentReminderTemplate, setPaymentReminderTemplate] = useState("");
+  const [blockWarningTemplate, setBlockWarningTemplate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -138,6 +141,15 @@ export default function SettingsView() {
           }
           if (settingsData.settings.whatsapp_invite_template) {
             setTemplate(settingsData.settings.whatsapp_invite_template);
+          }
+          if (settingsData.settings.whatsapp_missing_docs_template) {
+            setMissingDocsTemplate(settingsData.settings.whatsapp_missing_docs_template);
+          }
+          if (settingsData.settings.whatsapp_payment_reminder_template) {
+            setPaymentReminderTemplate(settingsData.settings.whatsapp_payment_reminder_template);
+          }
+          if (settingsData.settings.whatsapp_block_warning_template) {
+            setBlockWarningTemplate(settingsData.settings.whatsapp_block_warning_template);
           }
           if (settingsData.settings.role_tab_permissions) {
             try {
@@ -310,22 +322,29 @@ export default function SettingsView() {
   async function handleSaveTemplate() {
     setIsSaving(true);
     try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key: "whatsapp_invite_template",
-          value: template,
-        }),
-      });
+      const templatesToSave = [
+        { key: "whatsapp_invite_template", value: template },
+        { key: "whatsapp_missing_docs_template", value: missingDocsTemplate },
+        { key: "whatsapp_payment_reminder_template", value: paymentReminderTemplate },
+        { key: "whatsapp_block_warning_template", value: blockWarningTemplate }
+      ];
 
-      if (res.ok) {
-        toast.success("WhatsApp template saved!");
+      const savePromises = templatesToSave.map(t => 
+        fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(t),
+        })
+      );
+
+      const results = await Promise.all(savePromises);
+      if (results.every(r => r.ok)) {
+        toast.success("WhatsApp templates saved!");
       } else {
-        toast.error("Failed to save template.");
+        toast.error("Some templates failed to save.");
       }
     } catch (err) {
-      toast.error("Error saving template");
+      toast.error("Error saving templates");
     } finally {
       setIsSaving(false);
     }
@@ -972,32 +991,87 @@ export default function SettingsView() {
 
       {/* SECTION 4: WHATSAPP TEMPLATES */}
       {activeSection === "whatsapp" && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 max-w-3xl">
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 max-w-4xl mx-auto">
           <div>
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <span>💬</span> WhatsApp Driver Confirmation Message
+              <span>💬</span> WhatsApp Communication Templates
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Customize the automatic WhatsApp message sent to driver candidates when their training session is fixed.
+              Customize the automatic WhatsApp messages sent to drivers and candidates across different operational touchpoints.
             </p>
           </div>
 
-          <div className="space-y-3">
-            <label className="block text-xs font-semibold text-gray-700">
-              Message Template Body
-            </label>
-            <textarea
-              rows={6}
-              value={template}
-              onChange={(e) => setTemplate(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl p-4 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy"
-              placeholder="Type template message..."
-            />
-            <div className="bg-gray-50 rounded-xl p-3 text-[11px] text-gray-500 space-y-1 border border-gray-100">
-              <p className="font-semibold text-gray-700">Available Placeholder Tags:</p>
-              <p><code>{"{name}"}</code> — Driver's candidate name</p>
-              <p><code>{"{date}"}</code> — Scheduled training date (e.g. 25/08/2026)</p>
-              <p><code>{"{time}"}</code> — Scheduled time</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 1. Training Schedule */}
+            <div className="space-y-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+              <label className="block text-xs font-bold text-gray-800">
+                🎓 Candidate Training Confirmation
+              </label>
+              <textarea
+                rows={5}
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white"
+                placeholder="Type template message..."
+              />
+              <div className="text-[10px] text-gray-500 space-y-0.5">
+                <span className="font-semibold text-gray-700">Tags: </span>
+                <code>{"{name}"}</code>, <code>{"{date}"}</code>, <code>{"{time}"}</code>
+              </div>
+            </div>
+
+            {/* 2. KYC Missing Docs */}
+            <div className="space-y-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+              <label className="block text-xs font-bold text-gray-800">
+                📁 Missing Documents Reminder (KYC)
+              </label>
+              <textarea
+                rows={5}
+                value={missingDocsTemplate}
+                onChange={(e) => setMissingDocsTemplate(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white"
+                placeholder="Type template message..."
+              />
+              <div className="text-[10px] text-gray-500 space-y-0.5">
+                <span className="font-semibold text-gray-700">Tags: </span>
+                <code>{"{name}"}</code>, <code>{"{missing_docs}"}</code>
+              </div>
+            </div>
+
+            {/* 3. Payment Reminder (Arrears) */}
+            <div className="space-y-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+              <label className="block text-xs font-bold text-amber-800">
+                💰 Payment Reminder (Arrears)
+              </label>
+              <textarea
+                rows={5}
+                value={paymentReminderTemplate}
+                onChange={(e) => setPaymentReminderTemplate(e.target.value)}
+                className="w-full border border-amber-300 rounded-xl p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                placeholder="Type template message..."
+              />
+              <div className="text-[10px] text-gray-500 space-y-0.5">
+                <span className="font-semibold text-gray-700">Tags: </span>
+                <code>{"{name}"}</code>, <code>{"{amount}"}</code>, <code>{"{days_unpaid}"}</code>
+              </div>
+            </div>
+
+            {/* 4. Block Warning (3rd Day Red Alert) */}
+            <div className="space-y-3 bg-red-50/30 p-4 rounded-2xl border border-red-100">
+              <label className="block text-xs font-bold text-red-700">
+                🚨 3rd-Day Non-Payment (Block Warning)
+              </label>
+              <textarea
+                rows={5}
+                value={blockWarningTemplate}
+                onChange={(e) => setBlockWarningTemplate(e.target.value)}
+                className="w-full border border-red-300 rounded-xl p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
+                placeholder="Type template message..."
+              />
+              <div className="text-[10px] text-gray-500 space-y-0.5">
+                <span className="font-semibold text-gray-700">Tags: </span>
+                <code>{"{name}"}</code>, <code>{"{amount}"}</code>
+              </div>
             </div>
           </div>
 
@@ -1007,7 +1081,7 @@ export default function SettingsView() {
               disabled={isSaving}
               className="px-5 py-2.5 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
             >
-              {isSaving ? "Saving…" : "Save WhatsApp Template"}
+              {isSaving ? "Saving…" : "Save All Templates"}
             </button>
           </div>
         </div>

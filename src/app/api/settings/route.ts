@@ -11,6 +11,12 @@ import { prisma } from "@/lib/prisma";
 const DEFAULT_SETTINGS: Record<string, string> = {
   whatsapp_invite_template:
     "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time}.\nنتطلع للقائكم في GoCab.\nشكراً لكم.",
+  whatsapp_missing_docs_template:
+    "السلام عليكم {name}،\nيرجى إرسال الوثائق التالية لاستكمال ملفكم:\n{missing_docs}\nشكراً لكم.",
+  whatsapp_payment_reminder_template:
+    "السلام عليكم {name}،\nنذكركم بأن عليكم متأخرات بقيمة {amount} درهم (بدون دفع منذ {days_unpaid} أيام). المرجو تسوية وضعيتكم في أقرب وقت لتفادي توقيف السيارة.\nشكراً.",
+  whatsapp_block_warning_template:
+    "إنذار عاجل 🚨\nالسلام عليكم {name}، نظراً لعدم تسديدكم المتأخرات بقيمة {amount} درهم، سيتم توقيف سيارتكم اليوم. المرجو الدفع فوراً.",
   role_tab_permissions: JSON.stringify({
     LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
     FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],

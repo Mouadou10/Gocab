@@ -17,6 +17,11 @@
   --foreground: #0f172a; /* Slate 900 for high contrast text */
 }
 
+.dark {
+  --background: #0b1120; /* Deep blue/slate for premium dark mode */
+  --foreground: #f8fafc; /* Slate 50 */
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -25,6 +30,12 @@ body {
   background-image: radial-gradient(circle at top left, rgba(44,78,140,0.03) 0%, transparent 40%),
                     radial-gradient(circle at bottom right, rgba(91,108,40,0.03) 0%, transparent 40%);
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark body {
+  background-image: radial-gradient(circle at top left, rgba(44,78,140,0.15) 0%, transparent 40%),
+                    radial-gradient(circle at bottom right, rgba(91,108,40,0.1) 0%, transparent 40%);
 }
 
 /* ─── Custom Animations ─── */

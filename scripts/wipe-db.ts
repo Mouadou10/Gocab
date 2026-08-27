@@ -10,7 +10,10 @@
  * Run: npm run db:wipe
  */
 
-import { prisma } from "../src/lib/prisma";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
+const { prisma } = require("../src/lib/prisma");
 
 const tables = [
   "MaintenanceTicket",
@@ -25,6 +28,7 @@ const tables = [
   "WeeklyObjective",
   "ChurnEvent",
   "DriverProfile",
+  "VehicleExpense",
   "Vehicle",
   "Lead",
   "Blacklist",

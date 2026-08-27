@@ -26,6 +26,7 @@ model Lead {
   has_confirmation_adresse   Boolean   @default(false)
   has_permis                 Boolean   @default(false)
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
+  is_archived                Boolean   @default(false)
   
   // Eligibility Guardrails (Strict Eligibility per Ops Structure)
   age                        Int?      // Must be 22+
@@ -73,6 +74,7 @@ model Vehicle {
   adBlueLevelPct    Int       @default(100)
   isGpsConnected    Boolean   @default(true)
   lastGpsPing       DateTime  @default(now())
+  is_archived       Boolean   @default(false)
   
   // Relations to new Command Dashboard models
   driverProfile     DriverProfile?
@@ -113,6 +115,7 @@ model MaintenanceTicket {
   repair_cost    Float?
   garage_name    String?
   resolution_notes String?
+  is_archived    Boolean   @default(false)
   
   created_at     DateTime  @default(now())
   resolved_at    DateTime?
@@ -265,6 +268,7 @@ model DriverProfile {
   consecutiveUnpaidDays Int           @default(0) // Track days without payment (>=2 means 3rd day in RED)
   lastPaymentDate       DateTime?
   lastDailyChargeDate   DateTime?
+  is_archived           Boolean       @default(false)
   
   assignedVehicleId     String?       @unique
   assignedVehicle       Vehicle?      @relation(fields: [assignedVehicleId], references: [id])
@@ -390,7 +394,22 @@ model VehicleExpense {
   recorded_by     String?
   
   status          String    @default("PAID")    // PAID, PENDING, REIMBURSED
+  is_archived     Boolean   @default(false)
   
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
+}
+
+/// System-wide audit logs to track who changed what.
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String   // ID or email of the user who made the change
+  action      String   // CREATE, UPDATE, DELETE, ARCHIVE
+  entity_type String   // Vehicle, DriverProfile, PaymentLedger, etc.
+  entity_id   String   // ID of the affected entity
+  changes     String   // JSON stringified payload of what changed
+  created_at  DateTime @default(now())
+
+  @@index([entity_type, entity_id])
+  @@index([user_id])
 }

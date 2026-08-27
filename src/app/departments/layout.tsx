@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const DEPARTMENTS = [
   { id: "brand-manager", label: "Brand Manager" },
@@ -18,10 +19,13 @@ export default function DepartmentsLayout({ children }: { children: React.ReactN
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col md:flex-row transition-colors">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-white border-r border-gray-200 p-6 flex-shrink-0">
-        <h2 className="text-xl font-bold text-[#2C4E8C] mb-6">Departments</h2>
+      <aside className="w-full md:w-64 bg-white dark:bg-slate-950 border-r border-gray-200 dark:border-slate-800 p-6 flex-shrink-0 transition-colors">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-[#2C4E8C] dark:text-blue-400">Departments</h2>
+          <ThemeToggle />
+        </div>
         <nav className="space-y-2">
           {DEPARTMENTS.map((dept) => {
             const isActive = pathname === `/departments/${dept.id}`;

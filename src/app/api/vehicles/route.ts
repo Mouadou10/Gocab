@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const hub = searchParams.get("hub") || "";
     const status = searchParams.get("status") || "";
 
-    const where: any = {};
+    const where: any = { is_archived: false };
 
     if (search) {
       where.OR = [
@@ -113,6 +113,15 @@ export async function POST(request: Request) {
         assigned_driver_phone: assigned_driver_phone ? assigned_driver_phone.trim() : null,
         notes: notes ? notes.trim() : null,
       },
+    });
+
+    const { logAudit } = require("@/lib/services/auditLogger");
+    await logAudit({
+      userId: "ops_manager", // TODO: Extract from session
+      action: "CREATE",
+      entityType: "Vehicle",
+      entityId: vehicle.id,
+      changes: vehicle,
     });
 
     return NextResponse.json({ vehicle }, { status: 201 });

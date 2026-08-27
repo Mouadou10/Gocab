@@ -5,7 +5,10 @@
  * Run: npx tsx prisma/seed-team.ts
  */
 
-import { prisma } from "../src/lib/prisma";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
+const { prisma } = require("../src/lib/prisma");
 import bcrypt from "bcryptjs";
 
 const DEFAULT_PASSWORD = "GoCab2024!";
@@ -17,7 +20,7 @@ const TEAM_MEMBERS = [
     fullName: "Mouad Koudia",
     role: "OPS_MANAGER",
     region: "CASABLANCA",
-    password: "Moulana@pc1995",
+    password: process.env.SEED_ADMIN_PASSWORD,
   },
 ];
 

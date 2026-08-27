@@ -24,6 +24,7 @@ import {
   XCircle,
   Search,
   Filter,
+  Download,
   Phone,
   MessageSquare,
   Car,
@@ -205,20 +206,44 @@ export default function FleetPerformanceView() {
           </p>
         </div>
 
-        {/* Date Selector Pill */}
-        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl border border-white/20">
-          <Calendar className="w-4 h-4 text-gold ml-2" />
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer pr-2"
-          />
+        {/* Controls: Date & Export */}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl border border-white/20">
+            <Calendar className="w-4 h-4 text-gold ml-2" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer pr-2"
+            />
+            <button
+              onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+              className="px-2.5 py-1 bg-white text-navy font-bold text-2xs rounded-xl hover:bg-gold transition-colors"
+            >
+              Aujourd'hui
+            </button>
+          </div>
           <button
-            onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-            className="px-2.5 py-1 bg-white text-navy font-bold text-2xs rounded-xl hover:bg-gold transition-colors"
+            onClick={() => {
+              if (drivers.length === 0) return;
+              const headers = "Nom,Telephone,CIN,Vehicule,Statut,Dernier Paiement,Jours Sans Paiement,Arrieres (MAD)\n";
+              const rows = drivers.map(d => 
+                `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.assignedVehicle?.plate_number || 'Aucun'}","${d.defaultStage}","${d.lastPaymentDate ? new Date(d.lastPaymentDate).toLocaleDateString() : 'Jamais'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
+              ).join("\n");
+              const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `rapport_encaissements_${selectedDate}.csv`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              toast.success("Export CSV réussi !");
+            }}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl border border-emerald-400 transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            Aujourd'hui
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
           </button>
         </div>
       </div>

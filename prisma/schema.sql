@@ -312,3 +312,17 @@ CREATE INDEX IF NOT EXISTS "FieldTask_vehicle_type_status_idx" ON "FieldTask"("v
 CREATE INDEX IF NOT EXISTS "FieldTask_status_idx" ON "FieldTask"("status");
 CREATE INDEX IF NOT EXISTS "MaintenanceTicket_vehicle_status_idx" ON "MaintenanceTicket"("vehicle_id", "status");
 CREATE INDEX IF NOT EXISTS "MaintenanceTicket_status_idx" ON "MaintenanceTicket"("status");
+
+-- System-wide audit logs
+CREATE TABLE "AuditLog" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "user_id" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "entity_type" TEXT NOT NULL,
+    "entity_id" TEXT NOT NULL,
+    "changes" TEXT NOT NULL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS "AuditLog_entity_type_entity_id_idx" ON "AuditLog"("entity_type", "entity_id");
+CREATE INDEX IF NOT EXISTS "AuditLog_user_id_idx" ON "AuditLog"("user_id");
