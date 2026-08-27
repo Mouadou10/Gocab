@@ -103,9 +103,26 @@ export async function DELETE(req: Request, context: any) {
   const { id } = params;
   
   try {
-    await prisma.accidentClaim.delete({
+    const claim = await prisma.accidentClaim.findUnique({
       where: { id },
+      include: { vehicle: true }
     });
+
+    if (claim) {
+      await prisma.accidentClaim.delete({
+        where: { id },
+      });
+
+      // Revert the vehicle status so the auto-sync doesn't immediately recreate the claim
+      if (claim.vehicle && claim.vehicle.status === "Accident") {
+        const hasDriver = !!claim.vehicle.assigned_driver_name;
+        await prisma.vehicle.update({
+          where: { id: claim.vehicle_id },
+          data: { status: hasDriver ? "Actif" : "Available" },
+        });
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error deleting accident claim:", error);

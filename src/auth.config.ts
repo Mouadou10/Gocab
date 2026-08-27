@@ -6,7 +6,7 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const authConfig: NextAuthConfig = {
   trustHost: true,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "gocab-ops-secret-key-2026-mouad",
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: "/login",
     error: "/login",

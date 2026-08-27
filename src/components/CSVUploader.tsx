@@ -70,7 +70,7 @@ export default function CSVUploader({ onUploadComplete }: CSVUploaderProps) {
 
   return (
     <div className="flex items-center gap-3">
-      <label className="flex items-center gap-2 cursor-pointer bg-white/10 hover:bg-white/20 transition-colors rounded-lg px-4 py-2 text-sm text-white border border-white/20">
+      <label className="flex items-center gap-2 cursor-pointer bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg px-4 py-2 text-sm text-gray-700 border border-gray-300">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="h-4 w-4"

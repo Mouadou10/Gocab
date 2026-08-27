@@ -3,34 +3,6 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // 1. Auto-sync: Find any vehicles with status 'Accident' that do not have an open AccidentClaim
-    const accidentVehicles = await prisma.vehicle.findMany({
-      where: { status: "Accident" },
-      include: {
-        driverProfile: true,
-        accidentClaims: {
-          where: { timeline_step: { not: "VEHICLE_BACK" } },
-        },
-      },
-    });
-
-    for (const vehicle of accidentVehicles) {
-      if (!vehicle.accidentClaims || vehicle.accidentClaims.length === 0) {
-        // Auto-create missing accident claim
-        await prisma.accidentClaim.create({
-          data: {
-            vehicle_id: vehicle.id,
-            driver_id: vehicle.driverProfile?.id || null,
-            driver_name: vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || null,
-            driver_phone: vehicle.assigned_driver_phone || vehicle.driverProfile?.phoneSanitized || null,
-            timeline_step: "NEW_ACCIDENT",
-            severity: "HARD",
-            step_updated_at: new Date(),
-          },
-        });
-      }
-    }
-
     const claims = await prisma.accidentClaim.findMany({
       include: {
         vehicle: true,

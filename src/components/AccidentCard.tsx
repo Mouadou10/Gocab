@@ -33,6 +33,7 @@ const TIMELINE_STEPS = [
 
 export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim; onUpdate: () => void }) {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const calculateDays = (dateStr: string) => {
     const diffTime = Math.abs(new Date().getTime() - new Date(dateStr).getTime());
@@ -72,6 +73,23 @@ export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim
     }
   };
 
+  const handleDelete = async () => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`/api/accidents/${claim.id}`, { method: "DELETE" });
+      if (res.ok) {
+        onUpdate();
+      } else {
+        alert("Failed to delete accident");
+      }
+    } catch (err) {
+      console.error("Error deleting accident", err);
+      alert("Error deleting accident");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="p-5 border-b border-gray-100 flex justify-between items-start">
@@ -98,9 +116,25 @@ export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end">
           <div className="text-3xl font-black text-navy">{daysInStatus}</div>
-          <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Days in Status</div>
+          <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Days in Status</div>
+          
+          {isDeleting ? (
+            <div className="flex gap-2 items-center mt-1">
+              <span className="text-[10px] text-red-500 font-bold">Sure?</span>
+              <button onClick={handleDelete} className="text-[10px] text-white bg-red-600 px-2 py-1 rounded hover:bg-red-700">Yes</button>
+              <button onClick={() => setIsDeleting(false)} className="text-[10px] text-gray-600 bg-gray-100 border border-gray-300 px-2 py-1 rounded hover:bg-gray-200">No</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsDeleting(true)}
+              disabled={isUpdating}
+              className="text-[11px] text-red-500 hover:text-red-700 font-semibold hover:underline disabled:opacity-50 transition-colors"
+            >
+              Delete Record
+            </button>
+          )}
         </div>
       </div>
 

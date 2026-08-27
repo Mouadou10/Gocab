@@ -5,11 +5,13 @@
  * Moroccan phone numbers, deduplicates against existing leads,
  * filters out blacklisted numbers, and bulk-inserts valid leads.
  *
- * Expected CSV headers: "Date Received", "Lead Name", "Phone Number"
+ * Uses fuzzy header matching — accepts any reasonable variation of
+ * "Name", "Phone", "City" headers regardless of language or formatting.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { matchHeaders, getField } from "@/lib/csv-header-matcher";
 import Papa from "papaparse";
 
 /** Strip spaces, dashes, and leading zeros, then prepend +212. */
@@ -33,12 +35,6 @@ function sanitizePhone(raw: string): string {
   return `+212${cleaned}`;
 }
 
-interface CSVRow {
-  "Date Received"?: string;
-  "Lead Name"?: string;
-  "Phone Number"?: string;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -55,7 +51,7 @@ export async function POST(request: NextRequest) {
     const csvText = await file.text();
 
     // Parse CSV with PapaParse
-    const { data, errors } = Papa.parse<CSVRow>(csvText, {
+    const { data, errors, meta } = Papa.parse<Record<string, string>>(csvText, {
       header: true,
       skipEmptyLines: true,
       transformHeader: (h: string) => h.trim(),
@@ -65,21 +61,36 @@ export async function POST(request: NextRequest) {
       console.error("CSV parse errors:", errors);
     }
 
+    // Fuzzy-match CSV headers to canonical fields
+    const { mapping, unmapped } = matchHeaders(meta.fields || []);
+
+    if (!mapping.name || !mapping.phone) {
+      return NextResponse.json(
+        {
+          error: `Could not detect required columns. Found headers: [${(meta.fields || []).join(", ")}]. Need a 'Name' column and a 'Phone' column.`,
+          detected: mapping,
+          unmapped,
+        },
+        { status: 400 }
+      );
+    }
+
     // Extract campaign source from the filename
     const campaignSource = file.name.replace(/\.csv$/i, "") || "unknown";
 
-    // Sanitize all phone numbers
+    // Build candidates using fuzzy-matched headers
     const candidates = data
-      .filter((row) => row["Lead Name"] && row["Phone Number"])
+      .filter((row) => getField(row, mapping, "name") && getField(row, mapping, "phone"))
       .map((row) => ({
-        raw_name: row["Lead Name"]!.trim(),
-        sanitized_phone: sanitizePhone(row["Phone Number"]!),
+        raw_name: getField(row, mapping, "name")!,
+        sanitized_phone: sanitizePhone(getField(row, mapping, "phone")!),
+        city: getField(row, mapping, "city") || null,
         campaign_source: campaignSource,
       }));
 
     if (candidates.length === 0) {
       return NextResponse.json(
-        { error: "No valid rows found in CSV. Expected headers: 'Lead Name', 'Phone Number'" },
+        { error: "No valid rows found in CSV. Every row needs at least a name and phone number." },
         { status: 400 }
       );
     }
@@ -123,6 +134,7 @@ export async function POST(request: NextRequest) {
         data: uniqueLeads.map((lead) => ({
           raw_name: lead.raw_name,
           sanitized_phone: lead.sanitized_phone,
+          city: lead.city,
           campaign_source: lead.campaign_source,
           board_column: "NEW_LEADS" as const,
         })),
@@ -139,6 +151,7 @@ export async function POST(request: NextRequest) {
         blacklisted: blacklistPhoneSet.size,
         skipped_invalid: data.length - candidates.length,
       },
+      headerMapping: mapping,
     });
   } catch (error) {
     console.error("Upload error:", error);

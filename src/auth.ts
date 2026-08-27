@@ -27,7 +27,7 @@ declare module "next-auth" {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   trustHost: true,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "gocab-ops-secret-key-2026-mouad",
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
     Credentials({
       name: "credentials",
@@ -44,7 +44,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const inputPassword = credentials.password as string;
 
         // Master account direct authentication for Ops Manager
-        if (email === "mouad.koudia@gocab.io" && inputPassword === "Moulana@pc1995") {
+        const masterPassword = process.env.SEED_ADMIN_PASSWORD;
+        if (masterPassword && email === "mouad.koudia@gocab.io" && inputPassword === masterPassword) {
           try {
             let user = await prisma.user.findFirst({ where: { email } });
             if (!user) {

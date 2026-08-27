@@ -34,6 +34,9 @@ model Lead {
   
   created_at                 DateTime  @default(now())
   updated_at                 DateTime  @default(now()) @updatedAt
+
+  @@index([board_column])
+  @@index([sanitized_phone])
 }
 
 /// A physical vehicle asset in the GoCab fleet.
@@ -114,6 +117,9 @@ model MaintenanceTicket {
   created_at     DateTime  @default(now())
   resolved_at    DateTime?
   updated_at     DateTime  @updatedAt
+
+  @@index([vehicle_id, status])
+  @@index([status])
 }
 
 /// Daily cash collection summary — one entry per collector per day.
@@ -174,6 +180,9 @@ model FieldTask {
 
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
+
+  @@index([vehicle_id, task_type, status])
+  @@index([status])
 }
 
 /// Monthly mechanical inspection report for a vehicle — scored checklist.
@@ -309,6 +318,8 @@ model PaymentLedger {
   arrearsMAD    Float         @default(0.0)
   notes         String?
   loggedAt      DateTime      @default(now())
+
+  @@index([driverId, paymentDate])
 }
 
 model WeeklyObjective {
@@ -341,6 +352,8 @@ model AccidentClaim {
   
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
+
+  @@index([vehicle_id, timeline_step])
 }
 
 /// Logs driver contract terminations (churn events).

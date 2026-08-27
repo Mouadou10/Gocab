@@ -303,3 +303,12 @@ CREATE TABLE IF NOT EXISTS "VehicleExpense" (
 CREATE INDEX IF NOT EXISTS "VehicleExpense_vehicle_id_idx" ON "VehicleExpense"("vehicle_id");
 CREATE INDEX IF NOT EXISTS "VehicleExpense_plate_number_idx" ON "VehicleExpense"("plate_number");
 CREATE INDEX IF NOT EXISTS "VehicleExpense_category_idx" ON "VehicleExpense"("category");
+
+-- Performance indexes for high-traffic queries
+CREATE INDEX IF NOT EXISTS "Lead_board_column_idx" ON "Lead"("board_column");
+CREATE INDEX IF NOT EXISTS "PaymentLedger_driver_date_idx" ON "PaymentLedger"("driverId", "paymentDate");
+CREATE INDEX IF NOT EXISTS "AccidentClaim_vehicle_step_idx" ON "AccidentClaim"("vehicle_id", "timeline_step");
+CREATE INDEX IF NOT EXISTS "FieldTask_vehicle_type_status_idx" ON "FieldTask"("vehicle_id", "task_type", "status");
+CREATE INDEX IF NOT EXISTS "FieldTask_status_idx" ON "FieldTask"("status");
+CREATE INDEX IF NOT EXISTS "MaintenanceTicket_vehicle_status_idx" ON "MaintenanceTicket"("vehicle_id", "status");
+CREATE INDEX IF NOT EXISTS "MaintenanceTicket_status_idx" ON "MaintenanceTicket"("status");

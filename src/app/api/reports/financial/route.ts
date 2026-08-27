@@ -9,21 +9,34 @@
  * - Department Performance Targets vs Actuals for every agent role
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const DAILY_OPPORTUNITY_COST_MAD = 250; // 250 MAD / day lost revenue per inactive vehicle
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Optional date range filters: ?from=2026-08-01&to=2026-08-31
+    const { searchParams } = new URL(request.url);
+    const fromParam = searchParams.get("from");
+    const toParam = searchParams.get("to");
+
+    const dateFilter: { gte?: Date; lte?: Date } = {};
+    if (fromParam) dateFilter.gte = new Date(`${fromParam}T00:00:00.000Z`);
+    if (toParam) dateFilter.lte = new Date(`${toParam}T23:59:59.999Z`);
+    const hasDateFilter = Object.keys(dateFilter).length > 0;
+
     const [vehicles, expenses, drivers, leads, tickets, inspections, tasks, settingsRecord] = await Promise.all([
       prisma.vehicle.findMany({
         include: {
           driverProfile: true,
-          expenses: true,
+          expenses: hasDateFilter
+            ? { where: { paid_at: dateFilter } }
+            : true,
         },
       }),
       prisma.vehicleExpense.findMany({
+        where: hasDateFilter ? { paid_at: dateFilter } : undefined,
         orderBy: { paid_at: "desc" },
       }),
       prisma.driverProfile.findMany(),

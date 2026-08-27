@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 
 /**
  * PATCH /api/vehicles/[id]
@@ -14,6 +15,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAuth();
     const { id } = await params;
     const body = await request.json();
 
@@ -226,6 +228,8 @@ export async function PATCH(
 
   } catch (error) {
     console.error("PATCH /api/vehicles/[id] error:", error);
+    const authResp = (() => { try { return handleAuthError(error); } catch { return null; } })();
+    if (authResp) return authResp;
     return NextResponse.json(
       { error: "Failed to update vehicle" },
       { status: 500 }
@@ -244,47 +248,58 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAuth();
     const { id } = await params;
 
-    // 1. Unlink any DriverProfile assigned to this vehicle
-    await prisma.driverProfile.updateMany({
-      where: { assignedVehicleId: id },
-      data: { assignedVehicleId: null },
-    });
+    // Wrap in a transaction so partial deletes don't leave orphans
+    await prisma.$transaction(async (tx) => {
+      // 1. Unlink any DriverProfile assigned to this vehicle
+      await tx.driverProfile.updateMany({
+        where: { assignedVehicleId: id },
+        data: { assignedVehicleId: null },
+      });
 
-    // 2. Delete SupportTickets linked to this vehicle
-    await prisma.supportTicket.deleteMany({
-      where: { vehicleId: id },
-    });
+      // 2. Delete SupportTickets linked to this vehicle
+      await tx.supportTicket.deleteMany({
+        where: { vehicleId: id },
+      });
 
-    // 3. Delete FieldInspections linked to this vehicle
-    await prisma.fieldInspectionNew.deleteMany({
-      where: { vehicleId: id },
-    });
+      // 3. Delete FieldInspections linked to this vehicle
+      await tx.fieldInspectionNew.deleteMany({
+        where: { vehicleId: id },
+      });
 
-    // 4. Delete AccidentClaims linked to this vehicle
-    await prisma.accidentClaim.deleteMany({
-      where: { vehicle_id: id },
-    });
+      // 4. Delete AccidentClaims linked to this vehicle
+      await tx.accidentClaim.deleteMany({
+        where: { vehicle_id: id },
+      });
 
-    // 5. Delete MaintenanceTickets linked to this vehicle
-    await prisma.maintenanceTicket.deleteMany({
-      where: { vehicle_id: id },
-    });
+      // 5. Delete MaintenanceTickets linked to this vehicle
+      await tx.maintenanceTicket.deleteMany({
+        where: { vehicle_id: id },
+      });
 
-    // 6. Delete ChurnEvents linked to this vehicle
-    await prisma.churnEvent.deleteMany({
-      where: { vehicle_id: id },
-    });
+      // 6. Delete ChurnEvents linked to this vehicle
+      await tx.churnEvent.deleteMany({
+        where: { vehicle_id: id },
+      });
 
-    // 7. Finally delete the vehicle itself
-    await prisma.vehicle.delete({
-      where: { id },
+      // 7. Delete expenses linked to this vehicle
+      await tx.vehicleExpense.deleteMany({
+        where: { vehicle_id: id },
+      });
+
+      // 8. Finally delete the vehicle itself
+      await tx.vehicle.delete({
+        where: { id },
+      });
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/vehicles/[id] error:", error);
+    const authResp = (() => { try { return handleAuthError(error); } catch { return null; } })();
+    if (authResp) return authResp;
     return NextResponse.json(
       { error: "Failed to delete vehicle. It may have related records that could not be removed." },
       { status: 500 }

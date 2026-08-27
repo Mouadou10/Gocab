@@ -175,10 +175,10 @@ export async function POST(request: NextRequest) {
       const existing = await prisma.driverProfile.findFirst({
         where: {
           OR: [
-            { phoneSanitized: rawPhone ? phoneSanitized : undefined },
-            { cinNumber: rawCin ? cinNumber : undefined },
-            { fullName: { equals: fullName } },
-            ...(assignedVehicleId ? [{ assignedVehicleId }] : []),
+            rawPhone ? { phoneSanitized } : null,
+            rawCin ? { cinNumber } : null,
+            { fullName },
+            assignedVehicleId ? { assignedVehicleId } : null,
           ].filter(Boolean) as any,
         },
       });

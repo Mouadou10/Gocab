@@ -3,6 +3,10 @@
  *
  * Uses @prisma/adapter-libsql configured with Turso Cloud database.
  * Works seamlessly on Vercel serverless and locally.
+ *
+ * Credentials are read ONLY from environment variables:
+ *   TURSO_DATABASE_URL or DATABASE_URL
+ *   TURSO_AUTH_TOKEN (required for Turso Cloud)
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -12,15 +16,20 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const TURSO_DEFAULT_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io";
-const TURSO_DEFAULT_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
-
 function createPrismaClient(): PrismaClient {
-  let url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || TURSO_DEFAULT_URL;
+  let url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+
+  if (!url) {
+    throw new Error(
+      "Missing database URL. Set TURSO_DATABASE_URL or DATABASE_URL in your .env.local file."
+    );
+  }
+
   if (url.startsWith("libsql://")) {
     url = url.replace("libsql://", "https://");
   }
-  const authToken = process.env.TURSO_AUTH_TOKEN || TURSO_DEFAULT_TOKEN;
+
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
   const adapter = new PrismaLibSql({
     url,
@@ -35,3 +44,4 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+

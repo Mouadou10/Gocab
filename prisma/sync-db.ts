@@ -10,8 +10,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { prisma } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
+import * as dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+
+// Require prisma AFTER dotenv has run to prevent missing env var error
+const { prisma } = require("../src/lib/prisma");
 
 async function syncSchema() {
   const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
@@ -66,7 +71,13 @@ async function syncSchema() {
 
   // Seed default Ops Manager
   const email = "mouad.koudia@gocab.io";
-  const passwordHash = await bcrypt.hash("Moulana@pc1995", 12);
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedPassword) {
+    console.warn("⚠️  SEED_ADMIN_PASSWORD not set in env — skipping admin account seed.");
+    await prisma.$disconnect();
+    return;
+  }
+  const passwordHash = await bcrypt.hash(seedPassword, 12);
 
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
