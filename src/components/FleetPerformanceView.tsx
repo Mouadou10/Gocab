@@ -226,9 +226,9 @@ export default function FleetPerformanceView() {
           <button
             onClick={() => {
               if (drivers.length === 0) return;
-              const headers = "Nom,Telephone,CIN,Vehicule,Statut,Dernier Paiement,Jours Sans Paiement,Arrieres (MAD)\n";
+              const headers = "Nom,Telephone,CIN,Vehicule,Jours Sans Paiement,Arrieres (MAD)\n";
               const rows = drivers.map(d => 
-                `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.assignedVehicle?.plate_number || 'Aucun'}","${d.defaultStage}","${d.lastPaymentDate ? new Date(d.lastPaymentDate).toLocaleDateString() : 'Jamais'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
+                `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || 'Aucun'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
               ).join("\n");
               const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
               const url = URL.createObjectURL(blob);

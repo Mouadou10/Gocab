@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useMemo } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   TrendingDown,
   TrendingUp,
@@ -103,6 +104,7 @@ interface AgentTargetGroup {
 }
 
 export default function DashboardView() {
+  const { t } = useLanguage();
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [vehicles, setVehicles] = useState<VehicleFinancialItem[]>([]);
   const [agentTargets, setAgentTargets] = useState<Record<string, AgentTargetGroup>>({});
@@ -222,11 +224,11 @@ export default function DashboardView() {
               <DollarSign className="w-6 h-6" />
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Tableau de Bord Financier & Opérationnel
+              {t.executiveDashboard}
             </h1>
           </div>
           <p className="text-white/70 text-sm">
-            Contrôle des coûts de réparation, coût d'opportunité des véhicules à l'arrêt (<span className="text-gold font-bold">250 DH / jour</span> d'inactivité) et suivi des objectifs par collaborateur.
+            {t.executiveSubtitle}
           </p>
         </div>
 
@@ -258,7 +260,9 @@ export default function DashboardView() {
         {/* Card 1: Inactivity Opportunity Loss */}
         <div className="bg-white p-6 rounded-3xl border border-amber-200/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Perte d'Opportunité Flotte</span>
+            <span className="text-xs font-bold text-amber-700 tracking-wider uppercase">
+              {t.opportunityLoss}
+            </span>
             <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
               <TrendingDown className="w-4 h-4" />
             </div>

@@ -421,10 +421,10 @@ export default function SettingsView() {
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">⚙️</span>
-            <h2 className="text-xl font-bold tracking-tight">Operations Manager Control Center</h2>
+            <h2 className="text-xl font-bold tracking-tight">{t.settings}</h2>
           </div>
           <p className="text-white/70 text-xs mt-1">
-            Set weekly department targets, manage role permissions, control team access, and customize messaging templates.
+            {t.rolePermissionsSubtitle}
           </p>
         </div>
 
