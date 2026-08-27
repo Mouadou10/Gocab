@@ -31,8 +31,8 @@ export default function InsuranceView() {
     try {
       const res = await fetch("/api/vehicles");
       const data = await res.json();
-      // Only fetch active vehicles that aren't already in accident
-      setVehicles(data.vehicles?.filter((v: any) => v.status !== "Accident") || []);
+      // Allow selecting any vehicle to ensure we can create claims for legacy "Accident" status vehicles
+      setVehicles(data.vehicles || []);
     } catch (err) {
       console.error("Failed to fetch vehicles for accident reporting", err);
     }
