@@ -458,15 +458,32 @@ export default function FleetPerformanceView() {
 
                       {/* Contract Type */}
                       <td className="py-4 px-4">
-                        {driver.contractType === "WEEKLY" ? (
-                          <span className="text-2xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200">
-                            🗓️ Hebdo (1800 DH / Lun)
-                          </span>
-                        ) : (
-                          <span className="text-2xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200">
-                            📅 Journalier (300 DH / j)
-                          </span>
-                        )}
+                        <select
+                          value={driver.contractType}
+                          onChange={async (e) => {
+                            const newType = e.target.value;
+                            try {
+                              const res = await fetch(`/api/drivers/${driver.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ contractType: newType }),
+                              });
+                              if (res.ok) {
+                                fetchDriverCollections(); // Refresh the list
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className={`w-full px-2 py-1.5 font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
+                            driver.contractType === 'WEEKLY'
+                              ? 'border-purple-200 bg-purple-50 text-purple-700 focus:ring-purple-200'
+                              : 'border-blue-200 bg-blue-50 text-blue-700 focus:ring-blue-200'
+                          }`}
+                        >
+                          <option value="DAILY">📅 Journalier (300 DH)</option>
+                          <option value="WEEKLY">🗓️ Hebdo (1800 DH)</option>
+                        </select>
                       </td>
 
                       {/* Expected Today */}

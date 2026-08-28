@@ -11,6 +11,7 @@ import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
+  useSortable,
 } from "@dnd-kit/sortable";
 import { Inbox } from "lucide-react";
 import LeadCard from "./LeadCard";
@@ -81,11 +82,20 @@ export default function KanbanColumn({
   leads,
   onCardClick,
 }: KanbanColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: columnId });
+  const { setNodeRef, isOver, attributes, listeners, transform, transition } = useSortable({
+    id: columnId,
+    data: { type: "Column", columnId },
+  });
+
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+  };
 
   return (
     <div
       ref={setNodeRef}
+      style={style}
       className={`
         flex flex-col glass-panel rounded-3xl min-h-[calc(100vh-14rem)] w-72 min-w-[18rem] flex-shrink-0
         transition-all duration-300
@@ -93,7 +103,11 @@ export default function KanbanColumn({
       `}
     >
       {/* Column Header */}
-      <div className="flex items-center gap-3 px-5 py-4 rounded-t-3xl bg-white/50 border-b border-gray-100">
+      <div 
+        className="flex items-center gap-3 px-5 py-4 rounded-t-3xl bg-white/50 border-b border-gray-100 cursor-grab active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
         {/* Accent dot */}
         <div
           className={`w-2.5 h-2.5 rounded-full bg-gradient-to-br ${

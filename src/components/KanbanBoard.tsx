@@ -24,6 +24,7 @@ import {
   useSensors,
   closestCorners,
 } from "@dnd-kit/core";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import KanbanColumn from "./KanbanColumn";
 import CSVUploader from "./CSVUploader";
 import FleetView from "./FleetView";
@@ -143,6 +144,11 @@ export default function KanbanBoard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [activeColumnDragId, setActiveColumnDragId] = useState<string | null>(null);
+
+  // Column order states
+  const [leadsColumns, setLeadsColumns] = useState<string[]>([...LEADS_COLUMNS]);
+  const [trainingColumns, setTrainingColumns] = useState<string[]>([...TRAINING_COLUMNS]);
   
   // Navigation & Settings State — default to first allowed tab
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
@@ -258,13 +264,41 @@ export default function KanbanBoard() {
   // ─── Drag & Drop Handlers ───────────────────────────────
 
   function handleDragStart(event: DragStartEvent) {
+    if (event.active.data.current?.type === "Column") {
+      setActiveColumnDragId(event.active.id as string);
+      return;
+    }
     setActiveDragId(event.active.id as string);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    setActiveDragId(null);
     const { active, over } = event;
 
+    // Handle Column Dragging
+    if (active.data.current?.type === "Column") {
+      setActiveColumnDragId(null);
+      if (!over) return;
+      if (active.id !== over.id) {
+        if (activeTab === "leads") {
+          const oldIndex = leadsColumns.indexOf(active.id as string);
+          const newIndex = leadsColumns.indexOf(over.id as string);
+          const newOrder = [...leadsColumns];
+          newOrder.splice(oldIndex, 1);
+          newOrder.splice(newIndex, 0, active.id as string);
+          setLeadsColumns(newOrder);
+        } else {
+          const oldIndex = trainingColumns.indexOf(active.id as string);
+          const newIndex = trainingColumns.indexOf(over.id as string);
+          const newOrder = [...trainingColumns];
+          newOrder.splice(oldIndex, 1);
+          newOrder.splice(newIndex, 0, active.id as string);
+          setTrainingColumns(newOrder);
+        }
+      }
+      return;
+    }
+
+    setActiveDragId(null);
     if (!over) return;
 
     const leadId = active.id as string;
@@ -442,6 +476,10 @@ export default function KanbanBoard() {
     const { active, over } = event;
     if (!over) return;
 
+    if (active.data.current?.type === "Column") {
+      return; // Handled in DragEnd
+    }
+
     const leadId = active.id as string;
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return;
@@ -501,7 +539,7 @@ export default function KanbanBoard() {
   const activeLead = activeDragId ? leads.find((l) => l.id === activeDragId) : null;
 
   // Active columns arrays based on current tab
-  const activeColumns = activeTab === "leads" ? LEADS_COLUMNS : TRAINING_COLUMNS;
+  const activeColumns = activeTab === "leads" ? leadsColumns : trainingColumns;
 
   // Tab count indicators
   const leadsCount = leads.filter(
@@ -798,14 +836,16 @@ export default function KanbanBoard() {
             {/* Scrollable Horizontal Kanban Board Container */}
             <div className="flex-1 overflow-x-auto pb-4 scrollbar-thin">
               <div className="flex gap-5 min-h-[calc(100vh-14rem)] pb-2">
-                {activeColumns.map((col) => (
-                  <KanbanColumn
-                    key={col}
-                    columnId={col}
-                    leads={getLeadsByColumn(col)}
-                    onCardClick={handleCardClick}
-                  />
-                ))}
+                <SortableContext items={activeColumns} strategy={horizontalListSortingStrategy}>
+                  {activeColumns.map((col) => (
+                    <KanbanColumn
+                      key={col}
+                      columnId={col}
+                      leads={getLeadsByColumn(col)}
+                      onCardClick={handleCardClick}
+                    />
+                  ))}
+                </SortableContext>
               </div>
             </div>
 

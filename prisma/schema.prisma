@@ -27,12 +27,13 @@ model Lead {
   has_permis                 Boolean   @default(false)
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
   is_archived                Boolean   @default(false)
+  notes                      String?   // Free-form notes from agents
   
   // Eligibility Guardrails (Strict Eligibility per Ops Structure)
   age                        Int?      // Must be 22+
   permis_seniority_years     Int?      // Must be 2+ years
   is_resident                Boolean?  // Non-residents strictly blocked
-  
+
   created_at                 DateTime  @default(now())
   updated_at                 DateTime  @default(now()) @updatedAt
 
