@@ -85,7 +85,7 @@ export default function LeadDrawer({
   onUpdate,
   whatsappTemplate,
 }: LeadDrawerProps) {
-  const [brandStatus, setBrandStatus] = useState(lead.brand_status || "");
+  const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
   const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
   const [city, setCity] = useState(lead.city || "");
   
@@ -131,12 +131,14 @@ export default function LeadDrawer({
       };
 
       if (boardType === "leads") {
-        payload.brand_status = brandStatus;
-
-        if (brandStatus === "Training fixed") {
+        if (brandStatus === "NEW_LEADS" || !brandStatus) {
+          payload.board_column = "NEW_LEADS";
+          payload.brand_status = null;
+        } else if (brandStatus === "Training fixed") {
           // Move from leads page to training page
           payload.board_column = "TRAINING_PIPELINE";
           payload.training_status = "Scheduled"; // first status for moved leads
+          payload.brand_status = "Training fixed";
 
           if (trainingDate) {
             const date = new Date(trainingDate);
@@ -151,9 +153,10 @@ export default function LeadDrawer({
             );
             window.open(waUrl, "_blank");
           }
-        } else if (brandStatus) {
+        } else {
           // Any other brand status means it's no longer a new lead
           payload.board_column = "BRAND_PRE_FILTER";
+          payload.brand_status = brandStatus;
         }
       } else {
         payload.training_status = trainingStatus;
@@ -297,6 +300,7 @@ export default function LeadDrawer({
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                 >
                   <option value="">Select Brand Status...</option>
+                  <option value="NEW_LEADS">✨ New Leads (Return to Intake)</option>
                   {BRAND_STATUS_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}

@@ -261,6 +261,26 @@ export default function KanbanBoard() {
     );
   }
 
+  /** Bring selected status column to 2nd position (right after NEW_LEADS) */
+  function handleBringColumnToSecond(columnKey: string) {
+    if (activeTab === "leads") {
+      setLeadsColumns((prev) => {
+        const withoutTarget = prev.filter((c) => c !== columnKey && c !== "NEW_LEADS");
+        return ["NEW_LEADS", columnKey, ...withoutTarget];
+      });
+    } else {
+      setTrainingColumns((prev) => {
+        const withoutTarget = prev.filter((c) => c !== columnKey);
+        if (withoutTarget.length > 0) {
+          const first = withoutTarget[0];
+          const rest = withoutTarget.slice(1);
+          return [first, columnKey, ...rest];
+        }
+        return prev;
+      });
+    }
+  }
+
   // ─── Drag & Drop Handlers ───────────────────────────────
 
   function handleDragStart(event: DragStartEvent) {
@@ -830,7 +850,12 @@ export default function KanbanBoard() {
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
-            {activeTab === "leads" && <LeadsScorecard leads={leads} />}
+            {activeTab === "leads" && (
+              <LeadsScorecard
+                leads={leads}
+                onSelectStatus={handleBringColumnToSecond}
+              />
+            )}
             {activeTab === "training" && <TrainingScorecard leads={leads} />}
             
             {/* Scrollable Horizontal Kanban Board Container */}

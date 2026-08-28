@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 
-export default function LeadsScorecard({ leads }: { leads: any[] }) {
+interface LeadsScorecardProps {
+  leads: any[];
+  onSelectStatus?: (status: string) => void;
+}
+
+export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecardProps) {
   const [dateFilter, setDateFilter] = useState<string>('');
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
 
@@ -117,26 +122,80 @@ export default function LeadsScorecard({ leads }: { leads: any[] }) {
 
         {/* Status Breakdown */}
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 col-span-1 md:col-span-2">
-          <div className="text-sm font-medium text-gray-500 mb-3">Status Breakdown</div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-medium text-gray-500">Status Breakdown</div>
+            <span className="text-[11px] text-navy/70 font-medium">✨ Click a status to bring column to 2nd position</span>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 rounded-md">
-              Not Interested: {statusCounts['Not interested'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-yellow-100 text-yellow-700 rounded-md">
-              No Response: {(statusCounts['No response 1'] || 0) + (statusCounts['No response 2'] || 0)}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-green-100 text-green-700 rounded-md">
-              Training Fixed: {trainingFixed}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-purple-100 text-purple-700 rounded-md">
-              To Recall: {statusCounts['To Recall'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-md">
-              Wrong Number: {statusCounts['Wrong number'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-gray-200 text-gray-700 rounded-md">
-              Already Client: {statusCounts['Already a client'] || 0}
-            </span>
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Not interested')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Not interested' in 2nd column position"
+            >
+              <span>Not Interested:</span>
+              <span className="font-bold">{statusCounts['Not interested'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('No response 1')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'No response 1' in 2nd column position"
+            >
+              <span>No Response 1:</span>
+              <span className="font-bold">{statusCounts['No response 1'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('No response 2')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-amber-100 text-amber-800 hover:bg-amber-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'No response 2' in 2nd column position"
+            >
+              <span>No Response 2:</span>
+              <span className="font-bold">{statusCounts['No response 2'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Training fixed')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Training fixed' in 2nd column position"
+            >
+              <span>Training Fixed:</span>
+              <span className="font-bold">{trainingFixed}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('To Recall')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'To Recall' in 2nd column position"
+            >
+              <span>To Recall:</span>
+              <span className="font-bold">{statusCounts['To Recall'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Wrong number')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Wrong number' in 2nd column position"
+            >
+              <span>Wrong Number:</span>
+              <span className="font-bold">{statusCounts['Wrong number'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Already a client')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Already a client' in 2nd column position"
+            >
+              <span>Already Client:</span>
+              <span className="font-bold">{statusCounts['Already a client'] || 0}</span>
+            </button>
           </div>
         </div>
       </div>
