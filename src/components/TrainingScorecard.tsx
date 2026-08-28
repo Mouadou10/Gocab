@@ -18,13 +18,17 @@ export default function TrainingScorecard({ leads }: { leads: any[] }) {
     const today = new Date().toISOString().split('T')[0];
     setDateFilter(today);
 
-    // Fetch objectives for preorders/new drivers target
-    fetch('/api/objectives?role=LEAD_ACQUISITION_JR')
+    // Fetch objectives from Settings
+    fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.objectives) {
-          const target = data.objectives.find((o: any) => o.metricKey === 'WEEKLY_PREORDERS');
-          if (target) setWeeklyPreordersTarget(target.targetValue);
+        if (data.settings?.department_weekly_targets) {
+          try {
+            const targets = JSON.parse(data.settings.department_weekly_targets);
+            if (targets.target_kyc_completion_rate) {
+              setWeeklyPreordersTarget(Number(targets.target_kyc_completion_rate));
+            }
+          } catch (e) {}
         }
       })
       .catch(console.error);

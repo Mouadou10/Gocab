@@ -281,21 +281,6 @@ export default function LeadDrawer({
             </select>
           </div>
 
-          {/* Notes Section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-            <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
-              📝 Notes
-              <span className="text-[10px] font-normal text-gray-500">(Optional context or history)</span>
-            </label>
-            <textarea
-              rows={4}
-              placeholder="Add notes about this prospect..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy resize-none"
-            />
-          </div>
-
           {/* Status Dropdowns & Board Specific Flow */}
           {boardType === "leads" ? (
             <div className="space-y-4">
@@ -447,6 +432,21 @@ export default function LeadDrawer({
               </div>
             </div>
           )}
+
+          {/* Notes Section */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+              📝 Notes
+              <span className="text-[10px] font-normal text-gray-500">(Optional context or history)</span>
+            </label>
+            <textarea
+              rows={4}
+              placeholder="Add notes about this prospect..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy resize-none"
+            />
+          </div>
         </div>
 
         {/* Validation Errors & Footer Actions */}

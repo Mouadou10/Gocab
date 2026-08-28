@@ -48,6 +48,7 @@ const DEFAULT_ROLE_LABELS: Record<string, string> = {
 };
 
 interface DepartmentTargets {
+  target_daily_calls: number;
   target_weekly_leads: number;
   target_training_showup_rate: number;
   target_kyc_completion_rate: number;
@@ -66,6 +67,7 @@ interface DepartmentTargets {
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
+  target_daily_calls: 34,
   target_weekly_leads: 100,
   target_training_showup_rate: 80,
   target_kyc_completion_rate: 25,
@@ -516,6 +518,22 @@ export default function SettingsView() {
                 </div>
 
                 <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Daily Calls Target (Objective)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={targets.target_daily_calls || 34}
+                        onChange={(e) => setTargets({ ...targets, target_daily_calls: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">calls/day</span>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                       Weekly New Leads Target

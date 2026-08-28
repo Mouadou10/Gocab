@@ -4,20 +4,26 @@ import React, { useState, useEffect } from 'react';
 
 export default function LeadsScorecard({ leads }: { leads: any[] }) {
   const [dateFilter, setDateFilter] = useState<string>('');
-  const [weeklyCallsTarget, setWeeklyCallsTarget] = useState(200);
+  const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
 
   useEffect(() => {
     // Default to today
     const today = new Date().toISOString().split('T')[0];
     setDateFilter(today);
 
-    // Fetch objectives
-    fetch('/api/objectives?role=LEAD_ACQUISITION_JR')
+    // Fetch objectives from Operations Manager Settings parameters
+    fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.objectives) {
-          const target = data.objectives.find((o: any) => o.metricKey === 'WEEKLY_CALLS');
-          if (target) setWeeklyCallsTarget(target.targetValue);
+        if (data.settings?.department_weekly_targets) {
+          try {
+            const targets = JSON.parse(data.settings.department_weekly_targets);
+            if (targets.target_daily_calls) {
+              setDailyCallsTarget(Number(targets.target_daily_calls));
+            } else if (targets.target_weekly_leads) {
+              setDailyCallsTarget(Math.ceil(Number(targets.target_weekly_leads) / 6));
+            }
+          } catch (e) {}
         }
       })
       .catch(console.error);
@@ -39,8 +45,8 @@ export default function LeadsScorecard({ leads }: { leads: any[] }) {
     l => l.brand_status === 'Training fixed' || l.board_column === 'TRAINING_PIPELINE'
   ).length;
 
-  // Daily target from weekly (6 working days)
-  const dailyTarget = Math.ceil(weeklyCallsTarget / 6);
+  // Daily target set by Operations Manager in parameters
+  const dailyTarget = dailyCallsTarget;
   const callProgress = dailyTarget > 0 ? Math.min((totalCalled / dailyTarget) * 100, 100) : 0;
 
   const conversionRate = totalCalled > 0 ? ((trainingFixed / totalCalled) * 100).toFixed(1) : '0';
