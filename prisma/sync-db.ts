@@ -57,6 +57,7 @@ async function syncSchema() {
       "ALTER TABLE PaymentLedger ADD COLUMN arrearsMAD REAL NOT NULL DEFAULT 0.0",
       "ALTER TABLE PaymentLedger ADD COLUMN notes TEXT",
       "ALTER TABLE Lead ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
+      "ALTER TABLE Lead ADD COLUMN notes TEXT",
       "ALTER TABLE Vehicle ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE MaintenanceTicket ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE DriverProfile ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
