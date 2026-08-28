@@ -17,13 +17,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  let url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
-
-  if (!url) {
-    throw new Error(
-      "Missing database URL. Set TURSO_DATABASE_URL or DATABASE_URL in your .env.local file."
-    );
-  }
+  let url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
 
   if (url.startsWith("libsql://")) {
     url = url.replace("libsql://", "https://");
@@ -31,12 +25,16 @@ function createPrismaClient(): PrismaClient {
 
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  const adapter = new PrismaLibSql({
-    url,
-    ...(authToken ? { authToken } : {}),
-  });
-
-  return new PrismaClient({ adapter });
+  try {
+    const adapter = new PrismaLibSql({
+      url,
+      ...(authToken ? { authToken } : {}),
+    });
+    return new PrismaClient({ adapter });
+  } catch (e) {
+    console.warn("PrismaLibSql initialization warning:", e);
+    return new PrismaClient();
+  }
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
