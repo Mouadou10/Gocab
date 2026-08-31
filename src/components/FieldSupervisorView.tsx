@@ -47,6 +47,9 @@ interface CheckupDue {
   assigned_driver_phone: string | null;
   previous_health_score: number | null;
   previous_inspection_date: string | null;
+  autorisation_expiry_date?: string | null;
+  days_left?: number | null;
+  is_expired?: boolean;
 }
 
 interface VehicleInspection {
@@ -570,6 +573,35 @@ export default function FieldSupervisorView() {
                     <span style={{ fontWeight: 700, color: "#1a1a2e", fontSize: 15 }}>{vehicle.plate_number}</span>
                     <span style={{ fontSize: 12, color: "#6b7280" }}>{vehicle.make_model}</span>
                   </div>
+                  {vehicle.autorisation_expiry_date && (
+                    <div>
+                      {vehicle.is_expired ? (
+                        <span style={{
+                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                          background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5",
+                          display: "inline-flex", alignItems: "center", gap: 4
+                        }}>
+                          🚨 Expirée ({Math.abs(vehicle.days_left ?? 0)}j de retard)
+                        </span>
+                      ) : (vehicle.days_left !== undefined && vehicle.days_left !== null && vehicle.days_left <= 3) ? (
+                        <span style={{
+                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                          background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a",
+                          display: "inline-flex", alignItems: "center", gap: 4
+                        }}>
+                          ⚠️ Expire dans {vehicle.days_left}j
+                        </span>
+                      ) : (
+                        <span style={{
+                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                          background: "#f3f4f6", color: "#374151", border: "1px solid #e5e7eb",
+                          display: "inline-flex", alignItems: "center", gap: 4
+                        }}>
+                          📄 Expire: {new Date(vehicle.autorisation_expiry_date).toLocaleDateString()} ({vehicle.days_left}j)
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {vehicle.assigned_driver_name && (

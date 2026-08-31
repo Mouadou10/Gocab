@@ -12,6 +12,7 @@ import { useState, useRef } from "react";
 interface UploadSummary {
   total_rows: number;
   inserted: number;
+  updated?: number;
   duplicates: number;
   blacklisted: number;
   skipped_invalid: number;
@@ -131,8 +132,7 @@ export default function CSVUploader({ onUploadComplete }: CSVUploaderProps) {
       {/* Upload result toast */}
       {summary && (
         <div className="bg-olive/20 border border-olive/40 text-white text-xs rounded-lg px-3 py-2 animate-fade-in">
-          ✅ {summary.inserted} inserted · {summary.duplicates} duplicates ·{" "}
-          {summary.blacklisted} blacklisted
+          ✅ {summary.inserted} ajoutés · {summary.updated ?? summary.duplicates} mis à jour · {summary.blacklisted} blacklistés
         </div>
       )}
 

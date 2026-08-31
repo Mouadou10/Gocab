@@ -240,61 +240,6 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
             </div>
           </div>
 
-          {/* Eligibility Criteria */}
-          <div className="p-3.5 bg-gray-50 border border-gray-100 rounded-xl space-y-3">
-            <div className="text-xs font-bold text-navy flex items-center gap-1.5">
-              <span>🛡️</span>
-              <span>{language === "fr" ? "Critères d'Éligibilité" : language === "ar" ? "معايير الأهلية" : "Eligibility Criteria"}</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                  {language === "fr" ? "Âge" : language === "ar" ? "العمر" : "Age"}
-                </label>
-                <input
-                  type="number"
-                  min="18"
-                  max="70"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                  {language === "fr" ? "Permis (ans)" : language === "ar" ? "أقدمية الرخصة" : "License (yrs)"}
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="50"
-                  value={permisSeniority}
-                  onChange={(e) => setPermisSeniority(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                  {language === "fr" ? "Résident MA" : language === "ar" ? "مقيم بالمغرب" : "Resident"}
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsResident(!isResident)}
-                  className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition-all border ${
-                    isResident
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-red-50 text-red-700 border-red-200"
-                  }`}
-                >
-                  {isResident ? "🇲🇦 Oui" : "❌ Non"}
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* KYC Documents Checklist */}
           <div className="space-y-2">
             <label className="block text-xs font-bold text-gray-700">

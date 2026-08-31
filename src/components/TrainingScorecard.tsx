@@ -11,7 +11,7 @@ import React, { useState, useEffect } from 'react';
  */
 export default function TrainingScorecard({ leads }: { leads: any[] }) {
   const [dateFilter, setDateFilter] = useState<string>('');
-  const [weeklyPreordersTarget, setWeeklyPreordersTarget] = useState(50);
+  const [dailyPreordersTarget, setDailyPreordersTarget] = useState(9);
 
   useEffect(() => {
     // Default to today
@@ -25,8 +25,10 @@ export default function TrainingScorecard({ leads }: { leads: any[] }) {
         if (data.settings?.department_weekly_targets) {
           try {
             const targets = JSON.parse(data.settings.department_weekly_targets);
-            if (targets.target_kyc_completion_rate) {
-              setWeeklyPreordersTarget(Number(targets.target_kyc_completion_rate));
+            if (targets.target_daily_preorders !== undefined && targets.target_daily_preorders !== null) {
+              setDailyPreordersTarget(Number(targets.target_daily_preorders));
+            } else if (targets.target_kyc_completion_rate) {
+              setDailyPreordersTarget(Math.ceil(Number(targets.target_kyc_completion_rate) / 6));
             }
           } catch (e) {}
         }
@@ -55,8 +57,8 @@ export default function TrainingScorecard({ leads }: { leads: any[] }) {
   );
   const totalConverted = converted.length;
 
-  // Daily target from weekly (6 working days)
-  const dailyTarget = Math.ceil(weeklyPreordersTarget / 6);
+  // Daily target configured in Operations Settings
+  const dailyTarget = dailyPreordersTarget;
   const progress = dailyTarget > 0 ? Math.min((totalConverted / dailyTarget) * 100, 100) : 0;
 
   const conversionRate = totalInTraining > 0

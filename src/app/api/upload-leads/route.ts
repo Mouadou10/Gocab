@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { matchHeaders, getField } from "@/lib/csv-header-matcher";
+import { matchHeaders, getField, resolveLeadStatus } from "@/lib/csv-header-matcher";
 import Papa from "papaparse";
 
 /** Strip spaces, dashes, and leading zeros, then prepend +212. */
@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
       console.error("CSV parse errors:", errors);
     }
 
-    // Fuzzy-match CSV headers to canonical fields
+    // Fuzzy-match CSV headers to canonical fields (name & phone required, city & status optional)
     const { mapping, unmapped } = matchHeaders(meta.fields || []);
 
     if (!mapping.name || !mapping.phone) {
       return NextResponse.json(
         {
-          error: `Could not detect required columns. Found headers: [${(meta.fields || []).join(", ")}]. Need a 'Name' column and a 'Phone' column.`,
+          error: `Required columns missing. Found headers: [${(meta.fields || []).join(", ")}]. A 'Lead Name' column and a 'Phone Number' column are required. 'City' and 'Status' are optional.`,
           detected: mapping,
           unmapped,
         },
@@ -81,12 +81,21 @@ export async function POST(request: NextRequest) {
     // Build candidates using fuzzy-matched headers
     const candidates = data
       .filter((row) => getField(row, mapping, "name") && getField(row, mapping, "phone"))
-      .map((row) => ({
-        raw_name: getField(row, mapping, "name")!,
-        sanitized_phone: sanitizePhone(getField(row, mapping, "phone")!),
-        city: getField(row, mapping, "city") || null,
-        campaign_source: campaignSource,
-      }));
+      .map((row) => {
+        const rawCity = getField(row, mapping, "city");
+        const rawStatus = getField(row, mapping, "status");
+        const { board_column, brand_status, training_status } = resolveLeadStatus(rawStatus);
+
+        return {
+          raw_name: getField(row, mapping, "name")!,
+          sanitized_phone: sanitizePhone(getField(row, mapping, "phone")!),
+          city: rawCity ? rawCity.trim() : null, // Preserve exact city tag as in CSV
+          campaign_source: campaignSource,
+          board_column,
+          brand_status,
+          training_status,
+        };
+      });
 
     if (candidates.length === 0) {
       return NextResponse.json(
@@ -112,34 +121,60 @@ export async function POST(request: NextRequest) {
     });
     const blacklistPhoneSet = new Set(blacklisted.map((b) => b.sanitized_phone));
 
-    // Filter to only valid, new, non-blacklisted leads
-    const validLeads = candidates.filter(
-      (c) =>
-        !existingPhoneSet.has(c.sanitized_phone) &&
-        !blacklistPhoneSet.has(c.sanitized_phone)
-    );
-
-    // Also deduplicate within the CSV itself (keep first occurrence)
+    // Deduplicate within the CSV batch itself (keep first occurrence)
     const seenInBatch = new Set<string>();
-    const uniqueLeads = validLeads.filter((lead) => {
+    const uniqueCandidates = candidates.filter((lead) => {
       if (seenInBatch.has(lead.sanitized_phone)) return false;
       seenInBatch.add(lead.sanitized_phone);
       return true;
     });
 
-    // Bulk insert
+    // Separate non-blacklisted candidates into new leads and leads to update
+    const nonBlacklisted = uniqueCandidates.filter(
+      (c) => !blacklistPhoneSet.has(c.sanitized_phone)
+    );
+
+    const newLeads = nonBlacklisted.filter(
+      (c) => !existingPhoneSet.has(c.sanitized_phone)
+    );
+
+    const leadsToUpdate = nonBlacklisted.filter(
+      (c) => existingPhoneSet.has(c.sanitized_phone)
+    );
+
+    // Bulk insert new leads with appropriate columns and statuses
     let insertedCount = 0;
-    if (uniqueLeads.length > 0) {
-       const result = await prisma.lead.createMany({
-        data: uniqueLeads.map((lead) => ({
+    if (newLeads.length > 0) {
+      const result = await prisma.lead.createMany({
+        data: newLeads.map((lead) => ({
           raw_name: lead.raw_name,
           sanitized_phone: lead.sanitized_phone,
           city: lead.city,
           campaign_source: lead.campaign_source,
-          board_column: "NEW_LEADS" as const,
+          board_column: lead.board_column,
+          brand_status: lead.brand_status,
+          training_status: lead.training_status,
         })),
       });
       insertedCount = result.count;
+    }
+
+    // Update existing leads if their status, column, or city was supplied in CSV
+    let updatedCount = 0;
+    if (leadsToUpdate.length > 0) {
+      for (const lead of leadsToUpdate) {
+        await prisma.lead.update({
+          where: { sanitized_phone: lead.sanitized_phone },
+          data: {
+            raw_name: lead.raw_name,
+            ...(lead.city ? { city: lead.city } : {}),
+            board_column: lead.board_column,
+            brand_status: lead.brand_status,
+            training_status: lead.training_status,
+          },
+        });
+        updatedCount++;
+      }
     }
 
     return NextResponse.json({
@@ -147,7 +182,8 @@ export async function POST(request: NextRequest) {
       summary: {
         total_rows: data.length,
         inserted: insertedCount,
-        duplicates: existingPhoneSet.size,
+        updated: updatedCount,
+        duplicates: leadsToUpdate.length,
         blacklisted: blacklistPhoneSet.size,
         skipped_invalid: data.length - candidates.length,
       },

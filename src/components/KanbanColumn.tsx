@@ -75,12 +75,24 @@ interface KanbanColumnProps {
   columnId: string;
   leads: Lead[];
   onCardClick: (lead: Lead) => void;
+  isDailyGoalAchieved?: boolean;
+  totalNewLeadsCount?: number;
+  dailyTrainingFixedToday?: number;
+  dailyTrainingTarget?: number;
+  callsDoneToday?: number;
+  dailyCallsTarget?: number;
 }
 
 export default function KanbanColumn({
   columnId,
   leads,
   onCardClick,
+  isDailyGoalAchieved,
+  totalNewLeadsCount,
+  dailyTrainingFixedToday,
+  dailyTrainingTarget,
+  callsDoneToday,
+  dailyCallsTarget,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver, attributes, listeners, transform, transition } = useSortable({
     id: columnId,
@@ -91,6 +103,8 @@ export default function KanbanColumn({
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
   };
+
+  const isNewLeadsColumn = columnId === "NEW_LEADS";
 
   return (
     <div
@@ -117,28 +131,67 @@ export default function KanbanColumn({
         <h3 className="text-xs font-bold text-gray-700 tracking-wide uppercase">
           {COLUMN_LABELS[columnId] || columnId}
         </h3>
-        <span className="ml-auto text-[10px] font-bold text-gray-500 bg-gray-150 px-2 py-0.5 rounded-full font-mono">
-          {leads.length}
+        <span
+          className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+            isNewLeadsColumn && isDailyGoalAchieved
+              ? "bg-emerald-100 text-emerald-800 font-black"
+              : isNewLeadsColumn
+              ? "bg-blue-100 text-blue-800"
+              : "bg-gray-150 text-gray-500"
+          }`}
+        >
+          {isNewLeadsColumn && isDailyGoalAchieved
+            ? "✅ Atteint"
+            : isNewLeadsColumn && totalNewLeadsCount !== undefined
+            ? `${leads.length} / ${totalNewLeadsCount}`
+            : leads.length}
         </span>
       </div>
 
       {/* Drop Zone + Card List */}
       <div className="flex-1 p-3 space-y-2.5 overflow-y-auto">
-        <SortableContext
-          items={leads.map((l) => l.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {leads.map((lead) => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              onClick={() => onCardClick(lead)}
-            />
-          ))}
-        </SortableContext>
+        {/* Goal Achieved State for New Leads Column */}
+        {isNewLeadsColumn && isDailyGoalAchieved ? (
+          <div className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-emerald-50 via-teal-50 to-white border-2 border-emerald-300 rounded-3xl shadow-sm space-y-3 animate-fadeIn my-auto">
+            <div className="text-5xl animate-bounce">🎉 🏆</div>
+            <h4 className="text-sm font-black text-emerald-950">
+              Félicitations ! Objectif Atteint !
+            </h4>
+            <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+              Vous avez atteint l&apos;objectif du jour de{" "}
+              <strong>{dailyTrainingTarget} formations fixées</strong> ! 🚀
+            </p>
+            <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200 w-full space-y-1.5 text-2xs font-bold text-emerald-900">
+              <div className="flex justify-between items-center">
+                <span>🎯 Formations :</span>
+                <span className="text-emerald-700 font-black">
+                  {dailyTrainingFixedToday} / {dailyTrainingTarget} ✅
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>📞 Appels :</span>
+                <span className="text-navy font-black">{callsDoneToday} appels</span>
+              </div>
+            </div>
+            <div className="text-xl">🥳 🌟 ✨ 🚗 💨</div>
+          </div>
+        ) : (
+          <SortableContext
+            items={leads.map((l) => l.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {leads.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                onClick={() => onCardClick(lead)}
+              />
+            ))}
+          </SortableContext>
+        )}
 
-        {/* Empty state */}
-        {leads.length === 0 && (
+        {/* Empty state (when not goal achieved) */}
+        {leads.length === 0 && (!isNewLeadsColumn || !isDailyGoalAchieved) && (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400/80">
             <Inbox className="w-10 h-10 mb-3 stroke-[1.5]" />
             <p className="text-[11px] font-medium tracking-wide uppercase">No Cards Here</p>

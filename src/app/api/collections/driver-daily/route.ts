@@ -102,6 +102,9 @@ export async function GET(request: NextRequest) {
         expectedTodayMAD,
         clearedTodayMAD,
         isPaidToday,
+        morningBalance: todayPayment?.morningBalance ?? null,
+        eveningBalance: todayPayment?.eveningBalance ?? null,
+        calculatedDelta: todayPayment?.calculatedDelta ?? null,
         paymentNote: todayPayment?.notes || null,
         paymentLedgerId: todayPayment?.id || null,
       };

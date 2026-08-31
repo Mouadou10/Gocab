@@ -73,8 +73,10 @@ export async function PATCH(
     // Guardrails removed per user request
     // ───────────────────────────────────────────────────────────────────────
 
-    // If the lead is being moved out of NEW_LEADS, stamp when it happened
-    if (updateData.board_column && updateData.board_column !== "NEW_LEADS") {
+    // If the lead is marked as recalled or being moved out of NEW_LEADS, stamp when it happened
+    if (body.is_recalled || body.mark_as_called) {
+      (updateData as any).status_changed_at = new Date();
+    } else if (updateData.board_column && updateData.board_column !== "NEW_LEADS") {
       const currentLead = await prisma.lead.findUnique({
         where: { id },
         select: { board_column: true, status_changed_at: true },

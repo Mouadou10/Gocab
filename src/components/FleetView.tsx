@@ -109,10 +109,8 @@ export default function FleetView() {
 
   // Calculate Expiration Alerts
   const now = new Date();
-  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   const expiredItems: { vehicle: Vehicle; type: string; date: string }[] = [];
-  const expiringSoonItems: { vehicle: Vehicle; type: string; daysLeft: number; date: string }[] = [];
 
   vehicles.forEach((v) => {
     const checks = [
@@ -129,14 +127,6 @@ export default function FleetView() {
           expiredItems.push({
             vehicle: v,
             type: chk.name,
-            date: d.toLocaleDateString(),
-          });
-        } else if (d <= thirtyDaysFromNow) {
-          const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24));
-          expiringSoonItems.push({
-            vehicle: v,
-            type: chk.name,
-            daysLeft: diffDays,
             date: d.toLocaleDateString(),
           });
         }
@@ -161,7 +151,7 @@ export default function FleetView() {
         </span>
       );
     }
-    if (d <= thirtyDaysFromNow) {
+    if (d <= threeDaysFromNow) {
       const days = Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24));
       return (
         <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-amber-200">
@@ -247,50 +237,24 @@ export default function FleetView() {
         </div>
       </div>
 
-      {/* Regulatory Expiration Alert Banners */}
-      {(expiredItems.length > 0 || expiringSoonItems.length > 0) && (
-        <div className="space-y-3">
-          {/* Expired Items Banner */}
-          {expiredItems.length > 0 && (
-            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-900 shadow-sm animate-pulse-subtle">
-              <div className="flex items-center gap-2 font-bold text-sm mb-1.5 text-red-700">
-                <span>🚨</span> CRITICAL COMPLIANCE ALERT: {expiredItems.length} Expired Regulatory Documents
+      {/* Regulatory Expiration Alert Banner (Critical Red Only) */}
+      {expiredItems.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-900 shadow-sm animate-pulse-subtle">
+          <div className="flex items-center gap-2 font-bold text-sm mb-1.5 text-red-700">
+            <span>🚨</span> CRITICAL COMPLIANCE ALERT: {expiredItems.length} Expired Regulatory Documents
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {expiredItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="bg-white/80 border border-red-200 px-3 py-1 rounded-xl text-xs flex items-center gap-2 font-mono shadow-xs"
+              >
+                <span className="font-bold text-gray-900">{item.vehicle.plate_number}</span>
+                <span className="text-red-600 font-semibold">{item.type}</span>
+                <span className="text-gray-500">Expired: {item.date}</span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {expiredItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white/80 border border-red-200 px-3 py-1 rounded-xl text-xs flex items-center gap-2 font-mono shadow-xs"
-                  >
-                    <span className="font-bold text-gray-900">{item.vehicle.plate_number}</span>
-                    <span className="text-red-600 font-semibold">{item.type}</span>
-                    <span className="text-gray-500">Expired: {item.date}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Expiring Soon Banner */}
-          {expiringSoonItems.length > 0 && (
-            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 text-amber-900 shadow-sm">
-              <div className="flex items-center gap-2 font-bold text-sm mb-1.5 text-amber-800">
-                <span>⚠️</span> UPCOMING REMINDERS: {expiringSoonItems.length} Documents Expiring Within 30 Days
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {expiringSoonItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white/80 border border-amber-200 px-3 py-1 rounded-xl text-xs flex items-center gap-2 font-mono shadow-xs"
-                  >
-                    <span className="font-bold text-gray-900">{item.vehicle.plate_number}</span>
-                    <span className="text-amber-700 font-semibold">{item.type}</span>
-                    <span className="text-gray-600">Due in {item.daysLeft} days ({item.date})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 

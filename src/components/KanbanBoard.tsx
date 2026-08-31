@@ -134,6 +134,10 @@ export default function KanbanBoard() {
   const allowedTabs = userRoleTabs.includes("drivers") ? userRoleTabs : [...userRoleTabs, "drivers"];
 
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+  const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
+  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
+  const [showCelebrationModal, setShowCelebrationModal] = useState(false);
+  const [hasCelebratedToday, setHasCelebratedToday] = useState(false);
 
   useEffect(() => {
     if (session?.user && (session.user as any).mustChangePassword) {
@@ -201,6 +205,13 @@ export default function KanbanBoard() {
             setRolePermissions(merged);
           } catch (e) {}
         }
+        if (data.settings.department_weekly_targets) {
+          try {
+            const targets = JSON.parse(data.settings.department_weekly_targets);
+            if (targets.target_daily_calls) setDailyCallsTarget(Number(targets.target_daily_calls));
+            if (targets.target_daily_training_fixed) setDailyTrainingTarget(Number(targets.target_daily_training_fixed));
+          } catch (e) {}
+        }
         if (data.settings.custom_role_labels) {
           try {
             const parsedLabels = JSON.parse(data.settings.custom_role_labels);
@@ -222,11 +233,71 @@ export default function KanbanBoard() {
     return () => clearInterval(interval);
   }, [fetchLeads, fetchSettings]);
 
+  // Daily Performance Metrics for Target Gating
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const callsDoneToday = leads.filter((l) => {
+    if (l.board_column === "NEW_LEADS") return false;
+    if (!l.status_changed_at) return false;
+    return new Date(l.status_changed_at).toISOString().split("T")[0] === todayStr;
+  }).length;
+
+  const trainingFixedToday = leads.filter((l) => {
+    if (
+      l.brand_status !== "Training fixed" &&
+      l.board_column !== "TRAINING_PIPELINE" &&
+      l.board_column !== "VEHICLE_ASSIGNMENT"
+    )
+      return false;
+    if (!l.status_changed_at) return false;
+    return new Date(l.status_changed_at).toISOString().split("T")[0] === todayStr;
+  }).length;
+
+  const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
+  const totalNewLeadsInDB = leads.filter((l) => l.board_column === "NEW_LEADS").length;
+
+  // Trigger celebration modal once when training goal is reached
+  useEffect(() => {
+    if (isDailyTrainingGoalAchieved && !hasCelebratedToday && leads.length > 0) {
+      setShowCelebrationModal(true);
+      setHasCelebratedToday(true);
+    }
+  }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length]);
+
   /** Group leads dynamically based on their specific status/column. */
   function getLeadsByColumn(column: string): Lead[] {
     if (activeTab === "leads") {
       if (column === "NEW_LEADS") {
-        return leads.filter((l) => l.board_column === "NEW_LEADS");
+        const allNewLeads = leads
+          .filter((l) => l.board_column === "NEW_LEADS")
+          .sort((a, b) => {
+            const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : new Date(a.created_at).getTime();
+            const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : new Date(b.created_at).getTime();
+            return timeB - timeA;
+          });
+
+        // 1. If daily training fixed target is ACHIEVED: New leads list disappears!
+        if (isDailyTrainingGoalAchieved) {
+          return [];
+        }
+
+        // 2. If training fix target is NOT yet achieved:
+        // Show exact remaining target batch (target_daily_calls - callsDoneToday)
+        // If calls target is exceeded but training fix target is not yet reached, keep showing next batch
+        let targetBatchCount = dailyCallsTarget - callsDoneToday;
+        if (targetBatchCount <= 0) {
+          targetBatchCount = Math.max(10, Math.min(allNewLeads.length, dailyCallsTarget));
+        }
+
+        return allNewLeads.slice(0, Math.max(1, targetBatchCount));
+      }
+      if (column === "Training fixed") {
+        return leads.filter(
+          (l) =>
+            l.brand_status === "Training fixed" ||
+            (l.board_column === "TRAINING_PIPELINE" &&
+              (l.training_status === "Scheduled" || !l.training_status))
+        );
       }
       return leads.filter(
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
@@ -868,6 +939,12 @@ export default function KanbanBoard() {
                       columnId={col}
                       leads={getLeadsByColumn(col)}
                       onCardClick={handleCardClick}
+                      isDailyGoalAchieved={col === "NEW_LEADS" && isDailyTrainingGoalAchieved}
+                      totalNewLeadsCount={col === "NEW_LEADS" ? totalNewLeadsInDB : undefined}
+                      dailyTrainingFixedToday={trainingFixedToday}
+                      dailyTrainingTarget={dailyTrainingTarget}
+                      callsDoneToday={callsDoneToday}
+                      dailyCallsTarget={dailyCallsTarget}
                     />
                   ))}
                 </SortableContext>
@@ -916,6 +993,55 @@ export default function KanbanBoard() {
 
       {/* Reminder Alerts */}
       <ReminderAlert leads={leads} />
+
+      {/* Daily Goal Achieved Celebration Modal */}
+      {showCelebrationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl border border-emerald-100 max-w-md w-full overflow-hidden text-center p-8 space-y-5">
+            <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-tr from-amber-400 via-emerald-400 to-teal-400 p-1 flex items-center justify-center shadow-lg">
+              <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-4xl animate-bounce">
+                🏆
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-black">
+                <span>✨</span> OBJECTIF DU JOUR ATTEINT <span>✨</span>
+              </div>
+              <h2 className="text-2xl font-black text-navy tracking-tight">
+                🎉 Félicitations ! 🎉
+              </h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Bravo ! Vous avez atteint votre objectif de{" "}
+                <strong>{dailyTrainingTarget} formations fixées</strong> aujourd&apos;hui avec{" "}
+                <strong>{callsDoneToday} appels</strong> !
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-xs">
+              <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
+                <span className="text-3xs font-bold text-gray-400 uppercase">Formations Fixées</span>
+                <p className="text-lg font-black text-emerald-600 mt-0.5">
+                  {trainingFixedToday} / {dailyTrainingTarget}
+                </p>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
+                <span className="text-3xs font-bold text-gray-400 uppercase">Appels Totaux</span>
+                <p className="text-lg font-black text-navy mt-0.5">
+                  {callsDoneToday}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowCelebrationModal(false)}
+              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>Super ! Merci 🚀</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

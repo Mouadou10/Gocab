@@ -49,7 +49,9 @@ const DEFAULT_ROLE_LABELS: Record<string, string> = {
 
 interface DepartmentTargets {
   target_daily_calls: number;
+  target_daily_training_fixed: number;
   target_weekly_leads: number;
+  target_daily_preorders: number;
   target_training_showup_rate: number;
   target_kyc_completion_rate: number;
   target_lead_conversion_rate: number;
@@ -68,7 +70,9 @@ interface DepartmentTargets {
 
 const DEFAULT_TARGETS: DepartmentTargets = {
   target_daily_calls: 34,
+  target_daily_training_fixed: 7,
   target_weekly_leads: 100,
+  target_daily_preorders: 9,
   target_training_showup_rate: 80,
   target_kyc_completion_rate: 25,
   target_lead_conversion_rate: 20,
@@ -536,6 +540,22 @@ export default function SettingsView() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Daily Training Fixed Target (Goal)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={targets.target_daily_training_fixed || 7}
+                        onChange={(e) => setTargets({ ...targets, target_daily_training_fixed: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">trainings/day</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                       Weekly New Leads Target
                     </label>
                     <div className="relative">
@@ -564,6 +584,22 @@ export default function SettingsView() {
                         className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Daily Preorders Target (Training Review)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={targets.target_daily_preorders || 9}
+                        onChange={(e) => setTargets({ ...targets, target_daily_preorders: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">preorders/day</span>
                     </div>
                   </div>
 

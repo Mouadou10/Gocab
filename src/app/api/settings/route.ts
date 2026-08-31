@@ -25,6 +25,26 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     OPS_MANAGER: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
     ADMIN: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
   }),
+  department_weekly_targets: JSON.stringify({
+    target_daily_calls: 34,
+    target_daily_training_fixed: 7,
+    target_weekly_leads: 100,
+    target_daily_preorders: 9,
+    target_training_showup_rate: 80,
+    target_kyc_completion_rate: 25,
+    target_lead_conversion_rate: 20,
+    target_active_fleet_rate: 85,
+    target_max_downtime_days: 7,
+    target_weekly_churn_limit: 2,
+    target_max_waived_days: 10,
+    target_monthly_inspection_rate: 90,
+    target_gps_connectivity_rate: 100,
+    target_asset_recovery_rate: 100,
+    target_sla_resolution_rate: 95,
+    target_max_open_tickets: 5,
+    target_collection_rate: 90,
+    target_weekly_revenue_mad: 50000,
+  }),
 };
 
 export async function GET() {

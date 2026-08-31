@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/context/LanguageContext";
+import BalanceReconciliationModal from "./BalanceReconciliationModal";
 
 interface DriverDailyItem {
   id: string;
@@ -58,6 +59,9 @@ interface DriverDailyItem {
   expectedTodayMAD: number;
   clearedTodayMAD: number;
   isPaidToday: boolean;
+  morningBalance?: number | null;
+  eveningBalance?: number | null;
+  calculatedDelta?: number | null;
   paymentNote: string | null;
   paymentLedgerId: string | null;
 }
@@ -85,6 +89,7 @@ export default function FleetPerformanceView() {
   // Local inputs state for editing cleared amounts
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
   const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
 
   const fetchDriverCollections = useCallback(async () => {
     setIsLoading(true);
@@ -206,7 +211,7 @@ export default function FleetPerformanceView() {
           </p>
         </div>
 
-        {/* Controls: Date & Export */}
+        {/* Controls: Date, CSV Balance Upload & Export */}
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl border border-white/20">
             <Calendar className="w-4 h-4 text-gold ml-2" />
@@ -223,28 +228,37 @@ export default function FleetPerformanceView() {
               Aujourd'hui
             </button>
           </div>
-          <button
-            onClick={() => {
-              if (drivers.length === 0) return;
-              const headers = "Nom,Telephone,CIN,Vehicule,Jours Sans Paiement,Arrieres (MAD)\n";
-              const rows = drivers.map(d => 
-                `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || 'Aucun'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
-              ).join("\n");
-              const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = `rapport_encaissements_${selectedDate}.csv`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              toast.success("Export CSV réussi !");
-            }}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl border border-emerald-400 transition-colors flex items-center gap-1.5 shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsBalanceModalOpen(true)}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-navy font-black text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-navy" />
+              Importer Soldes CSV (Matin / Soir)
+            </button>
+            <button
+              onClick={() => {
+                if (drivers.length === 0) return;
+                const headers = "Nom,Telephone,CIN,Vehicule,Jours Sans Paiement,Arrieres (MAD)\n";
+                const rows = drivers.map(d => 
+                  `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || 'Aucun'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
+                ).join("\n");
+                const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `rapport_encaissements_${selectedDate}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success("Export CSV réussi !");
+              }}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl border border-emerald-400 transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -497,43 +511,54 @@ export default function FleetPerformanceView() {
 
                       {/* Amount Paid Input Field */}
                       <td className="py-4 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <div className="relative w-28">
-                            <input
-                              type="number"
-                              min="0"
-                              step="50"
-                              value={currentInputValue}
-                              onChange={(e) =>
-                                setPaymentInputs({
-                                  ...paymentInputs,
-                                  [driver.id]: parseFloat(e.target.value) || 0,
-                                })
-                              }
-                              className={`w-full px-2 py-1.5 text-center font-mono font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
-                                driver.isPaidToday
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900 focus:ring-emerald-200"
-                                  : "border-gray-200 bg-white text-navy focus:ring-navy/20"
-                              }`}
-                            />
-                            <span className="absolute right-2 top-2 text-3xs font-bold text-gray-400">DH</span>
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <div className="relative w-28">
+                              <input
+                                type="number"
+                                min="0"
+                                step="50"
+                                value={currentInputValue}
+                                onChange={(e) =>
+                                  setPaymentInputs({
+                                    ...paymentInputs,
+                                    [driver.id]: parseFloat(e.target.value) || 0,
+                                  })
+                                }
+                                className={`w-full px-2 py-1.5 text-center font-mono font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
+                                  driver.isPaidToday
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-900 focus:ring-emerald-200"
+                                    : "border-gray-200 bg-white text-navy focus:ring-navy/20"
+                                }`}
+                              />
+                              <span className="absolute right-2 top-2 text-3xs font-bold text-gray-400">DH</span>
+                            </div>
+
+                            {/* Quick autofill expected amount */}
+                            {driver.expectedTodayMAD > 0 && currentInputValue !== driver.expectedTodayMAD && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPaymentInputs({
+                                    ...paymentInputs,
+                                    [driver.id]: driver.expectedTodayMAD,
+                                  })
+                                }
+                                className="p-1.5 bg-gray-100 hover:bg-gray-200 text-navy rounded-lg text-2xs font-bold"
+                                title="Remplir montant attendu"
+                              >
+                                <Zap className="w-3 h-3 text-gold" />
+                              </button>
+                            )}
                           </div>
 
-                          {/* Quick autofill expected amount */}
-                          {driver.expectedTodayMAD > 0 && currentInputValue !== driver.expectedTodayMAD && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPaymentInputs({
-                                  ...paymentInputs,
-                                  [driver.id]: driver.expectedTodayMAD,
-                                })
-                              }
-                              className="p-1.5 bg-gray-100 hover:bg-gray-200 text-navy rounded-lg text-2xs font-bold"
-                              title="Remplir montant attendu"
-                            >
-                              <Zap className="w-3 h-3 text-gold" />
-                            </button>
+                          {/* Balance Snapshot Info if imported via CSV */}
+                          {(driver.morningBalance !== null || driver.eveningBalance !== null) && (
+                            <div className="text-3xs font-mono text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <span>Matin: {driver.morningBalance ?? "-"}</span>
+                              <span>➔</span>
+                              <span>Soir: {driver.eveningBalance ?? "-"}</span>
+                            </div>
                           )}
                         </div>
                       </td>
@@ -609,6 +634,13 @@ export default function FleetPerformanceView() {
           </table>
         </div>
       </div>
+      {/* Driver Balance CSV Import & Reconciliation Modal */}
+      <BalanceReconciliationModal
+        isOpen={isBalanceModalOpen}
+        onClose={() => setIsBalanceModalOpen(false)}
+        selectedDate={selectedDate}
+        onSuccess={fetchDriverCollections}
+      />
     </div>
   );
 }

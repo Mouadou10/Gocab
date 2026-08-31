@@ -313,16 +313,19 @@ model FieldInspectionNew {
 }
 
 model PaymentLedger {
-  id            String        @id @default(uuid())
-  driverId      String
-  driver        DriverProfile @relation(fields: [driverId], references: [id])
+  id              String        @id @default(uuid())
+  driverId        String
+  driver          DriverProfile @relation(fields: [driverId], references: [id])
   
-  paymentDate   DateTime      @default(now())
-  expectedMAD   Float         @default(0.0)
-  clearedMAD    Float         @default(0.0)
-  arrearsMAD    Float         @default(0.0)
-  notes         String?
-  loggedAt      DateTime      @default(now())
+  paymentDate     DateTime      @default(now())
+  expectedMAD     Float         @default(0.0)
+  clearedMAD      Float         @default(0.0)
+  arrearsMAD      Float         @default(0.0)
+  morningBalance  Float?
+  eveningBalance  Float?
+  calculatedDelta Float?
+  notes           String?
+  loggedAt        DateTime      @default(now())
 
   @@index([driverId, paymentDate])
 }

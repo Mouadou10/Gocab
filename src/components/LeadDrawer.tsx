@@ -67,6 +67,7 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  status_changed_at?: string | null;
   notes?: string | null;
 }
 
@@ -95,7 +96,9 @@ export default function LeadDrawer({
   const [hasConfirmation, setHasConfirmation] = useState(lead.has_confirmation_adresse);
   const [hasPermis, setHasPermis] = useState(lead.has_permis);
 
-  const [trainingDate, setTrainingDate] = useState("");
+  const [trainingDate, setTrainingDate] = useState(
+    lead.reminder_date ? new Date(lead.reminder_date).toISOString().split("T")[0] : ""
+  );
   const [reminderDate, setReminderDate] = useState(
     lead.reminder_date ? lead.reminder_date.split("T")[0] : ""
   );
@@ -103,8 +106,19 @@ export default function LeadDrawer({
     lead.preorder_amount !== null ? String(lead.preorder_amount) : ""
   );
 
-  const [notes, setNotes] = useState<string>(lead.notes || "");
+  const [recallDate, setRecallDate] = useState(
+    lead.brand_status === "To Recall" && lead.reminder_date
+      ? new Date(lead.reminder_date).toISOString().split("T")[0]
+      : ""
+  );
+  const [recallTime, setRecallTime] = useState(
+    lead.brand_status === "To Recall" && lead.reminder_date
+      ? new Date(lead.reminder_date).toTimeString().slice(0, 5)
+      : ""
+  );
 
+  const [notes, setNotes] = useState<string>(lead.notes || "");
+  const [isRecalled, setIsRecalled] = useState<boolean>(false);
 
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,7 +130,10 @@ export default function LeadDrawer({
     return () => clearTimeout(timer);
   }, []);
 
-  const showDatePicker = boardType === "leads" && brandStatus === "Training fixed";
+  const showDatePicker =
+    (boardType === "leads" && brandStatus === "Training fixed") ||
+    (boardType === "training" && (trainingStatus === "Scheduled" || !trainingStatus));
+  const showRecallPicker = boardType === "leads" && brandStatus === "To Recall";
   const showReminderPicker = boardType === "training" && trainingStatus === "Pending";
   const showPreorderInput = boardType === "training" && trainingStatus === "Preorder";
 
@@ -129,6 +146,11 @@ export default function LeadDrawer({
         city: city || null,
         notes: notes || null,
       };
+
+      if (isRecalled) {
+        payload.is_recalled = true;
+        payload.mark_as_called = true;
+      }
 
       if (boardType === "leads") {
         if (brandStatus === "NEW_LEADS" || !brandStatus) {
@@ -153,6 +175,20 @@ export default function LeadDrawer({
             );
             window.open(waUrl, "_blank");
           }
+        } else if (brandStatus === "To Recall") {
+          // Move to To Recall with scheduled recall datetime
+          payload.board_column = "BRAND_PRE_FILTER";
+          payload.brand_status = "To Recall";
+
+          if (recallDate) {
+            if (recallTime) {
+              // Specific time: YYYY-MM-DDTHH:MM:00
+              payload.reminder_date = new Date(`${recallDate}T${recallTime}:00`).toISOString();
+            } else {
+              // Only date: scheduled for midnight (end of day)
+              payload.reminder_date = new Date(`${recallDate}T23:59:59.999`).toISOString();
+            }
+          }
         } else {
           // Any other brand status means it's no longer a new lead
           payload.board_column = "BRAND_PRE_FILTER";
@@ -167,7 +203,13 @@ export default function LeadDrawer({
         payload.has_confirmation_adresse = hasConfirmation;
         payload.has_permis = hasPermis;
 
-        if (trainingStatus === "Accept offer") {
+        if (trainingStatus === "Scheduled" || !trainingStatus) {
+          payload.training_status = "Scheduled";
+          payload.brand_status = "Training fixed";
+          if (trainingDate) {
+            payload.reminder_date = new Date(trainingDate).toISOString();
+          }
+        } else if (trainingStatus === "Accept offer") {
           // Validation checklist check: All 4 documents must be checked
           const isKycComplete = hasCin && hasFiche && hasConfirmation && hasPermis;
           if (!isKycComplete) {
@@ -327,6 +369,148 @@ export default function LeadDrawer({
                   </p>
                 </div>
               )}
+
+              {/* Conditional Recall Date & Time Picker for "To Recall" */}
+              {showRecallPicker && (
+                <div className="animate-slide-down p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <span>📅</span>
+                      <span>Programmer la Date & Heure du Rappel</span>
+                    </label>
+                    <span className="text-3xs font-semibold bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded-full">
+                      Auto-Retour New Leads
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-3xs font-bold text-amber-900 mb-1">
+                        Date du Rappel *
+                      </label>
+                      <input
+                        type="date"
+                        value={recallDate}
+                        onChange={(e) => setRecallDate(e.target.value)}
+                        min={new Date().toISOString().split("T")[0]}
+                        className="w-full border border-amber-300 bg-white rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-3xs font-bold text-amber-900 mb-1">
+                        Heure du Rappel (Optionnel)
+                      </label>
+                      <input
+                        type="time"
+                        value={recallTime}
+                        onChange={(e) => setRecallTime(e.target.value)}
+                        className="w-full border border-amber-300 bg-white rounded-xl px-3 py-2 text-xs font-mono font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick shortcuts */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-3xs text-amber-800 font-semibold">Raccourcis :</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        setRecallDate(d.toISOString().split("T")[0]);
+                        d.setHours(d.getHours() + 1);
+                        setRecallTime(d.toTimeString().slice(0, 5));
+                      }}
+                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
+                    >
+                      +1 Heure
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        setRecallDate(d.toISOString().split("T")[0]);
+                        d.setHours(d.getHours() + 2);
+                        setRecallTime(d.toTimeString().slice(0, 5));
+                      }}
+                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
+                    >
+                      +2 Heures
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        setRecallDate(tomorrow.toISOString().split("T")[0]);
+                        setRecallTime("09:30");
+                      }}
+                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
+                    >
+                      Demain 09:30
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date().toISOString().split("T")[0];
+                        setRecallDate(today);
+                        setRecallTime("");
+                      }}
+                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
+                    >
+                      Minuit
+                    </button>
+                  </div>
+
+                  <p className="text-2xs text-amber-800/80 leading-tight">
+                    ℹ️ <strong>Règle automatique :</strong> Si l&apos;heure est fixée, le prospect retournera en haut de la colonne <strong>New Leads</strong> dès que l&apos;heure arrive. Si seule la date est fixée, il restera dans &quot;To Recall&quot; et retournera dans &quot;New Leads&quot; à minuit.
+                  </p>
+                </div>
+              )}
+
+              {/* Recalled Status Checkbox */}
+              {(lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")) && (
+                <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2">
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isRecalled}
+                      onChange={(e) => setIsRecalled(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded text-navy border-gray-300 focus:ring-navy cursor-pointer accent-navy"
+                    />
+                    <div className="space-y-0.5 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-navy flex items-center gap-1.5">
+                          <span>📞</span>
+                          <span>Marquer comme Rappelé (+1 Appel)</span>
+                        </span>
+                        {isRecalled && (
+                          <span className="text-3xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                            Comptabilisé
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-2xs text-gray-500">
+                        Cochez cette case si vous avez rappelé ce prospect. Cela actualisera l'activité et l'ajoutera aux appels effectués aujourd'hui.
+                      </p>
+                    </div>
+                  </label>
+                  {lead.status_changed_at && (
+                    <div className="pt-2 border-t border-blue-200/50 text-3xs text-gray-400 font-mono flex items-center justify-between">
+                      <span>Dernier appel / statut :</span>
+                      <span className="font-semibold text-gray-600">
+                        {new Date(lead.status_changed_at).toLocaleString("fr-FR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -336,7 +520,7 @@ export default function LeadDrawer({
                   Training Status
                 </label>
                 <select
-                  value={trainingStatus}
+                  value={trainingStatus || "Scheduled"}
                   onChange={(e) => {
                     setTrainingStatus(e.target.value);
                     setReminderDate("");
@@ -352,6 +536,25 @@ export default function LeadDrawer({
                   ))}
                 </select>
               </div>
+
+              {/* Conditional Date Picker for Scheduled in Training Tab */}
+              {(trainingStatus === "Scheduled" || !trainingStatus) && (
+                <div className="animate-slide-down p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl space-y-1.5">
+                  <label className="block text-xs font-bold text-navy flex items-center gap-1.5">
+                    <span>📅</span> Date de Formation Prévue
+                  </label>
+                  <input
+                    type="date"
+                    value={trainingDate}
+                    onChange={(e) => setTrainingDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="w-full border border-blue-300 bg-white rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
+                  />
+                  <p className="text-2xs text-blue-900/70 leading-tight">
+                    📌 La modification de la date est synchronisée instantanément sur la colonne <strong>Training Fixed</strong> (Prospects) et sur le tableau de Formation.
+                  </p>
+                </div>
+              )}
 
               {/* Conditional Date Picker for Pending */}
               {showReminderPicker && (

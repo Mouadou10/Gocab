@@ -22,13 +22,19 @@ export async function GET(request: Request) {
 
     const inspectedVehicleIds = new Set(inspectedThisMonth.map((i) => i.vehicle_id));
 
-    // 2. Fetch all vehicles (you could add a status filter here if you have inactive vehicles)
-    const allVehicles = await prisma.vehicle.findMany({
-      orderBy: { plate_number: "asc" },
+    // 2. Fetch vehicles that have an Autorisation Expiry date configured and are not archived
+    const vehiclesWithAutorisation = await prisma.vehicle.findMany({
+      where: {
+        autorisation_expiry_date: {
+          not: null,
+        },
+        is_archived: false,
+      },
+      orderBy: { autorisation_expiry_date: "asc" },
     });
 
     // 3. Filter for vehicles that HAVE NOT been inspected this month
-    const dueVehicles = allVehicles.filter((v) => !inspectedVehicleIds.has(v.id));
+    const dueVehicles = vehiclesWithAutorisation.filter((v) => !inspectedVehicleIds.has(v.id));
 
     if (dueVehicles.length === 0) {
       return NextResponse.json({ checkupsDue: [] });
@@ -49,9 +55,14 @@ export async function GET(request: Request) {
       }
     }
 
-    // 5. Build the final response list
+    // 5. Build the final response list with Autorisation Expiry details
     const checkupsDue = dueVehicles.map((v) => {
       const prev = latestInspectionMap.get(v.id);
+      const expiryDate = v.autorisation_expiry_date ? new Date(v.autorisation_expiry_date) : null;
+      const daysLeft = expiryDate
+        ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 3600 * 24))
+        : null;
+
       return {
         vehicle_id: v.id,
         plate_number: v.plate_number,
@@ -60,6 +71,9 @@ export async function GET(request: Request) {
         assigned_driver_phone: v.assigned_driver_phone,
         previous_health_score: prev ? prev.health_score : null,
         previous_inspection_date: prev ? prev.inspection_date : null,
+        autorisation_expiry_date: v.autorisation_expiry_date,
+        days_left: daysLeft,
+        is_expired: daysLeft !== null && daysLeft < 0,
       };
     });
 

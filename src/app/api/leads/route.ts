@@ -16,8 +16,28 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    const now = new Date();
+
+    // Auto-transition: Any scheduled 'To Recall' lead whose reminder_date has arrived moves back to NEW_LEADS at the top
+    await prisma.lead.updateMany({
+      where: {
+        brand_status: "To Recall",
+        reminder_date: {
+          lte: now,
+        },
+      },
+      data: {
+        board_column: "NEW_LEADS",
+        brand_status: null,
+        updated_at: now,
+      },
+    });
+
     const leads = await prisma.lead.findMany({
-      orderBy: { created_at: "asc" },
+      orderBy: [
+        { updated_at: "desc" },
+        { created_at: "desc" },
+      ],
     });
 
     return NextResponse.json({ leads });
