@@ -71,9 +71,24 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
     : '0';
 
   // Status breakdown
+  const todayStr = new Date().toISOString().split('T')[0];
   const statusCounts: Record<string, number> = {};
   filteredLeads.forEach(lead => {
     const status = lead.training_status || lead.board_column;
+    // For Scheduled leads, hide future dates until training day
+    if (status === 'Scheduled' || (!lead.training_status && lead.board_column === 'TRAINING_PIPELINE')) {
+      if (lead.reminder_date) {
+        try {
+          const d = new Date(lead.reminder_date);
+          if (!isNaN(d.getTime())) {
+            const dateStr = d.toISOString().split('T')[0];
+            if (dateStr > todayStr && dateFilter === todayStr) {
+              return;
+            }
+          }
+        } catch {}
+      }
+    }
     statusCounts[status] = (statusCounts[status] || 0) + 1;
   });
 

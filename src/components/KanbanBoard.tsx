@@ -380,11 +380,24 @@ export default function KanbanBoard() {
       }
       // If training_status is unset but board_column is TRAINING_PIPELINE, fallback to "Scheduled"
       if (column === "Scheduled") {
-        return leads.filter(
-          (l) =>
-            l.board_column === "TRAINING_PIPELINE" &&
-            (l.training_status === "Scheduled" || !l.training_status)
-        );
+        return leads.filter((l) => {
+          if (l.board_column !== "TRAINING_PIPELINE") return false;
+          if (l.training_status && l.training_status !== "Scheduled") return false;
+
+          // If a scheduled training date is set in the future, hide until training date arrives!
+          if (l.reminder_date) {
+            try {
+              const d = new Date(l.reminder_date);
+              if (!isNaN(d.getTime())) {
+                const scheduledDateStr = d.toISOString().split("T")[0];
+                if (scheduledDateStr > todayStr) {
+                  return false;
+                }
+              }
+            } catch {}
+          }
+          return true;
+        });
       }
       return leads.filter(
         (l) => l.board_column === "TRAINING_PIPELINE" && l.training_status === column
