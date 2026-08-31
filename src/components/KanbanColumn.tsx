@@ -150,48 +150,59 @@ export default function KanbanColumn({
 
       {/* Drop Zone + Card List */}
       <div className="flex-1 p-3 space-y-2.5 overflow-y-auto">
-        {/* Goal Achieved State for New Leads Column */}
-        {isNewLeadsColumn && isDailyGoalAchieved ? (
-          <div className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-emerald-50 via-teal-50 to-white border-2 border-emerald-300 rounded-3xl shadow-sm space-y-3 animate-fadeIn my-auto">
-            <div className="text-5xl animate-bounce">🎉 🏆</div>
-            <h4 className="text-sm font-black text-emerald-950">
-              Félicitations ! Objectif Atteint !
-            </h4>
-            <p className="text-xs text-emerald-800 font-medium leading-relaxed">
-              Vous avez atteint l&apos;objectif du jour de{" "}
-              <strong>{dailyTrainingTarget} formations fixées</strong> ! 🚀
-            </p>
-            <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200 w-full space-y-1.5 text-2xs font-bold text-emerald-900">
+        {/* Goal Achieved Top Banner for New Leads Column */}
+        {isNewLeadsColumn && isDailyGoalAchieved && (
+          <div className="p-4 text-center bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-2.5 animate-fadeIn mb-3">
+            <div className="flex items-center justify-center gap-2 text-2xl animate-bounce">
+              <span>🎉</span>
+              <span>🏆</span>
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                Félicitations ! Objectif Atteint !
+              </h4>
+              <p className="text-3xs text-emerald-800 font-medium mt-0.5 leading-snug">
+                Vous avez atteint l&apos;objectif du jour de{" "}
+                <strong>{dailyTrainingTarget} formations fixées</strong> ! 🚀
+              </p>
+            </div>
+            <div className="bg-white/95 p-2.5 rounded-xl border border-emerald-200 w-full space-y-1 text-3xs font-bold text-emerald-900 shadow-2xs">
               <div className="flex justify-between items-center">
-                <span>🎯 Formations :</span>
+                <span className="flex items-center gap-1">🎯 Formations :</span>
                 <span className="text-emerald-700 font-black">
                   {dailyTrainingFixedToday} / {dailyTrainingTarget} ✅
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span>📞 Appels :</span>
+                <span className="flex items-center gap-1">📞 Appels :</span>
                 <span className="text-navy font-black">{callsDoneToday} appels</span>
               </div>
             </div>
-            <div className="text-xl">🥳 🌟 ✨ 🚗 💨</div>
+            <div className="text-xs flex items-center justify-center gap-1.5 pt-0.5">
+              <span>🥳</span>
+              <span>🌟</span>
+              <span>✨</span>
+              <span>🚗</span>
+              <span>💨</span>
+            </div>
           </div>
-        ) : (
-          <SortableContext
-            items={leads.map((l) => l.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {leads.map((lead) => (
-              <LeadCard
-                key={lead.id}
-                lead={lead}
-                onClick={() => onCardClick(lead)}
-              />
-            ))}
-          </SortableContext>
         )}
 
-        {/* Empty state (when not goal achieved) */}
-        {leads.length === 0 && (!isNewLeadsColumn || !isDailyGoalAchieved) && (
+        <SortableContext
+          items={leads.map((l) => l.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {leads.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onClick={() => onCardClick(lead)}
+            />
+          ))}
+        </SortableContext>
+
+        {/* Empty state */}
+        {leads.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400/80">
             <Inbox className="w-10 h-10 mb-3 stroke-[1.5]" />
             <p className="text-[11px] font-medium tracking-wide uppercase">No Cards Here</p>

@@ -296,17 +296,10 @@ export default function KanbanBoard() {
             return getTimestamp(b) - getTimestamp(a);
           });
 
-        // 1. If daily training fixed target is ACHIEVED: New leads list disappears!
-        if (isDailyTrainingGoalAchieved) {
-          return [];
-        }
-
-        // 2. If training fix target is NOT yet achieved:
-        // Show exact remaining target batch (target_daily_calls - callsDoneToday)
-        // If calls target is exceeded but training fix target is not yet reached, keep showing next batch
+        // If daily training target is achieved or calls target reached, continue displaying the active queue
         let targetBatchCount = dailyCallsTarget - callsDoneToday;
-        if (targetBatchCount <= 0) {
-          targetBatchCount = Math.max(10, Math.min(allNewLeads.length, dailyCallsTarget));
+        if (targetBatchCount <= 0 || isDailyTrainingGoalAchieved) {
+          targetBatchCount = Math.max(15, Math.min(allNewLeads.length, dailyCallsTarget));
         }
 
         return allNewLeads.slice(0, Math.max(1, targetBatchCount));

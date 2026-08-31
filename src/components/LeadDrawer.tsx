@@ -467,50 +467,6 @@ export default function LeadDrawer({
                   </p>
                 </div>
               )}
-
-              {/* Recalled Status Checkbox */}
-              {(lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")) && (
-                <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2">
-                  <label className="flex items-start gap-3 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isRecalled}
-                      onChange={(e) => setIsRecalled(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded text-navy border-gray-300 focus:ring-navy cursor-pointer accent-navy"
-                    />
-                    <div className="space-y-0.5 flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-navy flex items-center gap-1.5">
-                          <span>📞</span>
-                          <span>Marquer comme Rappelé (+1 Appel)</span>
-                        </span>
-                        {isRecalled && (
-                          <span className="text-3xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                            Comptabilisé
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-2xs text-gray-500">
-                        Cochez cette case si vous avez rappelé ce prospect. Cela actualisera l'activité et l'ajoutera aux appels effectués aujourd'hui.
-                      </p>
-                    </div>
-                  </label>
-                  {lead.status_changed_at && (
-                    <div className="pt-2 border-t border-blue-200/50 text-3xs text-gray-400 font-mono flex items-center justify-between">
-                      <span>Dernier appel / statut :</span>
-                      <span className="font-semibold text-gray-600">
-                        {new Date(lead.status_changed_at).toLocaleString("fr-FR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -637,6 +593,50 @@ export default function LeadDrawer({
                   </label>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Universal Recalled Status Checkbox (for any lead not in new lead status) */}
+          {(lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS") || (trainingStatus && boardType === "training")) && (
+            <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-2xl space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isRecalled}
+                  onChange={(e) => setIsRecalled(e.target.checked)}
+                  className="mt-0.5 w-4.5 h-4.5 rounded text-navy border-gray-300 focus:ring-navy cursor-pointer accent-navy"
+                />
+                <div className="space-y-0.5 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-navy flex items-center gap-1.5">
+                      <span>📞</span>
+                      <span>Marquer comme Rappelé (+1 Appel Comptabilisé)</span>
+                    </span>
+                    {isRecalled && (
+                      <span className="text-3xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                        ✓ Comptabilisé
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-2xs text-gray-500">
+                    Cochez cette case si vous avez rappelé ce prospect. Dès l&apos;enregistrement, cet appel sera comptabilisé dans vos objectifs journaliers.
+                  </p>
+                </div>
+              </label>
+              {lead.status_changed_at && (
+                <div className="pt-2 border-t border-blue-200/50 text-3xs text-gray-400 font-mono flex items-center justify-between">
+                  <span>Dernier appel / statut :</span>
+                  <span className="font-semibold text-gray-600">
+                    {new Date(lead.status_changed_at).toLocaleString("fr-FR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
