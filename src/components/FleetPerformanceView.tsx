@@ -70,9 +70,12 @@ interface DriverDailyItem {
 interface DailySummary {
   totalDrivers: number;
   totalExpectedTodayMAD: number;
+  totalMorningTargetMAD?: number;
   totalClearedTodayMAD: number;
   remainingToCollectMAD: number;
   totalArrearsAllMAD: number;
+  target60PercentMAD?: number;
+  collectionPercentage?: number;
   criticalRedCount: number;
 }
 
@@ -265,45 +268,83 @@ export default function FleetPerformanceView() {
 
       {/* KPI Summary Cards Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Expected Today */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
-          <span className="text-2xs font-bold text-gray-500 uppercase">Attendu Aujourd'hui ({dayName})</span>
-          <p className="text-2xl font-black text-navy mt-1.5">
-            {summary?.totalExpectedTodayMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+        {/* Morning Target (100% Cash Collection Pool) */}
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-2xs font-bold text-gray-500 uppercase">Cible Matinale (100% CSV)</span>
+            <span className="text-3xs font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+              Base 100%
+            </span>
+          </div>
+          <p className="text-2xl font-black text-navy mt-1">
+            {(summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0).toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
           </p>
-          <p className="text-2xs text-gray-400 mt-1">
-            300 DH/j (Lun-Sam) + 1,800 DH (Lundi)
-          </p>
-        </div>
-
-        {/* Collected Today */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
-          <span className="text-2xs font-bold text-gray-500 uppercase">Encaissé Aujourd'hui</span>
-          <p className="text-2xl font-black text-emerald-600 mt-1.5">
-            {summary?.totalClearedTodayMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
-          </p>
-          <div className="w-full h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full"
-              style={{
-                width: `${
-                  summary && summary.totalExpectedTodayMAD > 0
-                    ? Math.min(100, Math.round((summary.totalClearedTodayMAD / summary.totalExpectedTodayMAD) * 100))
-                    : 0
-                }%`,
-              }}
-            />
+          <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
+            <span className="font-semibold text-emerald-700">🎯 Objectif 60% :</span>
+            <span className="font-black text-emerald-800">
+              {Math.round((summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0) * 0.6).toLocaleString()} MAD
+            </span>
           </div>
         </div>
 
-        {/* Remaining to collect */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+        {/* Collected Today with 60% Target Progress */}
+        {(() => {
+          const morningTarget = summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0;
+          const cleared = summary?.totalClearedTodayMAD || 0;
+          const pct = morningTarget > 0 ? (cleared / morningTarget) * 100 : 0;
+          const isTargetAchieved = pct >= 60;
+
+          return (
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-2xs font-bold text-gray-500 uppercase">Encaissé Aujourd'hui</span>
+                <span
+                  className={`text-3xs font-black px-2 py-0.5 rounded-full ${
+                    isTargetAchieved
+                      ? "bg-emerald-100 text-emerald-800 animate-pulse-subtle"
+                      : pct >= 30
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {pct.toFixed(1)}% / 60%
+                </span>
+              </div>
+              <p className="text-2xl font-black text-emerald-600 mt-1">
+                {cleared.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+              </p>
+              <div className="relative w-full h-2.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                {/* 60% Goal Line Marker */}
+                <div className="absolute left-[60%] top-0 bottom-0 w-0.5 bg-gray-400 z-10" title="Cible 60%" />
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    isTargetAchieved
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                      : pct >= 30
+                      ? "bg-gradient-to-r from-amber-400 to-emerald-500"
+                      : "bg-blue-500"
+                  }`}
+                  style={{
+                    width: `${Math.min(100, pct)}%`,
+                  }}
+                />
+              </div>
+              <p className="text-3xs text-gray-500 pt-0.5 flex items-center justify-between">
+                <span>{isTargetAchieved ? "🎉 Objectif 60% Atteint !" : `Reste ${Math.max(0, Math.round(morningTarget * 0.6) - cleared).toLocaleString()} MAD pour 60%`}</span>
+                <span className="font-bold text-gray-400">Objectif: 60%</span>
+              </p>
+            </div>
+          );
+        })()}
+
+        {/* Remaining to collect (Negative balance remaining) */}
+        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
-          <p className="text-2xl font-black text-amber-600 mt-1.5">
-            {summary?.remainingToCollectMAD.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+          <p className="text-2xl font-black text-amber-600 mt-1">
+            {(summary?.remainingToCollectMAD || 0).toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
           </p>
-          <p className="text-2xs text-amber-700 mt-1 font-medium">
-            Cumul total impayés flotte : {summary?.totalArrearsAllMAD.toLocaleString()} MAD
+          <p className="text-2xs text-amber-700 mt-1 font-medium leading-tight">
+            Cumul total impayés flotte : {(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD
           </p>
         </div>
 
