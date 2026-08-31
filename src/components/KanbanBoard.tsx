@@ -239,7 +239,13 @@ export default function KanbanBoard() {
   const callsDoneToday = leads.filter((l) => {
     if (l.board_column === "NEW_LEADS") return false;
     if (!l.status_changed_at) return false;
-    return new Date(l.status_changed_at).toISOString().split("T")[0] === todayStr;
+    try {
+      const d = new Date(l.status_changed_at);
+      if (isNaN(d.getTime())) return false;
+      return d.toISOString().split("T")[0] === todayStr;
+    } catch {
+      return false;
+    }
   }).length;
 
   const trainingFixedToday = leads.filter((l) => {
@@ -250,7 +256,13 @@ export default function KanbanBoard() {
     )
       return false;
     if (!l.status_changed_at) return false;
-    return new Date(l.status_changed_at).toISOString().split("T")[0] === todayStr;
+    try {
+      const d = new Date(l.status_changed_at);
+      if (isNaN(d.getTime())) return false;
+      return d.toISOString().split("T")[0] === todayStr;
+    } catch {
+      return false;
+    }
   }).length;
 
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
@@ -271,9 +283,17 @@ export default function KanbanBoard() {
         const allNewLeads = leads
           .filter((l) => l.board_column === "NEW_LEADS")
           .sort((a, b) => {
-            const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : new Date(a.created_at).getTime();
-            const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : new Date(b.created_at).getTime();
-            return timeB - timeA;
+            const getTimestamp = (item: any) => {
+              try {
+                const dateStr = item?.updated_at || item?.created_at;
+                if (!dateStr) return 0;
+                const time = new Date(dateStr).getTime();
+                return isNaN(time) ? 0 : time;
+              } catch {
+                return 0;
+              }
+            };
+            return getTimestamp(b) - getTimestamp(a);
           });
 
         // 1. If daily training fixed target is ACHIEVED: New leads list disappears!

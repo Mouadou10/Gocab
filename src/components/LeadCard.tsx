@@ -142,16 +142,34 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
               {lead.training_status}
             </span>
           )}
-          {(lead.brand_status === "Training fixed" || lead.training_status === "Scheduled") && lead.reminder_date && (
-            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-900 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200">
-              📅 {new Date(lead.reminder_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-            </span>
-          )}
-          {lead.brand_status === "To Recall" && lead.reminder_date && (
-            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
-              ⏰ {new Date(lead.reminder_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} à {new Date(lead.reminder_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-            </span>
-          )}
+          {(() => {
+            if (!lead.reminder_date) return null;
+            try {
+              const d = new Date(lead.reminder_date);
+              if (isNaN(d.getTime())) return null;
+
+              if (lead.brand_status === "Training fixed" || lead.training_status === "Scheduled") {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-900 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200">
+                    📅 {d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  </span>
+                );
+              }
+
+              if (lead.brand_status === "To Recall") {
+                const datePart = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+                const timePart = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+                return (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                    ⏰ {datePart} à {timePart}
+                  </span>
+                );
+              }
+            } catch {
+              return null;
+            }
+            return null;
+          })()}
         </div>
 
         {/* KYC indicator for training phase or if any doc checked */}

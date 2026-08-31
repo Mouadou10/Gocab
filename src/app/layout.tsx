@@ -22,7 +22,11 @@ export const metadata: Metadata = {
     "Kanban-style lead management for GoCab driver onboarding. Manage leads through Brand Pre-Filter, Training Pipeline, and Vehicle Assignment stages.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
