@@ -228,11 +228,16 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Update driver's current arrears
+        // Update driver's current arrears and calculate unpaid days from balance
+        const morningArrears = Math.abs(balance);
+        const morningUnpaidDays = balance === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
+
         await prisma.driverProfile.update({
           where: { id: driver.id },
           data: {
-            currentArrearsMAD: Math.abs(balance),
+            currentArrearsMAD: morningArrears,
+            consecutiveUnpaidDays: morningUnpaidDays,
+            defaultStage: morningArrears >= 1500 ? "DAY_3_BLOCK" : morningArrears >= 600 ? "DAY_2_ACTION" : "NOMINAL",
           },
         });
 

@@ -77,9 +77,15 @@ export async function GET(request: NextRequest) {
       totalClearedTodayMAD += clearedTodayMAD;
       totalArrearsAllMAD += driver.currentArrearsMAD;
 
-      // 3rd Day Red Rule: If unpaid for 2 days, on 3rd day -> RED ALERT
-      const unpaidDays = driver.consecutiveUnpaidDays || 0;
-      const isCriticalRed = unpaidDays >= 2 || driver.currentArrearsMAD >= 600;
+      // 3rd Day Red Rule: If unpaid for >= 3 days (or arrears >= 900 MAD) -> RED ALERT
+      const unpaidDays =
+        driver.consecutiveUnpaidDays > 0
+          ? driver.consecutiveUnpaidDays
+          : driver.currentArrearsMAD > 0
+          ? Math.max(1, Math.ceil(driver.currentArrearsMAD / 300))
+          : 0;
+
+      const isCriticalRed = unpaidDays >= 3 || driver.currentArrearsMAD >= 900;
       if (isCriticalRed) criticalRedCount++;
 
       return {

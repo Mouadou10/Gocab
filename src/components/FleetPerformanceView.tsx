@@ -427,7 +427,12 @@ export default function FleetPerformanceView() {
                 filteredDrivers.map((driver) => {
                   const isRed = driver.isCriticalRed;
                   const isSaving = savingDriverId === driver.id;
-                  const currentInputValue = paymentInputs[driver.id] ?? driver.expectedTodayMAD;
+                  const currentInputValue =
+                    paymentInputs[driver.id] !== undefined
+                      ? paymentInputs[driver.id]
+                      : driver.clearedTodayMAD !== undefined && driver.clearedTodayMAD !== null
+                      ? driver.clearedTodayMAD
+                      : 0;
 
                   return (
                     <tr
@@ -569,15 +574,23 @@ export default function FleetPerformanceView() {
                         {isRed ? (
                           <div className="inline-flex flex-col items-center">
                             <span className="text-2xs font-extrabold text-white bg-red-600 px-2 py-0.5 rounded-full animate-pulse">
-                              🔴 {driver.consecutiveUnpaidDays || 3}e JOUR SANS PAIEMENT
+                              🔴 {driver.consecutiveUnpaidDays || Math.ceil(driver.currentArrearsMAD / 300) || 3}e JOUR SANS PAIEMENT
                             </span>
                             <span className="text-3xs text-red-700 font-semibold mt-0.5">
                               Risque Immobilisation
                             </span>
                           </div>
-                        ) : driver.consecutiveUnpaidDays === 1 ? (
+                        ) : driver.consecutiveUnpaidDays === 2 || (driver.currentArrearsMAD >= 600 && driver.currentArrearsMAD < 900) ? (
+                          <span className="text-2xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                            ⚠️ 2 jours impayés
+                          </span>
+                        ) : driver.consecutiveUnpaidDays === 1 || (driver.currentArrearsMAD >= 300 && driver.currentArrearsMAD < 600) ? (
                           <span className="text-2xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
                             ⚠️ 1 jour impayé
+                          </span>
+                        ) : driver.currentArrearsMAD > 0 ? (
+                          <span className="text-2xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            ⚠️ Arriérés ({driver.currentArrearsMAD} DH)
                           </span>
                         ) : (
                           <span className="text-2xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
