@@ -109,6 +109,7 @@ export default function FleetView() {
 
   // Calculate Expiration Alerts
   const now = new Date();
+  const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   const expiredItems: { vehicle: Vehicle; type: string; date: string }[] = [];
 
@@ -122,14 +123,16 @@ export default function FleetView() {
 
     checks.forEach((chk) => {
       if (chk.dateStr) {
-        const d = new Date(chk.dateStr);
-        if (d < now) {
-          expiredItems.push({
-            vehicle: v,
-            type: chk.name,
-            date: d.toLocaleDateString(),
-          });
-        }
+        try {
+          const d = new Date(chk.dateStr);
+          if (!isNaN(d.getTime()) && d < now) {
+            expiredItems.push({
+              vehicle: v,
+              type: chk.name,
+              date: d.toLocaleDateString(),
+            });
+          }
+        } catch {}
       }
     });
   });
@@ -143,27 +146,42 @@ export default function FleetView() {
         </span>
       );
     }
-    const d = new Date(dateStr);
-    if (d < now) {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) {
+        return (
+          <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md font-mono">
+            {label}: Non défini
+          </span>
+        );
+      }
+      if (d < now) {
+        return (
+          <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-red-200">
+            🚨 {label} EXPIRED ({d.toLocaleDateString()})
+          </span>
+        );
+      }
+      if (d <= threeDaysFromNow) {
+        const days = Math.max(0, Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24)));
+        return (
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-amber-200">
+            ⚠️ {label} due in {days}d ({d.toLocaleDateString()})
+          </span>
+        );
+      }
       return (
-        <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-red-200">
-          🚨 {label} EXPIRED ({d.toLocaleDateString()})
+        <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-emerald-200">
+          ✓ {label}: {d.toLocaleDateString()}
+        </span>
+      );
+    } catch {
+      return (
+        <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md font-mono">
+          {label}: Non défini
         </span>
       );
     }
-    if (d <= threeDaysFromNow) {
-      const days = Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24));
-      return (
-        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-amber-200">
-          ⚠️ {label} due in {days}d ({d.toLocaleDateString()})
-        </span>
-      );
-    }
-    return (
-      <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 border border-emerald-200">
-        ✓ {label}: {d.toLocaleDateString()}
-      </span>
-    );
   }
 
   /** Gets styling for the 6 vehicle operational statuses */
