@@ -9,7 +9,12 @@ import React, { useState, useEffect } from 'react';
  * or "VEHICLE_ASSIGNMENT" (the conversion goal of the training pipeline).
  * Filters by the date the lead's training_status was last changed.
  */
-export default function TrainingScorecard({ leads }: { leads: any[] }) {
+interface TrainingScorecardProps {
+  leads: any[];
+  onSelectStatus?: (status: string) => void;
+}
+
+export default function TrainingScorecard({ leads, onSelectStatus }: TrainingScorecardProps) {
   const [dateFilter, setDateFilter] = useState<string>('');
   const [dailyPreordersTarget, setDailyPreordersTarget] = useState(9);
 
@@ -133,38 +138,112 @@ export default function TrainingScorecard({ leads }: { leads: any[] }) {
 
         {/* Status Breakdown */}
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 col-span-1 md:col-span-2">
-          <div className="text-sm font-medium text-gray-500 mb-3">Status Breakdown</div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-500">Status Breakdown</span>
+            <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+              ✨ Click a status to bring column to 2nd position
+            </span>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-md">
-              Scheduled: {statusCounts['Scheduled'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-green-100 text-green-700 rounded-md">
-              Attended: {statusCounts['Attended'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 rounded-md">
-              Not Interested: {statusCounts['Attended and not interested'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-orange-100 text-orange-700 rounded-md">
-              Pending: {statusCounts['Pending'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 rounded-md">
-              Refused: {statusCounts['Refused the offer'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-100 text-emerald-700 rounded-md">
-              Accept Offer: {statusCounts['Accept offer'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-gray-200 text-gray-700 rounded-md">
-              Not Attended: {statusCounts['Not attended'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-yellow-100 text-yellow-700 rounded-md">
-              No Response: {statusCounts['No response'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-purple-100 text-purple-700 rounded-md">
-              Preorder: {statusCounts['Preorder'] || 0}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1.5 bg-navy/10 text-navy rounded-md">
-              Vehicle Assigned: {statusCounts['VEHICLE_ASSIGNMENT'] || 0}
-            </span>
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Scheduled')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Scheduled' in 2nd column position"
+            >
+              <span>Scheduled:</span>
+              <span className="font-bold">{statusCounts['Scheduled'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Attended')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Attended' in 2nd column position"
+            >
+              <span>Attended:</span>
+              <span className="font-bold">{statusCounts['Attended'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Attended and not interested')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Not Interested' in 2nd column position"
+            >
+              <span>Not Interested:</span>
+              <span className="font-bold">{statusCounts['Attended and not interested'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Pending')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Pending' in 2nd column position"
+            >
+              <span>Pending:</span>
+              <span className="font-bold">{statusCounts['Pending'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Refused the offer')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Refused' in 2nd column position"
+            >
+              <span>Refused:</span>
+              <span className="font-bold">{statusCounts['Refused the offer'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Accept offer')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Accept Offer' in 2nd column position"
+            >
+              <span>Accept Offer:</span>
+              <span className="font-bold">{statusCounts['Accept offer'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Not attended')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Not Attended' in 2nd column position"
+            >
+              <span>Not Attended:</span>
+              <span className="font-bold">{statusCounts['Not attended'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('No response')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-yellow-100 text-yellow-700 hover:bg-yellow-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'No Response' in 2nd column position"
+            >
+              <span>No Response:</span>
+              <span className="font-bold">{statusCounts['No response'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('Preorder')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Preorder' in 2nd column position"
+            >
+              <span>Preorder:</span>
+              <span className="font-bold">{statusCounts['Preorder'] || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStatus?.('VEHICLE_ASSIGNMENT')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-navy/10 text-navy hover:bg-navy/20 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Vehicle Assigned' in 2nd column position"
+            >
+              <span>Vehicle Assigned:</span>
+              <span className="font-bold">{statusCounts['VEHICLE_ASSIGNMENT'] || 0}</span>
+            </button>
           </div>
         </div>
       </div>

@@ -996,7 +996,12 @@ export default function KanbanBoard() {
                 onSelectStatus={handleBringColumnToSecond}
               />
             )}
-            {activeTab === "training" && <TrainingScorecard leads={leads} />}
+            {activeTab === "training" && (
+              <TrainingScorecard
+                leads={leads}
+                onSelectStatus={handleBringColumnToSecond}
+              />
+            )}
             
             {/* Scrollable Horizontal Kanban Board Container */}
             <div className="flex-1 overflow-x-auto pb-4 scrollbar-thin">
