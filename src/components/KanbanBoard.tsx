@@ -96,6 +96,16 @@ const ROLE_COLORS: Record<string, string> = {
 
 type TabType = "dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
 
+// Default Landing Page for each role on initial login
+const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
+  LEAD_ACQUISITION_JR: "leads",
+  FLEET_PERF_MANAGER:  "fleet",
+  FIELD_SUPERVISOR:    "field",
+  FINANCE_OFFICER:     "performance",
+  OPS_MANAGER:         "dashboard",
+  ADMIN:               "dashboard",
+};
+
 
 const LEADS_COLUMNS = [
   "NEW_LEADS",
@@ -154,9 +164,57 @@ export default function KanbanBoard() {
   const [leadsColumns, setLeadsColumns] = useState<string[]>([...LEADS_COLUMNS]);
   const [trainingColumns, setTrainingColumns] = useState<string[]>([...TRAINING_COLUMNS]);
   
-  // Navigation & Settings State — default to first allowed tab
+  // Navigation & Settings State — persisted across refreshes
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
+  const [isTabRestored, setIsTabRestored] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
+
+  // Restore tab on mount/refresh or default to role's assigned page on sign in
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const urlTab = new URLSearchParams(window.location.search).get("tab") as TabType;
+      const storedTab = (
+        localStorage.getItem(`gocab_active_tab_${userRole}`) ||
+        localStorage.getItem("gocab_active_tab")
+      ) as TabType;
+
+      const candidate = urlTab || storedTab;
+
+      if (candidate && allowedTabs.includes(candidate)) {
+        setActiveTab(candidate);
+      } else {
+        const defaultLanding =
+          ROLE_DEFAULT_LANDING_TAB[userRole] ||
+          (allowedTabs.length > 0 ? allowedTabs[0] : "dashboard");
+        setActiveTab(defaultLanding);
+      }
+    } catch (e) {
+      const defaultLanding =
+        ROLE_DEFAULT_LANDING_TAB[userRole] ||
+        (allowedTabs.length > 0 ? allowedTabs[0] : "dashboard");
+      setActiveTab(defaultLanding);
+    }
+    setIsTabRestored(true);
+  }, [userRole, allowedTabs]);
+
+  // Tab switcher that saves state for page refreshes
+  const handleSelectTab = (tab: TabType) => {
+    setActiveTab(tab);
+    if (tab === "training") {
+      fetchSettings();
+    }
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`gocab_active_tab_${userRole}`, tab);
+        localStorage.setItem("gocab_active_tab", tab);
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", tab);
+        window.history.replaceState({}, "", url.toString());
+      } catch (e) {}
+    }
+  };
 
   // Drawer state
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -268,13 +326,14 @@ export default function KanbanBoard() {
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
   const totalNewLeadsInDB = leads.filter((l) => l.board_column === "NEW_LEADS").length;
 
-  // Trigger celebration modal once when training goal is reached
+  // Trigger celebration modal once when training goal is reached — ONLY for Lead Acquisition
   useEffect(() => {
-    if (isDailyTrainingGoalAchieved && !hasCelebratedToday && leads.length > 0) {
+    const isLeadAcquisition = activeTab === "leads" || userRole === "LEAD_ACQUISITION_JR";
+    if (isLeadAcquisition && isDailyTrainingGoalAchieved && !hasCelebratedToday && leads.length > 0) {
       setShowCelebrationModal(true);
       setHasCelebratedToday(true);
     }
-  }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length]);
+  }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length, activeTab, userRole]);
 
   /** Group leads dynamically based on their specific status/column. */
   function getLeadsByColumn(column: string): Lead[] {
@@ -685,7 +744,7 @@ export default function KanbanBoard() {
           <div className="flex flex-wrap items-center bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200/50">
             {allowedTabs.includes("dashboard") && (
               <button
-                onClick={() => setActiveTab("dashboard")}
+                onClick={() => handleSelectTab("dashboard")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "dashboard"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -698,7 +757,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("leads") && (
               <button
-                onClick={() => setActiveTab("leads")}
+                onClick={() => handleSelectTab("leads")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "leads"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -718,10 +777,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("training") && (
               <button
-                onClick={() => {
-                  setActiveTab("training");
-                  fetchSettings();
-                }}
+                onClick={() => handleSelectTab("training")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "training"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -741,7 +797,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("drivers") && (
               <button
-                onClick={() => setActiveTab("drivers")}
+                onClick={() => handleSelectTab("drivers")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "drivers"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -754,7 +810,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("fleet") && (
               <button
-                onClick={() => setActiveTab("fleet")}
+                onClick={() => handleSelectTab("fleet")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "fleet"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -767,7 +823,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("tickets") && (
               <button
-                onClick={() => setActiveTab("tickets")}
+                onClick={() => handleSelectTab("tickets")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "tickets"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -780,7 +836,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("performance") && (
               <button
-                onClick={() => setActiveTab("performance")}
+                onClick={() => handleSelectTab("performance")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "performance"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -793,7 +849,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("field") && (
               <button
-                onClick={() => setActiveTab("field")}
+                onClick={() => handleSelectTab("field")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "field"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -806,7 +862,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("insurance") && (
               <button
-                onClick={() => setActiveTab("insurance")}
+                onClick={() => handleSelectTab("insurance")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "insurance"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -819,7 +875,7 @@ export default function KanbanBoard() {
 
             {allowedTabs.includes("settings") && (
               <button
-                onClick={() => setActiveTab("settings")}
+                onClick={() => handleSelectTab("settings")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                   activeTab === "settings"
                     ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
@@ -1007,8 +1063,8 @@ export default function KanbanBoard() {
       {/* Reminder Alerts */}
       <ReminderAlert leads={leads} />
 
-      {/* Daily Goal Achieved Celebration Modal */}
-      {showCelebrationModal && (
+      {/* Target Reached Celebration Modal (Lead Acquisition Only) */}
+      {showCelebrationModal && (activeTab === "leads" || userRole === "LEAD_ACQUISITION_JR") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl shadow-2xl border border-emerald-100 max-w-md w-full overflow-hidden text-center p-8 space-y-5">
             <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-tr from-amber-400 via-emerald-400 to-teal-400 p-1 flex items-center justify-center shadow-lg">
