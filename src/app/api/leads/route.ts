@@ -69,6 +69,11 @@ export async function POST(request: Request) {
       has_permis,
       has_fiche_anthropometrique,
       has_confirmation_adresse,
+      board_column,
+      brand_status,
+      training_status,
+      reminder_date,
+      preorder_amount,
     } = body;
 
     if (!name || !name.trim()) {
@@ -124,16 +129,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create lead in NEW_LEADS column
+    // Create lead in selected column/status
     const lead = await prisma.lead.create({
       data: {
         raw_name: name.trim(),
         sanitized_phone,
         city: city ? city.trim() : null,
         campaign_source: campaign_source ? campaign_source.trim() : "Manual Entry",
-        board_column: "NEW_LEADS",
-        brand_status: null,
-        training_status: null,
+        board_column: board_column || "NEW_LEADS",
+        brand_status: brand_status || null,
+        training_status: training_status || null,
+        reminder_date: reminder_date ? new Date(reminder_date) : null,
+        preorder_amount: preorder_amount ? Number(preorder_amount) : null,
         age: age ? Number(age) : null,
         permis_seniority_years: permis_seniority_years ? Number(permis_seniority_years) : null,
         is_resident: is_resident !== undefined ? Boolean(is_resident) : true,
@@ -141,6 +148,7 @@ export async function POST(request: Request) {
         has_permis: Boolean(has_permis),
         has_fiche_anthropometrique: Boolean(has_fiche_anthropometrique),
         has_confirmation_adresse: Boolean(has_confirmation_adresse),
+        status_changed_at: (brand_status || training_status || board_column !== "NEW_LEADS") ? new Date() : null,
       },
     });
 

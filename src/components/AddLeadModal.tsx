@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -32,14 +32,44 @@ const CAMPAIGN_SOURCES = [
   "Manual Entry",
 ] as const;
 
+const TRAINING_STATUSES = [
+  { key: "Scheduled", label: "Scheduled (Programmé)", icon: "📅" },
+  { key: "Attended", label: "Attended (Présent)", icon: "✅" },
+  { key: "Attended and not interested", label: "Attended & Not Interested", icon: "🚫" },
+  { key: "Pending", label: "Pending (En attente)", icon: "⏳" },
+  { key: "Refused the offer", label: "Refused Offer (Refusé)", icon: "❌" },
+  { key: "Accept offer", label: "Accept Offer (Accepté)", icon: "🤝" },
+  { key: "Not attended", label: "Not Attended (Absent)", icon: "⚠️" },
+  { key: "No response", label: "No Response (Injoignable)", icon: "📞" },
+  { key: "Preorder", label: "Preorder (Précommande)", icon: "💵" },
+  { key: "VEHICLE_ASSIGNMENT", label: "Vehicle Assignment (Affectation)", icon: "🚗" },
+] as const;
+
+const LEADS_STATUSES = [
+  { key: "NEW_LEADS", label: "New Lead (Nouveau)" },
+  { key: "Not Interested", label: "Not Interested (Non intéressé)" },
+  { key: "No response 1", label: "No response 1 (Injoignable 1)" },
+  { key: "No response 2", label: "No response 2 (Injoignable 2)" },
+  { key: "To Recall", label: "To Recall (À rappeler)" },
+  { key: "Wrong Number", label: "Wrong Number (Faux numéro)" },
+  { key: "Already Client", label: "Already Client (Déjà client)" },
+  { key: "Training fixed", label: "Training Fixed (Formation fixée)" },
+] as const;
+
 interface AddLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLeadAdded: () => void;
+  activeTab?: string;
 }
 
-export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadModalProps) {
+export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab = "leads" }: AddLeadModalProps) {
   const { t, language } = useLanguage();
+
+  // Destination pipeline: "leads" vs "training"
+  const [pipeline, setPipeline] = useState<"leads" | "training">(
+    activeTab === "training" ? "training" : "leads"
+  );
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -49,6 +79,12 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
   const [permisSeniority, setPermisSeniority] = useState<string>("3");
   const [isResident, setIsResident] = useState<boolean>(true);
 
+  // Training & Leads status selection
+  const [trainingStatus, setTrainingStatus] = useState<string>("Scheduled");
+  const [leadStatus, setLeadStatus] = useState<string>("NEW_LEADS");
+  const [trainingDate, setTrainingDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [preorderAmount, setPreorderAmount] = useState<string>("");
+
   // KYC Checklist
   const [hasCin, setHasCin] = useState<boolean>(false);
   const [hasPermis, setHasPermis] = useState<boolean>(true);
@@ -57,6 +93,13 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Synchronize pipeline with activeTab when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setPipeline(activeTab === "training" ? "training" : "leads");
+    }
+  }, [isOpen, activeTab]);
 
   if (!isOpen) return null;
 
@@ -74,6 +117,47 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
       return;
     }
 
+    // Determine target board_column and statuses
+    let targetBoardColumn = "NEW_LEADS";
+    let targetBrandStatus: string | null = null;
+    let targetTrainingStatus: string | null = null;
+    let targetReminderDate: string | null = null;
+    let targetPreorderAmount: number | null = null;
+
+    if (pipeline === "training") {
+      if (trainingStatus === "VEHICLE_ASSIGNMENT") {
+        targetBoardColumn = "VEHICLE_ASSIGNMENT";
+        targetBrandStatus = "Training fixed";
+        targetTrainingStatus = "Accept offer";
+      } else {
+        targetBoardColumn = "TRAINING_PIPELINE";
+        targetBrandStatus = "Training fixed";
+        targetTrainingStatus = trainingStatus;
+      }
+
+      if (trainingStatus === "Scheduled") {
+        targetReminderDate = trainingDate ? `${trainingDate}T12:00:00.000Z` : null;
+      }
+
+      if (trainingStatus === "Preorder" && preorderAmount) {
+        targetPreorderAmount = parseFloat(preorderAmount);
+      }
+    } else {
+      // Leads pipeline
+      if (leadStatus === "NEW_LEADS") {
+        targetBoardColumn = "NEW_LEADS";
+        targetBrandStatus = null;
+      } else if (leadStatus === "Training fixed") {
+        targetBoardColumn = "TRAINING_PIPELINE";
+        targetBrandStatus = "Training fixed";
+        targetTrainingStatus = "Scheduled";
+        targetReminderDate = trainingDate ? `${trainingDate}T12:00:00.000Z` : null;
+      } else {
+        targetBoardColumn = "BRAND_PRE_FILTER";
+        targetBrandStatus = leadStatus;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/leads", {
@@ -84,6 +168,11 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
           phone: phone.trim(),
           city,
           campaign_source: campaignSource,
+          board_column: targetBoardColumn,
+          brand_status: targetBrandStatus,
+          training_status: targetTrainingStatus,
+          reminder_date: targetReminderDate,
+          preorder_amount: targetPreorderAmount,
           age: age ? parseInt(age, 10) : null,
           permis_seniority_years: permisSeniority ? parseInt(permisSeniority, 10) : null,
           is_resident: isResident,
@@ -120,6 +209,9 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
       setHasPermis(true);
       setHasFiche(false);
       setHasConfirmation(false);
+      setTrainingStatus("Scheduled");
+      setLeadStatus("NEW_LEADS");
+      setPreorderAmount("");
 
       onLeadAdded();
       onClose();
@@ -132,7 +224,7 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-navy to-navy/90 text-white flex items-center justify-between border-b border-navy/20">
           <div className="flex items-center gap-3">
@@ -144,10 +236,12 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
                 {language === "fr" ? "Nouveau Prospect" : language === "ar" ? "إضافة مرشح جديد" : "Add New Lead"}
               </h2>
               <p className="text-xs text-white/70">
-                {language === "fr"
+                {pipeline === "training"
+                  ? language === "fr"
+                    ? "Ajout direct dans la Formation"
+                    : "Direct Training candidate entry"
+                  : language === "fr"
                   ? "Saisie manuelle d'un chauffeur candidat"
-                  : language === "ar"
-                  ? "إدخال يدوي لبيانات السائق المرشح"
                   : "Manual driver candidate registration"}
               </p>
             </div>
@@ -160,9 +254,42 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
           </button>
         </div>
 
+        {/* Pipeline Selector Switch (Leads vs Training) */}
+        <div className="px-6 pt-4 pb-2 bg-gray-50/70 border-b border-gray-200/60">
+          <label className="block text-2xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+            Destination Pipeline
+          </label>
+          <div className="grid grid-cols-2 gap-2 bg-gray-200/80 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setPipeline("leads")}
+              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                pipeline === "leads"
+                  ? "bg-white text-navy shadow-xs font-black"
+                  : "text-gray-600 hover:text-navy"
+              }`}
+            >
+              <span>💼</span>
+              <span>Leads Acquisition</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPipeline("training")}
+              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                pipeline === "training"
+                  ? "bg-white text-navy shadow-xs font-black"
+                  : "text-gray-600 hover:text-navy"
+              }`}
+            >
+              <span>🎓</span>
+              <span>Training Pipeline</span>
+            </button>
+          </div>
+        </div>
+
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+          <div className="mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
             <span>⚠️</span>
             <span className="flex-1">{errorMsg}</span>
           </div>
@@ -202,6 +329,102 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded }: AddLeadMo
               </div>
             </div>
           </div>
+
+          {/* Status Selection based on chosen pipeline */}
+          {pipeline === "training" ? (
+            <div className="p-4 bg-purple-50/70 border border-purple-200/80 rounded-2xl space-y-3">
+              <div>
+                <label className="block text-xs font-black text-purple-950 mb-1 flex items-center gap-1.5">
+                  <span>🎓</span>
+                  <span>Statut Training (Colonne de Destination) *</span>
+                </label>
+                <select
+                  value={trainingStatus}
+                  onChange={(e) => setTrainingStatus(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-white border border-purple-300 rounded-xl text-xs font-bold text-gray-900 focus:ring-2 focus:ring-purple-400 outline-none"
+                >
+                  {TRAINING_STATUSES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.icon} {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* If Scheduled, select training date */}
+              {trainingStatus === "Scheduled" && (
+                <div className="animate-fadeIn">
+                  <label className="block text-2xs font-bold text-purple-900 mb-1 flex items-center gap-1">
+                    <span>📅</span>
+                    <span>Date de la Session de Formation *</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={trainingDate}
+                    onChange={(e) => setTrainingDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-purple-400 outline-none"
+                  />
+                  <p className="text-3xs text-purple-700 mt-1">
+                    Le prospect apparaîtra dans la colonne &quot;Scheduled&quot; à la date de formation indiquée.
+                  </p>
+                </div>
+              )}
+
+              {/* If Preorder, enter amount */}
+              {trainingStatus === "Preorder" && (
+                <div className="animate-fadeIn">
+                  <label className="block text-2xs font-bold text-purple-900 mb-1 flex items-center gap-1">
+                    <span>💵</span>
+                    <span>Montant Précommande (MAD)</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="ex: 1500"
+                    value={preorderAmount}
+                    onChange={(e) => setPreorderAmount(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-purple-400 outline-none"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl space-y-2">
+              <div>
+                <label className="block text-xs font-black text-navy mb-1 flex items-center gap-1.5">
+                  <span>💼</span>
+                  <span>Statut Initial du Prospect</span>
+                </label>
+                <select
+                  value={leadStatus}
+                  onChange={(e) => setLeadStatus(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-white border border-blue-300 rounded-xl text-xs font-bold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
+                >
+                  {LEADS_STATUSES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {leadStatus === "Training fixed" && (
+                <div className="animate-fadeIn pt-1">
+                  <label className="block text-2xs font-bold text-navy mb-1 flex items-center gap-1">
+                    <span>📅</span>
+                    <span>Date de Formation *</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={trainingDate}
+                    onChange={(e) => setTrainingDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* City & Source */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

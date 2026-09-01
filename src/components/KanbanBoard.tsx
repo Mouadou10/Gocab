@@ -364,12 +364,28 @@ export default function KanbanBoard() {
         return allNewLeads.slice(0, Math.max(1, targetBatchCount));
       }
       if (column === "Training fixed") {
-        return leads.filter(
-          (l) =>
+        return leads.filter((l) => {
+          const isTrainingFixed =
             l.brand_status === "Training fixed" ||
             (l.board_column === "TRAINING_PIPELINE" &&
-              (l.training_status === "Scheduled" || !l.training_status))
-        );
+              (l.training_status === "Scheduled" || !l.training_status));
+          
+          if (!isTrainingFixed) return false;
+
+          // Remove leads with previous/past training dates (only show today or future)
+          if (l.reminder_date) {
+            try {
+              const d = new Date(l.reminder_date);
+              if (!isNaN(d.getTime())) {
+                const scheduledDateStr = d.toISOString().split("T")[0];
+                if (scheduledDateStr < todayStr) {
+                  return false;
+                }
+              }
+            } catch {}
+          }
+          return true;
+        });
       }
       return leads.filter(
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
@@ -1076,6 +1092,7 @@ export default function KanbanBoard() {
         isOpen={isAddLeadModalOpen}
         onClose={() => setIsAddLeadModalOpen(false)}
         onLeadAdded={fetchLeads}
+        activeTab={activeTab}
       />
 
       {/* Reminder Alerts */}
