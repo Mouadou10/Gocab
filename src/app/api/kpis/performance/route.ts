@@ -155,34 +155,37 @@ export async function GET(request: NextRequest) {
     const totalPreorderMAD = preorders.reduce((acc, l) => acc + (Number(l.preorder_amount) || 0), 0);
     const attendanceRate = trainingLeads.length > 0 ? Number(((attendedCount / trainingLeads.length) * 100).toFixed(1)) : 0;
 
-    // 4. Query Collections & Daily Collections
-    const dailyCollections = await prisma.driverDailyCollection.findMany({
+    // 4. Query Collections & Daily Ledgers
+    const paymentLedgers = await prisma.paymentLedger.findMany({
+      where: {
+        paymentDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        driver: true,
+      },
+    });
+
+    const dailyCollections = await prisma.dailyCollection.findMany({
       where: {
         date: {
           gte: startDate,
           lte: endDate,
         },
       },
-      select: {
-        id: true,
-        driver_id: true,
-        driver_name: true,
-        date: true,
-        morning_balance: true,
-        evening_balance: true,
-        daily_collection: true,
-        is_recovered: true,
-      },
     });
 
-    const totalMorningTargetMAD = dailyCollections.reduce((acc, row) => {
-      const mb = Number(row.morning_balance) || 0;
+    const totalMorningTargetMAD = paymentLedgers.reduce((acc, row) => {
+      const mb = Number(row.morningBalance) || 0;
       return mb < 0 ? acc + Math.abs(mb) : acc;
-    }, 0);
+    }, 0) || dailyCollections.reduce((acc, d) => acc + (Number(d.expected_total) || 0), 0);
 
-    const totalEveningCollectedMAD = dailyCollections.reduce((acc, row) => {
-      return acc + (Number(row.daily_collection) || 0);
-    }, 0);
+    const totalEveningCollectedMAD = paymentLedgers.reduce((acc, row) => {
+      const collected = Number(row.clearedMAD) || (Number(row.calculatedDelta) && Number(row.calculatedDelta) > 0 ? Number(row.calculatedDelta) : 0);
+      return acc + collected;
+    }, 0) || dailyCollections.reduce((acc, d) => acc + (Number(d.collected_total) || 0), 0);
 
     const collectionRecoveryRate = totalMorningTargetMAD > 0 
       ? Number(((totalEveningCollectedMAD / totalMorningTargetMAD) * 100).toFixed(1))
@@ -341,10 +344,16 @@ export async function GET(request: NextRequest) {
         (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE"
       ).length;
 
-      const dayCollections = dailyCollections.filter(
+      const dayPaymentLedgers = paymentLedgers.filter(
+        (p) => p.paymentDate && new Date(p.paymentDate).toISOString().split("T")[0] === dateKey
+      );
+      const dayDailyCols = dailyCollections.filter(
         (c) => c.date && new Date(c.date).toISOString().split("T")[0] === dateKey
       );
-      const dayCollectedMAD = dayCollections.reduce((acc, row) => acc + (Number(row.daily_collection) || 0), 0);
+      const dayCollectedMAD = dayPaymentLedgers.reduce(
+        (acc, row) => acc + (Number(row.clearedMAD) || (Number(row.calculatedDelta) && Number(row.calculatedDelta) > 0 ? Number(row.calculatedDelta) : 0)), 
+        0
+      ) || dayDailyCols.reduce((acc, row) => acc + (Number(row.collected_total) || 0), 0);
 
       const dayTasks = fieldTasks.filter(
         (t) => t.created_at && new Date(t.created_at).toISOString().split("T")[0] === dateKey
