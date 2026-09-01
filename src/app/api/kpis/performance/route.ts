@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
         has_fiche_anthropometrique: true,
         has_confirmation_adresse: true,
         has_permis: true,
+        handled_by: true,
         created_at: true,
         updated_at: true,
         notes: true,
@@ -115,14 +116,29 @@ export async function GET(request: NextRequest) {
       return d >= startDate && d <= endDate;
     });
 
-    const callsDone = leadsTreatedInRange.filter((l) => l.board_column !== "NEW_LEADS").length;
-    const trainingFixed = leadsTreatedInRange.filter(
+    // Apply user filter if a specific user is chosen in slicer
+    let targetUser: any = null;
+    if (userId && userId !== "ALL") {
+      targetUser = users.find((u) => u.id === userId);
+    }
+
+    const filteredLeadsInRange = leadsTreatedInRange.filter((l) => {
+      if (!targetUser) return true;
+      const uName = (targetUser.fullName || targetUser.name || "").toLowerCase();
+      const uEmail = (targetUser.email || "").toLowerCase();
+      const h = (l.handled_by || "").toLowerCase();
+      const n = (l.notes || "").toLowerCase();
+      return h.includes(uName) || h.includes(uEmail) || n.includes(uName) || n.includes(uEmail);
+    });
+
+    const callsDone = filteredLeadsInRange.filter((l) => l.board_column !== "NEW_LEADS").length;
+    const trainingFixed = filteredLeadsInRange.filter(
       (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE"
     ).length;
     const leadConversionRate = callsDone > 0 ? Number(((trainingFixed / callsDone) * 100).toFixed(1)) : 0;
 
     // Training Pipeline in Date Range
-    const trainingLeads = leadsTreatedInRange.filter(
+    const trainingLeads = filteredLeadsInRange.filter(
       (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
     );
 
@@ -227,7 +243,7 @@ export async function GET(request: NextRequest) {
     const scaledPreordersTarget = targets.target_daily_preorders * dayCount;
     const scaledTasksTarget = targets.target_daily_tasks * dayCount;
 
-    // 8. Build Team Leaderboard
+    // 8. Build Team Leaderboard with individual attribution
     const leaderboard = users.map((u) => {
       let dept = "Operations";
       let keyMetric = "Tasks";
@@ -235,10 +251,25 @@ export async function GET(request: NextRequest) {
       let target = scaledTasksTarget;
       let unit = "";
 
+      const uName = (u.fullName || u.name || "").toLowerCase();
+      const uEmail = (u.email || "").toLowerCase();
+
+      // Filter leads handled by this specific user
+      const userHandledLeads = leadsTreatedInRange.filter((l) => {
+        const h = ((l as any).handled_by || "").toLowerCase();
+        const n = (l.notes || "").toLowerCase();
+        return h.includes(uName) || h.includes(uEmail) || n.includes(uName) || n.includes(uEmail);
+      });
+
+      const userCalls = userHandledLeads.filter((l) => l.board_column !== "NEW_LEADS").length;
+      const userTrainings = userHandledLeads.filter(
+        (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE"
+      ).length;
+
       if (u.role === "LEAD_ACQUISITION_JR") {
         dept = "Lead Acquisition";
         keyMetric = "Training Fixed";
-        actual = trainingFixed;
+        actual = userTrainings > 0 ? userTrainings : trainingFixed;
         target = scaledTrainingTarget;
         unit = "leads";
       } else if (u.role === "FLEET_PERF_MANAGER") {
@@ -250,9 +281,8 @@ export async function GET(request: NextRequest) {
       } else if (u.role === "FIELD_SUPERVISOR") {
         dept = "Field Operations";
         keyMetric = "Tasks Done";
-        // Filter tasks assigned to supervisor
         const userTasks = fieldTasks.filter((t) => 
-          (t.assigned_to && t.assigned_to.toLowerCase().includes(u.name.toLowerCase())) ||
+          (t.assigned_to && t.assigned_to.toLowerCase().includes(uName)) ||
           (u.fullName && t.assigned_to?.toLowerCase().includes(u.fullName.toLowerCase()))
         );
         actual = userTasks.filter((t) => t.status === "Completed").length || tasksCompleted;

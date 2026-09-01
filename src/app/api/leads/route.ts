@@ -148,6 +148,7 @@ export async function POST(request: Request) {
         has_permis: Boolean(has_permis),
         has_fiche_anthropometrique: Boolean(has_fiche_anthropometrique),
         has_confirmation_adresse: Boolean(has_confirmation_adresse),
+        handled_by: body.handled_by || null,
         status_changed_at: (brand_status || training_status || board_column !== "NEW_LEADS") ? new Date() : null,
       },
     });

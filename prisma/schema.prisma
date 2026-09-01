@@ -26,6 +26,7 @@ model Lead {
   has_confirmation_adresse   Boolean   @default(false)
   has_permis                 Boolean   @default(false)
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
+  handled_by                 String?   // Agent name / email who handled or updated this lead
   is_archived                Boolean   @default(false)
   notes                      String?   // Free-form notes from agents
   

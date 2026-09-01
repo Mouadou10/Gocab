@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { generateTrainingInviteURL, generateThankYouURL } from "@/lib/whatsapp";
 
@@ -68,6 +69,7 @@ interface Lead {
   campaign_source: string;
   created_at: string;
   status_changed_at?: string | null;
+  handled_by?: string | null;
   notes?: string | null;
 }
 
@@ -86,6 +88,7 @@ export default function LeadDrawer({
   onUpdate,
   whatsappTemplate,
 }: LeadDrawerProps) {
+  const { data: session } = useSession();
   const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
   const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
   const [city, setCity] = useState(lead.city || "");
@@ -267,9 +270,11 @@ export default function LeadDrawer({
           payload.board_column = "TRAINING_PIPELINE";
           payload.preorder_amount = preorderAmount ? parseFloat(preorderAmount) : null;
         } else {
-          payload.board_column = "TRAINING_PIPELINE";
         }
       }
+
+      // Record agent attribution
+      payload.handled_by = session?.user?.name || session?.user?.email || lead.handled_by || "Agent";
 
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",

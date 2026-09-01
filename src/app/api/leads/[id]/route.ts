@@ -69,6 +69,9 @@ export async function PATCH(
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
     }
+    if (body.handled_by !== undefined) {
+      updateData.handled_by = body.handled_by;
+    }
 
     // Guardrails removed per user request
     // ───────────────────────────────────────────────────────────────────────
