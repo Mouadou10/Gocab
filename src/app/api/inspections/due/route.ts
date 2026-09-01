@@ -6,44 +6,79 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Midnight of current day for date-only comparisons
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // 1. Find all inspections that happened this month
-    const inspectedThisMonth = await prisma.vehicleInspection.findMany({
+    // 1. Fetch all active vehicles that have at least one regulatory document configured
+    const allVehicles = await prisma.vehicle.findMany({
       where: {
-        inspection_date: {
-          gte: firstDayOfMonth,
-        },
-      },
-      select: {
-        vehicle_id: true,
-      },
-    });
-
-    const inspectedVehicleIds = new Set(inspectedThisMonth.map((i) => i.vehicle_id));
-
-    // 2. Fetch vehicles that have an Autorisation Expiry date configured and are not archived
-    const vehiclesWithAutorisation = await prisma.vehicle.findMany({
-      where: {
-        autorisation_expiry_date: {
-          not: null,
-        },
         is_archived: false,
+        OR: [
+          { autorisation_expiry_date: { not: null } },
+          { insurance_expiry_date: { not: null } },
+          { vignette_expiry_date: { not: null } },
+          { technical_inspection_expiry: { not: null } },
+        ],
       },
-      orderBy: { autorisation_expiry_date: "asc" },
     });
 
-    // 3. Filter for vehicles that HAVE NOT been inspected this month
-    const dueVehicles = vehiclesWithAutorisation.filter((v) => !inspectedVehicleIds.has(v.id));
+    // 2. Filter strictly for vehicles with documents expiring in <= 3 days or already expired
+    const dueVehiclesWithDocs: any[] = [];
 
-    if (dueVehicles.length === 0) {
+    for (const v of allVehicles) {
+      const docChecks = [
+        { name: "Autorisation", date: v.autorisation_expiry_date },
+        { name: "Assurance", date: v.insurance_expiry_date },
+        { name: "Vignette", date: v.vignette_expiry_date },
+        { name: "Visite Technique", date: v.technical_inspection_expiry },
+      ];
+
+      const urgentDocs: { name: string; date: Date; days_left: number; is_expired: boolean }[] = [];
+
+      for (const doc of docChecks) {
+        if (doc.date) {
+          const exp = new Date(doc.date);
+          const expDay = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate());
+          const diffMs = expDay.getTime() - today.getTime();
+          const daysLeft = Math.round(diffMs / (1000 * 3600 * 24));
+
+          // Condition: 3 days or fewer remaining (daysLeft <= 3), or already expired (daysLeft < 0)
+          if (daysLeft <= 3) {
+            urgentDocs.push({
+              name: doc.name,
+              date: exp,
+              days_left: daysLeft,
+              is_expired: daysLeft < 0,
+            });
+          }
+        }
+      }
+
+      if (urgentDocs.length > 0) {
+        // Sort urgent docs by earliest expiry (lowest days_left first)
+        urgentDocs.sort((a, b) => a.days_left - b.days_left);
+        const mostUrgent = urgentDocs[0];
+
+        dueVehiclesWithDocs.push({
+          vehicle: v,
+          urgentDocs,
+          mostUrgent,
+        });
+      }
+    }
+
+    if (dueVehiclesWithDocs.length === 0) {
       return NextResponse.json({ checkupsDue: [] });
     }
 
-    // 4. Fetch the most recent inspection for these due vehicles (to show their previous score)
+    // Sort vehicles: most overdue first (lowest days_left)
+    dueVehiclesWithDocs.sort((a, b) => a.mostUrgent.days_left - b.mostUrgent.days_left);
+
+    // 3. Fetch latest inspection for these due vehicles
+    const vehicleIds = dueVehiclesWithDocs.map((item) => item.vehicle.id);
     const previousInspections = await prisma.vehicleInspection.findMany({
       where: {
-        vehicle_id: { in: dueVehicles.map((v) => v.id) },
+        vehicle_id: { in: vehicleIds },
       },
       orderBy: { inspection_date: "desc" },
     });
@@ -55,13 +90,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // 5. Build the final response list with Autorisation Expiry details
-    const checkupsDue = dueVehicles.map((v) => {
+    // 4. Build final response list
+    const checkupsDue = dueVehiclesWithDocs.map(({ vehicle: v, urgentDocs, mostUrgent }) => {
       const prev = latestInspectionMap.get(v.id);
-      const expiryDate = v.autorisation_expiry_date ? new Date(v.autorisation_expiry_date) : null;
-      const daysLeft = expiryDate
-        ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 3600 * 24))
-        : null;
 
       return {
         vehicle_id: v.id,
@@ -71,9 +102,20 @@ export async function GET(request: Request) {
         assigned_driver_phone: v.assigned_driver_phone,
         previous_health_score: prev ? prev.health_score : null,
         previous_inspection_date: prev ? prev.inspection_date : null,
+        document_name: mostUrgent.name,
+        document_expiry_date: mostUrgent.date.toISOString(),
         autorisation_expiry_date: v.autorisation_expiry_date,
-        days_left: daysLeft,
-        is_expired: daysLeft !== null && daysLeft < 0,
+        insurance_expiry_date: v.insurance_expiry_date,
+        vignette_expiry_date: v.vignette_expiry_date,
+        technical_inspection_expiry: v.technical_inspection_expiry,
+        days_left: mostUrgent.days_left,
+        is_expired: mostUrgent.is_expired,
+        urgent_docs: urgentDocs.map((d) => ({
+          name: d.name,
+          date: d.date.toISOString(),
+          days_left: d.days_left,
+          is_expired: d.is_expired,
+        })),
       };
     });
 

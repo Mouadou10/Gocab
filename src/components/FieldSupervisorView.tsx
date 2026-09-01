@@ -47,9 +47,20 @@ interface CheckupDue {
   assigned_driver_phone: string | null;
   previous_health_score: number | null;
   previous_inspection_date: string | null;
+  document_name?: string | null;
+  document_expiry_date?: string | null;
   autorisation_expiry_date?: string | null;
+  insurance_expiry_date?: string | null;
+  vignette_expiry_date?: string | null;
+  technical_inspection_expiry?: string | null;
   days_left?: number | null;
   is_expired?: boolean;
+  urgent_docs?: {
+    name: string;
+    date: string;
+    days_left: number;
+    is_expired: boolean;
+  }[];
 }
 
 interface VehicleInspection {
@@ -573,7 +584,21 @@ export default function FieldSupervisorView() {
                     <span style={{ fontWeight: 700, color: "#1a1a2e", fontSize: 15 }}>{vehicle.plate_number}</span>
                     <span style={{ fontSize: 12, color: "#6b7280" }}>{vehicle.make_model}</span>
                   </div>
-                  {vehicle.autorisation_expiry_date && (
+                  {(vehicle.urgent_docs && vehicle.urgent_docs.length > 0) ? (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {vehicle.urgent_docs.map((doc, idx) => (
+                        <span key={idx} style={{
+                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                          background: doc.is_expired ? "#fee2e2" : "#fef3c7",
+                          color: doc.is_expired ? "#991b1b" : "#92400e",
+                          border: `1px solid ${doc.is_expired ? "#fca5a5" : "#fde68a"}`,
+                          display: "inline-flex", alignItems: "center", gap: 4
+                        }}>
+                          {doc.is_expired ? "🚨" : "⚠️"} {doc.name}: {doc.is_expired ? `Expiré (${Math.abs(doc.days_left)}j retard)` : `Expire dans ${doc.days_left}j`}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (vehicle.document_expiry_date || vehicle.autorisation_expiry_date) ? (
                     <div>
                       {vehicle.is_expired ? (
                         <span style={{
@@ -581,27 +606,19 @@ export default function FieldSupervisorView() {
                           background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5",
                           display: "inline-flex", alignItems: "center", gap: 4
                         }}>
-                          🚨 Expirée ({Math.abs(vehicle.days_left ?? 0)}j de retard)
+                          🚨 {vehicle.document_name || "Doc"} expiré ({Math.abs(vehicle.days_left ?? 0)}j de retard)
                         </span>
-                      ) : (vehicle.days_left !== undefined && vehicle.days_left !== null && vehicle.days_left <= 3) ? (
+                      ) : (
                         <span style={{
                           padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
                           background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a",
                           display: "inline-flex", alignItems: "center", gap: 4
                         }}>
-                          ⚠️ Expire dans {vehicle.days_left}j
-                        </span>
-                      ) : (
-                        <span style={{
-                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                          background: "#f3f4f6", color: "#374151", border: "1px solid #e5e7eb",
-                          display: "inline-flex", alignItems: "center", gap: 4
-                        }}>
-                          📄 Expire: {new Date(vehicle.autorisation_expiry_date).toLocaleDateString()} ({vehicle.days_left}j)
+                          ⚠️ {vehicle.document_name || "Doc"} expire dans {vehicle.days_left}j
                         </span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 {vehicle.assigned_driver_name && (
