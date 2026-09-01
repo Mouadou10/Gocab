@@ -204,6 +204,7 @@ export default function LeadDrawer({
         payload.has_permis = hasPermis;
 
         if (trainingStatus === "Scheduled" || !trainingStatus) {
+          payload.board_column = "TRAINING_PIPELINE";
           payload.training_status = "Scheduled";
           payload.brand_status = "Training fixed";
           if (trainingDate) {
@@ -231,10 +232,16 @@ export default function LeadDrawer({
           setTimeout(() => {
             alert("🚗 Assign Vehicle Module Unlocked");
           }, 300);
-        } else if (trainingStatus === "Pending" && reminderDate) {
-          payload.reminder_date = new Date(reminderDate).toISOString();
+        } else if (trainingStatus === "Pending") {
+          payload.board_column = "TRAINING_PIPELINE";
+          if (reminderDate) {
+            payload.reminder_date = new Date(reminderDate).toISOString();
+          }
         } else if (trainingStatus === "Preorder") {
+          payload.board_column = "TRAINING_PIPELINE";
           payload.preorder_amount = preorderAmount ? parseFloat(preorderAmount) : null;
+        } else {
+          payload.board_column = "TRAINING_PIPELINE";
         }
       }
 
@@ -677,9 +684,7 @@ export default function LeadDrawer({
                 isSubmitting ||
                 (boardType === "leads" && !brandStatus) ||
                 (boardType === "training" && !trainingStatus) ||
-                (showDatePicker && !trainingDate) ||
-                (showReminderPicker && !reminderDate) ||
-                (showPreorderInput && !preorderAmount)
+                (showDatePicker && !trainingDate)
               }
               className="px-5 py-2.5 bg-navy hover:bg-navy/95 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
             >
