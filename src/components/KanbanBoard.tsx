@@ -389,6 +389,7 @@ export default function KanbanBoard() {
       return leads.filter(
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
       );
+    } else {
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
         return leads.filter(
           (l) =>

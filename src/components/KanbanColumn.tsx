@@ -87,7 +87,7 @@ interface KanbanColumnProps {
 
 export default function KanbanColumn({
   columnId,
-  leads,
+  leads = [],
   onCardClick,
   isDailyGoalAchieved,
   totalNewLeadsCount,
@@ -96,6 +96,7 @@ export default function KanbanColumn({
   callsDoneToday,
   dailyCallsTarget,
 }: KanbanColumnProps) {
+  const safeLeads = Array.isArray(leads) ? leads : [];
   const { setNodeRef, isOver, attributes, listeners, transform, transition } = useSortable({
     id: columnId,
     data: { type: "Column", columnId },
@@ -145,8 +146,8 @@ export default function KanbanColumn({
           {isNewLeadsColumn && isDailyGoalAchieved
             ? "✅ Atteint"
             : isNewLeadsColumn && totalNewLeadsCount !== undefined
-            ? `${leads.length} / ${totalNewLeadsCount}`
-            : leads.length}
+            ? `${safeLeads.length} / ${totalNewLeadsCount}`
+            : safeLeads.length}
         </span>
       </div>
 
@@ -191,10 +192,10 @@ export default function KanbanColumn({
         )}
 
         <SortableContext
-          items={leads.map((l) => l.id)}
+          items={safeLeads.map((l) => l.id)}
           strategy={verticalListSortingStrategy}
         >
-          {leads.map((lead) => (
+          {safeLeads.map((lead) => (
             <LeadCard
               key={lead.id}
               lead={lead}
@@ -204,7 +205,7 @@ export default function KanbanColumn({
         </SortableContext>
 
         {/* Empty state */}
-        {leads.length === 0 && (
+        {safeLeads.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400/80">
             <Inbox className="w-10 h-10 mb-3 stroke-[1.5]" />
             <p className="text-[11px] font-medium tracking-wide uppercase">No Cards Here</p>

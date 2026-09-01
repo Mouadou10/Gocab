@@ -42,7 +42,8 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
   }, []);
 
   // Training leads are those in TRAINING_PIPELINE or VEHICLE_ASSIGNMENT
-  const trainingLeads = leads.filter(l =>
+  const safeLeads = Array.isArray(leads) ? leads : [];
+  const trainingLeads = safeLeads.filter(l =>
     l.board_column === 'TRAINING_PIPELINE' || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
 
