@@ -38,11 +38,10 @@ const TRAINING_STATUSES = [
   { key: "Attended and not interested", label: "Attended & Not Interested", icon: "🚫" },
   { key: "Pending", label: "Pending (En attente)", icon: "⏳" },
   { key: "Refused the offer", label: "Refused Offer (Refusé)", icon: "❌" },
-  { key: "Accept offer", label: "Accept Offer (Accepté)", icon: "🤝" },
+  { key: "Assign vehicle", label: "Assign Vehicle (Affectation)", icon: "🚗" },
   { key: "Not attended", label: "Not Attended (Absent)", icon: "⚠️" },
   { key: "No response", label: "No Response (Injoignable)", icon: "📞" },
   { key: "Preorder", label: "Preorder (Précommande)", icon: "💵" },
-  { key: "VEHICLE_ASSIGNMENT", label: "Vehicle Assignment (Affectation)", icon: "🚗" },
 ] as const;
 
 const LEADS_STATUSES = [
@@ -125,10 +124,10 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
     let targetPreorderAmount: number | null = null;
 
     if (pipeline === "training") {
-      if (trainingStatus === "VEHICLE_ASSIGNMENT") {
+      if (trainingStatus === "Assign vehicle" || trainingStatus === "VEHICLE_ASSIGNMENT") {
         targetBoardColumn = "VEHICLE_ASSIGNMENT";
         targetBrandStatus = "Training fixed";
-        targetTrainingStatus = "Accept offer";
+        targetTrainingStatus = "Assign vehicle";
       } else {
         targetBoardColumn = "TRAINING_PIPELINE";
         targetBrandStatus = "Training fixed";

@@ -28,7 +28,7 @@ const TRAINING_STATUS_OPTIONS = [
   "Attended and not interested",
   "Pending",
   "Refused the offer",
-  "Accept offer",
+  "Assign vehicle",
   "Not attended",
   "No response",
   "Preorder",
@@ -124,6 +124,28 @@ export default function LeadDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
+  // Available vehicles state for Assign vehicle status
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
+  const [isLoadingVehicles, setIsLoadingVehicles] = useState(false);
+
+  // Fetch available vehicles when Assign vehicle is selected
+  useEffect(() => {
+    if (trainingStatus === "Assign vehicle" || trainingStatus === "Accept offer") {
+      setIsLoadingVehicles(true);
+      fetch("/api/vehicles")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.vehicles) {
+            setVehicles(data.vehicles);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsLoadingVehicles(false));
+    }
+  }, [trainingStatus]);
+
   // Trigger slide-in animation on mount
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 50);
@@ -210,12 +232,12 @@ export default function LeadDrawer({
           if (trainingDate) {
             payload.reminder_date = new Date(trainingDate).toISOString();
           }
-        } else if (trainingStatus === "Accept offer") {
+        } else if (trainingStatus === "Assign vehicle" || trainingStatus === "Accept offer") {
           // Validation checklist check: All 4 documents must be checked
           const isKycComplete = hasCin && hasFiche && hasConfirmation && hasPermis;
           if (!isKycComplete) {
             setValidationError(
-              "⚠️ KYC Checklist Incomplete! Please verify CIN, Fiche anthropométrique, Confirmation d'adresse, and Permis to proceed to Accept offer."
+              "⚠️ KYC Checklist Incomplete! Please verify CIN, Fiche anthropométrique, Confirmation d'adresse, and Permis to proceed to Assign vehicle."
             );
             setIsSubmitting(false);
             return;
@@ -223,6 +245,10 @@ export default function LeadDrawer({
 
           // Move to vehicle assignment
           payload.board_column = "VEHICLE_ASSIGNMENT";
+          payload.training_status = "Assign vehicle";
+          if (selectedVehicleId) {
+            payload.assigned_vehicle_id = selectedVehicleId;
+          }
 
           // Auto-trigger WhatsApp thank-you message
           const waUrl = generateThankYouURL(lead.sanitized_phone);
@@ -549,6 +575,103 @@ export default function LeadDrawer({
                     placeholder="Enter amount given"
                     className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy font-mono"
                   />
+                </div>
+              )}
+
+              {/* Conditional Vehicle Selection for Assign vehicle */}
+              {(trainingStatus === "Assign vehicle" || trainingStatus === "Accept offer") && (
+                <div className="animate-slide-down p-4 bg-emerald-50/80 border border-emerald-300 rounded-2xl space-y-3">
+                  {(() => {
+                    const availableList = vehicles.filter((v) => {
+                      const isAvail = v.status === "Available" || v.status === "DISPONIBLE";
+                      if (!isAvail && v.id !== selectedVehicleId) return false;
+                      if (!vehicleSearch.trim()) return true;
+                      const q = vehicleSearch.toLowerCase();
+                      return (
+                        v.plate_number.toLowerCase().includes(q) ||
+                        v.make_model.toLowerCase().includes(q) ||
+                        (v.hub_city && v.hub_city.toLowerCase().includes(q))
+                      );
+                    });
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                            <span>🚗</span>
+                            <span>Affecter un Véhicule Disponible</span>
+                          </label>
+                          <span className="text-3xs font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                            {availableList.length} Disponible(s)
+                          </span>
+                        </div>
+
+                        <input
+                          type="text"
+                          placeholder="🔍 Rechercher immatriculation, modèle, ville..."
+                          value={vehicleSearch}
+                          onChange={(e) => setVehicleSearch(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-400 outline-none"
+                        />
+
+                        {isLoadingVehicles ? (
+                          <div className="py-3 text-center text-xs text-gray-500">Chargement des véhicules...</div>
+                        ) : availableList.length === 0 ? (
+                          <div className="py-3 text-center text-xs text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+                            Aucun véhicule disponible trouvé.
+                          </div>
+                        ) : (
+                          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                            {availableList.map((v) => {
+                              const isSelected = selectedVehicleId === v.id;
+                              return (
+                                <div
+                                  key={v.id}
+                                  onClick={() => setSelectedVehicleId(isSelected ? "" : v.id)}
+                                  className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                                    isSelected
+                                      ? "bg-emerald-600 text-white border-emerald-700 shadow-sm font-bold"
+                                      : "bg-white text-gray-800 border-emerald-200 hover:bg-emerald-100/60"
+                                  }`}
+                                >
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold tracking-tight">{v.plate_number}</span>
+                                      <span className={`text-3xs px-1.5 py-0.2 rounded font-medium ${
+                                        isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
+                                      }`}>
+                                        {v.hub_city}
+                                      </span>
+                                    </div>
+                                    <p className={`text-2xs mt-0.5 ${isSelected ? "text-emerald-100" : "text-gray-500"}`}>
+                                      {v.make_model} {v.year ? `(${v.year})` : ""} {v.current_mileage ? `• ${v.current_mileage.toLocaleString()} KM` : ""}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    {isSelected ? (
+                                      <span className="text-xs bg-white text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                                        ✓ Sélectionné
+                                      </span>
+                                    ) : (
+                                      <span className="text-3xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                                        Choisir
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {selectedVehicleId && (
+                          <p className="text-3xs text-emerald-800 font-medium">
+                            ✓ Ce véhicule sera automatiquement affecté au chauffeur et passera au statut <strong>ACTIF</strong>.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

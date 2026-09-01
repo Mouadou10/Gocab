@@ -124,11 +124,10 @@ const TRAINING_COLUMNS = [
   "Attended and not interested",
   "Pending",
   "Refused the offer",
-  "Accept offer",
+  "Assign vehicle",
   "Not attended",
   "No response",
   "Preorder",
-  "VEHICLE_ASSIGNMENT",
 ] as const;
 
 export default function KanbanBoard() {
@@ -390,9 +389,13 @@ export default function KanbanBoard() {
       return leads.filter(
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
       );
-    } else {
-      if (column === "VEHICLE_ASSIGNMENT") {
-        return leads.filter((l) => l.board_column === "VEHICLE_ASSIGNMENT");
+      if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
+        return leads.filter(
+          (l) =>
+            l.board_column === "VEHICLE_ASSIGNMENT" ||
+            l.training_status === "Assign vehicle" ||
+            l.training_status === "Accept offer"
+        );
       }
       // If training_status is unset but board_column is TRAINING_PIPELINE, fallback to "Scheduled"
       if (column === "Scheduled") {
@@ -570,7 +573,7 @@ export default function KanbanBoard() {
     }
     // Handle Training Tab Drops
     else if (activeTab === "training") {
-      if (targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
+      if (targetColumn === "Assign vehicle" || targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
         // Enforce KYC Document Checklist validation
         const isKycComplete =
           lead.has_cin &&
@@ -580,18 +583,18 @@ export default function KanbanBoard() {
 
         if (!isKycComplete) {
           alert(
-            "⚠️ Cannot accept offer: KYC Documents Checklist is incomplete!\nPlease verify CIN, Fiche anthropométrique, Confirmation d'adresse, and Permis first."
+            "⚠️ Cannot assign vehicle: KYC Documents Checklist is incomplete!\nPlease verify CIN, Fiche anthropométrique, Confirmation d'adresse, and Permis first."
           );
           // Automatically open the details drawer to guide the user
           setSelectedLead(lead);
           return;
         }
 
-        // Move to Vehicle Assignment / Accept offer immediately
+        // Move to Vehicle Assignment immediately and open drawer to choose vehicle
         setLeads((prev) =>
           prev.map((l) =>
             l.id === leadId
-              ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Accept offer" }
+              ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" }
               : l
           )
         );
@@ -599,14 +602,12 @@ export default function KanbanBoard() {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "VEHICLE_ASSIGNMENT", training_status: "Accept offer" }),
+            body: JSON.stringify({ board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" }),
           });
           // Trigger WhatsApp thank you & Alert
           const waUrl = generateThankYouURL(lead.sanitized_phone);
           window.open(waUrl, "_blank");
-          setTimeout(() => {
-            alert("🚗 Assign Vehicle Module Unlocked");
-          }, 300);
+          setSelectedLead(lead);
         } catch (err) {
           fetchLeads();
         }
@@ -708,11 +709,11 @@ export default function KanbanBoard() {
           }
         }
       } else {
-        if (targetColumn === "VEHICLE_ASSIGNMENT") {
-          if (lead.board_column !== "VEHICLE_ASSIGNMENT") {
+        if (targetColumn === "Assign vehicle" || targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
+          if (lead.board_column !== "VEHICLE_ASSIGNMENT" || lead.training_status !== "Assign vehicle") {
             setLeads((prev) =>
               prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Accept offer" } : l
+                l.id === leadId ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" } : l
               )
             );
           }

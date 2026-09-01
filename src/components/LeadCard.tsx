@@ -56,7 +56,7 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
     transition,
   };
 
-  const isAccepted = lead.training_status === "Accept offer";
+  const isAccepted = lead.training_status === "Assign vehicle" || lead.training_status === "Accept offer" || lead.board_column === "VEHICLE_ASSIGNMENT";
   const isTrainingFixed = lead.brand_status === "Training fixed";
 
   const kycCount = [

@@ -52,11 +52,12 @@ const COLUMN_LABELS: Record<string, string> = {
   "Attended and not interested": "Attended & Not Interested",
   Pending: "Pending",
   "Refused the offer": "Refused Offer",
-  "Accept offer": "Accept Offer",
+  "Assign vehicle": "Assign Vehicle",
+  "Accept offer": "Assign Vehicle",
   "Not attended": "Not Attended",
   "No response": "No Response",
   Preorder: "Preorder",
-  VEHICLE_ASSIGNMENT: "Vehicle Assignment",
+  VEHICLE_ASSIGNMENT: "Assign Vehicle",
 };
 
 /** Column-specific accent colors (left border gradient). */
@@ -65,8 +66,9 @@ const COLUMN_ACCENTS: Record<string, string> = {
   "Training fixed": "from-teal-500 to-emerald-500",
   "Already a client": "from-olive to-green-600",
   Scheduled: "from-indigo-500 to-purple-500",
-  "Accept offer": "from-olive to-emerald-600",
-  VEHICLE_ASSIGNMENT: "from-olive to-green-600",
+  "Assign vehicle": "from-emerald-500 to-teal-600",
+  "Accept offer": "from-emerald-500 to-teal-600",
+  VEHICLE_ASSIGNMENT: "from-emerald-500 to-teal-600",
   Pending: "from-amber-500 to-orange-500",
   Preorder: "from-pink-500 to-rose-500",
 };

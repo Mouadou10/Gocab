@@ -91,8 +91,9 @@ export async function PATCH(
       data: updateData,
     });
 
-    // ── Auto-Convert Lead to DriverProfile on "Accept offer" ────────────────
+    // ── Auto-Convert Lead to DriverProfile & Assign Vehicle ────────────────
     if (
+      updatedLead.training_status === "Assign vehicle" ||
       updatedLead.training_status === "Accept offer" ||
       updatedLead.board_column === "VEHICLE_ASSIGNMENT"
     ) {
@@ -100,6 +101,8 @@ export async function PATCH(
         const cinNumber =
           (updatedLead as any).national_id?.trim() ||
           `CIN-${updatedLead.sanitized_phone.replace(/\D/g, "").slice(-6)}`;
+
+        const vehicleId = body.assigned_vehicle_id || null;
 
         const existingDriver = await prisma.driverProfile.findFirst({
           where: {
@@ -110,8 +113,10 @@ export async function PATCH(
           },
         });
 
+        let driverId = existingDriver?.id;
+
         if (!existingDriver) {
-          await prisma.driverProfile.create({
+          const newDriver = await prisma.driverProfile.create({
             data: {
               fullName: updatedLead.raw_name,
               phoneSanitized: updatedLead.sanitized_phone,
@@ -119,24 +124,38 @@ export async function PATCH(
               age: (updatedLead as any).age || 28,
               licenseSeniority: (updatedLead as any).permis_seniority_years || 2,
               isKycVerified: true,
-              contractType: "STANDARD",
+              contractType: "DAILY",
               monthlyTripCount: 0,
               currentArrearsMAD: 0.0,
               defaultStage: "NOMINAL",
-              assignedVehicleId: (updatedLead as any).assigned_vehicle_id || null,
+              assignedVehicleId: vehicleId,
             },
           });
+          driverId = newDriver.id;
           console.log(`✨ Auto-converted Lead ${updatedLead.raw_name} to DriverProfile (${updatedLead.sanitized_phone})`);
         } else {
-          // Update KYC status and vehicle if changed
+          // Update KYC status and vehicle
           await prisma.driverProfile.update({
             where: { id: existingDriver.id },
             data: {
               fullName: updatedLead.raw_name,
               isKycVerified: true,
-              assignedVehicleId: (updatedLead as any).assigned_vehicle_id || existingDriver.assignedVehicleId,
+              assignedVehicleId: vehicleId || existingDriver.assignedVehicleId,
             },
           });
+        }
+
+        // If a vehicle was selected, mark vehicle as ACTIF and attach driver details
+        if (vehicleId) {
+          await prisma.vehicle.update({
+            where: { id: vehicleId },
+            data: {
+              status: "ACTIF",
+              assigned_driver_name: updatedLead.raw_name,
+              assigned_driver_phone: updatedLead.sanitized_phone,
+            },
+          });
+          console.log(`🚗 Assigned vehicle ${vehicleId} to driver ${updatedLead.raw_name}`);
         }
       } catch (driverErr: any) {
         console.error("Auto-convert to DriverProfile warning:", driverErr?.message);

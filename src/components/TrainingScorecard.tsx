@@ -56,7 +56,7 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
   const totalInTraining = filteredLeads.length;
 
   // Conversion statuses — the goal of the training pipeline
-  const CONVERSION_STATUSES = ['Accept offer', 'Preorder'];
+  const CONVERSION_STATUSES = ['Assign vehicle', 'Accept offer', 'Preorder', 'VEHICLE_ASSIGNMENT'];
   const converted = filteredLeads.filter(l =>
     CONVERSION_STATUSES.includes(l.training_status) || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
@@ -212,12 +212,14 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
 
             <button
               type="button"
-              onClick={() => onSelectStatus?.('Accept offer')}
-              className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
-              title="Click to place 'Accept Offer' in 2nd column position"
+              onClick={() => onSelectStatus?.('Assign vehicle')}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
+              title="Click to place 'Assign Vehicle' in 2nd column position"
             >
-              <span>Accept Offer:</span>
-              <span className="font-bold">{statusCounts['Accept offer'] || 0}</span>
+              <span>Assign Vehicle:</span>
+              <span className="font-bold">
+                {(statusCounts['Assign vehicle'] || 0) + (statusCounts['Accept offer'] || 0) + (statusCounts['VEHICLE_ASSIGNMENT'] || 0)}
+              </span>
             </button>
 
             <button
@@ -248,16 +250,6 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
             >
               <span>Preorder:</span>
               <span className="font-bold">{statusCounts['Preorder'] || 0}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onSelectStatus?.('VEHICLE_ASSIGNMENT')}
-              className="text-xs font-semibold px-2.5 py-1.5 bg-navy/10 text-navy hover:bg-navy/20 hover:shadow-sm transition-all rounded-lg cursor-pointer flex items-center gap-1.5"
-              title="Click to place 'Vehicle Assigned' in 2nd column position"
-            >
-              <span>Vehicle Assigned:</span>
-              <span className="font-bold">{statusCounts['VEHICLE_ASSIGNMENT'] || 0}</span>
             </button>
           </div>
         </div>
