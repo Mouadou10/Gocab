@@ -41,6 +41,7 @@ import DashboardView from "./DashboardView";
 import DriversView from "./DriversView";
 import PasswordChangeModal from "./PasswordChangeModal";
 import AddLeadModal from "./AddLeadModal";
+import PowerBiDashboardView from "./PowerBiDashboardView";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
@@ -68,12 +69,12 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:  ["dashboard", "leads", "training", "drivers"],
-  FLEET_PERF_MANAGER:   ["dashboard", "drivers", "fleet", "tickets", "performance"],
-  FIELD_SUPERVISOR:     ["dashboard", "drivers", "fleet", "field", "tickets"],
-  FINANCE_OFFICER:      ["dashboard", "drivers", "performance", "insurance"],
-  OPS_MANAGER:          ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
-  ADMIN:                ["dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  LEAD_ACQUISITION_JR:  ["dashboard", "kpi-dashboard", "leads", "training", "drivers"],
+  FLEET_PERF_MANAGER:   ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance"],
+  FIELD_SUPERVISOR:     ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets"],
+  FINANCE_OFFICER:      ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance"],
+  OPS_MANAGER:          ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  ADMIN:                ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -94,7 +95,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:               "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
@@ -782,7 +783,20 @@ export default function KanbanBoard() {
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                📊 {t.home}
+                🏠 {t.dashboard}
+              </button>
+            )}
+
+            {allowedTabs.includes("kpi-dashboard") && (
+              <button
+                onClick={() => handleSelectTab("kpi-dashboard")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "kpi-dashboard"
+                    ? "bg-white text-navy shadow-sm ring-1 ring-gray-200/50 font-bold"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                📊 KPI Analytics
               </button>
             )}
 
@@ -998,6 +1012,8 @@ export default function KanbanBoard() {
       <main className="px-6 py-6 flex-1 w-full overflow-hidden flex flex-col">
         {activeTab === "dashboard" ? (
           <DashboardView />
+        ) : activeTab === "kpi-dashboard" ? (
+          <PowerBiDashboardView />
         ) : activeTab === "settings" ? (
           <SettingsView />
         ) : activeTab === "drivers" ? (
