@@ -141,7 +141,10 @@ export default function KanbanBoard() {
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
 
   const userRoleTabs = rolePermissions[userRole] || DEFAULT_ROLE_PERMISSIONS[userRole] || DEFAULT_ROLE_PERMISSIONS.ADMIN || [];
-  const allowedTabs = userRoleTabs.includes("drivers") ? userRoleTabs : [...userRoleTabs, "drivers"];
+  let allowedTabs = userRoleTabs.includes("drivers") ? userRoleTabs : [...userRoleTabs, "drivers"];
+  if (!allowedTabs.includes("kpi-dashboard")) {
+    allowedTabs = ["dashboard", "kpi-dashboard", ...allowedTabs.filter((t) => t !== "dashboard")];
+  }
 
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
@@ -257,6 +260,9 @@ export default function KanbanBoard() {
               const tabs = Array.isArray(v) ? (v as TabType[]) : [];
               if (!tabs.includes("drivers")) {
                 tabs.push("drivers");
+              }
+              if (!tabs.includes("kpi-dashboard")) {
+                tabs.push("kpi-dashboard");
               }
               merged[k] = tabs;
             }
