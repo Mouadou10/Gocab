@@ -397,17 +397,38 @@ export default function KanbanBoard() {
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
       );
     } else {
+      // Training Tab: Only show leads scheduled for today (hide past leads).
+      const isDateValidForToday = (l: Lead) => {
+        if (!l.reminder_date) return true; // Keep leads without a date for safety, or we could hide them
+        try {
+          const d = new Date(l.reminder_date);
+          if (!isNaN(d.getTime())) {
+            const scheduledDateStr = d.toISOString().split("T")[0];
+            // Hide previous leads (before today)
+            if (scheduledDateStr < todayStr) {
+              return false;
+            }
+            // For columns other than "Scheduled", do we hide future leads? 
+            // The user said "start over with showing only person are gonna attend the same day".
+            // So we'll enforce the same rules as Scheduled: only today's leads show up.
+          }
+        } catch {}
+        return true;
+      };
+
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
         return leads.filter(
           (l) =>
-            l.board_column === "VEHICLE_ASSIGNMENT" ||
+            isDateValidForToday(l) &&
+            (l.board_column === "VEHICLE_ASSIGNMENT" ||
             l.training_status === "Assign vehicle" ||
-            l.training_status === "Accept offer"
+            l.training_status === "Accept offer")
         );
       }
       // If training_status is unset but board_column is TRAINING_PIPELINE, fallback to "Scheduled"
       if (column === "Scheduled") {
         return leads.filter((l) => {
+          if (!isDateValidForToday(l)) return false;
           if (l.board_column !== "TRAINING_PIPELINE") return false;
           if (l.training_status && l.training_status !== "Scheduled") return false;
 
@@ -427,7 +448,7 @@ export default function KanbanBoard() {
         });
       }
       return leads.filter(
-        (l) => l.board_column === "TRAINING_PIPELINE" && l.training_status === column
+        (l) => isDateValidForToday(l) && l.board_column === "TRAINING_PIPELINE" && l.training_status === column
       );
     }
   }

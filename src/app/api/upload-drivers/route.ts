@@ -69,6 +69,15 @@ export async function POST(request: NextRequest) {
     // Fetch all vehicles to enable multi-pattern fuzzy matching
     const allVehicles = await prisma.vehicle.findMany();
 
+    // Fetch the snapshot of currently assigned vehicles BEFORE we process the CSV
+    // This allows us to compare against the final state to detect churn.
+    const initialAssignedVehicles = await prisma.vehicle.findMany({
+      where: {
+        assigned_driver_name: { not: null },
+      },
+      include: { driverProfile: true },
+    });
+
     // Helper to find vehicle by immat
     const findMatchingVehicle = (rawPlate: string) => {
       if (!rawPlate) return null;
@@ -106,6 +115,11 @@ export async function POST(request: NextRequest) {
 
       return null;
     };
+
+    // Track what is assigned in the CSV to detect churn
+    const csvVehicleAssignments: Record<string, { driverName: string; driverPhone: string; driverId: string }> = {};
+    const csvDriverIds = new Set<string>();
+    let churned_drivers = 0;
 
     for (const row of data) {
       total_rows++;
@@ -183,8 +197,10 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      let driverRecord;
+
       if (!existing) {
-        const created = await prisma.driverProfile.create({
+        driverRecord = await prisma.driverProfile.create({
           data: {
             fullName,
             phoneSanitized,
@@ -198,6 +214,7 @@ export async function POST(request: NextRequest) {
             isKycVerified: true,
             monthlyTripCount: 0,
             assignedVehicleId,
+            is_archived: false,
           },
         });
 
@@ -206,8 +223,8 @@ export async function POST(request: NextRequest) {
             where: { id: assignedVehicleId },
             data: {
               status: "Actif",
-              assigned_driver_name: created.fullName,
-              assigned_driver_phone: created.phoneSanitized,
+              assigned_driver_name: driverRecord.fullName,
+              assigned_driver_phone: driverRecord.phoneSanitized,
             },
           });
           linked_vehicles++;
@@ -217,7 +234,7 @@ export async function POST(request: NextRequest) {
         // Update existing driver profile with real contact info, while preserving or updating vehicle
         const finalVehicleId = assignedVehicleId || existing.assignedVehicleId;
 
-        const updatedDriver = await prisma.driverProfile.update({
+        driverRecord = await prisma.driverProfile.update({
           where: { id: existing.id },
           data: {
             fullName,
@@ -228,6 +245,7 @@ export async function POST(request: NextRequest) {
             consecutiveUnpaidDays: currentArrearsMAD >= 600 ? 2 : currentArrearsMAD >= 300 ? 1 : existing.consecutiveUnpaidDays,
             defaultStage,
             assignedVehicleId: finalVehicleId,
+            is_archived: false,
           },
         });
 
@@ -236,15 +254,84 @@ export async function POST(request: NextRequest) {
             where: { id: finalVehicleId },
             data: {
               status: "Actif",
-              assigned_driver_name: updatedDriver.fullName,
-              assigned_driver_phone: updatedDriver.phoneSanitized,
+              assigned_driver_name: driverRecord.fullName,
+              assigned_driver_phone: driverRecord.phoneSanitized,
             },
           });
           linked_vehicles++;
         }
         updated++;
       }
+
+      csvDriverIds.add(driverRecord.id);
+
+      // Record this assignment for the churn check later
+      if (assignedVehicleId && matchedVehicle) {
+        csvVehicleAssignments[assignedVehicleId] = {
+          driverName: driverRecord.fullName,
+          driverPhone: driverRecord.phoneSanitized,
+          driverId: driverRecord.id,
+        };
+      }
     }
+
+    // --- CHURN DETECTION LOGIC ---
+    for (const vehicle of initialAssignedVehicles) {
+      const csvAssignment = csvVehicleAssignments[vehicle.id];
+      const previousDriverName = vehicle.assigned_driver_name;
+      const previousDriverPhone = vehicle.assigned_driver_phone;
+
+      // 1. Vehicle is missing entirely from the CSV OR is no longer assigned to anyone in the CSV
+      if (!csvAssignment) {
+        await prisma.churnEvent.create({
+          data: {
+            vehicle_id: vehicle.id,
+            plate_number: vehicle.plate_number,
+            driver_name: previousDriverName,
+            driver_phone: previousDriverPhone,
+            reason: "Auto-churned via CSV Upload: Vehicle is no longer in the active drivers list.",
+          }
+        });
+        churned_drivers++;
+
+        // Free up the vehicle
+        await prisma.vehicle.update({
+          where: { id: vehicle.id },
+          data: {
+            status: "Available",
+            assigned_driver_name: null,
+            assigned_driver_phone: null,
+          }
+        });
+      } 
+      // 2. Vehicle changed hands (assigned to a DIFFERENT driver in the CSV)
+      else if (csvAssignment.driverPhone !== previousDriverPhone) {
+        await prisma.churnEvent.create({
+          data: {
+            vehicle_id: vehicle.id,
+            plate_number: vehicle.plate_number,
+            driver_name: previousDriverName,
+            driver_phone: previousDriverPhone,
+            reason: `Auto-churned via CSV Upload: Vehicle reassigned to new driver (${csvAssignment.driverName}).`,
+          }
+        });
+        churned_drivers++;
+      }
+    }
+
+    // --- ARCHIVE MISSING DRIVERS ---
+    // Any driver NOT in this CSV should be archived and unassigned, since CSV is the single source of truth.
+    const csvDriverIdsArray = Array.from(csvDriverIds);
+    await prisma.driverProfile.updateMany({
+      where: {
+        id: { notIn: csvDriverIdsArray },
+        is_archived: false // Only update those not already archived
+      },
+      data: {
+        is_archived: true,
+        assignedVehicleId: null
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -254,6 +341,8 @@ export async function POST(request: NextRequest) {
         updated,
         skipped_invalid,
         linked_vehicles,
+        churned_drivers,
+        archived_drivers: (await prisma.driverProfile.count({ where: { id: { notIn: csvDriverIdsArray }, is_archived: true } })) // Note: This count includes previously archived drivers, but gives a general sense.
       },
     });
   } catch (error: any) {

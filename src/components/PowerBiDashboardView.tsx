@@ -26,17 +26,15 @@ interface PerformanceData {
       trainingFixed: number;
       trainingTarget: number;
       trainingAttainmentPct: number;
-      conversionRate: number;
-      conversionTarget: number;
+      attendedPersons: number;
     };
     trainingOnboarding: {
-      attendedCount: number;
+      attendanceRate: number;
       assignedVehiclesCount: number;
       preordersCount: number;
       preordersTarget: number;
       preordersAttainmentPct: number;
       totalPreorderMAD: number;
-      attendanceRate: number;
     };
     fleetCollections: {
       totalMorningTargetMAD: number;
@@ -45,26 +43,20 @@ interface PerformanceData {
       recoveryObjectivePct: number;
       collectionAttainmentPct: number;
       isObjectiveMet: boolean;
+      avgDaysInsuranceRepair: number;
+      avgHoursAdBlueVidange: number;
+      weeklyChurnRate: number;
     };
     fieldOperations: {
+      avgHoursVehicleRecovery: number;
+      monthlyChecksCount: number;
       tasksTotal: number;
       tasksCompleted: number;
       tasksFailed: number;
       tasksTarget: number;
       tasksAttainmentPct: number;
       taskCompletionRate: number;
-      inspectionsCount: number;
       avgHealthScore: number;
-    };
-    fleetMaintenance: {
-      totalVehicles: number;
-      activeVehicles: number;
-      fleetUptimePct: number;
-      fleetUptimeTarget: number;
-      ticketsTotal: number;
-      ticketsResolved: number;
-      ticketResolutionRate: number;
-      ticketResolutionTarget: number;
     };
   };
   leaderboard: {
@@ -443,11 +435,11 @@ export default function PowerBiDashboardView() {
                         📞 Acquisition Prospects
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.leadAcquisition.trainingFixed}{" "}
-                        <span className="text-xs text-gray-500 font-normal">/ {kpis.leadAcquisition.trainingTarget} Obj.</span>
+                        {kpis.leadAcquisition.callsDone}{" "}
+                        <span className="text-xs text-gray-500 font-normal">/ {kpis.leadAcquisition.callsTarget} Appels Obj.</span>
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Formations fixées ({kpis.leadAcquisition.callsDone} appels traités)
+                        {kpis.leadAcquisition.trainingFixed} Formations fixées par jour
                       </p>
                     </div>
                     <span className="text-2xl">🎯</span>
@@ -456,28 +448,28 @@ export default function PowerBiDashboardView() {
                   {/* Progress Bar */}
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Atteinte Objectif :</span>
-                      <span className={kpis.leadAcquisition.trainingAttainmentPct >= 100 ? "text-emerald-700" : "text-blue-700"}>
-                        {kpis.leadAcquisition.trainingAttainmentPct}%
+                      <span className="text-gray-600">Atteinte Objectif Appels :</span>
+                      <span className={kpis.leadAcquisition.callsAttainmentPct >= 100 ? "text-emerald-700" : "text-blue-700"}>
+                        {kpis.leadAcquisition.callsAttainmentPct}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          kpis.leadAcquisition.trainingAttainmentPct >= 100
+                          kpis.leadAcquisition.callsAttainmentPct >= 100
                             ? "bg-emerald-500"
-                            : kpis.leadAcquisition.trainingAttainmentPct >= 80
+                            : kpis.leadAcquisition.callsAttainmentPct >= 80
                             ? "bg-blue-600"
                             : "bg-amber-500"
                         }`}
-                        style={{ width: `${Math.min(100, kpis.leadAcquisition.trainingAttainmentPct)}%` }}
+                        style={{ width: `${Math.min(100, kpis.leadAcquisition.callsAttainmentPct)}%` }}
                       />
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Taux de conversion :</span>
-                    <strong className="text-gray-900">{kpis.leadAcquisition.conversionRate}% (Cible: 25%)</strong>
+                    <span>Personnes Présentes :</span>
+                    <strong className="text-gray-900">{kpis.leadAcquisition.attendedPersons} présences</strong>
                   </div>
                 </div>
 
@@ -486,14 +478,13 @@ export default function PowerBiDashboardView() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-3xs font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full inline-block">
-                        🎓 Formation & Onboarding
+                        🎓 Onboarding
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.trainingOnboarding.preordersCount}{" "}
-                        <span className="text-xs text-gray-500 font-normal">/ {kpis.trainingOnboarding.preordersTarget} Obj.</span>
+                        {kpis.trainingOnboarding.attendanceRate}%
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Précommandes ({kpis.trainingOnboarding.assignedVehiclesCount} véhicules affectés)
+                        Taux de présence (Attended / Fixed)
                       </p>
                     </div>
                     <span className="text-2xl">🚗</span>
@@ -502,9 +493,9 @@ export default function PowerBiDashboardView() {
                   {/* Progress Bar */}
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Atteinte Précommandes :</span>
+                      <span className="text-gray-600">Objectif Précommandes :</span>
                       <span className={kpis.trainingOnboarding.preordersAttainmentPct >= 100 ? "text-emerald-700" : "text-purple-700"}>
-                        {kpis.trainingOnboarding.preordersAttainmentPct}%
+                        {kpis.trainingOnboarding.preordersCount} / {kpis.trainingOnboarding.preordersTarget}
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
@@ -520,64 +511,62 @@ export default function PowerBiDashboardView() {
                   </div>
 
                   <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Total Acomptes MAD :</span>
-                    <strong className="text-emerald-700 font-bold">{kpis.trainingOnboarding.totalPreorderMAD.toLocaleString()} MAD</strong>
+                    <span>Véhicules affectés :</span>
+                    <strong className="text-emerald-700 font-bold">{kpis.trainingOnboarding.assignedVehiclesCount} affectations</strong>
                   </div>
                 </div>
 
-                {/* 3. Cash Collections Card (60% Rule) */}
+                {/* 3. Cash Collections & Support SLAs Card */}
                 <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-3xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full inline-block">
-                        💰 Recouvrement Cash (60%)
+                        💸 Support & Driver Perf
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
                         {kpis.fleetCollections.collectionRecoveryRate}%
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        {kpis.fleetCollections.totalEveningCollectedMAD.toLocaleString()} / {kpis.fleetCollections.totalMorningTargetMAD.toLocaleString()} MAD
+                        Cash Recouvrement (Cible: 60%)
                       </p>
                     </div>
-                    <span className="text-2xl">💵</span>
+                    <span className="text-2xl">🔧</span>
                   </div>
 
                   {/* 60% Objective Visual Progress */}
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Cible Minimum (60%) :</span>
-                      <span className={kpis.fleetCollections.isObjectiveMet ? "text-emerald-700 font-black" : "text-amber-700"}>
-                        {kpis.fleetCollections.isObjectiveMet ? "✅ Objectif Atteint" : "⏳ En Cours"}
+                      <span className="text-gray-600">Assurance (jours) :</span>
+                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= 5 ? "text-emerald-700 font-black" : "text-red-700"}>
+                        {kpis.fleetCollections.avgDaysInsuranceRepair} j
                       </span>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden relative">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          kpis.fleetCollections.isObjectiveMet ? "bg-emerald-500" : "bg-amber-500"
-                        }`}
-                        style={{ width: `${Math.min(100, (kpis.fleetCollections.collectionRecoveryRate / 60) * 100)}%` }}
-                      />
+                    <div className="flex justify-between text-3xs font-bold">
+                      <span className="text-gray-600">AdBlue/Vidange (heures) :</span>
+                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= 5 ? "text-emerald-700 font-black" : "text-amber-700"}>
+                        {kpis.fleetCollections.avgHoursAdBlueVidange} h
+                      </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Reste à Encaisser Matin :</span>
-                    <strong className="text-gray-900">{kpis.fleetCollections.totalMorningTargetMAD.toLocaleString()} MAD</strong>
+                    <span>Taux de Churn hebdo :</span>
+                    <strong className={kpis.fleetCollections.weeklyChurnRate < 5 ? "text-emerald-600" : "text-red-600"}>{kpis.fleetCollections.weeklyChurnRate}%</strong>
                   </div>
                 </div>
 
-                {/* 4. Field Operations & Fleet Uptime */}
+                {/* 4. Field Operations */}
                 <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-3xs font-black uppercase tracking-wider text-green-800 bg-green-50 px-2 py-0.5 rounded-full inline-block">
-                        🛡️ Opérations & Uptime Flotte
+                        🛡️ Field Operations
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.fleetMaintenance.fleetUptimePct}%
+                        {kpis.fieldOperations.avgHoursVehicleRecovery} h
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        {kpis.fleetMaintenance.activeVehicles} actifs / {kpis.fleetMaintenance.totalVehicles} véhicules (Flotte)
+                        Temps moyen de récupération véhicule
                       </p>
                     </div>
                     <span className="text-2xl">⚡</span>
@@ -586,15 +575,15 @@ export default function PowerBiDashboardView() {
                   {/* Task Completion Bar */}
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Tâches Terrain Réalisées :</span>
+                      <span className="text-gray-600">Contrôles Mensuels (Checks) :</span>
                       <span className="text-green-800">
-                        {kpis.fieldOperations.tasksCompleted} / {kpis.fieldOperations.tasksTotal} ({kpis.fieldOperations.taskCompletionRate}%)
+                        {kpis.fieldOperations.monthlyChecksCount} réalisés
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-full bg-green-600 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, kpis.fieldOperations.taskCompletionRate)}%` }}
+                        style={{ width: `100%` }}
                       />
                     </div>
                   </div>
@@ -713,17 +702,17 @@ export default function PowerBiDashboardView() {
                   {/* Maintenance Tickets Goal */}
                   <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>🔧 Résolution Tickets Garage</span>
-                      <span className="text-3xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-black">
-                        {kpis.fleetMaintenance.ticketResolutionRate}%
+                      <span>🔧 Taux de Churn / Départ</span>
+                      <span className={`text-3xs px-2 py-0.5 rounded-full font-black ${kpis.fleetCollections.weeklyChurnRate < 5 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                        {kpis.fleetCollections.weeklyChurnRate}%
                       </span>
                     </div>
                     <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Résolus : <strong>{kpis.fleetMaintenance.ticketsResolved} / {kpis.fleetMaintenance.ticketsTotal}</strong></span>
-                      <span>Cible : <strong>{kpis.fleetMaintenance.ticketResolutionTarget}%</strong></span>
+                      <span>Semaine courante</span>
+                      <span>Seuil Alerte : <strong>5%</strong></span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className="bg-orange-600 h-full rounded-full" style={{ width: `${Math.min(100, kpis.fleetMaintenance.ticketResolutionRate)}%` }} />
+                      <div className={`h-full rounded-full ${kpis.fleetCollections.weeklyChurnRate < 5 ? "bg-emerald-600" : "bg-red-600"}`} style={{ width: `${Math.min(100, kpis.fleetCollections.weeklyChurnRate * 10)}%` }} />
                     </div>
                   </div>
                 </div>
