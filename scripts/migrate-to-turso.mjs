@@ -1,4 +1,4 @@
-﻿import Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { createClient } from '@libsql/client';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,9 +10,10 @@ const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOj
 const BATCH_SIZE = 50;
 
 async function main() {
-  console.log('Opening local SQLite...');
-  const localDb = new Database(LOCAL_DB, { readonly: true });
-  const turso = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
+  console.log('⚠️ Migration script is locked to prevent accidental overwrite of live production leads.');
+  console.log('If you really need to run this, remove this safety return.');
+  return;
+
   
   try {
     const tursoCount = await turso.execute('SELECT COUNT(*) as cnt FROM Lead');
