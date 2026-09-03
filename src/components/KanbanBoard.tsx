@@ -396,18 +396,16 @@ export default function KanbanBoard() {
       }
     };
 
-    // Check if lead was moved or updated to current status today
-    const isMovedToday = (l: Lead) => {
-      const ts = l.status_changed_at || (l as any).updated_at;
-      return isDateMatchToday(ts);
+    // Helper: Check if lead had its status changed TODAY strictly (using status_changed_at)
+    const isStatusChangedToday = (l: Lead) => {
+      if (!l.status_changed_at) return false;
+      return isDateMatchToday(l.status_changed_at);
     };
 
-    // Check if lead is scheduled for today (by reminder_date or moved today)
-    const isScheduledToday = (l: Lead) => {
-      if (l.reminder_date) {
-        return isDateMatchToday(l.reminder_date);
-      }
-      return isMovedToday(l);
+    // Helper: Check if lead is scheduled to attend TODAY strictly (reminder_date must be today)
+    const isScheduledToAttendToday = (l: Lead) => {
+      if (!l.reminder_date) return false;
+      return isDateMatchToday(l.reminder_date);
     };
 
     if (activeTab === "leads") {
@@ -449,7 +447,7 @@ export default function KanbanBoard() {
               (l.training_status === "Scheduled" || !l.training_status));
           if (!isMatch) return false;
           if (isSearching) return true;
-          return isMovedToday(l);
+          return isStatusChangedToday(l) || isScheduledToAttendToday(l);
         });
       }
 
@@ -458,7 +456,7 @@ export default function KanbanBoard() {
           if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== "To Recall") return false;
           if (isSearching) return true;
           if (l.reminder_date && isDateMatchToday(l.reminder_date)) return true;
-          return isMovedToday(l);
+          return isStatusChangedToday(l);
         });
       }
 
@@ -466,7 +464,7 @@ export default function KanbanBoard() {
       return filteredLeads.filter((l) => {
         if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== column) return false;
         if (isSearching) return true;
-        return isMovedToday(l);
+        return isStatusChangedToday(l);
       });
     } else {
       // Training Tab
@@ -478,7 +476,7 @@ export default function KanbanBoard() {
             l.training_status === "Accept offer";
           if (!isVehicleMatch) return false;
           if (isSearching) return true;
-          return isMovedToday(l);
+          return isStatusChangedToday(l);
         });
       }
 
@@ -489,8 +487,8 @@ export default function KanbanBoard() {
             (!l.training_status || l.training_status === "Scheduled");
           if (!isScheduledMatch) return false;
           if (isSearching) return true;
-          // By default, display ONLY leads scheduled for today
-          return isScheduledToday(l);
+          // Display ONLY leads scheduled to attend TODAY
+          return isScheduledToAttendToday(l);
         });
       }
 
@@ -499,18 +497,19 @@ export default function KanbanBoard() {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
           if (isSearching) return true;
-          return isScheduledToday(l);
+          return isScheduledToAttendToday(l);
         });
       }
 
       // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
+      // Every morning these start EMPTY and are filled today as agents process today's scheduled leads!
       return filteredLeads.filter((l) => {
         if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
           return false;
         }
         if (isSearching) return true;
-        // Display only leads moved to this status on today's date
-        return isMovedToday(l);
+        // Must have been moved to this status TODAY
+        return isStatusChangedToday(l);
       });
     }
   }
