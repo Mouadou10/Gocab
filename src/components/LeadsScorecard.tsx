@@ -10,6 +10,8 @@ interface LeadsScorecardProps {
 export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecardProps) {
   const [dateFilter, setDateFilter] = useState<string>('');
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
+  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
+  const [targetConversionRate, setTargetConversionRate] = useState(20);
 
   useEffect(() => {
     // Default to today
@@ -27,6 +29,12 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
               setDailyCallsTarget(Number(targets.target_daily_calls));
             } else if (targets.target_weekly_leads) {
               setDailyCallsTarget(Math.ceil(Number(targets.target_weekly_leads) / 6));
+            }
+            if (targets.target_daily_training_fixed) {
+              setDailyTrainingTarget(Number(targets.target_daily_training_fixed));
+            }
+            if (targets.target_lead_conversion_rate) {
+              setTargetConversionRate(Number(targets.target_lead_conversion_rate));
             }
           } catch (e) {}
         }
@@ -116,8 +124,22 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
         {/* Conversion Rate */}
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
           <div className="text-sm font-medium text-gray-500 mb-1">Conversion to Training</div>
-          <div className="text-3xl font-bold text-green-600 mb-2">{conversionRate}%</div>
-          <p className="text-xs text-gray-500">{trainingFixed} of {totalCalled} called leads converted.</p>
+          <div className="flex items-end gap-2 mb-2">
+            <span className="text-3xl font-bold text-green-600">{conversionRate}%</span>
+            <span className="text-sm text-gray-400 mb-1">/ {targetConversionRate}% obj.</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-1.5">
+            <div
+              className={`h-2.5 rounded-full transition-all duration-500 ${
+                Number(conversionRate) >= targetConversionRate ? 'bg-green-500' : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min(100, targetConversionRate > 0 ? (Number(conversionRate) / targetConversionRate) * 100 : 0)}%` }}
+            ></div>
+          </div>
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>{trainingFixed} of {totalCalled} leads</span>
+            <span className="font-semibold text-navy">Obj: {trainingFixed}/{dailyTrainingTarget} fixées</span>
+          </div>
         </div>
 
         {/* Status Breakdown */}

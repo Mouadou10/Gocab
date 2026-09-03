@@ -30,7 +30,9 @@ interface PerformanceData {
     };
     trainingOnboarding: {
       attendanceRate: number;
+      targetAttendanceRate?: number;
       assignedVehiclesCount: number;
+      assignedVehiclesTarget?: number;
       preordersCount: number;
       preordersTarget: number;
       preordersAttainmentPct: number;
@@ -44,12 +46,16 @@ interface PerformanceData {
       collectionAttainmentPct: number;
       isObjectiveMet: boolean;
       avgDaysInsuranceRepair: number;
+      maxDaysInsuranceRepair?: number;
       avgHoursAdBlueVidange: number;
+      maxHoursAdBlueVidange?: number;
       weeklyChurnRate: number;
+      maxWeeklyChurnRate?: number;
     };
     fieldOperations: {
       avgHoursVehicleRecovery: number;
       monthlyChecksCount: number;
+      monthlyChecksTarget?: number;
       tasksTotal: number;
       tasksCompleted: number;
       tasksFailed: number;
@@ -438,8 +444,13 @@ export default function PowerBiDashboardView() {
                         {kpis.leadAcquisition.callsDone}{" "}
                         <span className="text-xs text-gray-500 font-normal">/ {kpis.leadAcquisition.callsTarget} Appels Obj.</span>
                       </h3>
-                      <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        {kpis.leadAcquisition.trainingFixed} Formations fixées par jour
+                      <p className="text-2xs text-gray-600 font-medium mt-0.5 flex items-center gap-1.5">
+                        <span>🎯 <strong>{kpis.leadAcquisition.trainingFixed}</strong> / {kpis.leadAcquisition.trainingTarget} Formations fixées Obj.</span>
+                        {kpis.leadAcquisition.trainingTarget > 0 && (
+                          <span className="text-3xs font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded-full">
+                            {kpis.leadAcquisition.trainingAttainmentPct}%
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span className="text-2xl">🎯</span>
@@ -449,7 +460,7 @@ export default function PowerBiDashboardView() {
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
                       <span className="text-gray-600">Atteinte Objectif Appels :</span>
-                      <span className={kpis.leadAcquisition.callsAttainmentPct >= 100 ? "text-emerald-700" : "text-blue-700"}>
+                      <span className={kpis.leadAcquisition.callsAttainmentPct >= 100 ? "text-emerald-700 font-black" : "text-blue-700"}>
                         {kpis.leadAcquisition.callsAttainmentPct}%
                       </span>
                     </div>
@@ -481,7 +492,10 @@ export default function PowerBiDashboardView() {
                         🎓 Onboarding
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.trainingOnboarding.attendanceRate}%
+                        {kpis.trainingOnboarding.attendanceRate}%{" "}
+                        <span className="text-xs text-gray-500 font-normal">
+                          / {kpis.trainingOnboarding.targetAttendanceRate || 80}% Cible
+                        </span>
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
                         Taux de présence (Attended / Fixed)
@@ -494,8 +508,8 @@ export default function PowerBiDashboardView() {
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
                       <span className="text-gray-600">Objectif Précommandes :</span>
-                      <span className={kpis.trainingOnboarding.preordersAttainmentPct >= 100 ? "text-emerald-700" : "text-purple-700"}>
-                        {kpis.trainingOnboarding.preordersCount} / {kpis.trainingOnboarding.preordersTarget}
+                      <span className={kpis.trainingOnboarding.preordersAttainmentPct >= 100 ? "text-emerald-700 font-black" : "text-purple-700"}>
+                        {kpis.trainingOnboarding.preordersCount} / {kpis.trainingOnboarding.preordersTarget} Obj.
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
@@ -512,7 +526,9 @@ export default function PowerBiDashboardView() {
 
                   <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
                     <span>Véhicules affectés :</span>
-                    <strong className="text-emerald-700 font-bold">{kpis.trainingOnboarding.assignedVehiclesCount} affectations</strong>
+                    <strong className="text-emerald-700 font-bold">
+                      {kpis.trainingOnboarding.assignedVehiclesCount} / {kpis.trainingOnboarding.assignedVehiclesTarget || kpis.trainingOnboarding.preordersTarget} affectations Obj.
+                    </strong>
                   </div>
                 </div>
 
@@ -524,34 +540,39 @@ export default function PowerBiDashboardView() {
                         💸 Support & Driver Perf
                       </p>
                       <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.fleetCollections.collectionRecoveryRate}%
+                        {kpis.fleetCollections.collectionRecoveryRate}%{" "}
+                        <span className="text-xs text-gray-500 font-normal">
+                          / {kpis.fleetCollections.recoveryObjectivePct || 90}% Cible
+                        </span>
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Cash Recouvrement (Cible: 60%)
+                        Cash Recouvrement (Cible: {kpis.fleetCollections.recoveryObjectivePct || 90}%)
                       </p>
                     </div>
                     <span className="text-2xl">🔧</span>
                   </div>
 
-                  {/* 60% Objective Visual Progress */}
+                  {/* Objective Visual Progress */}
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
                       <span className="text-gray-600">Assurance (jours) :</span>
-                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= 5 ? "text-emerald-700 font-black" : "text-red-700"}>
-                        {kpis.fleetCollections.avgDaysInsuranceRepair} j
+                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= (kpis.fleetCollections.maxDaysInsuranceRepair || 7) ? "text-emerald-700 font-black" : "text-red-700"}>
+                        {kpis.fleetCollections.avgDaysInsuranceRepair} j <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxDaysInsuranceRepair || 7}j)</span>
                       </span>
                     </div>
                     <div className="flex justify-between text-3xs font-bold">
                       <span className="text-gray-600">AdBlue/Vidange (heures) :</span>
-                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= 5 ? "text-emerald-700 font-black" : "text-amber-700"}>
-                        {kpis.fleetCollections.avgHoursAdBlueVidange} h
+                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= (kpis.fleetCollections.maxHoursAdBlueVidange || 5) ? "text-emerald-700 font-black" : "text-amber-700"}>
+                        {kpis.fleetCollections.avgHoursAdBlueVidange} h <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxHoursAdBlueVidange || 5}h)</span>
                       </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
                     <span>Taux de Churn hebdo :</span>
-                    <strong className={kpis.fleetCollections.weeklyChurnRate < 5 ? "text-emerald-600" : "text-red-600"}>{kpis.fleetCollections.weeklyChurnRate}%</strong>
+                    <strong className={kpis.fleetCollections.weeklyChurnRate <= (kpis.fleetCollections.maxWeeklyChurnRate || 2) ? "text-emerald-600" : "text-red-600"}>
+                      {kpis.fleetCollections.weeklyChurnRate}% <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxWeeklyChurnRate || 2}%)</span>
+                    </strong>
                   </div>
                 </div>
 
@@ -576,14 +597,16 @@ export default function PowerBiDashboardView() {
                   <div className="space-y-1 pt-1">
                     <div className="flex justify-between text-3xs font-bold">
                       <span className="text-gray-600">Contrôles Mensuels (Checks) :</span>
-                      <span className="text-green-800">
-                        {kpis.fieldOperations.monthlyChecksCount} réalisés
+                      <span className="text-green-800 font-bold">
+                        {kpis.fieldOperations.monthlyChecksCount} / {kpis.fieldOperations.monthlyChecksTarget || 30} réalisés Obj.
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-full bg-green-600 rounded-full transition-all duration-500"
-                        style={{ width: `100%` }}
+                        style={{
+                          width: `${Math.min(100, ((kpis.fieldOperations.monthlyChecksCount || 0) / (kpis.fieldOperations.monthlyChecksTarget || 30)) * 100)}%`,
+                        }}
                       />
                     </div>
                   </div>

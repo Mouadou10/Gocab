@@ -6,20 +6,48 @@ export const dynamic = "force-dynamic";
 interface DepartmentTargets {
   target_daily_calls: number;
   target_daily_training_fixed: number;
+  target_weekly_leads: number;
   target_daily_preorders: number;
+  target_training_showup_rate: number;
+  target_kyc_completion_rate: number;
+  target_lead_conversion_rate: number;
+  target_active_fleet_rate: number;
+  target_max_downtime_days: number;
+  target_weekly_churn_limit: number;
+  target_max_waived_days: number;
+  target_monthly_inspection_rate: number;
+  target_gps_connectivity_rate: number;
+  target_asset_recovery_rate: number;
+  target_sla_resolution_rate: number;
+  target_max_open_tickets: number;
   target_collection_rate: number;
+  target_weekly_revenue_mad: number;
   target_daily_tasks: number;
   target_fleet_uptime: number;
   target_ticket_resolution_rate: number;
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
-  target_daily_calls: 60,
-  target_daily_training_fixed: 15,
-  target_daily_preorders: 5,
-  target_collection_rate: 60, // 60% standard
+  target_daily_calls: 34,
+  target_daily_training_fixed: 7,
+  target_weekly_leads: 100,
+  target_daily_preorders: 9,
+  target_training_showup_rate: 80,
+  target_kyc_completion_rate: 25,
+  target_lead_conversion_rate: 20,
+  target_active_fleet_rate: 85,
+  target_max_downtime_days: 7,
+  target_weekly_churn_limit: 2,
+  target_max_waived_days: 10,
+  target_monthly_inspection_rate: 90,
+  target_gps_connectivity_rate: 100,
+  target_asset_recovery_rate: 100,
+  target_sla_resolution_rate: 95,
+  target_max_open_tickets: 5,
+  target_collection_rate: 90,
+  target_weekly_revenue_mad: 50000,
   target_daily_tasks: 10,
-  target_fleet_uptime: 95, // 95% uptime
+  target_fleet_uptime: 95,
   target_ticket_resolution_rate: 85,
 };
 
@@ -47,7 +75,7 @@ export async function GET(request: NextRequest) {
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     const dayCount = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-    // 1. Fetch system targets
+    // 1. Fetch system targets from Weekly Department Goals & Thresholds
     let targets = { ...DEFAULT_TARGETS };
     try {
       const setting = await prisma.setting.findUnique({
@@ -56,13 +84,19 @@ export async function GET(request: NextRequest) {
       if (setting?.value) {
         const parsed = JSON.parse(setting.value);
         targets = {
-          target_daily_calls: Number(parsed.target_daily_calls) || targets.target_daily_calls,
-          target_daily_training_fixed: Number(parsed.target_daily_training_fixed) || targets.target_daily_training_fixed,
-          target_daily_preorders: Number(parsed.target_daily_preorders) || targets.target_daily_preorders,
-          target_collection_rate: Number(parsed.target_collection_rate) || targets.target_collection_rate,
-          target_daily_tasks: Number(parsed.target_daily_tasks) || targets.target_daily_tasks,
-          target_fleet_uptime: Number(parsed.target_fleet_uptime) || targets.target_fleet_uptime,
-          target_ticket_resolution_rate: Number(parsed.target_ticket_resolution_rate) || targets.target_ticket_resolution_rate,
+          ...DEFAULT_TARGETS,
+          ...parsed,
+          target_daily_calls: Number(parsed.target_daily_calls) || DEFAULT_TARGETS.target_daily_calls,
+          target_daily_training_fixed: Number(parsed.target_daily_training_fixed) || DEFAULT_TARGETS.target_daily_training_fixed,
+          target_daily_preorders: Number(parsed.target_daily_preorders) || DEFAULT_TARGETS.target_daily_preorders,
+          target_collection_rate: Number(parsed.target_collection_rate) || DEFAULT_TARGETS.target_collection_rate,
+          target_training_showup_rate: Number(parsed.target_training_showup_rate) || DEFAULT_TARGETS.target_training_showup_rate,
+          target_max_downtime_days: Number(parsed.target_max_downtime_days) || DEFAULT_TARGETS.target_max_downtime_days,
+          target_weekly_churn_limit: Number(parsed.target_weekly_churn_limit) || DEFAULT_TARGETS.target_weekly_churn_limit,
+          target_monthly_inspection_rate: Number(parsed.target_monthly_inspection_rate) || DEFAULT_TARGETS.target_monthly_inspection_rate,
+          target_daily_tasks: Number(parsed.target_daily_tasks) || DEFAULT_TARGETS.target_daily_tasks,
+          target_fleet_uptime: Number(parsed.target_fleet_uptime) || DEFAULT_TARGETS.target_fleet_uptime,
+          target_ticket_resolution_rate: Number(parsed.target_ticket_resolution_rate) || DEFAULT_TARGETS.target_ticket_resolution_rate,
         };
       }
     } catch (err) {
@@ -447,7 +481,10 @@ export async function GET(request: NextRequest) {
         },
         trainingOnboarding: {
           attendanceRate, // % attended / fixed training
+          targetAttendanceRate: targets.target_training_showup_rate,
+          attendanceAttainmentPct: targets.target_training_showup_rate > 0 ? Number(((attendanceRate / targets.target_training_showup_rate) * 100).toFixed(1)) : 0,
           assignedVehiclesCount,
+          assignedVehiclesTarget: scaledPreordersTarget,
           preordersCount,
           preordersTarget: scaledPreordersTarget,
           preordersAttainmentPct: scaledPreordersTarget > 0 ? Number(((preordersCount / scaledPreordersTarget) * 100).toFixed(1)) : 0,
@@ -457,16 +494,20 @@ export async function GET(request: NextRequest) {
           totalMorningTargetMAD,
           totalEveningCollectedMAD,
           collectionRecoveryRate,
-          recoveryObjectivePct: targets.target_collection_rate, // 60%
+          recoveryObjectivePct: targets.target_collection_rate,
           collectionAttainmentPct: targets.target_collection_rate > 0 ? Number(((collectionRecoveryRate / targets.target_collection_rate) * 100).toFixed(1)) : 0,
           isObjectiveMet: collectionRecoveryRate >= targets.target_collection_rate,
           avgDaysInsuranceRepair,
+          maxDaysInsuranceRepair: targets.target_max_downtime_days,
           avgHoursAdBlueVidange,
+          maxHoursAdBlueVidange: 5,
           weeklyChurnRate,
+          maxWeeklyChurnRate: targets.target_weekly_churn_limit,
         },
         fieldOperations: {
           avgHoursVehicleRecovery,
           monthlyChecksCount,
+          monthlyChecksTarget: Math.max(1, Math.round((targets.target_monthly_inspection_rate / 30) * dayCount)),
           tasksTotal,
           tasksCompleted,
           tasksFailed,

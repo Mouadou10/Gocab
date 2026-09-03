@@ -17,6 +17,7 @@ interface TrainingScorecardProps {
 export default function TrainingScorecard({ leads, onSelectStatus }: TrainingScorecardProps) {
   const [dateFilter, setDateFilter] = useState<string>('');
   const [dailyPreordersTarget, setDailyPreordersTarget] = useState(9);
+  const [targetConversionRate, setTargetConversionRate] = useState(25);
 
   useEffect(() => {
     // Default to today
@@ -34,6 +35,11 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
               setDailyPreordersTarget(Number(targets.target_daily_preorders));
             } else if (targets.target_kyc_completion_rate) {
               setDailyPreordersTarget(Math.ceil(Number(targets.target_kyc_completion_rate) / 6));
+            }
+            if (targets.target_kyc_completion_rate) {
+              setTargetConversionRate(Number(targets.target_kyc_completion_rate));
+            } else if (targets.target_lead_conversion_rate) {
+              setTargetConversionRate(Number(targets.target_lead_conversion_rate));
             }
           } catch (e) {}
         }
@@ -148,8 +154,22 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
         {/* Conversion Rate */}
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
           <div className="text-sm font-medium text-gray-500 mb-1">Training Conversion</div>
-          <div className="text-3xl font-bold text-green-600 mb-2">{conversionRate}%</div>
-          <p className="text-xs text-gray-500">{totalConverted} of {totalInTraining} training leads converted.</p>
+          <div className="flex items-end gap-2 mb-2">
+            <span className="text-3xl font-bold text-green-600">{conversionRate}%</span>
+            <span className="text-sm text-gray-400 mb-1">/ {targetConversionRate}% obj.</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-1.5">
+            <div
+              className={`h-2.5 rounded-full transition-all duration-500 ${
+                Number(conversionRate) >= targetConversionRate ? 'bg-green-500' : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min(100, targetConversionRate > 0 ? (Number(conversionRate) / targetConversionRate) * 100 : 0)}%` }}
+            ></div>
+          </div>
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>{totalConverted} of {totalInTraining} leads</span>
+            <span className="font-semibold text-navy">Obj: {totalConverted}/{dailyPreordersTarget} convertis</span>
+          </div>
         </div>
 
         {/* Status Breakdown */}
