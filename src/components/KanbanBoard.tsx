@@ -382,12 +382,27 @@ export default function KanbanBoard() {
       filteredLeads = filteredLeads.filter(l => !(l as any).notes || (l as any).notes.trim() === "");
     }
 
-    // Helper: Check if a date matches today (handles both local time & ISO UTC strings)
+    // Helper: Exact date tag matching as rendered on the card (fr-FR format: DD/MM/YYYY)
+    const todayDateTag = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const getLeadDateTag = (dateVal: any): string | null => {
+      if (!dateVal) return null;
+      try {
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      } catch {
+        return null;
+      }
+    };
+
+    // Helper: Check if a date matches today (handles fr-FR date tag, local time & ISO UTC strings)
     const isDateMatchToday = (dateVal: any) => {
       if (!dateVal) return false;
       try {
         const d = new Date(dateVal);
         if (isNaN(d.getTime())) return false;
+        const tag = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+        if (tag === todayDateTag) return true;
         const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const isoDate = d.toISOString().split("T")[0];
         return localDate === todayStr || isoDate === todayStr;
@@ -402,10 +417,10 @@ export default function KanbanBoard() {
       return isDateMatchToday(l.status_changed_at);
     };
 
-    // Helper: Check if lead is scheduled to attend TODAY strictly (reminder_date must be today)
+    // Helper: Check if lead is scheduled to attend TODAY strictly (date tag must equal today's date tag)
     const isScheduledToAttendToday = (l: Lead) => {
       if (!l.reminder_date) return false;
-      return isDateMatchToday(l.reminder_date);
+      return getLeadDateTag(l.reminder_date) === todayDateTag;
     };
 
     if (activeTab === "leads") {
@@ -487,17 +502,17 @@ export default function KanbanBoard() {
             (!l.training_status || l.training_status === "Scheduled");
           if (!isScheduledMatch) return false;
           if (isSearching) return true;
-          // Display ONLY leads scheduled to attend TODAY
-          return isScheduledToAttendToday(l);
+          // In training page the agent should see ONLY leads with date tag = today's date
+          return getLeadDateTag(l.reminder_date) === todayDateTag;
         });
       }
 
-      // For Pending: display ONLY leads who have today's pending reminder
+      // For Pending: display ONLY leads who have today's date tag
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
           if (isSearching) return true;
-          return isScheduledToAttendToday(l);
+          return getLeadDateTag(l.reminder_date) === todayDateTag;
         });
       }
 
