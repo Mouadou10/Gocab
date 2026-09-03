@@ -47,7 +47,10 @@ export async function GET() {
         error: "Failed to fetch leads",
         message: error?.message || String(error),
         code: error?.code,
-        meta: error?.meta
+        meta: error?.meta,
+        envTursoUrl: process.env.TURSO_DATABASE_URL || "none",
+        envDatabaseUrl: process.env.DATABASE_URL || "none",
+        hasTursoToken: !!process.env.TURSO_AUTH_TOKEN,
       },
       { status: 500 }
     );

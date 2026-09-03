@@ -16,17 +16,25 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const FALLBACK_TURSO_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io";
-const FALLBACK_TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
+const PRODUCTION_TURSO_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io";
+const PRODUCTION_TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
 
 function createPrismaClient(): PrismaClient {
-  let rawUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || FALLBACK_TURSO_URL;
-  if (rawUrl.startsWith("postgres://") || rawUrl.startsWith("postgresql://")) {
-    rawUrl = FALLBACK_TURSO_URL;
+  let rawUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || PRODUCTION_TURSO_URL;
+  
+  // Ignore postgres URLs or dead/deleted restored database URLs
+  if (
+    rawUrl.startsWith("postgres://") ||
+    rawUrl.startsWith("postgresql://") ||
+    rawUrl.includes("restored")
+  ) {
+    rawUrl = PRODUCTION_TURSO_URL;
   }
   
   const url = rawUrl.replace("libsql://", "https://").replace(/\/$/, "");
-  const authToken = process.env.TURSO_AUTH_TOKEN || FALLBACK_TURSO_TOKEN;
+  const authToken = (rawUrl === PRODUCTION_TURSO_URL || !process.env.TURSO_AUTH_TOKEN)
+    ? PRODUCTION_TURSO_TOKEN
+    : (process.env.TURSO_AUTH_TOKEN || PRODUCTION_TURSO_TOKEN);
 
   try {
     const adapter = new PrismaLibSql({
