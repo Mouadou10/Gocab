@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         technical_inspection_expiry: v.technical_inspection_expiry,
         days_left: mostUrgent.days_left,
         is_expired: mostUrgent.is_expired,
-        urgent_docs: urgentDocs.map((d) => ({
+        urgent_docs: urgentDocs.map((d: any) => ({
           name: d.name,
           date: d.date.toISOString(),
           days_left: d.days_left,

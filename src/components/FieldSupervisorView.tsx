@@ -15,6 +15,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import CarModel3D from "./CarModel3D";
+import FieldMobileQuickActions from "./FieldMobileQuickActions";
 
 interface FieldTask {
   id: string;
@@ -656,6 +657,20 @@ export default function FieldSupervisorView() {
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1200, margin: "0 auto" }}>
+      {/* Mobile-Optimized Supervisor Quick Actions */}
+      <FieldMobileQuickActions
+        onSearchPlate={(plate) => setSearchTerm(plate)}
+        onStartInspection={() => {
+          if (checkupsDue.length > 0) {
+            setInspectionVehicle(checkupsDue[0]);
+            setInspectorName("");
+          } else {
+            toast.success("Tous les contrôles mensuels sont à jour !");
+          }
+        }}
+        pendingRecoveriesCount={recoveryTasks.filter((t) => t.status !== "COMPLETED").length}
+      />
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <div>

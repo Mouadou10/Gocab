@@ -61,14 +61,14 @@ export default function ReminderAlert({ leads }: ReminderAlertProps) {
     };
   }, [checkReminders]);
 
-  // Automatically dismiss reminders 4 seconds after they appear
+  // Automatically dismiss reminders 1 second after they appear
   useEffect(() => {
     dueLeads.forEach((lead) => {
       if (!timersRef.current[lead.id]) {
         timersRef.current[lead.id] = setTimeout(() => {
           dismiss(lead.id);
           delete timersRef.current[lead.id];
-        }, 4000); // 4 seconds auto-dismiss
+        }, 1000); // 1 second auto-dismiss
       }
     });
 

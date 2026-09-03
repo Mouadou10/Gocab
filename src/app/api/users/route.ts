@@ -6,8 +6,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET() {
+  const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+  if ("error" in authResult) return authResult.error;
+
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -34,6 +38,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+  if ("error" in authResult) return authResult.error;
+
   try {
     const body = await request.json();
     const { email, name, fullName, role, password, region } = body;
@@ -91,6 +98,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+  if ("error" in authResult) return authResult.error;
+
   try {
     const body = await request.json();
     const { id, role, name, fullName, region, isActive, password } = body;
@@ -139,6 +149,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+  if ("error" in authResult) return authResult.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

@@ -47,6 +47,7 @@ interface VehicleOption {
   make_model?: string;
   status: string;
   assigned_driver_name?: string | null;
+  hub_city?: string | null;
 }
 
 interface AddExpenseModalProps {

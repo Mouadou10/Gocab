@@ -65,6 +65,7 @@ interface Lead {
   age?: number | null;
   permis_seniority_years?: number | null;
   is_resident?: boolean | null;
+  status_changed_at?: string | null;
 }
 
 // Default Role → tabs fallback
@@ -171,6 +172,10 @@ export default function KanbanBoard() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [isTabRestored, setIsTabRestored] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
+
+  // Filters
+  const [filterCity, setFilterCity] = useState("");
+  const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
 
   // Restore tab on mount/refresh or default to role's assigned page on sign in
   useEffect(() => {
@@ -343,9 +348,21 @@ export default function KanbanBoard() {
 
   /** Group leads dynamically based on their specific status/column. */
   function getLeadsByColumn(column: string): Lead[] {
+    let filteredLeads = leads;
+
+    if (filterCity) {
+      filteredLeads = filteredLeads.filter(l => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()));
+    }
+    
+    if (filterHasNote === "YES") {
+      filteredLeads = filteredLeads.filter(l => (l as any).notes && (l as any).notes.trim() !== "");
+    } else if (filterHasNote === "NO") {
+      filteredLeads = filteredLeads.filter(l => !(l as any).notes || (l as any).notes.trim() === "");
+    }
+
     if (activeTab === "leads") {
       if (column === "NEW_LEADS") {
-        const allNewLeads = leads
+        const allNewLeads = filteredLeads
           .filter((l) => l.board_column === "NEW_LEADS")
           .sort((a, b) => {
             const getTimestamp = (item: any) => {
@@ -370,7 +387,7 @@ export default function KanbanBoard() {
         return allNewLeads.slice(0, Math.max(1, targetBatchCount));
       }
       if (column === "Training fixed") {
-        return leads.filter((l) => {
+        return filteredLeads.filter((l) => {
           const isTrainingFixed =
             l.brand_status === "Training fixed" ||
             (l.board_column === "TRAINING_PIPELINE" &&
@@ -393,7 +410,7 @@ export default function KanbanBoard() {
           return true;
         });
       }
-      return leads.filter(
+      return filteredLeads.filter(
         (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
       );
     } else {
@@ -417,7 +434,7 @@ export default function KanbanBoard() {
       };
 
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
-        return leads.filter(
+        return filteredLeads.filter(
           (l) =>
             isDateValidForToday(l) &&
             (l.board_column === "VEHICLE_ASSIGNMENT" ||
@@ -427,7 +444,7 @@ export default function KanbanBoard() {
       }
       // If training_status is unset but board_column is TRAINING_PIPELINE, fallback to "Scheduled"
       if (column === "Scheduled") {
-        return leads.filter((l) => {
+        return filteredLeads.filter((l) => {
           if (!isDateValidForToday(l)) return false;
           if (l.board_column !== "TRAINING_PIPELINE") return false;
           if (l.training_status && l.training_status !== "Scheduled") return false;
@@ -447,7 +464,7 @@ export default function KanbanBoard() {
           return true;
         });
       }
-      return leads.filter(
+      return filteredLeads.filter(
         (l) => isDateValidForToday(l) && l.board_column === "TRAINING_PIPELINE" && l.training_status === column
       );
     }
@@ -810,7 +827,7 @@ export default function KanbanBoard() {
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
                 }`}
               >
-                🏠 {t.dashboard}
+                🏠 {(t as any).dashboard || t.executiveDashboard || "Dashboard"}
               </button>
             )}
 
@@ -1035,6 +1052,36 @@ export default function KanbanBoard() {
         </div>
       </header>
 
+      {/* Leads/Training Toolbar */}
+      {(activeTab === "leads" || activeTab === "training") && (
+        <div className="bg-white px-6 py-3 border-b border-gray-200 shadow-sm flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-500">Filter City:</span>
+              <input
+                type="text"
+                value={filterCity}
+                onChange={(e) => setFilterCity(e.target.value)}
+                placeholder="e.g. Casablanca"
+                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy w-32"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-500">Has Note:</span>
+              <select
+                value={filterHasNote}
+                onChange={(e) => setFilterHasNote(e.target.value as "ALL" | "YES" | "NO")}
+                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy cursor-pointer"
+              >
+                <option value="ALL">All</option>
+                <option value="YES">Yes</option>
+                <option value="NO">No</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Board Grid / Settings View / Fleet / Tickets / Performance / Field */}
       <main className="px-6 py-6 flex-1 w-full overflow-hidden flex flex-col">
         {activeTab === "dashboard" ? (
@@ -1140,8 +1187,8 @@ export default function KanbanBoard() {
         activeTab={activeTab}
       />
 
-      {/* Reminder Alerts */}
-      <ReminderAlert leads={leads} />
+      {/* Reminder Alerts - Only for Lead Acquisition Junior */}
+      {userRole === "LEAD_ACQUISITION_JR" && <ReminderAlert leads={leads} />}
 
       {/* Target Reached Celebration Modal (Lead Acquisition Only) */}
       {showCelebrationModal && (activeTab === "leads" || userRole === "LEAD_ACQUISITION_JR") && (

@@ -8,20 +8,32 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, handleAuthError } from "@/lib/auth-guard";
+import { LeadUpdateSchema } from "@/lib/validations";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireAuth();
     const { id } = await params;
-    const body = await request.json();
+    const rawBody = await request.json();
+
+    const parseResult = LeadUpdateSchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Données invalides", details: parseResult.error.format() },
+        { status: 400 }
+      );
+    }
+    const body = parseResult.data;
 
     // Build the update payload from provided fields
     const updateData: {
       board_column?: string;
-      brand_status?: string;
-      training_status?: string;
+      brand_status?: string | null;
+      training_status?: string | null;
       reminder_date?: Date | null;
       preorder_amount?: number | null;
       city?: string | null;
@@ -30,6 +42,7 @@ export async function PATCH(
       has_confirmation_adresse?: boolean;
       has_permis?: boolean;
       notes?: string | null;
+      handled_by?: string | null;
     } = {};
 
     if (body.board_column !== undefined) {
@@ -169,9 +182,13 @@ export async function PATCH(
     return NextResponse.json({ lead: updatedLead });
   } catch (error) {
     console.error("Error updating lead:", error);
-    return NextResponse.json(
-      { error: "Failed to update lead" },
-      { status: 500 }
-    );
+    try {
+      return handleAuthError(error);
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to update lead" },
+        { status: 500 }
+      );
+    }
   }
 }

@@ -17,10 +17,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GoCab CRM — Growth & KYC Module",
+  title: "GoCab CRM — Growth & Fleet Operations",
   description:
-    "Kanban-style lead management for GoCab driver onboarding. Manage leads through Brand Pre-Filter, Training Pipeline, and Vehicle Assignment stages.",
+    "Kanban-style lead management and fleet operations for GoCab driver onboarding, vehicle assignment, collections, and field supervisor tasks.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "GoCab Ops",
+  },
 };
+
 
 export default function RootLayout({
   children,
