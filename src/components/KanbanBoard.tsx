@@ -382,17 +382,32 @@ export default function KanbanBoard() {
       filteredLeads = filteredLeads.filter(l => !(l as any).notes || (l as any).notes.trim() === "");
     }
 
-    // Helper: Check if lead was moved to current status today (still used by Pending column)
-    const isMovedToday = (l: Lead) => {
-      const ts = l.status_changed_at || (l as any).updated_at;
-      if (!ts) return false;
+    // Helper: Check if a date matches today (handles both local time & ISO UTC strings)
+    const isDateMatchToday = (dateVal: any) => {
+      if (!dateVal) return false;
       try {
-        const d = new Date(ts);
+        const d = new Date(dateVal);
         if (isNaN(d.getTime())) return false;
-        return d.toISOString().split("T")[0] === todayStr;
+        const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const isoDate = d.toISOString().split("T")[0];
+        return localDate === todayStr || isoDate === todayStr;
       } catch {
         return false;
       }
+    };
+
+    // Check if lead was moved or updated to current status today
+    const isMovedToday = (l: Lead) => {
+      const ts = l.status_changed_at || (l as any).updated_at;
+      return isDateMatchToday(ts);
+    };
+
+    // Check if lead is scheduled for today (by reminder_date or moved today)
+    const isScheduledToday = (l: Lead) => {
+      if (l.reminder_date) {
+        return isDateMatchToday(l.reminder_date);
+      }
+      return isMovedToday(l);
     };
 
     if (activeTab === "leads") {
@@ -428,61 +443,74 @@ export default function KanbanBoard() {
 
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
-          return (
+          const isMatch =
             l.brand_status === "Training fixed" ||
             (l.board_column === "TRAINING_PIPELINE" &&
-              (l.training_status === "Scheduled" || !l.training_status))
-          );
+              (l.training_status === "Scheduled" || !l.training_status));
+          if (!isMatch) return false;
+          if (isSearching) return true;
+          return isMovedToday(l);
         });
       }
 
-      // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, etc.)
+      if (column === "To Recall") {
+        return filteredLeads.filter((l) => {
+          if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== "To Recall") return false;
+          if (isSearching) return true;
+          if (l.reminder_date && isDateMatchToday(l.reminder_date)) return true;
+          return isMovedToday(l);
+        });
+      }
+
+      // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, Wrong number)
       return filteredLeads.filter((l) => {
-        return l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column;
+        if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== column) return false;
+        if (isSearching) return true;
+        return isMovedToday(l);
       });
     } else {
       // Training Tab
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
         return filteredLeads.filter((l) => {
-          return (
+          const isVehicleMatch =
             l.board_column === "VEHICLE_ASSIGNMENT" ||
             l.training_status === "Assign vehicle" ||
-            l.training_status === "Accept offer"
-          );
+            l.training_status === "Accept offer";
+          if (!isVehicleMatch) return false;
+          if (isSearching) return true;
+          return isMovedToday(l);
         });
       }
 
       if (column === "Scheduled") {
         return filteredLeads.filter((l) => {
-          return (
+          const isScheduledMatch =
             l.board_column === "TRAINING_PIPELINE" &&
-            (!l.training_status || l.training_status === "Scheduled")
-          );
+            (!l.training_status || l.training_status === "Scheduled");
+          if (!isScheduledMatch) return false;
+          if (isSearching) return true;
+          // By default, display ONLY leads scheduled for today
+          return isScheduledToday(l);
         });
       }
 
-      // For Pending: display leads who have today's pending reminder (keep date filter here per user request)
+      // For Pending: display ONLY leads who have today's pending reminder
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
-
           if (isSearching) return true;
-
-          if (!l.reminder_date) return false;
-          try {
-            const d = new Date(l.reminder_date);
-            if (!isNaN(d.getTime())) {
-              const reminderDateStr = d.toISOString().split("T")[0];
-              return reminderDateStr === todayStr;
-            }
-          } catch {}
-          return false;
+          return isScheduledToday(l);
         });
       }
 
       // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
       return filteredLeads.filter((l) => {
-        return l.board_column === "TRAINING_PIPELINE" && l.training_status === column;
+        if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
+          return false;
+        }
+        if (isSearching) return true;
+        // Display only leads moved to this status on today's date
+        return isMovedToday(l);
       });
     }
   }
