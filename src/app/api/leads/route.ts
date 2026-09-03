@@ -40,10 +40,15 @@ export async function GET() {
     }).catch(() => {});
 
     return NextResponse.json({ leads });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching leads:", error);
     return NextResponse.json(
-      { error: "Failed to fetch leads" },
+      { 
+        error: "Failed to fetch leads",
+        message: error?.message || String(error),
+        code: error?.code,
+        meta: error?.meta
+      },
       { status: 500 }
     );
   }
