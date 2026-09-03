@@ -243,8 +243,14 @@ export default function KanbanBoard() {
   const fetchLeads = useCallback(async () => {
     try {
       const res = await fetch("/api/leads");
+      if (!res.ok) {
+        console.error("Leads API error status:", res.status);
+        return;
+      }
       const data = await res.json();
-      setLeads(data.leads || []);
+      if (Array.isArray(data.leads)) {
+        setLeads(data.leads);
+      }
     } catch (err) {
       console.error("Failed to fetch leads:", err);
     } finally {
