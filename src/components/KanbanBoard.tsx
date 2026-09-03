@@ -382,7 +382,7 @@ export default function KanbanBoard() {
       filteredLeads = filteredLeads.filter(l => !(l as any).notes || (l as any).notes.trim() === "");
     }
 
-    // Helper: Check if lead was moved to current status today
+    // Helper: Check if lead was moved to current status today (still used by Pending column)
     const isMovedToday = (l: Lead) => {
       const ts = l.status_changed_at || (l as any).updated_at;
       if (!ts) return false;
@@ -428,72 +428,40 @@ export default function KanbanBoard() {
 
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
-          const isTrainingFixed =
+          return (
             l.brand_status === "Training fixed" ||
             (l.board_column === "TRAINING_PIPELINE" &&
-              (l.training_status === "Scheduled" || !l.training_status));
-          
-          if (!isTrainingFixed) return false;
-
-          // When searching: bypass date filter so lead appears even if saved on another date!
-          if (isSearching) return true;
-
-          // Display only leads moved to this status on today's date
-          return isMovedToday(l);
+              (l.training_status === "Scheduled" || !l.training_status))
+          );
         });
       }
 
+      // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, etc.)
       return filteredLeads.filter((l) => {
-        if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== column) {
-          return false;
-        }
-
-        // When searching: bypass date filter so lead appears even if saved on another date!
-        if (isSearching) return true;
-
-        // Display only leads moved to this status on today's date
-        return isMovedToday(l);
+        return l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column;
       });
     } else {
       // Training Tab
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
         return filteredLeads.filter((l) => {
-          const isVehicleMatch =
+          return (
             l.board_column === "VEHICLE_ASSIGNMENT" ||
             l.training_status === "Assign vehicle" ||
-            l.training_status === "Accept offer";
-          if (!isVehicleMatch) return false;
-
-          if (isSearching) return true;
-
-          return isMovedToday(l);
+            l.training_status === "Accept offer"
+          );
         });
       }
 
       if (column === "Scheduled") {
         return filteredLeads.filter((l) => {
-          const isScheduledMatch =
+          return (
             l.board_column === "TRAINING_PIPELINE" &&
-            (!l.training_status || l.training_status === "Scheduled");
-          if (!isScheduledMatch) return false;
-
-          if (isSearching) return true;
-
-          // By default, only show leads scheduled for today
-          if (l.reminder_date) {
-            try {
-              const d = new Date(l.reminder_date);
-              if (!isNaN(d.getTime())) {
-                const scheduledDateStr = d.toISOString().split("T")[0];
-                return scheduledDateStr === todayStr;
-              }
-            } catch {}
-          }
-          return isMovedToday(l);
+            (!l.training_status || l.training_status === "Scheduled")
+          );
         });
       }
 
-      // For Pending: display ONLY leads who have today's pending reminder
+      // For Pending: display leads who have today's pending reminder (keep date filter here per user request)
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
@@ -514,14 +482,7 @@ export default function KanbanBoard() {
 
       // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
       return filteredLeads.filter((l) => {
-        if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
-          return false;
-        }
-
-        if (isSearching) return true;
-
-        // Display only leads moved to this status on today's date
-        return isMovedToday(l);
+        return l.board_column === "TRAINING_PIPELINE" && l.training_status === column;
       });
     }
   }
