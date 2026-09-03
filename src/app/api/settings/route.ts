@@ -17,6 +17,9 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     "السلام عليكم {name}،\nنذكركم بأن عليكم متأخرات بقيمة {amount} درهم (بدون دفع منذ {days_unpaid} أيام). المرجو تسوية وضعيتكم في أقرب وقت لتفادي توقيف السيارة.\nشكراً.",
   whatsapp_block_warning_template:
     "إنذار عاجل 🚨\nالسلام عليكم {name}، نظراً لعدم تسديدكم المتأخرات بقيمة {amount} درهم، سيتم توقيف سيارتكم اليوم. المرجو الدفع فوراً.",
+  telegram_bot_token: "",
+  telegram_chat_id: "",
+  telegram_notifications_enabled: "true",
   role_tab_permissions: JSON.stringify({
     LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
     FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],

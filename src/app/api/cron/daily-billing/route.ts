@@ -98,32 +98,8 @@ export async function POST(request: Request) {
         nextStage = "DAY_3_BLOCK";
       }
 
-      // If driver reached Day 3, ensure a recovery task is created for Field Supervisors
-      if (nextStage === "DAY_3_BLOCK" && driver.assignedVehicle) {
-        const existingTask = await prisma.fieldTask.findFirst({
-          where: {
-            vehicle_id: driver.assignedVehicle.id,
-            task_type: "VEHICLE_RECOVERY",
-            status: { in: ["PENDING", "IN_PROGRESS"] },
-          },
-        });
-
-        if (!existingTask) {
-          await prisma.fieldTask.create({
-            data: {
-              task_type: "VEHICLE_RECOVERY",
-              vehicle_id: driver.assignedVehicle.id,
-              plate_number: driver.assignedVehicle.plate_number,
-              driver_name: driver.fullName,
-              driver_phone: driver.phoneSanitized,
-              description: `Alerte Blocage Télématique: ${driver.fullName} (${driver.phoneSanitized}) - 3 jours consécutifs d'impayés (${newArrears.toFixed(2)} MAD d'arriérés). Véhicule à récupérer d'urgence sur le terrain.`,
-              priority: "Critical",
-              status: "PENDING",
-            },
-          });
-          recoveryTasksCreated++;
-        }
-      }
+      // Note: Vehicle recovery tasks are no longer created automatically.
+      // They are manually triggered by the Fleet Performance Manager via the Call/Recovery action.
 
       if (nextStage !== driver.defaultStage) {
         escalatedCount++;

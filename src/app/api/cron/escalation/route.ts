@@ -29,21 +29,8 @@ export async function POST() {
         // Mock API call to telematics provider to block engine
         console.log(`[TELEMATICS API] Issuing remote engine block for vehicle ${driver.assignedVehicle?.plate_number}`);
         
-        // Generate a recovery task for Senior Field Supervisor
-        if (driver.assignedVehicle) {
-          await prisma.fieldTask.create({
-            data: {
-              task_type: "VEHICLE_RECOVERY",
-              vehicle_id: driver.assignedVehicle.id,
-              plate_number: driver.assignedVehicle.plate_number,
-              driver_name: driver.fullName,
-              driver_phone: driver.phoneSanitized,
-              description: `Automated Recovery Dispatch: Driver ${driver.fullName} exceeded 48-hour default threshold. Telematic block executed. Recover asset immediately.`,
-              priority: "Critical",
-              status: "PENDING"
-            }
-          });
-        }
+        // Note: Vehicle recovery tasks are no longer created automatically.
+        // They are manually triggered by the Fleet Performance Manager via the Call/Recovery action.
       }
 
       if (nextStage !== driver.defaultStage) {

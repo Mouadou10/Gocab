@@ -25,6 +25,8 @@ model Lead {
   has_fiche_anthropometrique Boolean   @default(false)
   has_confirmation_adresse   Boolean   @default(false)
   has_permis                 Boolean   @default(false)
+  presence_confirmed         Boolean   @default(false) // Agent called and confirmed presence
+  presence_confirmed_at      DateTime? // Timestamp when presence was confirmed by phone
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
   handled_by                 String?   // Agent name / email who handled or updated this lead
   is_archived                Boolean   @default(false)

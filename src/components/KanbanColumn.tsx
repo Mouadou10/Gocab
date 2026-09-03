@@ -32,6 +32,8 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  presence_confirmed?: boolean;
+  presence_confirmed_at?: string | null;
 }
 
 /** Maps DB enum & statuses to user-friendly column titles. */
@@ -77,6 +79,7 @@ interface KanbanColumnProps {
   columnId: string;
   leads: Lead[];
   onCardClick: (lead: Lead) => void;
+  onLeadUpdate?: (lead: Lead) => void;
   isDailyGoalAchieved?: boolean;
   totalNewLeadsCount?: number;
   dailyTrainingFixedToday?: number;
@@ -89,6 +92,7 @@ export default function KanbanColumn({
   columnId,
   leads = [],
   onCardClick,
+  onLeadUpdate,
   isDailyGoalAchieved,
   totalNewLeadsCount,
   dailyTrainingFixedToday,
@@ -200,6 +204,7 @@ export default function KanbanColumn({
               key={lead.id}
               lead={lead}
               onClick={() => onCardClick(lead)}
+              onLeadUpdate={onLeadUpdate}
             />
           ))}
         </SortableContext>

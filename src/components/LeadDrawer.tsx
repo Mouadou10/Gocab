@@ -71,6 +71,8 @@ interface Lead {
   status_changed_at?: string | null;
   handled_by?: string | null;
   notes?: string | null;
+  presence_confirmed?: boolean;
+  presence_confirmed_at?: string | null;
 }
 
 interface LeadDrawerProps {
@@ -92,6 +94,7 @@ export default function LeadDrawer({
   const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
   const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
   const [city, setCity] = useState(lead.city || "");
+  const [presenceConfirmed, setPresenceConfirmed] = useState(Boolean(lead.presence_confirmed));
   
   // KYC Checklist State
   const [hasCin, setHasCin] = useState(lead.has_cin);
@@ -275,6 +278,7 @@ export default function LeadDrawer({
 
       // Record agent attribution
       payload.handled_by = session?.user?.name || session?.user?.email || lead.handled_by || "Agent";
+      payload.presence_confirmed = presenceConfirmed;
 
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
@@ -549,6 +553,28 @@ export default function LeadDrawer({
                   </p>
                 </div>
               )}
+
+              {/* Call to Confirm Presence Checkbox */}
+              <div className="p-3.5 bg-gray-50 border border-gray-200/80 rounded-2xl flex items-center gap-3 hover:bg-emerald-50/50 hover:border-emerald-200 transition-colors">
+                <input
+                  type="checkbox"
+                  id="drawer-presence-confirmed"
+                  checked={presenceConfirmed}
+                  onChange={(e) => setPresenceConfirmed(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <label
+                  htmlFor="drawer-presence-confirmed"
+                  className="text-xs font-semibold text-gray-800 cursor-pointer flex-1 flex items-center justify-between"
+                >
+                  <span>📞 Appel de confirmation de présence effectué</span>
+                  {presenceConfirmed && (
+                    <span className="text-2xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                      ✓ Confirmé
+                    </span>
+                  )}
+                </label>
+              </div>
 
               {/* Conditional Date Picker for Pending */}
               {showReminderPicker && (

@@ -39,6 +39,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useSession } from "next-auth/react";
 import { useLanguage } from "@/context/LanguageContext";
 import BalanceReconciliationModal from "./BalanceReconciliationModal";
 
@@ -86,6 +87,9 @@ export default function FleetPerformanceView() {
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const { data: session } = useSession();
+  const currentUserName = session?.user?.name || "Fleet Performance Manager";
+
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "RED" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
@@ -94,6 +98,84 @@ export default function FleetPerformanceView() {
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
   const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+
+  // Recovery trigger state & active recovery tracking
+  const [triggeringRecoveryId, setTriggeringRecoveryId] = useState<string | null>(null);
+  const [activeRecoveryDriverIds, setActiveRecoveryDriverIds] = useState<Record<string, boolean>>({});
+
+  // Fetch open VEHICLE_RECOVERY field tasks so we know which drivers already have one active
+  const fetchActiveRecoveryTasks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/field-tasks?type=VEHICLE_RECOVERY&status=PENDING");
+      if (res.ok) {
+        const data = await res.json();
+        const activeMap: Record<string, boolean> = {};
+        if (Array.isArray(data.tasks)) {
+          for (const task of data.tasks) {
+            if (task.driver_phone) {
+              activeMap[task.driver_phone.replace(/\D/g, "")] = true;
+            }
+            if (task.plate_number) {
+              activeMap[task.plate_number.replace(/\s+/g, "")] = true;
+            }
+          }
+        }
+        setActiveRecoveryDriverIds(activeMap);
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    fetchActiveRecoveryTasks();
+  }, [fetchActiveRecoveryTasks]);
+
+  // Trigger call & create Vehicle Recovery task for Field Supervisors
+  async function handleCallAndCreateRecovery(driver: DriverDailyItem) {
+    setTriggeringRecoveryId(driver.id);
+
+    // 1. Immediately trigger the phone call
+    if (driver.phoneSanitized) {
+      window.open(`tel:${driver.phoneSanitized}`, "_self");
+    }
+
+    // 2. Create the Vehicle Recovery task on the Field Supervisor page
+    try {
+      const daysUnpaid = driver.consecutiveUnpaidDays || Math.ceil(driver.currentArrearsMAD / 300) || 1;
+      const res = await fetch("/api/field-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task_type: "VEHICLE_RECOVERY",
+          vehicle_id: driver.vehicle?.id || null,
+          plate_number: driver.vehicle?.plate_number || "Véhicule non assigné",
+          driver_name: driver.fullName,
+          driver_phone: driver.phoneSanitized,
+          description: `Alerte Blocage Télématique: ${driver.fullName} (${driver.phoneSanitized}) - ${daysUnpaid} jours consécutifs d'impayés (${driver.currentArrearsMAD.toFixed(2)} MAD d'arriérés). Véhicule à récupérer d'urgence sur le terrain (déclenché par ${currentUserName}).`,
+          priority: "Critical",
+          status: "PENDING",
+          triggered_by: currentUserName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`🚨 Ticket de récupération créé sur la page Terrain pour ${driver.fullName} !`);
+        setActiveRecoveryDriverIds((prev) => ({
+          ...prev,
+          [driver.id]: true,
+          [driver.phoneSanitized.replace(/\D/g, "")]: true,
+          ...(driver.vehicle?.plate_number ? { [driver.vehicle.plate_number.replace(/\s+/g, "")]: true } : {}),
+        }));
+      } else {
+        const errData = await res.json();
+        toast.error(errData.error || "Échec de création du ticket");
+      }
+    } catch (err) {
+      console.error("Error creating recovery task:", err);
+      toast.error("Erreur lors de la création du ticket de récupération");
+    } finally {
+      setTriggeringRecoveryId(null);
+    }
+  }
 
   const fetchDriverCollections = useCallback(async () => {
     setIsLoading(true);
@@ -654,32 +736,73 @@ export default function FleetPerformanceView() {
                         </div>
                       </td>
 
-                      {/* Actions: Save & WhatsApp */}
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleSavePayment(driver)}
-                            disabled={isSaving}
-                            className="px-3 py-1.5 bg-navy hover:bg-navy/90 text-white rounded-xl font-bold text-2xs shadow-2xs transition-all flex items-center gap-1 disabled:opacity-50"
-                          >
-                            {isSaving ? (
-                              <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="w-3 h-3 text-gold" />
-                            )}
-                            <span>Valider</span>
-                          </button>
+                      {/* Actions: Recovery Trigger & Save / WhatsApp */}
+                      <td className="py-3 px-6 text-right">
+                        {(() => {
+                          const isAlreadyInRecovery = Boolean(
+                            activeRecoveryDriverIds[driver.id] ||
+                            (driver.phoneSanitized && activeRecoveryDriverIds[driver.phoneSanitized.replace(/\D/g, "")]) ||
+                            (driver.vehicle?.plate_number && activeRecoveryDriverIds[driver.vehicle.plate_number.replace(/\s+/g, "")])
+                          );
 
-                          <a
-                            href={getWhatsAppReminderURL(driver)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-2xs transition-colors"
-                            title="Relancer sur WhatsApp avec le solde exact"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
+                          return (
+                            <div className="flex flex-col items-end gap-1.5">
+                              {/* Call / Trigger Vehicle Recovery Button (above Valider) */}
+                              <button
+                                type="button"
+                                onClick={() => handleCallAndCreateRecovery(driver)}
+                                disabled={triggeringRecoveryId === driver.id}
+                                className={`w-full max-w-[130px] px-2 py-1 rounded-xl text-3xs font-extrabold transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer ${
+                                  isAlreadyInRecovery
+                                    ? "bg-red-100 text-red-800 border border-red-300 hover:bg-red-200"
+                                    : isRed
+                                    ? "bg-red-600 hover:bg-red-700 text-white shadow-xs"
+                                    : "bg-red-500 hover:bg-red-600 text-white"
+                                }`}
+                                title={
+                                  isAlreadyInRecovery
+                                    ? "Ticket Vehicle Recovery déjà ouvert sur la page Terrain. Cliquez pour appeler."
+                                    : "Appeler le chauffeur et créer automatiquement un ticket Vehicle Recovery sur la page Terrain"
+                                }
+                              >
+                                {triggeringRecoveryId === driver.id ? (
+                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Phone className="w-3 h-3" />
+                                )}
+                                <span className="truncate">
+                                  {isAlreadyInRecovery ? "🚨 En Récupération" : "📞 Appel / Récupérer"}
+                                </span>
+                              </button>
+
+                              {/* Valider & WhatsApp */}
+                              <div className="flex items-center justify-end gap-1.5 w-full max-w-[130px]">
+                                <button
+                                  onClick={() => handleSavePayment(driver)}
+                                  disabled={isSaving}
+                                  className="px-3 py-1.5 bg-navy hover:bg-navy/90 text-white rounded-xl font-bold text-2xs shadow-2xs transition-all flex items-center justify-center gap-1 disabled:opacity-50 flex-1"
+                                >
+                                  {isSaving ? (
+                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3 h-3 text-gold" />
+                                  )}
+                                  <span>Valider</span>
+                                </button>
+
+                                <a
+                                  href={getWhatsAppReminderURL(driver)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-2xs transition-colors"
+                                  title="Relancer sur WhatsApp avec le solde exact"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

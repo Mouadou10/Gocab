@@ -62,10 +62,13 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  updated_at?: string;
   age?: number | null;
   permis_seniority_years?: number | null;
   is_resident?: boolean | null;
   status_changed_at?: string | null;
+  presence_confirmed?: boolean;
+  presence_confirmed_at?: string | null;
 }
 
 // Default Role → tabs fallback
@@ -176,6 +179,7 @@ export default function KanbanBoard() {
   // Filters
   const [filterCity, setFilterCity] = useState("");
   const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Restore tab on mount/refresh or default to role's assigned page on sign in
   useEffect(() => {
@@ -350,6 +354,18 @@ export default function KanbanBoard() {
   function getLeadsByColumn(column: string): Lead[] {
     let filteredLeads = leads;
 
+    const cleanQuery = searchQuery.trim().toLowerCase();
+    const isSearching = cleanQuery.length > 0;
+
+    if (isSearching) {
+      const cleanPhoneQuery = cleanQuery.replace(/\s+/g, "");
+      filteredLeads = filteredLeads.filter((l) => {
+        const name = (l.raw_name || "").toLowerCase();
+        const phone = (l.sanitized_phone || "").replace(/\s+/g, "");
+        return name.includes(cleanQuery) || phone.includes(cleanPhoneQuery);
+      });
+    }
+
     if (filterCity) {
       filteredLeads = filteredLeads.filter(l => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()));
     }
@@ -359,6 +375,19 @@ export default function KanbanBoard() {
     } else if (filterHasNote === "NO") {
       filteredLeads = filteredLeads.filter(l => !(l as any).notes || (l as any).notes.trim() === "");
     }
+
+    // Helper: Check if lead was moved to current status today
+    const isMovedToday = (l: Lead) => {
+      const ts = l.status_changed_at || (l as any).updated_at;
+      if (!ts) return false;
+      try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return false;
+        return d.toISOString().split("T")[0] === todayStr;
+      } catch {
+        return false;
+      }
+    };
 
     if (activeTab === "leads") {
       if (column === "NEW_LEADS") {
@@ -378,6 +407,10 @@ export default function KanbanBoard() {
             return getTimestamp(b) - getTimestamp(a);
           });
 
+        if (isSearching) {
+          return allNewLeads;
+        }
+
         // If daily training target is achieved or calls target reached, continue displaying the active queue
         let targetBatchCount = dailyCallsTarget - callsDoneToday;
         if (targetBatchCount <= 0 || isDailyTrainingGoalAchieved) {
@@ -386,6 +419,7 @@ export default function KanbanBoard() {
 
         return allNewLeads.slice(0, Math.max(1, targetBatchCount));
       }
+
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
           const isTrainingFixed =
@@ -395,78 +429,94 @@ export default function KanbanBoard() {
           
           if (!isTrainingFixed) return false;
 
-          // Remove leads with previous/past training dates (only show today or future)
-          if (l.reminder_date) {
-            try {
-              const d = new Date(l.reminder_date);
-              if (!isNaN(d.getTime())) {
-                const scheduledDateStr = d.toISOString().split("T")[0];
-                if (scheduledDateStr < todayStr) {
-                  return false;
-                }
-              }
-            } catch {}
-          }
-          return true;
+          // When searching: bypass date filter so lead appears even if saved on another date!
+          if (isSearching) return true;
+
+          // Display only leads moved to this status on today's date
+          return isMovedToday(l);
         });
       }
-      return filteredLeads.filter(
-        (l) => l.board_column === "BRAND_PRE_FILTER" && l.brand_status === column
-      );
-    } else {
-      // Training Tab: Only show leads scheduled for today (hide past leads).
-      const isDateValidForToday = (l: Lead) => {
-        if (!l.reminder_date) return true; // Keep leads without a date for safety, or we could hide them
-        try {
-          const d = new Date(l.reminder_date);
-          if (!isNaN(d.getTime())) {
-            const scheduledDateStr = d.toISOString().split("T")[0];
-            // Hide previous leads (before today)
-            if (scheduledDateStr < todayStr) {
-              return false;
-            }
-            // For columns other than "Scheduled", do we hide future leads? 
-            // The user said "start over with showing only person are gonna attend the same day".
-            // So we'll enforce the same rules as Scheduled: only today's leads show up.
-          }
-        } catch {}
-        return true;
-      };
 
+      return filteredLeads.filter((l) => {
+        if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== column) {
+          return false;
+        }
+
+        // When searching: bypass date filter so lead appears even if saved on another date!
+        if (isSearching) return true;
+
+        // Display only leads moved to this status on today's date
+        return isMovedToday(l);
+      });
+    } else {
+      // Training Tab
       if (column === "Assign vehicle" || column === "VEHICLE_ASSIGNMENT" || column === "Accept offer") {
-        return filteredLeads.filter(
-          (l) =>
-            isDateValidForToday(l) &&
-            (l.board_column === "VEHICLE_ASSIGNMENT" ||
+        return filteredLeads.filter((l) => {
+          const isVehicleMatch =
+            l.board_column === "VEHICLE_ASSIGNMENT" ||
             l.training_status === "Assign vehicle" ||
-            l.training_status === "Accept offer")
-        );
+            l.training_status === "Accept offer";
+          if (!isVehicleMatch) return false;
+
+          if (isSearching) return true;
+
+          return isMovedToday(l);
+        });
       }
-      // If training_status is unset but board_column is TRAINING_PIPELINE, fallback to "Scheduled"
+
       if (column === "Scheduled") {
         return filteredLeads.filter((l) => {
-          if (!isDateValidForToday(l)) return false;
-          if (l.board_column !== "TRAINING_PIPELINE") return false;
-          if (l.training_status && l.training_status !== "Scheduled") return false;
+          const isScheduledMatch =
+            l.board_column === "TRAINING_PIPELINE" &&
+            (!l.training_status || l.training_status === "Scheduled");
+          if (!isScheduledMatch) return false;
 
-          // If a scheduled training date is set in the future, hide until training date arrives!
+          if (isSearching) return true;
+
+          // By default, only show leads scheduled for today
           if (l.reminder_date) {
             try {
               const d = new Date(l.reminder_date);
               if (!isNaN(d.getTime())) {
                 const scheduledDateStr = d.toISOString().split("T")[0];
-                if (scheduledDateStr > todayStr) {
-                  return false;
-                }
+                return scheduledDateStr === todayStr;
               }
             } catch {}
           }
-          return true;
+          return isMovedToday(l);
         });
       }
-      return filteredLeads.filter(
-        (l) => isDateValidForToday(l) && l.board_column === "TRAINING_PIPELINE" && l.training_status === column
-      );
+
+      // For Pending: display ONLY leads who have today's pending reminder
+      if (column === "Pending") {
+        return filteredLeads.filter((l) => {
+          if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
+
+          if (isSearching) return true;
+
+          if (!l.reminder_date) return false;
+          try {
+            const d = new Date(l.reminder_date);
+            if (!isNaN(d.getTime())) {
+              const reminderDateStr = d.toISOString().split("T")[0];
+              return reminderDateStr === todayStr;
+            }
+          } catch {}
+          return false;
+        });
+      }
+
+      // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
+      return filteredLeads.filter((l) => {
+        if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
+          return false;
+        }
+
+        if (isSearching) return true;
+
+        // Display only leads moved to this status on today's date
+        return isMovedToday(l);
+      });
     }
   }
 
@@ -1054,8 +1104,36 @@ export default function KanbanBoard() {
 
       {/* Leads/Training Toolbar */}
       {(activeTab === "leads" || activeTab === "training") && (
-        <div className="bg-white px-6 py-3 border-b border-gray-200 shadow-sm flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-xs">
+        <div className="bg-white px-6 py-3 border-b border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            {/* Search Field (Name or Phone number) */}
+            <div className="relative flex items-center">
+              <span className="absolute left-3 text-gray-400 text-xs">🔍</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  language === "fr"
+                    ? "Rechercher par nom ou tél..."
+                    : language === "ar"
+                    ? "بحث بالاسم أو الهاتف..."
+                    : "Search by name or phone..."
+                }
+                className="pl-8 pr-7 py-1.5 border border-gray-300 rounded-xl text-xs text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy w-64 shadow-2xs font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  title="Effacer la recherche"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <span className="font-semibold text-gray-500">Filter City:</span>
               <input
@@ -1063,7 +1141,7 @@ export default function KanbanBoard() {
                 value={filterCity}
                 onChange={(e) => setFilterCity(e.target.value)}
                 placeholder="e.g. Casablanca"
-                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy w-32"
+                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy w-32 bg-white"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -1071,7 +1149,7 @@ export default function KanbanBoard() {
               <select
                 value={filterHasNote}
                 onChange={(e) => setFilterHasNote(e.target.value as "ALL" | "YES" | "NO")}
-                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy cursor-pointer"
+                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy cursor-pointer bg-white"
               >
                 <option value="ALL">All</option>
                 <option value="YES">Yes</option>
@@ -1079,6 +1157,20 @@ export default function KanbanBoard() {
               </select>
             </div>
           </div>
+
+          {searchQuery && (
+            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200/80 px-3 py-1 rounded-xl flex items-center gap-1.5 font-medium">
+              <span>🔎</span>
+              <span>Recherche (toutes dates) : <strong>&quot;{searchQuery}&quot;</strong></span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="ml-2 text-blue-500 hover:text-blue-800 underline font-semibold cursor-pointer"
+              >
+                Réinitialiser
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1134,6 +1226,7 @@ export default function KanbanBoard() {
                       columnId={col}
                       leads={getLeadsByColumn(col)}
                       onCardClick={handleCardClick}
+                      onLeadUpdate={handleLeadUpdate}
                       isDailyGoalAchieved={col === "NEW_LEADS" && isDailyTrainingGoalAchieved}
                       totalNewLeadsCount={col === "NEW_LEADS" ? totalNewLeadsInDB : undefined}
                       dailyTrainingFixedToday={trainingFixedToday}

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 
 /**
  * GET /api/field-tasks
@@ -76,6 +78,17 @@ export async function POST(request: Request) {
         due_date: due_date ? new Date(due_date) : null,
       },
     });
+
+    const session = await auth();
+    const triggered_by = body.triggered_by || session?.user?.name || "Fleet Performance Manager";
+
+    // Send instant Telegram notification to the Field Supervisor group (asynchronous, non-blocking)
+    sendFieldTaskTelegramAlert({
+      ...task,
+      triggered_by,
+    }).catch((err) =>
+      console.error("Non-blocking Telegram alert error:", err)
+    );
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {

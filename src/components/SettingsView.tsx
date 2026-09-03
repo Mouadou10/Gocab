@@ -102,7 +102,7 @@ interface UserRecord {
 
 export default function SettingsView() {
   const { t, language } = useLanguage();
-  const [activeSection, setActiveSection] = useState<"targets" | "roles" | "users" | "whatsapp">("targets");
+  const [activeSection, setActiveSection] = useState<"targets" | "roles" | "users" | "whatsapp" | "telegram">("targets");
   const [targets, setTargets] = useState<DepartmentTargets>(DEFAULT_TARGETS);
   const [permissions, setPermissions] = useState<Record<string, TabType[]>>(DEFAULT_ROLE_PERMISSIONS);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
@@ -111,6 +111,13 @@ export default function SettingsView() {
   const [missingDocsTemplate, setMissingDocsTemplate] = useState("");
   const [paymentReminderTemplate, setPaymentReminderTemplate] = useState("");
   const [blockWarningTemplate, setBlockWarningTemplate] = useState("");
+
+  // Telegram Notifications State
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -157,6 +164,15 @@ export default function SettingsView() {
           }
           if (settingsData.settings.whatsapp_block_warning_template) {
             setBlockWarningTemplate(settingsData.settings.whatsapp_block_warning_template);
+          }
+          if (settingsData.settings.telegram_bot_token) {
+            setTelegramBotToken(settingsData.settings.telegram_bot_token);
+          }
+          if (settingsData.settings.telegram_chat_id) {
+            setTelegramChatId(settingsData.settings.telegram_chat_id);
+          }
+          if (settingsData.settings.telegram_notifications_enabled !== undefined) {
+            setTelegramEnabled(settingsData.settings.telegram_notifications_enabled !== "false");
           }
           if (settingsData.settings.role_tab_permissions) {
             try {
@@ -357,6 +373,69 @@ export default function SettingsView() {
     }
   }
 
+  // Save Telegram Settings
+  async function handleSaveTelegram(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const settingsToSave = [
+        { key: "telegram_bot_token", value: telegramBotToken.trim() },
+        { key: "telegram_chat_id", value: telegramChatId.trim() },
+        { key: "telegram_notifications_enabled", value: String(telegramEnabled) }
+      ];
+
+      const results = await Promise.all(
+        settingsToSave.map((s) =>
+          fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(s),
+          })
+        )
+      );
+
+      if (results.every((r) => r.ok)) {
+        toast.success("📱 Paramètres Telegram enregistrés avec succès !");
+      } else {
+        toast.error("Certains paramètres Telegram n'ont pas pu être enregistrés.");
+      }
+    } catch (err) {
+      toast.error("Erreur réseau lors de l'enregistrement Telegram");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Send Test Notification to Telegram
+  async function handleTestTelegram() {
+    if (!telegramBotToken.trim() || !telegramChatId.trim()) {
+      toast.error("Veuillez renseigner le Token du Bot et l'ID du Groupe Telegram avant de tester.");
+      return;
+    }
+    setIsTestingTelegram(true);
+    try {
+      const res = await fetch("/api/telegram/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bot_token: telegramBotToken.trim(),
+          chat_id: telegramChatId.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("🚀 Notification test envoyée avec succès sur votre groupe Telegram !");
+      } else {
+        toast.error(data.error || "Échec de l'envoi test Telegram");
+      }
+    } catch (err) {
+      toast.error("Erreur réseau lors du test Telegram");
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  }
+
   // Change User Role
   async function handleUserRoleChange(userId: string, newRole: string) {
     try {
@@ -476,6 +555,16 @@ export default function SettingsView() {
             }`}
           >
             💬 WhatsApp
+          </button>
+          <button
+            onClick={() => setActiveSection("telegram")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeSection === "telegram"
+                ? "bg-white text-navy shadow-sm font-bold"
+                : "text-white/80 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            📱 Telegram
           </button>
         </div>
       </div>
@@ -1139,6 +1228,107 @@ export default function SettingsView() {
               {isSaving ? "Saving…" : "Save All Templates"}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* SECTION 5: TELEGRAM ALERTS */}
+      {activeSection === "telegram" && (
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span>📱</span> Telegram Notifications — Groupe Field Supervisor
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Envoyez des alertes instantanées avec sonnerie sur les téléphones des superviseurs de terrain dès qu'une nouvelle tâche ou récupération est déclenchée.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
+              <input
+                type="checkbox"
+                checked={telegramEnabled}
+                onChange={(e) => setTelegramEnabled(e.target.checked)}
+                className="w-4 h-4 text-navy rounded border-gray-300 focus:ring-navy"
+              />
+              <span className="text-xs font-bold text-gray-700">Notifications actives</span>
+            </label>
+          </div>
+
+          <form onSubmit={handleSaveTelegram} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Bot Token */}
+              <div className="space-y-2 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                <label className="block text-xs font-bold text-gray-800">
+                  🤖 Telegram Bot Token
+                </label>
+                <input
+                  type="text"
+                  value={telegramBotToken}
+                  onChange={(e) => setTelegramBotToken(e.target.value)}
+                  placeholder="ex: 7891234567:AAHxyz... (obtenu via @BotFather)"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white"
+                />
+                <p className="text-[11px] text-gray-500">
+                  Le token secret de votre bot fourni par <b>@BotFather</b> sur Telegram.
+                </p>
+              </div>
+
+              {/* Group Chat ID */}
+              <div className="space-y-2 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                <label className="block text-xs font-bold text-gray-800">
+                  👥 Group Chat ID (ID du groupe)
+                </label>
+                <input
+                  type="text"
+                  value={telegramChatId}
+                  onChange={(e) => setTelegramChatId(e.target.value)}
+                  placeholder="ex: -1001234567890 ou -987654321"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white"
+                />
+                <p className="text-[11px] text-gray-500">
+                  L'identifiant numérique de votre groupe Telegram (commence par <b>-</b>).
+                </p>
+              </div>
+            </div>
+
+            {/* Step-by-Step Guide */}
+            <div className="p-4 bg-sky-50/70 border border-sky-200 rounded-2xl text-xs space-y-2 text-sky-900">
+              <p className="font-bold flex items-center gap-1.5">
+                <span>💡</span> Comment configurer les alertes Telegram pour votre équipe terrain :
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-sky-800">
+                <li>Ouvrez Telegram et cherchez le bot <b>@BotFather</b> pour créer un bot gratuit (commande <code>/newbot</code>) et copier le token.</li>
+                <li>Ajoutez ce bot en tant que <b>membre ou administrateur</b> dans votre groupe Telegram existant.</li>
+                <li>Ajoutez également le bot <b>@RawDataBot</b> dans le groupe pour voir l'identifiant du chat (<b>Chat ID</b>), puis retirez-le.</li>
+                <li>Collez le Token et le Chat ID ci-dessus, puis cliquez sur <b>"Tester la notification"</b> pour vérifier la sonnerie sur vos téléphones !</li>
+              </ol>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={handleTestTelegram}
+                disabled={isTestingTelegram || !telegramBotToken.trim() || !telegramChatId.trim()}
+                className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isTestingTelegram ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>🚀</span>
+                )}
+                <span>Tester la notification sur Telegram</span>
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+              >
+                {isSaving ? "Enregistrement…" : "Enregistrer les paramètres"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

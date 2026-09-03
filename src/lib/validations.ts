@@ -50,6 +50,7 @@ export const LeadUpdateSchema = z.object({
   assigned_vehicle_id: z.string().optional().nullable(),
   is_recalled: z.boolean().optional(),
   mark_as_called: z.boolean().optional(),
+  presence_confirmed: z.boolean().optional(),
 });
 
 export const VehicleCreateSchema = z.object({

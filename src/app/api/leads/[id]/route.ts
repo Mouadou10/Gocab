@@ -41,6 +41,8 @@ export async function PATCH(
       has_fiche_anthropometrique?: boolean;
       has_confirmation_adresse?: boolean;
       has_permis?: boolean;
+      presence_confirmed?: boolean;
+      presence_confirmed_at?: Date | null;
       notes?: string | null;
       handled_by?: string | null;
     } = {};
@@ -79,6 +81,10 @@ export async function PATCH(
     if (body.has_permis !== undefined) {
       updateData.has_permis = Boolean(body.has_permis);
     }
+    if (body.presence_confirmed !== undefined) {
+      updateData.presence_confirmed = Boolean(body.presence_confirmed);
+      updateData.presence_confirmed_at = body.presence_confirmed ? new Date() : null;
+    }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
     }
@@ -89,17 +95,15 @@ export async function PATCH(
     // Guardrails removed per user request
     // ───────────────────────────────────────────────────────────────────────
 
-    // If the lead is marked as recalled or being moved out of NEW_LEADS, stamp when it happened
-    if (body.is_recalled || body.mark_as_called) {
+    // If status or column is changed or marked as called, stamp when it happened
+    if (
+      body.is_recalled ||
+      body.mark_as_called ||
+      body.brand_status !== undefined ||
+      body.training_status !== undefined ||
+      (body.board_column && body.board_column !== "NEW_LEADS")
+    ) {
       (updateData as any).status_changed_at = new Date();
-    } else if (updateData.board_column && updateData.board_column !== "NEW_LEADS") {
-      const currentLead = await prisma.lead.findUnique({
-        where: { id },
-        select: { board_column: true, status_changed_at: true },
-      });
-      if (currentLead && currentLead.board_column === "NEW_LEADS") {
-        (updateData as any).status_changed_at = new Date();
-      }
     }
 
     const updatedLead = await prisma.lead.update({

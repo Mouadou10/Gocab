@@ -10,6 +10,7 @@
  * - Olive green border highlight for accepted offers
  */
 
+import React, { useState, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { generateTrainingInviteURL, generateThankYouURL } from "@/lib/whatsapp";
@@ -34,14 +35,17 @@ interface Lead {
   age?: number | null;
   permis_seniority_years?: number | null;
   is_resident?: boolean | null;
+  presence_confirmed?: boolean;
+  presence_confirmed_at?: string | null;
 }
 
 interface LeadCardProps {
   lead: Lead;
   onClick: () => void;
+  onLeadUpdate?: (lead: Lead) => void;
 }
 
-export default function LeadCard({ lead, onClick }: LeadCardProps) {
+export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps) {
   const {
     attributes,
     listeners,
@@ -55,6 +59,37 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const [presenceConfirmed, setPresenceConfirmed] = useState(Boolean(lead.presence_confirmed));
+  const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
+
+  useEffect(() => {
+    setPresenceConfirmed(Boolean(lead.presence_confirmed));
+  }, [lead.presence_confirmed]);
+
+  async function handleTogglePresence(checked: boolean) {
+    setPresenceConfirmed(checked);
+    setIsUpdatingPresence(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presence_confirmed: checked }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lead && onLeadUpdate) {
+          onLeadUpdate(data.lead);
+        }
+      } else {
+        setPresenceConfirmed(!checked);
+      }
+    } catch {
+      setPresenceConfirmed(!checked);
+    } finally {
+      setIsUpdatingPresence(false);
+    }
+  }
 
   const isAccepted = lead.training_status === "Assign vehicle" || lead.training_status === "Accept offer" || lead.board_column === "VEHICLE_ASSIGNMENT";
   const isTrainingFixed = lead.brand_status === "Training fixed";
@@ -201,6 +236,51 @@ export default function LeadCard({ lead, onClick }: LeadCardProps) {
             <span>⏰</span>
             Reminder: {new Date(lead.reminder_date).toLocaleDateString()}
           </p>
+        )}
+
+        {/* Call to Confirm Presence Checkbox */}
+        {(lead.board_column === "TRAINING_PIPELINE" ||
+          lead.training_status === "Scheduled" ||
+          lead.training_status === "Pending" ||
+          lead.brand_status === "Training fixed") && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isUpdatingPresence) {
+                handleTogglePresence(!presenceConfirmed);
+              }
+            }}
+            className={`mt-2 flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition-all ${
+              presenceConfirmed
+                ? "bg-emerald-50 border-emerald-300 text-emerald-800 font-medium"
+                : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-emerald-50/50 hover:border-emerald-200"
+            }`}
+            title="Cocher si le prospect a été appelé pour confirmer sa présence"
+          >
+            <input
+              type="checkbox"
+              id={`presence-${lead.id}`}
+              checked={presenceConfirmed}
+              onChange={(e) => {
+                e.stopPropagation();
+                handleTogglePresence(e.target.checked);
+              }}
+              disabled={isUpdatingPresence}
+              className="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+            />
+            <label
+              htmlFor={`presence-${lead.id}`}
+              className="cursor-pointer text-[11px] flex-1 flex items-center justify-between"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span>{presenceConfirmed ? "Présence confirmée par appel" : "Appel confirmation présence"}</span>
+              {presenceConfirmed && (
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold">
+                  ✓ Confirmé
+                </span>
+              )}
+            </label>
+          </div>
         )}
       </div>
 
