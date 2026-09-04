@@ -89,7 +89,7 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
           const d = new Date(lead.reminder_date);
           if (!isNaN(d.getTime())) {
             const dateStr = d.toISOString().split('T')[0];
-            if (dateStr > todayStr && dateFilter === todayStr) {
+            if (dateFilter === todayStr && dateStr !== todayStr) {
               return;
             }
           }

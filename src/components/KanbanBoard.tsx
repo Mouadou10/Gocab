@@ -180,6 +180,7 @@ export default function KanbanBoard() {
   const [filterCity, setFilterCity] = useState("");
   const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [trainingDateFilter, setTrainingDateFilter] = useState<"TODAY" | "ALL">("TODAY");
 
   // Restore tab on mount/refresh or default to role's assigned page on sign in
   useEffect(() => {
@@ -315,6 +316,43 @@ export default function KanbanBoard() {
   // Daily Performance Metrics for Target Gating
   const todayStr = new Date().toISOString().split("T")[0];
 
+  // Deterministic helper: Check if a date matches today strictly across all environments & timezones
+  const isScheduledDateToday = useCallback((dateVal: any): boolean => {
+    if (!dateVal) return false;
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return false;
+
+      const now = new Date();
+      // 1. Same local calendar day
+      if (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      ) {
+        return true;
+      }
+
+      // 2. ISO UTC date string matches
+      const dIso = d.toISOString().slice(0, 10);
+      const nowIso = now.toISOString().slice(0, 10);
+      if (dIso === nowIso) return true;
+
+      // 3. Formatted French tag matches (DD/MM/YYYY)
+      const dTag = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const nowTag = now.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      if (dTag === nowTag) return true;
+
+      // 4. Local YYYY-MM-DD matches
+      const localNowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      if (dIso === localNowStr) return true;
+
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const callsDoneToday = leads.filter((l) => {
     if (l.board_column === "NEW_LEADS") return false;
     if (!l.status_changed_at) return false;
@@ -346,6 +384,17 @@ export default function KanbanBoard() {
 
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
   const totalNewLeadsInDB = leads.filter((l) => l.board_column === "NEW_LEADS").length;
+
+  // Scheduled counts for training header/filter
+  const scheduledLeadsTotal = leads.filter(
+    (l) =>
+      l.board_column === "TRAINING_PIPELINE" &&
+      (!l.training_status || l.training_status === "Scheduled")
+  );
+  const allScheduledCount = scheduledLeadsTotal.length;
+  const todayScheduledCount = scheduledLeadsTotal.filter((l) =>
+    isScheduledDateToday(l.reminder_date)
+  ).length;
 
   // Trigger celebration modal once when training goal is reached — ONLY for Lead Acquisition
   useEffect(() => {
@@ -396,31 +445,18 @@ export default function KanbanBoard() {
     };
 
     // Helper: Check if a date matches today (handles fr-FR date tag, local time & ISO UTC strings)
-    const isDateMatchToday = (dateVal: any) => {
-      if (!dateVal) return false;
-      try {
-        const d = new Date(dateVal);
-        if (isNaN(d.getTime())) return false;
-        const tag = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-        if (tag === todayDateTag) return true;
-        const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const isoDate = d.toISOString().split("T")[0];
-        return localDate === todayStr || isoDate === todayStr;
-      } catch {
-        return false;
-      }
-    };
+    const isDateMatchToday = (dateVal: any) => isScheduledDateToday(dateVal);
 
     // Helper: Check if lead had its status changed TODAY strictly (using status_changed_at)
     const isStatusChangedToday = (l: Lead) => {
       if (!l.status_changed_at) return false;
-      return isDateMatchToday(l.status_changed_at);
+      return isScheduledDateToday(l.status_changed_at);
     };
 
     // Helper: Check if lead is scheduled to attend TODAY strictly (date tag must equal today's date tag)
     const isScheduledToAttendToday = (l: Lead) => {
       if (!l.reminder_date) return false;
-      return getLeadDateTag(l.reminder_date) === todayDateTag;
+      return isScheduledDateToday(l.reminder_date);
     };
 
     if (activeTab === "leads") {
@@ -501,9 +537,17 @@ export default function KanbanBoard() {
             l.board_column === "TRAINING_PIPELINE" &&
             (!l.training_status || l.training_status === "Scheduled");
           if (!isScheduledMatch) return false;
-          if (isSearching) return true;
-          // In training page the agent should see ONLY leads with date tag = today's date
-          return getLeadDateTag(l.reminder_date) === todayDateTag;
+
+          const isToday = isScheduledDateToday(l.reminder_date);
+
+          // For agents (LEAD_ACQUISITION_JR) or whenever TODAY filter is active:
+          // Strictly show ONLY today's scheduled leads (even when searching!)
+          if (userRole === "LEAD_ACQUISITION_JR" || trainingDateFilter === "TODAY") {
+            return isToday;
+          }
+
+          // Admins/Managers viewing all dates
+          return true;
         });
       }
 
@@ -511,8 +555,11 @@ export default function KanbanBoard() {
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
-          if (isSearching) return true;
-          return getLeadDateTag(l.reminder_date) === todayDateTag;
+          const isToday = isScheduledDateToday(l.reminder_date);
+          if (userRole === "LEAD_ACQUISITION_JR" || trainingDateFilter === "TODAY") {
+            return isToday;
+          }
+          return true;
         });
       }
 
@@ -1165,12 +1212,46 @@ export default function KanbanBoard() {
                 <option value="NO">No</option>
               </select>
             </div>
+
+            {activeTab === "training" && (
+              <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setTrainingDateFilter("TODAY")}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    trainingDateFilter === "TODAY"
+                      ? "bg-white text-navy shadow-xs"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  📅 Aujourd&apos;hui ({todayScheduledCount})
+                </button>
+                {userRole !== "LEAD_ACQUISITION_JR" && (
+                  <button
+                    type="button"
+                    onClick={() => setTrainingDateFilter("ALL")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      trainingDateFilter === "ALL"
+                        ? "bg-white text-navy shadow-xs"
+                        : "text-gray-500 hover:text-gray-800"
+                    }`}
+                  >
+                    Toutes les dates ({allScheduledCount})
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {searchQuery && (
             <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200/80 px-3 py-1 rounded-xl flex items-center gap-1.5 font-medium">
               <span>🔎</span>
-              <span>Recherche (toutes dates) : <strong>&quot;{searchQuery}&quot;</strong></span>
+              <span>
+                {userRole === "LEAD_ACQUISITION_JR" || trainingDateFilter === "TODAY"
+                  ? "Recherche (aujourd'hui) : "
+                  : "Recherche (toutes dates) : "}
+                <strong>&quot;{searchQuery}&quot;</strong>
+              </span>
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
