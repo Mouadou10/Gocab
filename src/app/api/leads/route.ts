@@ -7,6 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,9 @@ export async function POST(request: Request) {
         status_changed_at: (brand_status || training_status || board_column !== "NEW_LEADS") ? new Date() : null,
       },
     });
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("leads").catch(() => {});
 
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error: any) {

@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { LeadUpdateSchema } from "@/lib/validations";
+import { touchSyncState } from "@/lib/sync";
 
 export async function PATCH(
   request: NextRequest,
@@ -110,6 +111,9 @@ export async function PATCH(
       where: { id },
       data: updateData,
     });
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("leads").catch(() => {});
 
     // ── Auto-Convert Lead to DriverProfile & Assign Vehicle ────────────────
     if (

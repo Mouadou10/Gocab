@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * PATCH /api/tickets/[id]
@@ -48,6 +49,9 @@ export async function PATCH(
       where: { id },
       data: updateData,
     });
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("tickets").catch(() => {});
 
     // When ticket is resolved, auto-create a Field Task for the Field Supervisor
     if (body.status === "RESOLVED") {

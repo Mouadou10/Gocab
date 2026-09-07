@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import {
   DndContext,
   DragEndEvent,
@@ -327,13 +328,13 @@ export default function KanbanBoard() {
     }
   }, []);
 
+  // Connect to Live Session Sync: automatically re-fetches leads & settings when updated anywhere
+  const { notifyMutation } = useLiveSync("leads", fetchLeads);
+  useLiveSync("settings", fetchSettings);
+
   useEffect(() => {
     fetchLeads();
     fetchSettings();
-
-    // Auto-refresh the board every 1 minute to sync updates
-    const interval = setInterval(fetchLeads, 60000);
-    return () => clearInterval(interval);
   }, [fetchLeads, fetchSettings]);
 
   // Daily Performance Metrics for Target Gating
@@ -604,11 +605,12 @@ export default function KanbanBoard() {
     setSelectedLead(lead);
   }
 
-  /** After drawer update, update the lead in state. */
+  /** After drawer update, update the lead in state and notify live sessions. */
   function handleLeadUpdate(updatedLead: Lead) {
     setLeads((prev) =>
       prev.map((l) => (l.id === updatedLead.id ? updatedLead : l))
     );
+    notifyMutation("leads");
   }
 
   /** Bring selected status column to 2nd position (right after NEW_LEADS) */
@@ -838,6 +840,8 @@ export default function KanbanBoard() {
         }
       }
     }
+
+    notifyMutation("leads");
   }
 
   function handleDragOver(event: DragOverEvent) {

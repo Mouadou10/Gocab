@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { matchHeaders, getField, resolveLeadStatus } from "@/lib/csv-header-matcher";
+import { touchSyncState } from "@/lib/sync";
 import Papa from "papaparse";
 
 /** Strip spaces, dashes, and leading zeros, then prepend +212. */
@@ -176,6 +177,9 @@ export async function POST(request: NextRequest) {
         updatedCount++;
       }
     }
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("leads").catch(() => {});
 
     return NextResponse.json({
       success: true,

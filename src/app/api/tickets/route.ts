@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * GET /api/tickets
@@ -133,6 +134,9 @@ export async function POST(request: Request) {
         });
       }
     }
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("tickets").catch(() => {});
 
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {

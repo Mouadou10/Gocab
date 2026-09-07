@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   whatsapp_invite_template:
@@ -86,6 +87,9 @@ export async function POST(request: NextRequest) {
       update: { value },
       create: { key, value },
     });
+
+    // Touch sync state so all open sessions refresh immediately
+    touchSyncState("settings").catch(() => {});
 
     return NextResponse.json({ setting });
   } catch (error) {

@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import CarModel3D from "./CarModel3D";
 import FieldMobileQuickActions from "./FieldMobileQuickActions";
 
@@ -189,6 +190,7 @@ export default function FieldSupervisorView() {
         toast.success("✅ Véhicule récupéré avec succès ! Le ticket a été clôturé et le véhicule est désormais Disponible.");
         setRecoveryModalTask(null);
         fetchTasks();
+        notifyMutation("tickets");
       } else {
         toast.error("Échec de la validation de la récupération");
       }
@@ -226,6 +228,14 @@ export default function FieldSupervisorView() {
       console.error("Failed to fetch due checkups:", err);
     }
   }, []);
+
+  const handleRefreshAll = useCallback(() => {
+    fetchTasks();
+    fetchDueCheckups();
+  }, [fetchTasks, fetchDueCheckups]);
+
+  // Live sync: auto-refreshes tasks when tickets or fleet status updates
+  const { notifyMutation } = useLiveSync("tickets", handleRefreshAll);
 
   useEffect(() => { 
     fetchTasks(); 

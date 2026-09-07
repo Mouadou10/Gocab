@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { LiveSyncProvider } from "@/context/LiveSyncContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,23 +44,25 @@ export default function RootLayout({
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-[#f4f6fb]">
         <SessionProviderWrapper>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            <LanguageProvider>
-              {children}
-              <Toaster 
-                position="bottom-right"
-                toastOptions={{
-                  duration: 4000,
-                  style: {
-                    background: '#fff',
-                    color: '#1e293b',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                    borderRadius: '12px',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                  },
-                }} 
-              />
-            </LanguageProvider>
+            <LiveSyncProvider>
+              <LanguageProvider>
+                {children}
+                <Toaster 
+                  position="bottom-right"
+                  toastOptions={{
+                    duration: 4000,
+                    style: {
+                      background: '#fff',
+                      color: '#1e293b',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                    },
+                  }} 
+                />
+              </LanguageProvider>
+            </LiveSyncProvider>
           </ThemeProvider>
         </SessionProviderWrapper>
       </body>

@@ -24,6 +24,7 @@ import {
   useSensors,
   closestCorners,
 } from "@dnd-kit/core";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
 import TicketDrawer, { MaintenanceTicket as BaseMaintenanceTicket } from "./TicketDrawer";
 import TicketKanbanColumn from "./TicketKanbanColumn";
@@ -97,6 +98,9 @@ export default function SupportTicketsView() {
     }
   }, [searchTerm, selectedType]);
 
+  // Live sync: auto-refreshes tickets when modified anywhere
+  const { notifyMutation } = useLiveSync("tickets", fetchTickets);
+
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
@@ -127,6 +131,7 @@ export default function SupportTicketsView() {
       if (res.ok) {
         toast.success("Ticket deleted");
         fetchTickets();
+        notifyMutation("tickets");
       } else {
         toast.error("Failed to delete ticket");
       }
@@ -156,6 +161,7 @@ export default function SupportTicketsView() {
         toast.success("Payment waiver applied successfully");
         setWaiverTicket(null);
         fetchTickets();
+        notifyMutation("tickets");
       } else {
         toast.error("Failed to apply waiver");
       }
@@ -183,6 +189,7 @@ export default function SupportTicketsView() {
       if (res.ok) {
         toast.success("Waiver removed");
         fetchTickets();
+        notifyMutation("tickets");
       } else {
         toast.error("Failed to cancel waiver");
       }
@@ -215,6 +222,7 @@ export default function SupportTicketsView() {
         toast.success("Ticket resolved successfully");
         setResolvingTicket(null);
         fetchTickets();
+        notifyMutation("tickets");
       } else {
         toast.error("Failed to resolve ticket");
       }
@@ -306,6 +314,7 @@ export default function SupportTicketsView() {
         });
         toast.success("Ticket status updated");
         fetchTickets();
+        notifyMutation("tickets");
       } catch (err: any) {
         toast.error("Failed to update status");
         console.error("Failed to update status on drag end", err);
