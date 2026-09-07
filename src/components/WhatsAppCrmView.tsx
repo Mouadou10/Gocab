@@ -109,6 +109,18 @@ export default function WhatsAppCrmView() {
       .catch(() => {});
   }, []);
 
+  // Check for target phone requested from Lead Drawer
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const targetPhone = localStorage.getItem("gocab_target_whatsapp_phone");
+      if (targetPhone) {
+        setSearchQuery(targetPhone);
+        localStorage.removeItem("gocab_target_whatsapp_phone");
+      }
+    } catch (e) {}
+  }, []);
+
   // Fetch conversations list
   const fetchConversations = useCallback(
     async (preserveSelection = true) => {

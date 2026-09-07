@@ -176,6 +176,7 @@ export default function KanbanBoard() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [isTabRestored, setIsTabRestored] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
+  const [whatsappMissingDocsTemplate, setWhatsappMissingDocsTemplate] = useState("");
   const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
 
   // Poll unread WhatsApp count
@@ -286,6 +287,9 @@ export default function KanbanBoard() {
       if (data.settings) {
         if (data.settings.whatsapp_invite_template) {
           setWhatsappTemplate(data.settings.whatsapp_invite_template);
+        }
+        if (data.settings.whatsapp_missing_docs_template) {
+          setWhatsappMissingDocsTemplate(data.settings.whatsapp_missing_docs_template);
         }
         if (data.settings.role_tab_permissions) {
           try {
@@ -1395,6 +1399,14 @@ export default function KanbanBoard() {
           onClose={() => setSelectedLead(null)}
           onUpdate={handleLeadUpdate}
           whatsappTemplate={whatsappTemplate}
+          whatsappMissingDocsTemplate={whatsappMissingDocsTemplate}
+          onOpenWhatsAppChat={(phone) => {
+            setSelectedLead(null);
+            try {
+              localStorage.setItem("gocab_target_whatsapp_phone", phone);
+            } catch (e) {}
+            handleSelectTab("whatsapp");
+          }}
         />
       )}
 

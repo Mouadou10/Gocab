@@ -11,7 +11,16 @@
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
-import { generateTrainingInviteURL, generateThankYouURL } from "@/lib/whatsapp";
+import {
+  generateTrainingInviteURL,
+  generateThankYouURL,
+  formatDisplayPhone,
+  getTemplateForLeadStatus,
+  formatLeadWhatsAppMessage,
+  generateWhatsAppWebURL,
+  LEAD_STATUS_TEMPLATES,
+  LeadStatusTemplateDef,
+} from "@/lib/whatsapp";
 
 const BRAND_STATUS_OPTIONS = [
   "Not interested",
@@ -81,6 +90,8 @@ interface LeadDrawerProps {
   onClose: () => void;
   onUpdate: (updatedLead: Lead) => void;
   whatsappTemplate?: string;
+  whatsappMissingDocsTemplate?: string;
+  onOpenWhatsAppChat?: (phone: string, name: string) => void;
 }
 
 export default function LeadDrawer({
@@ -89,6 +100,8 @@ export default function LeadDrawer({
   onClose,
   onUpdate,
   whatsappTemplate,
+  whatsappMissingDocsTemplate,
+  onOpenWhatsAppChat,
 }: LeadDrawerProps) {
   const { data: session } = useSession();
   const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
@@ -158,6 +171,199 @@ export default function LeadDrawer({
     return () => clearTimeout(timer);
   }, []);
 
+  // WhatsApp Direct Hub State
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [waMessageText, setWaMessageText] = useState<string>("");
+  const [isManualEdit, setIsManualEdit] = useState<boolean>(false);
+  const [isSendingWa, setIsSendingWa] = useState<boolean>(false);
+  const [waSentSuccessAt, setWaSentSuccessAt] = useState<string | null>(null);
+  const [waDeliveryMode, setWaDeliveryMode] = useState<string | null>(null);
+  const [recentWaMessages, setRecentWaMessages] = useState<any[]>([]);
+  const [isLoadingWaHistory, setIsLoadingWaHistory] = useState<boolean>(false);
+
+  // Missing documents list for KYC template
+  const missingDocsList: string[] = [];
+  if (!hasCin) missingDocsList.push("Carte Nationale d'Identité (CIN)");
+  if (!hasFiche) missingDocsList.push("Fiche anthropométrique (Casier judiciaire)");
+  if (!hasConfirmation) missingDocsList.push("Confirmation / Justificatif d'adresse");
+  if (!hasPermis) missingDocsList.push("Permis de conduire (2+ ans)");
+
+  // Active status key based on board
+  const activeStatusKey = boardType === "leads" ? (brandStatus || "NEW_LEADS") : (trainingStatus || "Scheduled");
+
+  // Re-generate or update template text when active status or context fields change
+  useEffect(() => {
+    if (isManualEdit) return;
+
+    const resolvedTemplate = getTemplateForLeadStatus(
+      boardType,
+      activeStatusKey,
+      whatsappTemplate,
+      whatsappMissingDocsTemplate
+    );
+
+    setSelectedTemplateId(resolvedTemplate.id);
+
+    const formatted = formatLeadWhatsAppMessage(resolvedTemplate.template, {
+      name: lead.raw_name,
+      city: city || lead.city || "Casablanca",
+      date: trainingDate || recallDate || "",
+      time: recallTime ? recallTime : undefined,
+      missingDocs: missingDocsList,
+      amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
+    });
+
+    setWaMessageText(formatted);
+  }, [
+    activeStatusKey,
+    boardType,
+    city,
+    trainingDate,
+    recallDate,
+    recallTime,
+    hasCin,
+    hasFiche,
+    hasConfirmation,
+    hasPermis,
+    preorderAmount,
+    whatsappTemplate,
+    whatsappMissingDocsTemplate,
+    isManualEdit,
+  ]);
+
+  // Handle template selection from dropdown
+  const handleSelectCustomTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const found = LEAD_STATUS_TEMPLATES.find((t) => t.id === templateId);
+    if (found) {
+      let tmplText = found.template;
+      if (found.id === "LEADS_TRAINING_FIXED" && whatsappTemplate?.trim()) {
+        tmplText = whatsappTemplate.trim();
+      } else if (found.id === "TRAINING_PENDING_KYC" && whatsappMissingDocsTemplate?.trim()) {
+        tmplText = whatsappMissingDocsTemplate.trim();
+      }
+
+      const formatted = formatLeadWhatsAppMessage(tmplText, {
+        name: lead.raw_name,
+        city: city || lead.city || "Casablanca",
+        date: trainingDate || recallDate || "",
+        time: recallTime ? recallTime : undefined,
+        missingDocs: missingDocsList,
+        amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
+      });
+      setWaMessageText(formatted);
+      setIsManualEdit(false);
+    }
+  };
+
+  // Reset template to active status default
+  const handleResetTemplate = () => {
+    setIsManualEdit(false);
+    const resolvedTemplate = getTemplateForLeadStatus(
+      boardType,
+      activeStatusKey,
+      whatsappTemplate,
+      whatsappMissingDocsTemplate
+    );
+    setSelectedTemplateId(resolvedTemplate.id);
+    const formatted = formatLeadWhatsAppMessage(resolvedTemplate.template, {
+      name: lead.raw_name,
+      city: city || lead.city || "Casablanca",
+      date: trainingDate || recallDate || "",
+      time: recallTime ? recallTime : undefined,
+      missingDocs: missingDocsList,
+      amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
+    });
+    setWaMessageText(formatted);
+    toast.success("Modèle réinitialisé au statut actif");
+  };
+
+  // Fetch recent message history with this lead
+  const fetchRecentWaMessages = async () => {
+    if (!lead?.sanitized_phone) return;
+    setIsLoadingWaHistory(true);
+    try {
+      const convRes = await fetch(
+        `/api/whatsapp/conversations?search=${encodeURIComponent(lead.sanitized_phone)}`
+      );
+      if (convRes.ok) {
+        const convData = await convRes.json();
+        const convList = convData.conversations || [];
+        if (convList.length > 0) {
+          const convId = convList[0].id;
+          const msgRes = await fetch(`/api/whatsapp/messages?conversationId=${convId}`);
+          if (msgRes.ok) {
+            const msgData = await msgRes.json();
+            const msgs = msgData.messages || [];
+            setRecentWaMessages(msgs.slice(-3));
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load recent WhatsApp messages:", e);
+    } finally {
+      setIsLoadingWaHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentWaMessages();
+  }, [lead?.sanitized_phone]);
+
+  // Send message via GoCab WhatsApp CRM API (Meta Cloud API / DB CRM)
+  const handleSendWhatsAppApi = async () => {
+    if (!waMessageText.trim()) {
+      toast.error("Le message WhatsApp est vide");
+      return;
+    }
+    setIsSendingWa(true);
+    try {
+      const res = await fetch("/api/whatsapp/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: lead.sanitized_phone,
+          text: waMessageText.trim(),
+          senderName: session?.user?.name || session?.user?.email || "GoCab Operations",
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setWaSentSuccessAt(timeNow);
+        setWaDeliveryMode(data.mode || "SENT");
+        toast.success("✓ Message WhatsApp envoyé avec succès !");
+        fetchRecentWaMessages();
+      } else {
+        toast.error(data.error || "Échec d'envoi du message WhatsApp");
+      }
+    } catch (err: any) {
+      console.error("Send WhatsApp error:", err);
+      toast.error(err.message || "Erreur lors de l'envoi WhatsApp");
+    } finally {
+      setIsSendingWa(false);
+    }
+  };
+
+  // Open message in WhatsApp Web / wa.me
+  const handleOpenWhatsAppWeb = () => {
+    const url = generateWhatsAppWebURL(lead.sanitized_phone, waMessageText);
+    window.open(url, "_blank");
+  };
+
+  // Jump to full WhatsApp CRM tab
+  const handleJumpToWhatsAppCrm = () => {
+    if (onOpenWhatsAppChat) {
+      onOpenWhatsAppChat(lead.sanitized_phone, lead.raw_name);
+    } else {
+      try {
+        localStorage.setItem("gocab_target_whatsapp_phone", lead.sanitized_phone);
+      } catch (e) {}
+      onClose();
+    }
+  };
+
   const showDatePicker =
     (boardType === "leads" && brandStatus === "Training fixed") ||
     (boardType === "training" && (trainingStatus === "Scheduled" || !trainingStatus));
@@ -194,14 +400,11 @@ export default function LeadDrawer({
             const date = new Date(trainingDate);
             payload.reminder_date = date.toISOString(); // Use reminder_date to track scheduled training date
 
-            // Auto-trigger WhatsApp confirmation message
-            const waUrl = generateTrainingInviteURL(
-              lead.sanitized_phone,
-              lead.raw_name,
-              date,
-              whatsappTemplate
-            );
-            window.open(waUrl, "_blank");
+            // Auto-trigger WhatsApp confirmation message if not already sent in drawer
+            if (!waSentSuccessAt) {
+              const waUrl = generateWhatsAppWebURL(lead.sanitized_phone, waMessageText);
+              window.open(waUrl, "_blank");
+            }
           }
         } else if (brandStatus === "To Recall") {
           // Move to To Recall with scheduled recall datetime
@@ -256,9 +459,11 @@ export default function LeadDrawer({
             payload.assigned_vehicle_id = selectedVehicleId;
           }
 
-          // Auto-trigger WhatsApp thank-you message
-          const waUrl = generateThankYouURL(lead.sanitized_phone);
-          window.open(waUrl, "_blank");
+          // Auto-trigger WhatsApp thank-you message if not already sent
+          if (!waSentSuccessAt) {
+            const waUrl = generateThankYouURL(lead.sanitized_phone);
+            window.open(waUrl, "_blank");
+          }
 
           // Fire unlock alert
           setTimeout(() => {
@@ -326,14 +531,24 @@ export default function LeadDrawer({
         }`}
       >
         {/* Header */}
-        <div className="bg-navy px-6 py-5 flex items-center justify-between text-white">
+        <div className="bg-navy px-6 py-4 flex items-center justify-between text-white">
           <div>
             <h3 className="text-base font-bold tracking-tight">{lead.raw_name}</h3>
-            <p className="text-xs text-white/70 font-mono mt-0.5">{lead.sanitized_phone}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-white/70 font-mono">{formatDisplayPhone(lead.sanitized_phone)}</p>
+              <button
+                type="button"
+                onClick={handleJumpToWhatsAppCrm}
+                title="Accéder au CRM WhatsApp"
+                className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+              >
+                <span>💬 CRM Chat</span>
+              </button>
+            </div>
           </div>
           <button
             onClick={handleClose}
-            className="text-white/80 hover:text-white transition-colors"
+            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -380,6 +595,8 @@ export default function LeadDrawer({
                   onChange={(e) => {
                     setBrandStatus(e.target.value);
                     setTrainingDate("");
+                    setIsManualEdit(false);
+                    setWaSentSuccessAt(null);
                   }}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                 >
@@ -523,6 +740,8 @@ export default function LeadDrawer({
                     setTrainingStatus(e.target.value);
                     setReminderDate("");
                     setPreorderAmount("");
+                    setIsManualEdit(false);
+                    setWaSentSuccessAt(null);
                   }}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                 >
@@ -800,6 +1019,202 @@ export default function LeadDrawer({
               )}
             </div>
           )}
+
+          {/* ========================================================= */}
+          {/* WHATSAPP INTERFACE & STATUS-DRIVEN CRM HUB */}
+          {/* ========================================================= */}
+          <div className="bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border-2 border-emerald-200/80 rounded-2xl p-4.5 space-y-4 shadow-xs">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-emerald-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-xs text-base font-bold">
+                  💬
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-gray-900 tracking-tight">
+                      WhatsApp CRM Direct
+                    </h4>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full border border-emerald-200">
+                      En direct
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-mono">
+                    {formatDisplayPhone(lead.sanitized_phone)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Jump to full CRM Tab */}
+              <button
+                type="button"
+                onClick={handleJumpToWhatsAppCrm}
+                title="Ouvrir dans l'interface complète WhatsApp CRM"
+                className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 text-2xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>Accéder au CRM</span>
+                <span className="text-xs">↗</span>
+              </button>
+            </div>
+
+            {/* Template Selector & Status Indicator */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-2xs">
+                <label className="font-bold text-emerald-950 flex items-center gap-1">
+                  <span>⚡</span> Modèle adapté au statut :
+                </label>
+                <span className="font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                  {activeStatusKey || "Statut actuel"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleSelectCustomTemplate(e.target.value)}
+                  className="w-full bg-white border border-emerald-200 rounded-xl px-2.5 py-1.5 text-xs text-gray-800 font-medium focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                >
+                  <optgroup label="Modèle recommandé pour ce statut">
+                    {(() => {
+                      const matched = getTemplateForLeadStatus(
+                        boardType,
+                        activeStatusKey,
+                        whatsappTemplate,
+                        whatsappMissingDocsTemplate
+                      );
+                      return (
+                        <option value={matched.id}>
+                          {matched.icon} {matched.title} (Recommandé)
+                        </option>
+                      );
+                    })()}
+                  </optgroup>
+                  <optgroup label="Autres modèles disponibles">
+                    {LEAD_STATUS_TEMPLATES.map((tmpl) => (
+                      <option key={tmpl.id} value={tmpl.id}>
+                        {tmpl.icon} {tmpl.title} ({tmpl.category})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+
+                {isManualEdit && (
+                  <button
+                    type="button"
+                    onClick={handleResetTemplate}
+                    title="Réinitialiser au texte initial du statut"
+                    className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-3xs font-bold shrink-0 transition-colors"
+                  >
+                    ↺ Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Message Textarea */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <span className="text-3xs text-emerald-900/70 font-semibold">
+                  Aperçu & Personnalisation du message :
+                </span>
+                <span className="text-3xs font-mono">{waMessageText.length} car.</span>
+              </div>
+
+              <textarea
+                rows={4}
+                value={waMessageText}
+                onChange={(e) => {
+                  setWaMessageText(e.target.value);
+                  setIsManualEdit(true);
+                }}
+                placeholder="Écrivez le message WhatsApp..."
+                className="w-full bg-white border border-emerald-200 rounded-xl p-3 text-xs text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none font-sans leading-relaxed resize-none shadow-inner"
+              />
+
+              {/* Tags info pill */}
+              <div className="flex items-center gap-1.5 flex-wrap text-3xs text-emerald-900/60 pt-0.5">
+                <span className="font-semibold text-emerald-900">Variables insérées :</span>
+                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Nom: {lead.raw_name.split(" ")[0]}</span>
+                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Ville: {city || lead.city || "Casablanca"}</span>
+                {(trainingDate || recallDate) && (
+                  <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Date: {trainingDate || recallDate}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Success feedback badge */}
+            {waSentSuccessAt && (
+              <div className="p-2.5 bg-emerald-100 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between animate-fadeIn">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <span>✓</span> Message WhatsApp envoyé à {waSentSuccessAt}
+                </span>
+                <span className="text-3xs font-mono bg-white px-1.5 py-0.5 rounded text-emerald-800">
+                  {waDeliveryMode === "META_CLOUD_API" ? "Meta API Direct" : "GoCab CRM"}
+                </span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleSendWhatsAppApi}
+                disabled={isSendingWa || !waMessageText.trim()}
+                className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSendingWa ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>⚡</span>
+                )}
+                <span>Envoyer via WhatsApp API</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenWhatsAppWeb}
+                disabled={!waMessageText.trim()}
+                className="w-full py-2.5 px-3 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>💬</span>
+                <span>Ouvrir WhatsApp Web</span>
+              </button>
+            </div>
+
+            {/* Mini Message History */}
+            {recentWaMessages.length > 0 && (
+              <div className="pt-2 border-t border-emerald-100/80 space-y-1.5">
+                <div className="flex items-center justify-between text-3xs font-bold text-emerald-900">
+                  <span>Derniers messages échangés :</span>
+                  <button
+                    type="button"
+                    onClick={handleJumpToWhatsAppCrm}
+                    className="text-emerald-700 hover:underline cursor-pointer"
+                  >
+                    Voir toute la discussion ({recentWaMessages.length})
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                  {recentWaMessages.map((m: any) => (
+                    <div
+                      key={m.id}
+                      className={`p-2 rounded-lg text-3xs leading-relaxed ${
+                        m.direction === "OUTBOUND"
+                          ? "bg-white border border-emerald-100 text-gray-700 ml-4"
+                          : "bg-emerald-100/70 border border-emerald-200 text-emerald-950 mr-4"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[9px] text-gray-400 mb-0.5">
+                        <span className="font-bold text-gray-600">{m.direction === "OUTBOUND" ? "Vous" : lead.raw_name}</span>
+                        <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                      <p className="line-clamp-2">{m.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Notes Section */}
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
