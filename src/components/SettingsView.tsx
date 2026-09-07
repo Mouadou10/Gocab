@@ -1444,7 +1444,8 @@ export default function SettingsView() {
             </button>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* SECTION 5: TELEGRAM ALERTS */}
       {activeSection === "telegram" && (
@@ -1455,7 +1456,7 @@ export default function SettingsView() {
                 <span>📱</span> Telegram Notifications — Groupe Field Supervisor
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Envoyez des alertes instantanées avec sonnerie sur les téléphones des superviseurs de terrain dès qu'une nouvelle tâche ou récupération est déclenchée.
+                Envoyez des alertes instantanées avec sonnerie sur les téléphones des superviseurs de terrain dès qu&apos;une nouvelle tâche ou récupération est déclenchée.
               </p>
             </div>
             <label className="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
