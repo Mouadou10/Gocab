@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 import Papa from "papaparse";
 
 /**
@@ -8,7 +9,6 @@ import Papa from "papaparse";
 function normalizePhone(phone: string): string {
   if (!phone) return "";
   const digits = phone.replace(/\D/g, "");
-  // If starts with 212, or local 06/07
   if (digits.startsWith("212") && digits.length >= 11) {
     return digits.slice(-9); // last 9 digits (e.g. 645398932)
   }
@@ -29,6 +29,18 @@ function normalizeName(name: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]/g, " ")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Normalizes vehicle license plate number.
+ */
+function normalizePlate(plate: string): string {
+  if (!plate) return "";
+  return plate
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "-")
+    .replace(/-+/g, "-")
     .trim();
 }
 
@@ -78,25 +90,29 @@ export async function POST(request: NextRequest) {
     const endOfDay = new Date(targetDate);
     endOfDay.setUTCHours(23, 59, 59, 999);
 
-    // Fetch all active drivers from database
-    const allDrivers = await prisma.driverProfile.findMany({
-      include: {
-        assignedVehicle: true,
-        payments: {
-          where: {
-            paymentDate: {
-              gte: startOfDay,
-              lte: endOfDay,
+    // Fetch all active drivers and vehicles from database
+    const [allDrivers, allVehicles] = await Promise.all([
+      prisma.driverProfile.findMany({
+        include: {
+          assignedVehicle: true,
+          payments: {
+            where: {
+              paymentDate: {
+                gte: startOfDay,
+                lte: endOfDay,
+              },
             },
           },
         },
-      },
-    });
+      }),
+      prisma.vehicle.findMany(),
+    ]);
 
     // Build fast lookup maps
     const phoneMap = new Map<string, typeof allDrivers[0]>();
     const nameMap = new Map<string, typeof allDrivers[0]>();
     const cinMap = new Map<string, typeof allDrivers[0]>();
+    const plateMap = new Map<string, typeof allVehicles[0]>();
 
     for (const d of allDrivers) {
       const pNorm = normalizePhone(d.phoneSanitized);
@@ -108,25 +124,50 @@ export async function POST(request: NextRequest) {
       if (d.cinNumber) cinMap.set(d.cinNumber.toUpperCase().trim(), d);
     }
 
-    // Detect column headers dynamically
+    for (const v of allVehicles) {
+      const pNorm = normalizePlate(v.plate_number);
+      if (pNorm) plateMap.set(pNorm, v);
+    }
+
+    // Detect column headers dynamically from the CSV
     const firstRow = rows[0];
     const keys = Object.keys(firstRow);
 
-    const nameKey = keys.find((k) =>
-      /^(name|driver\s*name|nom|chauffeur|full\s*name)$/i.test(k.trim())
-    ) || keys.find((k) => /name|nom/i.test(k));
+    const nameKey =
+      keys.find((k) => /^(name|driver\s*name|nom|chauffeur|full\s*name)$/i.test(k.trim())) ||
+      keys.find((k) => /name|nom/i.test(k));
 
-    const phoneKey = keys.find((k) =>
-      /^(phone|phone\s*number|telephone|tel|num|mobile)$/i.test(k.trim())
-    ) || keys.find((k) => /phone|tel/i.test(k));
+    const phoneKey =
+      keys.find((k) => /^(phone|phone\s*number|telephone|tel|num|mobile)$/i.test(k.trim())) ||
+      keys.find((k) => /phone|tel/i.test(k));
 
-    const balanceKey = keys.find((k) =>
-      /^(balance|solde|current\s*balance|montant|total\s*balance)$/i.test(k.trim())
-    ) || keys.find((k) => /balance|solde/i.test(k));
+    const balanceKey =
+      keys.find((k) => /^(balance|solde|current\s*balance|montant|total\s*balance|impayes|arrears)$/i.test(k.trim())) ||
+      keys.find((k) => /balance|solde|impaye/i.test(k));
 
-    const cinKey = keys.find((k) =>
-      /^(id\s*number|cin|cnie|piece\s*identite)$/i.test(k.trim())
-    ) || keys.find((k) => /id\s*number|cin/i.test(k));
+    const cinKey =
+      keys.find((k) => /^(id\s*number|cin|cnie|piece\s*identite)$/i.test(k.trim())) ||
+      keys.find((k) => /id\s*number|cin/i.test(k));
+
+    const plateKey =
+      keys.find((k) => /^(plate|plate\s*number|immatriculation|matricule|vehicule|vehicle|car)$/i.test(k.trim())) ||
+      keys.find((k) => /plate|immat|matricule/i.test(k));
+
+    const makeModelKey =
+      keys.find((k) => /^(make|model|make\s*model|marque|modele|car\s*model)$/i.test(k.trim())) ||
+      keys.find((k) => /model|marque/i.test(k));
+
+    const statusKey =
+      keys.find((k) => /^(status|statut|etat|vehicle\s*status|driver\s*status)$/i.test(k.trim())) ||
+      keys.find((k) => /status|statut/i.test(k));
+
+    const contractKey =
+      keys.find((k) => /^(contract|contrat|contract\s*type|type\s*contrat)$/i.test(k.trim())) ||
+      keys.find((k) => /contract|contrat/i.test(k));
+
+    const cityKey =
+      keys.find((k) => /^(city|ville|hub|region)$/i.test(k.trim())) ||
+      keys.find((k) => /city|ville|hub/i.test(k));
 
     if (!balanceKey) {
       return NextResponse.json(
@@ -137,22 +178,64 @@ export async function POST(request: NextRequest) {
 
     const matchedDriversList: any[] = [];
     const unmatchedRows: any[] = [];
+    const processedDriverIds = new Set<string>();
     let totalCollectedToday = 0;
     let paidCount = 0;
     let partialCount = 0;
     let unpaidCount = 0;
+    let newDriversCreated = 0;
+    let newVehiclesCreated = 0;
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rawName = nameKey ? row[nameKey]?.trim() : "";
       const rawPhone = phoneKey ? row[phoneKey]?.trim() : "";
       const rawCin = cinKey ? row[cinKey]?.trim() : "";
+      const rawPlate = plateKey ? row[plateKey]?.trim() : "";
+      const rawMakeModel = makeModelKey ? row[makeModelKey]?.trim() : "";
+      const rawStatus = statusKey ? row[statusKey]?.trim() : "";
+      const rawContract = contractKey ? row[contractKey]?.trim() : "";
+      const rawCity = cityKey ? row[cityKey]?.trim() : "";
       const rawBalance = row[balanceKey];
 
       const balance = parseBalance(rawBalance);
       if (balance === null) continue;
 
-      // Try matching by phone, CIN, or name
+      // ── Step 1: Resolve or Create Vehicle from Plate ───────────────────
+      let vehicle = null;
+      if (rawPlate) {
+        const normPlate = normalizePlate(rawPlate);
+        if (normPlate) {
+          vehicle = plateMap.get(normPlate);
+          if (!vehicle) {
+            try {
+              vehicle = await prisma.vehicle.create({
+                data: {
+                  plate_number: normPlate,
+                  make_model: rawMakeModel || "Dacia Logan 1.5 dCi",
+                  year: 2023,
+                  hub_city: rawCity || "Casablanca",
+                  status: rawStatus || "Actif",
+                  assigned_driver_name: rawName || null,
+                  assigned_driver_phone: rawPhone || null,
+                },
+              });
+              plateMap.set(normPlate, vehicle);
+              newVehiclesCreated++;
+            } catch (e) {
+              vehicle = plateMap.get(normPlate) || null;
+            }
+          } else if (rawStatus && vehicle.status !== rawStatus) {
+            // Update vehicle status if explicitly specified in CSV
+            await prisma.vehicle.update({
+              where: { id: vehicle.id },
+              data: { status: rawStatus },
+            }).catch(() => {});
+          }
+        }
+      }
+
+      // ── Step 2: Resolve or Create Driver ───────────────────────────────
       let driver: typeof allDrivers[0] | undefined;
 
       if (rawPhone) {
@@ -162,6 +245,10 @@ export async function POST(request: NextRequest) {
 
       if (!driver && rawCin) {
         driver = cinMap.get(rawCin.toUpperCase().trim());
+      }
+
+      if (!driver && vehicle?.id) {
+        driver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
       }
 
       if (!driver && rawName) {
@@ -181,6 +268,46 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // If driver is not found in DB, auto-enroll driver from CSV (SSOT)
+      if (!driver) {
+        const pDigits = normalizePhone(rawPhone);
+        const phoneFormatted = pDigits
+          ? `+212${pDigits}`
+          : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
+        const cinFormatted = rawCin
+          ? rawCin.toUpperCase().trim()
+          : `CIN-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        try {
+          const newDriver = await prisma.driverProfile.create({
+            data: {
+              fullName: rawName || `Chauffeur ${rawPlate || "CSV"}`,
+              phoneSanitized: phoneFormatted,
+              cinNumber: cinFormatted,
+              contractType: rawContract?.toUpperCase() === "WEEKLY" ? "WEEKLY" : "DAILY",
+              assignedVehicleId: vehicle?.id || null,
+              currentArrearsMAD: balance < 0 ? Math.abs(balance) : 0,
+              consecutiveUnpaidDays: balance < 0 ? Math.max(1, Math.ceil(Math.abs(balance) / 300)) : 0,
+              defaultStage:
+                balance < -1500 ? "DAY_3_BLOCK" : balance < -600 ? "DAY_2_ACTION" : "NOMINAL",
+            },
+            include: {
+              assignedVehicle: true,
+              payments: true,
+            },
+          });
+
+          driver = newDriver as any;
+          allDrivers.push(newDriver as any);
+          if (pDigits) phoneMap.set(pDigits, newDriver as any);
+          if (rawName) nameMap.set(normalizeName(rawName), newDriver as any);
+          cinMap.set(cinFormatted, newDriver as any);
+          newDriversCreated++;
+        } catch (err) {
+          console.warn("Auto-create driver failed from CSV row:", err);
+        }
+      }
+
       if (!driver) {
         unmatchedRows.push({
           rowNumber: i + 2,
@@ -191,8 +318,19 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      processedDriverIds.add(driver.id);
+
+      // Link vehicle if not yet linked
+      if (vehicle && driver.assignedVehicleId !== vehicle.id) {
+        await prisma.driverProfile.update({
+          where: { id: driver.id },
+          data: { assignedVehicleId: vehicle.id },
+        }).catch(() => {});
+        (driver as any).assignedVehicle = vehicle;
+      }
+
       // Expected amount for this driver today
-      const contract = (driver.contractType || "DAILY").toUpperCase();
+      const contract = (rawContract || driver.contractType || "DAILY").toUpperCase();
       let expectedMAD = 0;
       if (contract === "WEEKLY") {
         if (dayOfWeek === 1) expectedMAD = 1800;
@@ -200,17 +338,21 @@ export async function POST(request: NextRequest) {
         if (dayOfWeek >= 1 && dayOfWeek <= 6) expectedMAD = 300;
       }
 
-      const existingLedger = driver.payments[0] || null;
+      const existingLedger = driver.payments?.[0] || null;
 
       if (mode === "MORNING") {
         // === MORNING SNAPSHOT ===
-        // Stores starting balance for the day
+        // Negative balance represents debt. Positive balance represents credit/advance (0 debt).
+        const morningArrears = balance < 0 ? Math.abs(balance) : 0;
+        const morningUnpaidDays = morningArrears === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
+
         if (existingLedger) {
           await prisma.paymentLedger.update({
             where: { id: existingLedger.id },
             data: {
               morningBalance: balance,
               expectedMAD: expectedMAD || existingLedger.expectedMAD,
+              arrearsMAD: morningArrears,
               notes: existingLedger.notes || `Solde initial: ${balance} MAD`,
             },
           });
@@ -221,23 +363,25 @@ export async function POST(request: NextRequest) {
               paymentDate: targetDate,
               expectedMAD,
               clearedMAD: 0,
-              arrearsMAD: Math.abs(balance),
+              arrearsMAD: morningArrears,
               morningBalance: balance,
               notes: `Solde initial (matin): ${balance} MAD`,
             },
           });
         }
 
-        // Update driver's current arrears and calculate unpaid days from balance
-        const morningArrears = Math.abs(balance);
-        const morningUnpaidDays = balance === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
-
+        // Update driver's current arrears strictly according to CSV
         await prisma.driverProfile.update({
           where: { id: driver.id },
           data: {
             currentArrearsMAD: morningArrears,
             consecutiveUnpaidDays: morningUnpaidDays,
-            defaultStage: morningArrears >= 1500 ? "DAY_3_BLOCK" : morningArrears >= 600 ? "DAY_2_ACTION" : "NOMINAL",
+            defaultStage:
+              morningArrears >= 1500
+                ? "DAY_3_BLOCK"
+                : morningArrears >= 600
+                ? "DAY_2_ACTION"
+                : "NOMINAL",
           },
         });
 
@@ -245,10 +389,11 @@ export async function POST(request: NextRequest) {
           driverId: driver.id,
           fullName: driver.fullName,
           phone: driver.phoneSanitized,
-          plateNumber: driver.assignedVehicle?.plate_number || "-",
+          plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
           morningBalance: balance,
           eveningBalance: null,
           collectedAmount: 0,
+          expectedMAD,
           status: "MORNING_SET",
         });
       } else {
@@ -256,18 +401,14 @@ export async function POST(request: NextRequest) {
         const morningBal =
           existingLedger?.morningBalance !== undefined && existingLedger?.morningBalance !== null
             ? existingLedger.morningBalance
-            : -driver.currentArrearsMAD; // Fallback to current arrears if morning was not imported
+            : -driver.currentArrearsMAD;
 
-        // Calculate amount collected:
-        // When balance is negative (e.g. -3000 to -2700), collected = (-2700) - (-3000) = +300
-        // When balance is positive debt (3000 to 2700), collected = 3000 - 2700 = +300
         let collected = 0;
         if (morningBal <= 0 && balance >= morningBal) {
           collected = balance - morningBal;
         } else if (morningBal > 0 && balance <= morningBal) {
           collected = morningBal - balance;
         } else if (morningBal <= 0 && balance < morningBal) {
-          // Debt increased (no payment made, or additional penalty)
           collected = 0;
         }
 
@@ -286,8 +427,7 @@ export async function POST(request: NextRequest) {
           unpaidCount++;
         }
 
-        // Calculate new arrears and consecutive unpaid days
-        const newArrears = Math.abs(balance);
+        const newArrears = balance < 0 ? Math.abs(balance) : 0;
         let newUnpaidDays = driver.consecutiveUnpaidDays || 0;
         if (collected >= expectedMAD && expectedMAD > 0) {
           newUnpaidDays = 0;
@@ -295,7 +435,6 @@ export async function POST(request: NextRequest) {
           newUnpaidDays = Math.max(1, newUnpaidDays + 1);
         }
 
-        // Upsert PaymentLedger with evening balance & cleared amount
         if (existingLedger) {
           await prisma.paymentLedger.update({
             where: { id: existingLedger.id },
@@ -323,14 +462,18 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Update DriverProfile
         await prisma.driverProfile.update({
           where: { id: driver.id },
           data: {
             currentArrearsMAD: newArrears,
             consecutiveUnpaidDays: newUnpaidDays,
             lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
-            defaultStage: newArrears >= 1500 ? "DAY_3_BLOCK" : newArrears >= 600 ? "DAY_2_ACTION" : "NOMINAL",
+            defaultStage:
+              newArrears >= 1500
+                ? "DAY_3_BLOCK"
+                : newArrears >= 600
+                ? "DAY_2_ACTION"
+                : "NOMINAL",
           },
         });
 
@@ -338,7 +481,7 @@ export async function POST(request: NextRequest) {
           driverId: driver.id,
           fullName: driver.fullName,
           phone: driver.phoneSanitized,
-          plateNumber: driver.assignedVehicle?.plate_number || "-",
+          plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
           morningBalance: morningBal,
           eveningBalance: balance,
           collectedAmount: collected,
@@ -347,6 +490,26 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    // ── SSOT FLEET DEBT ALIGNMENT ─────────────────────────────────────────
+    // In MORNING mode, the CSV is the Single Source of Truth for the fleet.
+    // Any driver in the database not included in the CSV is reconciled to 0 debt.
+    if (mode === "MORNING") {
+      const nonCsvDrivers = allDrivers.filter((d) => !processedDriverIds.has(d.id));
+      if (nonCsvDrivers.length > 0) {
+        await prisma.driverProfile.updateMany({
+          where: { id: { in: nonCsvDrivers.map((d) => d.id) } },
+          data: {
+            currentArrearsMAD: 0,
+            consecutiveUnpaidDays: 0,
+            defaultStage: "NOMINAL",
+          },
+        });
+      }
+    }
+
+    // Touch sync state so all active sessions & dashboard instantly refresh collections data
+    await touchSyncState("collections");
 
     return NextResponse.json({
       success: true,
@@ -357,6 +520,8 @@ export async function POST(request: NextRequest) {
         matchedCount: matchedDriversList.length,
         unmatchedCount: unmatchedRows.length,
         totalCollectedTodayMAD: totalCollectedToday,
+        newDriversCreated,
+        newVehiclesCreated,
         paidCount,
         partialCount,
         unpaidCount,

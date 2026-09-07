@@ -11,6 +11,7 @@ export interface SyncState {
   leads: number;
   tickets: number;
   settings: number;
+  collections: number;
   version: string;
   updatedAt: number;
 }
@@ -36,6 +37,7 @@ export async function getSyncState(): Promise<SyncState> {
     leads: SERVER_START_TIME,
     tickets: SERVER_START_TIME,
     settings: SERVER_START_TIME,
+    collections: SERVER_START_TIME,
     version: SERVER_VERSION,
     updatedAt: SERVER_START_TIME,
   };
@@ -51,6 +53,7 @@ export async function getSyncState(): Promise<SyncState> {
         leads: Number(parsed.leads) || fallback.leads,
         tickets: Number(parsed.tickets) || fallback.tickets,
         settings: Number(parsed.settings) || fallback.settings,
+        collections: Number(parsed.collections) || fallback.collections,
         version: SERVER_VERSION, // Always report current server version
         updatedAt: Number(parsed.updatedAt) || Date.now(),
       };
@@ -68,7 +71,7 @@ export async function getSyncState(): Promise<SyncState> {
  * Touches the sync state for one or more entities, updating both memory and DB.
  */
 export async function touchSyncState(
-  entity: "leads" | "tickets" | "settings" | "all"
+  entity: "leads" | "tickets" | "settings" | "collections" | "all"
 ): Promise<SyncState> {
   const now = Date.now();
   const current = await getSyncState();
@@ -78,6 +81,7 @@ export async function touchSyncState(
     leads: entity === "leads" || entity === "all" ? now : current.leads,
     tickets: entity === "tickets" || entity === "all" ? now : current.tickets,
     settings: entity === "settings" || entity === "all" ? now : current.settings,
+    collections: entity === "collections" || entity === "all" ? now : current.collections,
     version: SERVER_VERSION,
     updatedAt: now,
   };

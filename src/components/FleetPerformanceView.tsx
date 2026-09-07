@@ -15,7 +15,7 @@
  *    - Accumulated unpaid days display as cumulative debt (+300 MAD, +600 MAD...).
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Calendar,
   DollarSign,
@@ -205,6 +205,29 @@ export default function FleetPerformanceView() {
 
   useEffect(() => {
     fetchDriverCollections();
+  }, [fetchDriverCollections]);
+
+  // Live sync: auto-refresh when a CSV is uploaded in any session (poll every 6s)
+  const lastCollectionsTs = useRef<number>(0);
+  useEffect(() => {
+    const pollSync = async () => {
+      try {
+        const ts = lastCollectionsTs.current;
+        const res = await fetch(`/api/system/sync-status?collections=${ts}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.collections && data.collections > lastCollectionsTs.current) {
+          if (ts > 0) {
+            // New CSV uploaded — refresh the collections data
+            fetchDriverCollections();
+          }
+          lastCollectionsTs.current = data.collections;
+        }
+      } catch {}
+    };
+    pollSync();
+    const interval = setInterval(pollSync, 6000);
+    return () => clearInterval(interval);
   }, [fetchDriverCollections]);
 
   // Handle Recording / Saving a Driver's Payment for the day

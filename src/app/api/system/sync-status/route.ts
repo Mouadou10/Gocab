@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const clientLeads = Number(searchParams.get("leads")) || 0;
     const clientTickets = Number(searchParams.get("tickets")) || 0;
     const clientSettings = Number(searchParams.get("settings")) || 0;
+    const clientCollections = Number(searchParams.get("collections")) || 0;
     const clientVersion = searchParams.get("version") || "";
 
     const syncState = await getSyncState();
@@ -23,10 +24,12 @@ export async function GET(request: NextRequest) {
       leads: syncState.leads,
       tickets: syncState.tickets,
       settings: syncState.settings,
+      collections: syncState.collections,
       version: currentVersion,
       shouldRefreshLeads: clientLeads > 0 && syncState.leads > clientLeads,
       shouldRefreshTickets: clientTickets > 0 && syncState.tickets > clientTickets,
       shouldRefreshSettings: clientSettings > 0 && syncState.settings > clientSettings,
+      shouldRefreshCollections: clientCollections > 0 && syncState.collections > clientCollections,
       shouldRefreshApp:
         clientVersion.length > 0 &&
         currentVersion.length > 0 &&

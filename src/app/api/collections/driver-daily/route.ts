@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 export async function GET(request: NextRequest) {
   try {
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
               status: driver.assignedVehicle.status,
             }
           : null,
-        currentArrearsMAD: hasMorningCsv ? driver.currentArrearsMAD : 0,
+        currentArrearsMAD: hasMorningCsv ? morningDebt : driver.currentArrearsMAD,
         consecutiveUnpaidDays: hasMorningCsv ? unpaidDays : 0,
         isCriticalRed,
         expectedTodayMAD,
@@ -152,7 +153,7 @@ export async function GET(request: NextRequest) {
         totalMorningTargetMAD: effectiveMorningTargetMAD,
         totalClearedTodayMAD,
         remainingToCollectMAD,
-        totalArrearsAllMAD: hasMorningCsv ? totalArrearsAllMAD : 0,
+        totalArrearsAllMAD: hasMorningCsv ? effectiveMorningTargetMAD : totalArrearsAllMAD,
         target60PercentMAD,
         collectionPercentage,
         criticalRedCount,
@@ -266,6 +267,9 @@ export async function POST(request: NextRequest) {
         defaultStage: newArrears >= 1500 ? "DAY_3_BLOCK" : newArrears >= 600 ? "DAY_2_ACTION" : "NOMINAL",
       },
     });
+
+    // Notify all open sessions (Dashboard, Perf page) to refresh
+    await touchSyncState("collections");
 
     return NextResponse.json({
       success: true,

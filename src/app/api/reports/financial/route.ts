@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
         where: hasDateFilter ? { paid_at: dateFilter } : undefined,
         orderBy: { paid_at: "desc" },
       }),
-      prisma.driverProfile.findMany(),
+      prisma.driverProfile.findMany({ where: { is_archived: false } }),
       prisma.lead.findMany(),
       prisma.maintenanceTicket.findMany(),
       prisma.fieldInspectionNew.findMany(),
@@ -72,8 +72,28 @@ export async function GET(request: NextRequest) {
       expensesByCategory[exp.category] = (expensesByCategory[exp.category] || 0) + (exp.amount_mad || 0);
     }
 
-    // Driver Arrears Aggregation
-    const totalDriverArrearsMAD = drivers.reduce((sum, d) => sum + (d.currentArrearsMAD || 0), 0);
+    // Driver Arrears Aggregation — Morning CSV is the trust source of truth
+    const todayStr = new Date().toISOString().split("T")[0];
+    const morningPayments = await prisma.paymentLedger.findMany({
+      where: {
+        paymentDate: {
+          gte: new Date(`${todayStr}T00:00:00.000Z`),
+          lte: new Date(`${todayStr}T23:59:59.999Z`),
+        },
+        morningBalance: { not: null },
+      },
+    });
+
+    let totalDriverArrearsMAD = 0;
+    if (morningPayments.length > 0) {
+      // Sum of negative balances extracted directly from the morning CSV
+      totalDriverArrearsMAD = morningPayments.reduce((sum, p) => {
+        const bal = p.morningBalance ?? 0;
+        return sum + (bal < 0 ? Math.abs(bal) : 0);
+      }, 0);
+    } else {
+      totalDriverArrearsMAD = drivers.reduce((sum, d) => sum + (d.currentArrearsMAD || 0), 0);
+    }
 
     // Calculate Per-Vehicle Financials
     let totalOpportunityLossMAD = 0;
@@ -105,7 +125,18 @@ export async function GET(request: NextRequest) {
         status: v.status,
         driver_name: v.driverProfile?.fullName || v.assigned_driver_name || null,
         driver_phone: v.driverProfile?.phoneSanitized || v.assigned_driver_phone || null,
-        driver_arrears_mad: v.driverProfile?.currentArrearsMAD || 0,
+        driver_arrears_mad:
+          morningPayments.length > 0
+            ? (() => {
+                const driverId = v.driverProfile?.id;
+                const p = morningPayments.find((m) => m.driverId === driverId);
+                if (p && p.morningBalance !== null && p.morningBalance !== undefined) {
+                  return p.morningBalance < 0 ? Math.abs(p.morningBalance) : 0;
+                }
+                // Fallback to driver profile arrears if no morning ledger entry for this driver
+                return v.driverProfile?.currentArrearsMAD || 0;
+              })()
+            : (v.driverProfile?.currentArrearsMAD || 0),
         inactive_days: inactiveDays,
         opportunity_loss_mad: opportunityLossMAD,
         direct_expenses_mad: directExpensesMAD,

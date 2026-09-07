@@ -10,7 +10,7 @@
  * 4. Exportable CSV Financial Summary for Accounting
  */
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   TrendingDown,
@@ -147,8 +147,34 @@ export default function DashboardView() {
     }
   };
 
+  const lastCollectionsTs = useRef<number>(0);
+
   useEffect(() => {
     fetchFinancialReport();
+  }, []);
+
+  // Live sync: poll every 8s for collection updates (CSV uploads)
+  useEffect(() => {
+    const pollCollections = async () => {
+      try {
+        const ts = lastCollectionsTs.current;
+        const res = await fetch(`/api/system/sync-status?collections=${ts}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.collections && data.collections > lastCollectionsTs.current) {
+          lastCollectionsTs.current = data.collections;
+          if (ts > 0) {
+            // Only auto-refresh if not the initial load
+            fetchFinancialReport();
+          } else {
+            lastCollectionsTs.current = data.collections;
+          }
+        }
+      } catch {}
+    };
+    pollCollections();
+    const interval = setInterval(pollCollections, 8000);
+    return () => clearInterval(interval);
   }, []);
 
   // Filtered vehicles for the financial table
