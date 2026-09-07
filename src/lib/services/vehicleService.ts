@@ -8,52 +8,15 @@ export async function processVehicleSideEffects(
   updatedVehicle: any,
   userId: string
 ) {
-  // If status changed to Blocked, auto-create a MaintenanceTicket and linked FieldTask for physical recovery
+  // If status changed to Blocked, log audit. Vehicle recovery FieldTask is only created manually by performance agent from collection page.
   if (body.status === "Blocked" && prevVehicle?.status !== "Blocked") {
-    const activeRecoveryTask = await prisma.fieldTask.findFirst({
-      where: {
-        vehicle_id: id,
-        task_type: "VEHICLE_RECOVERY",
-        status: { in: ["PENDING", "IN_PROGRESS"] },
-      },
+    await logAudit({
+      userId,
+      action: "UPDATE",
+      entityType: "Vehicle",
+      entityId: id,
+      changes: { status: "Blocked", reason: body.blocked_reason || "Vehicle marked as Blocked" },
     });
-
-    if (!activeRecoveryTask) {
-      const ticket = await prisma.maintenanceTicket.create({
-        data: {
-          vehicle_id: id,
-          plate_number: updatedVehicle.plate_number,
-          driver_name: updatedVehicle.assigned_driver_name || null,
-          driver_phone: updatedVehicle.assigned_driver_phone || null,
-          ticket_type: "VEHICLE_RECOVERY",
-          description: body.blocked_reason || "Vehicle blocked by Fleet Performance Manager. Physical recovery required.",
-          priority: "Urgent",
-          status: "OPEN",
-          sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        },
-      });
-
-      await prisma.fieldTask.create({
-        data: {
-          task_type: "VEHICLE_RECOVERY",
-          vehicle_id: id,
-          plate_number: updatedVehicle.plate_number,
-          driver_name: updatedVehicle.assigned_driver_name || null,
-          driver_phone: updatedVehicle.assigned_driver_phone || null,
-          description: `🚨 Vehicle Blocked: ${body.blocked_reason || "Physical recovery required by Field Supervisor"}`,
-          priority: "Urgent",
-          status: "PENDING",
-          linked_ticket_id: ticket.id,
-        },
-      });
-      await logAudit({
-        userId,
-        action: "CREATE",
-        entityType: "MaintenanceTicket",
-        entityId: ticket.id,
-        changes: { type: "VEHICLE_RECOVERY_AUTO_TRIGGER" },
-      });
-    }
   }
 
   // If status changed to Accident, auto-create an AccidentClaim

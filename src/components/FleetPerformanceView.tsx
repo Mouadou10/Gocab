@@ -861,33 +861,32 @@ export default function FleetPerformanceView() {
 
                           return (
                             <div className="flex flex-col items-end gap-1.5">
-                              {/* Call / Trigger Vehicle Recovery Button (above Valider) */}
-                              <button
-                                type="button"
-                                onClick={() => handleCallAndCreateRecovery(driver)}
-                                disabled={triggeringRecoveryId === driver.id}
-                                className={`w-full max-w-[130px] px-2 py-1 rounded-xl text-3xs font-extrabold transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer ${
-                                  isAlreadyInRecovery
-                                    ? "bg-red-100 text-red-800 border border-red-300 hover:bg-red-200"
-                                    : isRed
-                                    ? "bg-red-600 hover:bg-red-700 text-white shadow-xs"
-                                    : "bg-red-500 hover:bg-red-600 text-white"
-                                }`}
-                                title={
-                                  isAlreadyInRecovery
-                                    ? "Ticket Vehicle Recovery déjà ouvert sur la page Terrain. Cliquez pour appeler."
-                                    : "Appeler le chauffeur et créer automatiquement un ticket Vehicle Recovery sur la page Terrain"
-                                }
-                              >
-                                {triggeringRecoveryId === driver.id ? (
-                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <Phone className="w-3 h-3" />
-                                )}
-                                <span className="truncate">
-                                  {isAlreadyInRecovery ? "🚨 En Récupération" : "📞 Appel / Récupérer"}
-                                </span>
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCallAndCreateRecovery(driver)}
+                                  disabled={triggeringRecoveryId === driver.id}
+                                  className={`w-full max-w-[130px] px-2 py-1 rounded-xl text-3xs font-extrabold transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer ${
+                                    isAlreadyInRecovery
+                                      ? "bg-red-100 text-red-800 border border-red-300 hover:bg-red-200"
+                                      : isRed
+                                      ? "bg-red-600 hover:bg-red-700 text-white shadow-xs"
+                                      : "bg-red-500 hover:bg-red-600 text-white"
+                                  }`}
+                                  title={
+                                    isAlreadyInRecovery
+                                      ? "Ticket Récupération déjà envoyé sur la page Terrain. Cliquez pour appeler."
+                                      : "Déclencher la récupération du véhicule sur la page Terrain"
+                                  }
+                                >
+                                  {triggeringRecoveryId === driver.id ? (
+                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Car className="w-3 h-3" />
+                                  )}
+                                  <span className="truncate">
+                                    {isAlreadyInRecovery ? "🚨 En Récupération" : "🚨 Récupérer Véhicule"}
+                                  </span>
+                                </button>
 
                               {/* Valider & WhatsApp */}
                               <div className="flex items-center justify-end gap-1.5 w-full max-w-[130px]">

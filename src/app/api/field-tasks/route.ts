@@ -96,3 +96,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create field task" }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/field-tasks
+ * Bulk delete tasks by type and/or status (e.g. ?type=VEHICLE_RECOVERY or ?all=true)
+ */
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+    const status = searchParams.get("status");
+    const clearAll = searchParams.get("all") === "true";
+
+    const where: any = {};
+    if (type) where.task_type = type;
+    if (status) where.status = status;
+
+    if (!type && !status && !clearAll) {
+      return NextResponse.json(
+        { error: "Specify ?type, ?status, or ?all=true to delete tasks." },
+        { status: 400 }
+      );
+    }
+
+    const result = await prisma.fieldTask.deleteMany({ where });
+    return NextResponse.json({ success: true, count: result.count });
+  } catch (error: any) {
+    console.error("DELETE /api/field-tasks error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to delete field tasks" },
+      { status: 500 }
+    );
+  }
+}

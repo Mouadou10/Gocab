@@ -515,15 +515,45 @@ export default function FieldSupervisorView() {
           padding: "12px 16px", background: config.bg, border: `1px solid ${config.border}`,
           borderRadius: "12px 12px 0 0",
         }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: config.color }}>
-            {config.icon} {config.label}
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: config.color, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>{config.icon} {config.label}</span>
             {pending > 0 && (
               <span style={{
-                marginLeft: 8, padding: "2px 8px", borderRadius: 10, fontSize: 12, fontWeight: 700,
+                padding: "2px 8px", borderRadius: 10, fontSize: 12, fontWeight: 700,
                 background: config.color, color: "#fff",
               }}>{pending}</span>
             )}
           </h3>
+
+          {type === "VEHICLE_RECOVERY" && sectionTasks.length > 0 && (
+            <button
+              onClick={async () => {
+                if (confirm("Voulez-vous vider toutes les tâches de récupération de véhicule ?")) {
+                  try {
+                    await fetch("/api/field-tasks?type=VEHICLE_RECOVERY", { method: "DELETE" });
+                    fetchTasks();
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }
+              }}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                background: "#fff",
+                color: "#b91c1c",
+                border: "1px solid #fca5a5",
+                borderRadius: 6,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              🗑 Vider la file
+            </button>
+          )}
         </div>
         <div style={{
           border: `1px solid ${config.border}`, borderTop: "none",
@@ -531,9 +561,21 @@ export default function FieldSupervisorView() {
           display: "flex", flexDirection: "column", gap: 10,
         }}>
           {sectionTasks.length === 0 ? (
-            <div style={{ padding: 20, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-              No {config.label.toLowerCase()} tasks.
-            </div>
+            type === "VEHICLE_RECOVERY" ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", background: "#fafafa", borderRadius: 8, border: "1px dashed #e5e7eb" }}>
+                <span style={{ fontSize: 36, display: "block", marginBottom: 8 }}>🛡️</span>
+                <p style={{ margin: 0, fontWeight: 700, color: "#1f2937", fontSize: 14 }}>
+                  Aucune récupération de véhicule en cours
+                </p>
+                <p style={{ margin: "6px 0 0", color: "#6b7280", fontSize: 12 }}>
+                  Cette section reste vide jusqu'à ce que l'agent de performance déclenche une récupération depuis la page Encaissements.
+                </p>
+              </div>
+            ) : (
+              <div style={{ padding: 20, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
+                No {config.label.toLowerCase()} tasks.
+              </div>
+            )
           ) : (
             sectionTasks.map(renderTaskCard)
           )}
