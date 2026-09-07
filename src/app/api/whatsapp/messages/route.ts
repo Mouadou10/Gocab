@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   sendOutboundWhatsAppMessage,
+  ensureWhatsAppTables,
   getDbConv,
   getDbMsg,
 } from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureWhatsAppTables();
+
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get("conversationId");
 
@@ -16,10 +19,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch messages for conversation
-    const messages = await getDbMsg().findMany({
-      where: { conversation_id: conversationId },
-      orderBy: { created_at: "asc" },
-    });
+    let messages: any[] = [];
+    try {
+      messages = await getDbMsg().findMany({
+        where: { conversation_id: conversationId },
+        orderBy: { created_at: "asc" },
+      });
+    } catch (err: any) {
+      if (err?.message?.includes("no such table")) {
+        await ensureWhatsAppTables();
+        messages = await getDbMsg().findMany({
+          where: { conversation_id: conversationId },
+          orderBy: { created_at: "asc" },
+        }).catch(() => []);
+      } else {
+        throw err;
+      }
+    }
 
     // Mark conversation unread count as read
     await getDbConv().update({
@@ -43,6 +59,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureWhatsAppTables();
     const body = await request.json();
     const { conversationId, phoneNumber, text, senderName } = body;
 

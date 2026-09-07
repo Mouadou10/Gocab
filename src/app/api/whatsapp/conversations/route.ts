@@ -3,21 +3,37 @@ import { prisma } from "@/lib/prisma";
 import {
   normalizeWhatsAppPhone,
   findOrCreateConversation,
+  ensureWhatsAppTables,
   getDbConv,
   getDbMsg,
 } from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureWhatsAppTables();
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.toLowerCase().trim() || "";
     const filter = searchParams.get("filter") || "ALL"; // ALL, DRIVERS, LEADS, ARREARS, UNREAD
 
     // Fetch all conversations from DB
-    let conversations = await getDbConv().findMany({
-      where: { is_archived: false },
-      orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
-    });
+    let conversations: any[] = [];
+    try {
+      conversations = await getDbConv().findMany({
+        where: { is_archived: false },
+        orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
+      });
+    } catch (err: any) {
+      if (err?.message?.includes("no such table")) {
+        await ensureWhatsAppTables();
+        conversations = await getDbConv().findMany({
+          where: { is_archived: false },
+          orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
+        }).catch(() => []);
+      } else {
+        throw err;
+      }
+    }
 
     // Auto-seed initial conversations from active Drivers and recent Leads if database table is empty
     if (conversations.length === 0) {
@@ -208,6 +224,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureWhatsAppTables();
     const body = await request.json();
     const { phoneNumber, contactName } = body;
 

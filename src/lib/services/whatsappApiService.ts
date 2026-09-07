@@ -60,6 +60,75 @@ export async function getWhatsAppApiConfig() {
   };
 }
 
+let tablesEnsured = false;
+
+/**
+ * Ensures WhatsAppConversation and WhatsAppMessage tables and indexes exist in the database.
+ * Automatically runs DDL on first access to prevent SQLITE_UNKNOWN / no such table errors.
+ */
+export async function ensureWhatsAppTables(): Promise<void> {
+  if (tablesEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "WhatsAppConversation" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "phone_number" TEXT NOT NULL,
+        "contact_name" TEXT NOT NULL,
+        "contact_type" TEXT NOT NULL DEFAULT 'UNKNOWN',
+        "driver_id" TEXT,
+        "lead_id" TEXT,
+        "unread_count" INTEGER NOT NULL DEFAULT 0,
+        "last_message" TEXT,
+        "last_message_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "is_pinned" BOOLEAN NOT NULL DEFAULT 0,
+        "is_archived" BOOLEAN NOT NULL DEFAULT 0,
+        "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "WhatsAppConversation_phone_number_key" 
+      ON "WhatsAppConversation"("phone_number")
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "WhatsAppConversation_last_message_at_idx" 
+      ON "WhatsAppConversation"("last_message_at")
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "WhatsAppConversation_contact_type_idx" 
+      ON "WhatsAppConversation"("contact_type")
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "WhatsAppMessage" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "conversation_id" TEXT NOT NULL,
+        "direction" TEXT NOT NULL,
+        "sender_type" TEXT NOT NULL DEFAULT 'AGENT',
+        "sender_name" TEXT,
+        "text" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'SENT',
+        "wa_message_id" TEXT,
+        "media_url" TEXT,
+        "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "WhatsAppMessage_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "WhatsAppConversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+      )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "WhatsAppMessage_conversation_id_created_at_idx" 
+      ON "WhatsAppMessage"("conversation_id", "created_at")
+    `);
+
+    tablesEnsured = true;
+  } catch (err: any) {
+    console.error("Auto-creating WhatsApp tables warning:", err?.message);
+  }
+}
+
 /**
  * Finds or creates a WhatsApp conversation, auto-linking to GoCab Drivers or Leads
  */
@@ -67,9 +136,24 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   const cleanPhone = normalizeWhatsAppPhone(phoneNumber);
   if (!cleanPhone) throw new Error("Numéro de téléphone invalide");
 
-  let conversation = await getDbConv().findUnique({
-    where: { phone_number: cleanPhone },
-  });
+  await ensureWhatsAppTables();
+
+  let conversation: any = null;
+  try {
+    conversation = await getDbConv().findUnique({
+      where: { phone_number: cleanPhone },
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("no such table")) {
+      tablesEnsured = false;
+      await ensureWhatsAppTables();
+      conversation = await getDbConv().findUnique({
+        where: { phone_number: cleanPhone },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   if (conversation) {
     return conversation;
@@ -78,8 +162,8 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   // Look up driver profile
   const drivers = await prisma.driverProfile.findMany({
     include: { assignedVehicle: true },
-  });
-  const matchedDriver = drivers.find((d) => {
+  }).catch(() => []);
+  const matchedDriver = drivers.find((d: any) => {
     const dNorm = normalizeWhatsAppPhone(d.phoneSanitized);
     return dNorm === cleanPhone || dNorm.slice(-9) === cleanPhone.slice(-9);
   });
@@ -89,8 +173,8 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   if (!matchedDriver) {
     const leads = await prisma.lead.findMany({
       where: { is_archived: false },
-    });
-    matchedLead = leads.find((l) => {
+    }).catch(() => []);
+    matchedLead = leads.find((l: any) => {
       const lNorm = normalizeWhatsAppPhone(l.sanitized_phone);
       return lNorm === cleanPhone || lNorm.slice(-9) === cleanPhone.slice(-9);
     });
@@ -104,18 +188,43 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
 
   const contactType = matchedDriver ? "DRIVER" : matchedLead ? "LEAD" : "UNKNOWN";
 
-  conversation = await getDbConv().create({
-    data: {
-      phone_number: cleanPhone,
-      contact_name: finalName,
-      driver_id: matchedDriver ? matchedDriver.id : null,
-      lead_id: matchedLead ? matchedLead.id : null,
-      contact_type: contactType,
-      unread_count: 0,
-      last_message: "Conversation initiée",
-      last_message_at: new Date(),
-    },
-  });
+  try {
+    conversation = await getDbConv().create({
+      data: {
+        phone_number: cleanPhone,
+        contact_name: finalName,
+        driver_id: matchedDriver ? matchedDriver.id : null,
+        lead_id: matchedLead ? matchedLead.id : null,
+        contact_type: contactType,
+        unread_count: 0,
+        last_message: "Conversation initiée",
+        last_message_at: new Date(),
+        is_archived: false,
+        is_pinned: false,
+      },
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("no such table")) {
+      tablesEnsured = false;
+      await ensureWhatsAppTables();
+      conversation = await getDbConv().create({
+        data: {
+          phone_number: cleanPhone,
+          contact_name: finalName,
+          driver_id: matchedDriver ? matchedDriver.id : null,
+          lead_id: matchedLead ? matchedLead.id : null,
+          contact_type: contactType,
+          unread_count: 0,
+          last_message: "Conversation initiée",
+          last_message_at: new Date(),
+          is_archived: false,
+          is_pinned: false,
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   return conversation;
 }
@@ -124,6 +233,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
  * Sends an outbound WhatsApp message via Meta Cloud API (if configured) and logs to DB
  */
 export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
+  await ensureWhatsAppTables();
   const cleanPhone = normalizeWhatsAppPhone(opts.phoneNumber);
   if (!cleanPhone) throw new Error("Numéro de téléphone invalide");
 
