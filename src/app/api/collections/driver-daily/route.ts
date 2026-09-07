@@ -47,6 +47,11 @@ export async function GET(request: NextRequest) {
       orderBy: { fullName: "asc" },
     });
 
+    // Check if morning CSV was uploaded for this target date
+    const hasMorningCsv = drivers.some((d) =>
+      d.payments.some((p) => p.morningBalance !== null && p.morningBalance !== undefined)
+    );
+
     let totalMorningTargetMAD = 0;
     let totalExpectedContractMAD = 0;
     let totalClearedTodayMAD = 0;
@@ -76,18 +81,19 @@ export async function GET(request: NextRequest) {
 
       // Negative morning balance in CSV represents the driver debt / collection target
       let morningDebt = 0;
-      if (todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
+      if (hasMorningCsv && todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
         morningDebt = Math.abs(Math.min(0, todayPayment.morningBalance));
-      } else {
-        morningDebt = driver.currentArrearsMAD;
       }
 
       totalMorningTargetMAD += morningDebt;
       totalExpectedContractMAD += expectedTodayMAD;
       totalClearedTodayMAD += clearedTodayMAD;
-      totalArrearsAllMAD += driver.currentArrearsMAD;
+      if (hasMorningCsv) {
+        totalArrearsAllMAD += driver.currentArrearsMAD;
+      }
 
-      // 3rd Day Red Rule: If unpaid for >= 3 days (or arrears >= 900 MAD) -> RED ALERT
+      // 3rd Day Red Rule: Only evaluated when morning CSV has been uploaded
+      let isCriticalRed = false;
       const unpaidDays =
         driver.consecutiveUnpaidDays > 0
           ? driver.consecutiveUnpaidDays
@@ -95,8 +101,10 @@ export async function GET(request: NextRequest) {
           ? Math.max(1, Math.ceil(driver.currentArrearsMAD / 300))
           : 0;
 
-      const isCriticalRed = unpaidDays >= 3 || driver.currentArrearsMAD >= 900;
-      if (isCriticalRed) criticalRedCount++;
+      if (hasMorningCsv) {
+        isCriticalRed = unpaidDays >= 3 || driver.currentArrearsMAD >= 900;
+        if (isCriticalRed) criticalRedCount++;
+      }
 
       return {
         id: driver.id,
@@ -112,8 +120,8 @@ export async function GET(request: NextRequest) {
               status: driver.assignedVehicle.status,
             }
           : null,
-        currentArrearsMAD: driver.currentArrearsMAD,
-        consecutiveUnpaidDays: unpaidDays,
+        currentArrearsMAD: hasMorningCsv ? driver.currentArrearsMAD : 0,
+        consecutiveUnpaidDays: hasMorningCsv ? unpaidDays : 0,
         isCriticalRed,
         expectedTodayMAD,
         clearedTodayMAD,
@@ -126,27 +134,29 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Effective morning target is the sum of negative CSV balances (or fallback to fleet arrears)
-    const effectiveMorningTargetMAD = totalMorningTargetMAD > 0 ? totalMorningTargetMAD : totalArrearsAllMAD;
-    const remainingToCollectMAD = Math.max(0, effectiveMorningTargetMAD - totalClearedTodayMAD);
-    const target60PercentMAD = Math.round(effectiveMorningTargetMAD * 0.6);
-    const collectionPercentage = effectiveMorningTargetMAD > 0
+    // When hasMorningCsv is true, morning target is the sum of negative morning balances from CSV
+    const effectiveMorningTargetMAD = hasMorningCsv ? totalMorningTargetMAD : 0;
+    const remainingToCollectMAD = hasMorningCsv ? Math.max(0, effectiveMorningTargetMAD - totalClearedTodayMAD) : 0;
+    const target60PercentMAD = hasMorningCsv ? Math.round(effectiveMorningTargetMAD * 0.6) : 0;
+    const collectionPercentage = hasMorningCsv && effectiveMorningTargetMAD > 0
       ? (totalClearedTodayMAD / effectiveMorningTargetMAD) * 100
       : 0;
 
     return NextResponse.json({
       date: dateParam,
       dayOfWeek,
+      hasMorningCsv,
       summary: {
         totalDrivers: drivers.length,
         totalExpectedTodayMAD: effectiveMorningTargetMAD,
         totalMorningTargetMAD: effectiveMorningTargetMAD,
         totalClearedTodayMAD,
         remainingToCollectMAD,
-        totalArrearsAllMAD,
+        totalArrearsAllMAD: hasMorningCsv ? totalArrearsAllMAD : 0,
         target60PercentMAD,
         collectionPercentage,
         criticalRedCount,
+        hasMorningCsv,
       },
       drivers: driverList,
     });

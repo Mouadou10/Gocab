@@ -78,6 +78,7 @@ interface DailySummary {
   target60PercentMAD?: number;
   collectionPercentage?: number;
   criticalRedCount: number;
+  hasMorningCsv?: boolean;
 }
 
 export default function FleetPerformanceView() {
@@ -348,33 +349,78 @@ export default function FleetPerformanceView() {
         </div>
       </div>
 
+      {/* Notice banner when morning CSV is not yet imported */}
+      {!isLoading && summary && !summary.hasMorningCsv && (
+        <div className="bg-amber-50/90 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-2xs animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-xs flex items-center gap-1.5">
+                <span>☀️ Cible Matinale en attente d'import CSV</span>
+                <span className="text-3xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-black uppercase">
+                  Chaque Matin
+                </span>
+              </p>
+              <p className="text-2xs text-amber-700 mt-0.5">
+                Cette section reste vide chaque matin jusqu'à ce que l'agent importe le fichier CSV des soldes.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsBalanceModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-navy font-black text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 shadow-sm whitespace-nowrap cursor-pointer shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-navy" />
+            Importer Soldes CSV (Matin)
+          </button>
+        </div>
+      )}
+
       {/* KPI Summary Cards Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Morning Target (100% Cash Collection Pool) */}
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-2xs font-bold text-gray-500 uppercase">Cible Matinale (100% CSV)</span>
-            <span className="text-3xs font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-              Base 100%
+            <span
+              className={`text-3xs font-black px-2 py-0.5 rounded-full ${
+                summary?.hasMorningCsv ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {summary?.hasMorningCsv ? "Base 100%" : "En attente CSV"}
             </span>
           </div>
           <p className="text-2xl font-black text-navy mt-1">
-            {(summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0).toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+            {summary?.hasMorningCsv ? (
+              <>
+                {(summary?.totalMorningTargetMAD || 0).toLocaleString()}{" "}
+                <span className="text-xs font-normal text-gray-500">MAD</span>
+              </>
+            ) : (
+              <span className="text-gray-300 font-extrabold">—</span>
+            )}
           </p>
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
-            <span className="font-semibold text-emerald-700">🎯 Objectif 60% :</span>
-            <span className="font-black text-emerald-800">
-              {Math.round((summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0) * 0.6).toLocaleString()} MAD
+            <span className={summary?.hasMorningCsv ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
+              🎯 Objectif 60% :
+            </span>
+            <span className={summary?.hasMorningCsv ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
+              {summary?.hasMorningCsv
+                ? `${Math.round((summary?.totalMorningTargetMAD || 0) * 0.6).toLocaleString()} MAD`
+                : "—"}
             </span>
           </div>
         </div>
 
         {/* Collected Today with 60% Target Progress */}
         {(() => {
-          const morningTarget = summary?.totalMorningTargetMAD || summary?.totalArrearsAllMAD || 0;
+          const hasCsv = summary?.hasMorningCsv ?? false;
+          const morningTarget = hasCsv ? (summary?.totalMorningTargetMAD || 0) : 0;
           const cleared = summary?.totalClearedTodayMAD || 0;
           const pct = morningTarget > 0 ? (cleared / morningTarget) * 100 : 0;
-          const isTargetAchieved = pct >= 60;
+          const isTargetAchieved = pct >= 60 && hasCsv;
 
           return (
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
@@ -382,18 +428,26 @@ export default function FleetPerformanceView() {
                 <span className="text-2xs font-bold text-gray-500 uppercase">Encaissé Aujourd'hui</span>
                 <span
                   className={`text-3xs font-black px-2 py-0.5 rounded-full ${
-                    isTargetAchieved
+                    !hasCsv
+                      ? "bg-gray-100 text-gray-400"
+                      : isTargetAchieved
                       ? "bg-emerald-100 text-emerald-800 animate-pulse-subtle"
                       : pct >= 30
                       ? "bg-amber-100 text-amber-800"
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {pct.toFixed(1)}% / 60%
+                  {hasCsv ? `${pct.toFixed(1)}% / 60%` : "0.0% / 60%"}
                 </span>
               </div>
               <p className="text-2xl font-black text-emerald-600 mt-1">
-                {cleared.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+                {hasCsv || cleared > 0 ? (
+                  <>
+                    {cleared.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+                  </>
+                ) : (
+                  <span className="text-gray-300 font-extrabold">—</span>
+                )}
               </p>
               <div className="relative w-full h-2.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
                 {/* 60% Goal Line Marker */}
@@ -407,12 +461,18 @@ export default function FleetPerformanceView() {
                       : "bg-blue-500"
                   }`}
                   style={{
-                    width: `${Math.min(100, pct)}%`,
+                    width: `${hasCsv ? Math.min(100, pct) : 0}%`,
                   }}
                 />
               </div>
               <p className="text-3xs text-gray-500 pt-0.5 flex items-center justify-between">
-                <span>{isTargetAchieved ? "🎉 Objectif 60% Atteint !" : `Reste ${Math.max(0, Math.round(morningTarget * 0.6) - cleared).toLocaleString()} MAD pour 60%`}</span>
+                <span>
+                  {!hasCsv
+                    ? "En attente du CSV matin pour fixer l'objectif"
+                    : isTargetAchieved
+                    ? "🎉 Objectif 60% Atteint !"
+                    : `Reste ${Math.max(0, Math.round(morningTarget * 0.6) - cleared).toLocaleString()} MAD pour 60%`}
+                </span>
                 <span className="font-bold text-gray-400">Objectif: 60%</span>
               </p>
             </div>
@@ -421,38 +481,92 @@ export default function FleetPerformanceView() {
 
         {/* Remaining to collect (Negative balance remaining) */}
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
-          <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
+          <div className="flex items-center justify-between">
+            <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
+            {!summary?.hasMorningCsv && (
+              <span className="text-3xs font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                En attente CSV
+              </span>
+            )}
+          </div>
           <p className="text-2xl font-black text-amber-600 mt-1">
-            {(summary?.remainingToCollectMAD || 0).toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
+            {summary?.hasMorningCsv ? (
+              <>
+                {(summary?.remainingToCollectMAD || 0).toLocaleString()}{" "}
+                <span className="text-xs font-normal text-gray-500">MAD</span>
+              </>
+            ) : (
+              <span className="text-gray-300 font-extrabold">—</span>
+            )}
           </p>
-          <p className="text-2xs text-amber-700 mt-1 font-medium leading-tight">
-            Cumul total impayés flotte : {(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD
+          <p className="text-2xs text-gray-500 mt-1 font-medium leading-tight">
+            {summary?.hasMorningCsv
+              ? `Cumul total impayés flotte : ${(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD`
+              : "En attente de l'import CSV du matin"}
           </p>
         </div>
 
         {/* Critical 3rd Day Red Alert Count */}
         <div
-          onClick={() => setFilterType(filterType === "RED" ? "ALL" : "RED")}
-          className={`p-5 rounded-3xl border shadow-xs cursor-pointer transition-all ${
-            summary && summary.criticalRedCount > 0
-              ? "bg-red-50 border-red-300 hover:border-red-500 animate-pulse-subtle"
-              : "bg-white border-gray-100"
+          onClick={() => {
+            if (!summary?.hasMorningCsv) return;
+            setFilterType(filterType === "RED" ? "ALL" : "RED");
+          }}
+          className={`p-5 rounded-3xl border shadow-xs transition-all ${
+            !summary?.hasMorningCsv
+              ? "bg-white border-gray-100 opacity-75 cursor-default"
+              : summary.criticalRedCount > 0
+              ? "bg-red-50 border-red-300 hover:border-red-500 animate-pulse-subtle cursor-pointer"
+              : "bg-white border-gray-100 cursor-pointer"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-red-700 uppercase flex items-center gap-1">
-              <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
+            <span
+              className={`text-2xs font-bold uppercase flex items-center gap-1 ${
+                summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-700" : "text-gray-500"
+              }`}
+            >
+              <ShieldAlert
+                className={`w-3.5 h-3.5 ${
+                  summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-600" : "text-gray-400"
+                }`}
+              />
               Alerte Rouge (3e Jour)
             </span>
-            <span className="text-2xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">
-              {summary?.criticalRedCount || 0}
+            <span
+              className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
+                summary?.hasMorningCsv && summary.criticalRedCount > 0
+                  ? "bg-red-600 text-white"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              {summary?.hasMorningCsv ? summary?.criticalRedCount || 0 : "0"}
             </span>
           </div>
-          <p className="text-2xl font-black text-red-700 mt-1.5">
-            {summary?.criticalRedCount} <span className="text-xs font-medium text-red-600">Chauffeurs</span>
+          <p
+            className={`text-2xl font-black mt-1.5 ${
+              summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-700" : "text-gray-300 font-extrabold"
+            }`}
+          >
+            {summary?.hasMorningCsv ? (
+              <>
+                {summary?.criticalRedCount}{" "}
+                <span className="text-xs font-medium text-red-600">Chauffeurs</span>
+              </>
+            ) : (
+              <>
+                — <span className="text-xs font-medium text-gray-400">Chauffeur</span>
+              </>
+            )}
           </p>
-          <p className="text-2xs text-red-600 mt-1 font-medium">
-            ≥ 2-3 jours sans versement (Risque d'immobilisation)
+          <p
+            className={`text-2xs mt-1 font-medium ${
+              summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-600" : "text-gray-400"
+            }`}
+          >
+            {summary?.hasMorningCsv
+              ? "≥ 2-3 jours sans versement (Risque d'immobilisation)"
+              : "Calculé après import du CSV matin"}
           </p>
         </div>
       </div>
