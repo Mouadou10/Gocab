@@ -326,3 +326,41 @@ CREATE TABLE "AuditLog" (
 
 CREATE INDEX IF NOT EXISTS "AuditLog_entity_type_entity_id_idx" ON "AuditLog"("entity_type", "entity_id");
 CREATE INDEX IF NOT EXISTS "AuditLog_user_id_idx" ON "AuditLog"("user_id");
+
+-- WhatsApp CRM Conversation & Message Tables
+CREATE TABLE IF NOT EXISTS "WhatsAppConversation" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "phone_number" TEXT NOT NULL,
+    "contact_name" TEXT NOT NULL,
+    "driver_id" TEXT,
+    "lead_id" TEXT,
+    "contact_type" TEXT NOT NULL DEFAULT 'UNKNOWN',
+    "last_message" TEXT,
+    "last_message_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "unread_count" INTEGER NOT NULL DEFAULT 0,
+    "is_pinned" BOOLEAN NOT NULL DEFAULT false,
+    "is_archived" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "WhatsAppConversation_phone_number_key" ON "WhatsAppConversation"("phone_number");
+CREATE INDEX IF NOT EXISTS "WhatsAppConversation_last_message_at_idx" ON "WhatsAppConversation"("last_message_at");
+CREATE INDEX IF NOT EXISTS "WhatsAppConversation_contact_type_idx" ON "WhatsAppConversation"("contact_type");
+
+CREATE TABLE IF NOT EXISTS "WhatsAppMessage" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "conversation_id" TEXT NOT NULL,
+    "direction" TEXT NOT NULL,
+    "sender_type" TEXT NOT NULL DEFAULT 'AGENT',
+    "sender_name" TEXT,
+    "text" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'SENT',
+    "wa_message_id" TEXT,
+    "media_url" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "WhatsAppMessage_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "WhatsAppConversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "WhatsAppMessage_conversation_id_created_at_idx" ON "WhatsAppMessage"("conversation_id", "created_at");
+CREATE INDEX IF NOT EXISTS "WhatsAppMessage_wa_message_id_idx" ON "WhatsAppMessage"("wa_message_id");

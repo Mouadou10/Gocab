@@ -420,3 +420,45 @@ model AuditLog {
   @@index([entity_type, entity_id])
   @@index([user_id])
 }
+
+/// A WhatsApp CRM conversation thread with a driver, lead, or prospect.
+model WhatsAppConversation {
+  id              String            @id @default(uuid())
+  phone_number    String            @unique
+  contact_name    String
+  driver_id       String?
+  lead_id         String?
+  contact_type    String            @default("UNKNOWN") // DRIVER, LEAD, UNKNOWN
+  last_message    String?
+  last_message_at DateTime          @default(now())
+  unread_count    Int               @default(0)
+  is_pinned       Boolean           @default(false)
+  is_archived     Boolean           @default(false)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  messages        WhatsAppMessage[]
+
+  @@index([phone_number])
+  @@index([last_message_at])
+  @@index([contact_type])
+}
+
+/// An individual message in a WhatsApp conversation thread.
+model WhatsAppMessage {
+  id              String               @id @default(uuid())
+  conversation_id String
+  conversation    WhatsAppConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  direction       String               // INBOUND, OUTBOUND
+  sender_type     String               @default("AGENT") // AGENT, CONTACT, SYSTEM
+  sender_name     String?
+  text            String
+  status          String               @default("SENT") // PENDING, SENT, DELIVERED, READ, FAILED
+  wa_message_id   String?
+  media_url       String?
+  created_at      DateTime             @default(now())
+
+  @@index([conversation_id, created_at])
+  @@index([wa_message_id])
+}
+

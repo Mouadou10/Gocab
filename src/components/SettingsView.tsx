@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
 const ALL_TABS: { id: TabType; label: string; icon: string; description: string }[] = [
   { id: "dashboard", label: "Home", icon: "📊", description: "KPI overview & command metrics" },
@@ -27,16 +27,17 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
   { id: "performance", label: "Perf", icon: "📈", description: "Fleet performance, collections & waivers" },
   { id: "field", label: "Field", icon: "🛡️", description: "Field supervisor inspections & recoveries" },
   { id: "insurance", label: "Insurance", icon: "📝", description: "Accident claims & insurance tracking" },
+  { id: "whatsapp", label: "WhatsApp CRM", icon: "💬", description: "WhatsApp live chat CRM & automated notifications" },
   { id: "settings", label: "Settings", icon: "⚙️", description: "Role permissions & system settings" },
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers"],
-  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance"],
-  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets"],
-  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance"],
-  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
-  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "whatsapp"],
+  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance", "whatsapp"],
+  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets", "whatsapp"],
+  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -111,6 +112,16 @@ export default function SettingsView() {
   const [missingDocsTemplate, setMissingDocsTemplate] = useState("");
   const [paymentReminderTemplate, setPaymentReminderTemplate] = useState("");
   const [blockWarningTemplate, setBlockWarningTemplate] = useState("");
+
+  // WhatsApp Cloud API Configuration
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
+  const [waAccessToken, setWaAccessToken] = useState("");
+  const [waVerifyToken, setWaVerifyToken] = useState("gocab_whatsapp_crm_token_2026");
+  const [waWabaId, setWaWabaId] = useState("");
+  const [waWebhookUrl, setWaWebhookUrl] = useState("https://gocab-iota.vercel.app/api/whatsapp/webhook");
+  const [waIsLiveConfigured, setWaIsLiveConfigured] = useState(false);
+  const [isSavingWaConfig, setIsSavingWaConfig] = useState(false);
+  const [showWaToken, setShowWaToken] = useState(false);
 
   // Telegram Notifications State
   const [telegramBotToken, setTelegramBotToken] = useState("");
@@ -191,6 +202,23 @@ export default function SettingsView() {
         if (usersData.users) {
           setUsers(usersData.users);
         }
+
+        // Load WhatsApp Cloud API status
+        fetch("/api/whatsapp/config")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.config) {
+              setWaPhoneNumberId(data.config.phoneNumberId || "");
+              setWaVerifyToken(data.config.verifyToken || "gocab_whatsapp_crm_token_2026");
+              setWaWabaId(data.config.wabaId || "");
+              setWaWebhookUrl(data.config.webhookUrl || "https://gocab-iota.vercel.app/api/whatsapp/webhook");
+              setWaIsLiveConfigured(data.config.isLiveConfigured);
+              if (data.config.hasAccessToken) {
+                setWaAccessToken(data.config.accessTokenMasked || "");
+              }
+            }
+          })
+          .catch(() => {});
       } catch (err) {
         console.error("Failed to load settings:", err);
         toast.error("Failed to load settings data");
@@ -370,6 +398,36 @@ export default function SettingsView() {
       toast.error("Error saving templates");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  // Save WhatsApp Cloud API Settings
+  async function handleSaveWhatsAppConfig(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingWaConfig(true);
+    try {
+      const res = await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumberId: waPhoneNumberId.trim(),
+          accessToken: waAccessToken.trim(),
+          verifyToken: waVerifyToken.trim(),
+          wabaId: waWabaId.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("✅ Configuration WhatsApp Cloud API enregistrée !");
+        setWaIsLiveConfigured(Boolean(waPhoneNumberId.trim() && waAccessToken.trim() && !waAccessToken.includes("••••")));
+      } else {
+        toast.error(data.error || "Échec de l'enregistrement");
+      }
+    } catch (err) {
+      toast.error("Erreur réseau");
+    } finally {
+      setIsSavingWaConfig(false);
     }
   }
 
@@ -1133,17 +1191,174 @@ export default function SettingsView() {
         </div>
       )}
 
-      {/* SECTION 4: WHATSAPP TEMPLATES */}
+      {/* SECTION 4: WHATSAPP CLOUD API & TEMPLATES */}
       {activeSection === "whatsapp" && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 max-w-4xl mx-auto">
-          <div>
-            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <span>💬</span> WhatsApp Communication Templates
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Customize the automatic WhatsApp messages sent to drivers and candidates across different operational touchpoints.
-            </p>
+        <div className="space-y-6 max-w-4xl mx-auto">
+          {/* 4.1 Meta WhatsApp Cloud API Integration Card */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span>⚡</span> Meta WhatsApp Cloud API — Ligne Officielle
+                  </h3>
+                  {waIsLiveConfigured ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      API Meta Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                      Mode Direct CRM (Simulation active)
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Connectez votre numéro WhatsApp Business via l&apos;API Cloud officielle de Meta pour envoyer et recevoir des messages en temps réel.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveWhatsAppConfig} className="space-y-5">
+              {/* Webhook Callback & Verify Token Display */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-emerald-900">
+                    🌐 Webhook Callback URL (URL de Rappel)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={waWebhookUrl}
+                      className="w-full bg-white border border-emerald-200 rounded-xl px-3 py-2 text-xs font-mono text-gray-700 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(waWebhookUrl);
+                        toast.success("URL Webhook copiée !");
+                      }}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer"
+                    >
+                      Copier
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-emerald-800">
+                    À coller dans <b>Meta for Developers &gt; WhatsApp &gt; Configuration &gt; Webhook</b>.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-emerald-900">
+                    🔑 Jeton de Vérification (Verify Token)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={waVerifyToken}
+                      onChange={(e) => setWaVerifyToken(e.target.value)}
+                      className="w-full bg-white border border-emerald-200 rounded-xl px-3 py-2 text-xs font-mono text-gray-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(waVerifyToken);
+                        toast.success("Verify Token copié !");
+                      }}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer"
+                    >
+                      Copier
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-emerald-800">
+                    Doit être identique dans votre console Meta.
+                  </p>
+                </div>
+              </div>
+
+              {/* API Credentials */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-800">
+                    📱 Phone Number ID (Identifiant du numéro)
+                  </label>
+                  <input
+                    type="text"
+                    value={waPhoneNumberId}
+                    onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                    placeholder="ex: 109876543210987"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500">
+                    Fourni sous <b>WhatsApp &gt; Démarrage de l&apos;API</b> dans le dashboard Meta.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-800">
+                    🏢 WhatsApp Business Account ID (WABA ID)
+                  </label>
+                  <input
+                    type="text"
+                    value={waWabaId}
+                    onChange={(e) => setWaWabaId(e.target.value)}
+                    placeholder="ex: 123456789012345"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500">
+                    L&apos;identifiant de votre compte WhatsApp Business.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-800">
+                    🔐 Meta Access Token (Jeton d&apos;accès Permanent ou Système)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowWaToken(!showWaToken)}
+                    className="text-[11px] text-emerald-700 hover:underline cursor-pointer"
+                  >
+                    {showWaToken ? "Masquer" : "Afficher"}
+                  </button>
+                </div>
+                <input
+                  type={showWaToken ? "text" : "password"}
+                  value={waAccessToken}
+                  onChange={(e) => setWaAccessToken(e.target.value)}
+                  placeholder="EAA..."
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-gray-500">
+                  Généré via Meta Business Manager &gt; Utilisateurs système &gt; Générer un jeton avec permission <code>whatsapp_business_messaging</code>.
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingWaConfig}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                >
+                  {isSavingWaConfig ? "Enregistrement…" : "💾 Sauvegarder la configuration Meta API"}
+                </button>
+              </div>
+            </form>
           </div>
+
+          {/* 4.2 Template Configuration */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span>💬</span> WhatsApp Communication Templates
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Customize the automatic WhatsApp messages sent to drivers and candidates across different operational touchpoints.
+              </p>
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 1. Training Schedule */}

@@ -42,6 +42,7 @@ import DriversView from "./DriversView";
 import PasswordChangeModal from "./PasswordChangeModal";
 import AddLeadModal from "./AddLeadModal";
 import PowerBiDashboardView from "./PowerBiDashboardView";
+import WhatsAppCrmView from "./WhatsAppCrmView";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
@@ -73,12 +74,12 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:  ["dashboard", "kpi-dashboard", "leads", "training", "drivers"],
-  FLEET_PERF_MANAGER:   ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance"],
-  FIELD_SUPERVISOR:     ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets"],
-  FINANCE_OFFICER:      ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance"],
-  OPS_MANAGER:          ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
-  ADMIN:                ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "settings"],
+  LEAD_ACQUISITION_JR:  ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "whatsapp"],
+  FLEET_PERF_MANAGER:   ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance", "whatsapp"],
+  FIELD_SUPERVISOR:     ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets", "whatsapp"],
+  FINANCE_OFFICER:      ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER:          ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  ADMIN:                ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -99,7 +100,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:               "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
@@ -175,6 +176,24 @@ export default function KanbanBoard() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [isTabRestored, setIsTabRestored] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
+  const [unreadWhatsAppCount, setUnreadWhatsAppCount] = useState(0);
+
+  // Poll unread WhatsApp count
+  const fetchWhatsAppUnread = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/conversations?filter=UNREAD");
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadWhatsAppCount(data.totalUnread || 0);
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    fetchWhatsAppUnread();
+    const interval = setInterval(fetchWhatsAppUnread, 12000);
+    return () => clearInterval(interval);
+  }, [fetchWhatsAppUnread]);
 
   // Filters
   const [filterCity, setFilterCity] = useState("");
@@ -1068,6 +1087,30 @@ export default function KanbanBoard() {
               </button>
             )}
 
+            {allowedTabs.includes("whatsapp") && (
+              <button
+                onClick={() => handleSelectTab("whatsapp")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "whatsapp"
+                    ? "bg-emerald-600 text-white shadow-sm font-bold"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/50"
+                }`}
+              >
+                💬 WhatsApp CRM
+                {unreadWhatsAppCount > 0 && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                      activeTab === "whatsapp"
+                        ? "bg-white text-emerald-700"
+                        : "bg-emerald-600 text-white animate-pulse"
+                    }`}
+                  >
+                    {unreadWhatsAppCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {allowedTabs.includes("settings") && (
               <button
                 onClick={() => handleSelectTab("settings")}
@@ -1284,6 +1327,8 @@ export default function KanbanBoard() {
           <FieldSupervisorView />
         ) : activeTab === "insurance" ? (
           <InsuranceView />
+        ) : activeTab === "whatsapp" ? (
+          <WhatsAppCrmView />
         ) : (
 
           <DndContext
