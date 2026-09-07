@@ -27,7 +27,7 @@ import {
   SendHorizontal,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { GOCAB_WHATSAPP_TEMPLATES, formatDisplayPhone } from "@/lib/services/whatsappApiService";
+import { GOCAB_WHATSAPP_TEMPLATES, formatDisplayPhone } from "@/lib/whatsapp";
 
 interface DriverSummary {
   id: string;
