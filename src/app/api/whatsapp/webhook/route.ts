@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getWhatsAppApiConfig,
   handleInboundWhatsAppMessage,
+  getDbMsg,
 } from "@/lib/services/whatsappApiService";
-import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   if (mode === "subscribe" && token === config.verifyToken) {
     console.log("✅ WhatsApp Cloud API Webhook verified successfully");
-    return new NextResponse(challenge, {
+    return new NextResponse(challenge || "", {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
                 : statusObj.status;
 
             if (waMsgId && newStatus) {
-              await prisma.whatsAppMessage.updateMany({
+              await getDbMsg().updateMany({
                 where: { wa_message_id: waMsgId },
                 data: { status: newStatus },
               });

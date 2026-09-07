@@ -7,6 +7,12 @@ import {
 
 export { normalizeWhatsAppPhone, formatDisplayPhone, GOCAB_WHATSAPP_TEMPLATES };
 
+export const getDbConv = () =>
+  (prisma as any).whatsAppConversation || (prisma as any).whatsappConversation;
+
+export const getDbMsg = () =>
+  (prisma as any).whatsAppMessage || (prisma as any).whatsappMessage;
+
 export interface SendMessageOptions {
   conversationId?: string;
   phoneNumber: string;
@@ -61,7 +67,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   const cleanPhone = normalizeWhatsAppPhone(phoneNumber);
   if (!cleanPhone) throw new Error("Numéro de téléphone invalide");
 
-  let conversation = await prisma.whatsAppConversation.findUnique({
+  let conversation = await getDbConv().findUnique({
     where: { phone_number: cleanPhone },
   });
 
@@ -98,7 +104,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
 
   const contactType = matchedDriver ? "DRIVER" : matchedLead ? "LEAD" : "UNKNOWN";
 
-  conversation = await prisma.whatsAppConversation.create({
+  conversation = await getDbConv().create({
     data: {
       phone_number: cleanPhone,
       contact_name: finalName,
@@ -123,7 +129,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
 
   const conversation =
     opts.conversationId
-      ? await prisma.whatsAppConversation.findUnique({ where: { id: opts.conversationId } })
+      ? await getDbConv().findUnique({ where: { id: opts.conversationId } })
       : await findOrCreateConversation(cleanPhone);
 
   if (!conversation) throw new Error("Conversation introuvable");
@@ -171,7 +177,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   }
 
   // Create message record in database
-  const message = await prisma.whatsAppMessage.create({
+  const message = await getDbMsg().create({
     data: {
       conversation_id: conversation.id,
       direction: "OUTBOUND",
@@ -184,7 +190,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   });
 
   // Update conversation's last message
-  await prisma.whatsAppConversation.update({
+  await getDbConv().update({
     where: { id: conversation.id },
     data: {
       last_message: opts.text,
@@ -209,7 +215,7 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
 
   const conversation = await findOrCreateConversation(cleanPhone, payload.contactName);
 
-  const message = await prisma.whatsAppMessage.create({
+  const message = await getDbMsg().create({
     data: {
       conversation_id: conversation.id,
       direction: "INBOUND",
@@ -222,7 +228,7 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
     },
   });
 
-  await prisma.whatsAppConversation.update({
+  await getDbConv().update({
     where: { id: conversation.id },
     data: {
       last_message: payload.text,

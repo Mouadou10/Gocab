@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeWhatsAppPhone, findOrCreateConversation } from "@/lib/services/whatsappApiService";
+import {
+  normalizeWhatsAppPhone,
+  findOrCreateConversation,
+  getDbConv,
+  getDbMsg,
+} from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,7 +14,7 @@ export async function GET(request: NextRequest) {
     const filter = searchParams.get("filter") || "ALL"; // ALL, DRIVERS, LEADS, ARREARS, UNREAD
 
     // Fetch all conversations from DB
-    let conversations = await prisma.whatsAppConversation.findMany({
+    let conversations = await getDbConv().findMany({
       where: { is_archived: false },
       orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
     });
@@ -32,7 +37,7 @@ export async function GET(request: NextRequest) {
               ? `Rappel solde : ${d.currentArrearsMAD} MAD`
               : "Discussion GoCab Chauffeur";
 
-          const conv = await prisma.whatsAppConversation.create({
+          const conv = await getDbConv().create({
             data: {
               phone_number: cleanPhone,
               contact_name: d.fullName,
@@ -45,7 +50,7 @@ export async function GET(request: NextRequest) {
           });
 
           // Add a sample opening message
-          await prisma.whatsAppMessage.create({
+          await getDbMsg().create({
             data: {
               conversation_id: conv.id,
               direction: "OUTBOUND",
@@ -70,7 +75,7 @@ export async function GET(request: NextRequest) {
         if (!cleanPhone) continue;
 
         try {
-          const conv = await prisma.whatsAppConversation.create({
+          const conv = await getDbConv().create({
             data: {
               phone_number: cleanPhone,
               contact_name: l.raw_name,
@@ -82,7 +87,7 @@ export async function GET(request: NextRequest) {
             },
           });
 
-          await prisma.whatsAppMessage.create({
+          await getDbMsg().create({
             data: {
               conversation_id: conv.id,
               direction: "OUTBOUND",
@@ -96,7 +101,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Re-query after auto-seed
-      conversations = await prisma.whatsAppConversation.findMany({
+      conversations = await getDbConv().findMany({
         where: { is_archived: false },
         orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
       });

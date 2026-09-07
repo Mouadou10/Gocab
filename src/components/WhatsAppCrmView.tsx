@@ -6,25 +6,17 @@ import {
   Search,
   Send,
   Phone,
-  ExternalLink,
   Plus,
   RefreshCw,
   Check,
-  CheckCheck,
   AlertTriangle,
   User,
   Car,
   FileText,
   Clock,
-  Sparkles,
   ChevronRight,
   X,
-  Bot,
   Zap,
-  ShieldAlert,
-  GraduationCap,
-  DollarSign,
-  SendHorizontal,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { GOCAB_WHATSAPP_TEMPLATES, formatDisplayPhone } from "@/lib/whatsapp";
@@ -629,7 +621,7 @@ export default function WhatsAppCrmView() {
                   rel="noreferrer"
                   className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border border-emerald-200"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   <span>WhatsApp Web</span>
                 </a>
                 <button
@@ -637,7 +629,7 @@ export default function WhatsAppCrmView() {
                   className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border border-purple-200 cursor-pointer"
                   title="Simuler une réponse du chauffeur pour tester le flux"
                 >
-                  <Bot className="w-3.5 h-3.5" />
+                  <span className="text-xs">🤖</span>
                   <span>Simuler Réponse</span>
                 </button>
               </div>
@@ -646,7 +638,7 @@ export default function WhatsAppCrmView() {
             {/* Quick Templates Bar */}
             <div className="px-6 py-2 bg-white/90 border-b border-gray-100 flex items-center gap-2 overflow-x-auto scrollbar-none">
               <span className="text-[11px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
-                <Sparkles className="w-3 h-3 text-amber-500" />
+                <span>✨</span>
                 Modèles Rapides :
               </span>
               {GOCAB_WHATSAPP_TEMPLATES.map((tpl) => (
@@ -706,8 +698,8 @@ export default function WhatsAppCrmView() {
                           <div className="flex items-center justify-end gap-1 pt-1 text-[10px]">
                             {msg.status === "PENDING" && <Clock className="w-3 h-3 text-gray-400 animate-spin" />}
                             {msg.status === "SENT" && <Check className="w-3 h-3 text-gray-400" />}
-                            {msg.status === "DELIVERED" && <CheckCheck className="w-3 h-3 text-gray-400" />}
-                            {msg.status === "READ" && <CheckCheck className="w-3 h-3 text-blue-500" />}
+                            {msg.status === "DELIVERED" && <span className="text-gray-400 font-bold text-[11px] leading-none">✓✓</span>}
+                            {msg.status === "READ" && <span className="text-blue-500 font-bold text-[11px] leading-none">✓✓</span>}
                             {msg.status === "FAILED" && (
                               <span className="text-red-500 font-bold flex items-center gap-0.5">
                                 <AlertTriangle className="w-3 h-3" /> Échec
@@ -751,7 +743,7 @@ export default function WhatsAppCrmView() {
                   {isSending ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <SendHorizontal className="w-5 h-5" />
+                    <Send className="w-4 h-4" />
                   )}
                 </button>
               </form>
@@ -885,7 +877,7 @@ export default function WhatsAppCrmView() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm">🎓</span>
                   Dossier Recrutement Lead
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-800">
@@ -948,7 +940,7 @@ export default function WhatsAppCrmView() {
           <div className="bg-white rounded-3xl shadow-2xl border border-purple-100 max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2 text-purple-700 font-black text-sm">
-                <Bot className="w-5 h-5" />
+                <span>🤖</span>
                 <span>Simuler un message entrant du chauffeur</span>
               </div>
               <button

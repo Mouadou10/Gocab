@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendOutboundWhatsAppMessage } from "@/lib/services/whatsappApiService";
+import {
+  sendOutboundWhatsAppMessage,
+  getDbConv,
+  getDbMsg,
+} from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,13 +16,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch messages for conversation
-    const messages = await prisma.whatsAppMessage.findMany({
+    const messages = await getDbMsg().findMany({
       where: { conversation_id: conversationId },
       orderBy: { created_at: "asc" },
     });
 
     // Mark conversation unread count as read
-    await prisma.whatsAppConversation.update({
+    await getDbConv().update({
       where: { id: conversationId },
       data: { unread_count: 0 },
     }).catch(() => {});
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     let phone = phoneNumber;
     if (!phone && conversationId) {
-      const conv = await prisma.whatsAppConversation.findUnique({
+      const conv = await getDbConv().findUnique({
         where: { id: conversationId },
       });
       phone = conv?.phone_number;
