@@ -247,8 +247,10 @@ export default function WhatsAppCrmView() {
           prev.map((m) => (m.id === tempId ? (data.message as MessageItem) : m))
         );
         fetchConversations(true);
-        if (data.mode === "META_CLOUD_API") {
-          toast.success("Message transmis via Meta WhatsApp API", { icon: "✅" });
+        if (data.mode === "360DIALOG_WABA" || data.mode === "META_GRAPH_API" || data.mode === "META_CLOUD_API") {
+          toast.success("✓ Message WhatsApp transmis en direct via l'API !", { icon: "🚀" });
+        } else {
+          toast.success("✓ Message WhatsApp enregistré dans le CRM", { icon: "✅" });
         }
       } else {
         toast.error(data.error || "Erreur lors de l'envoi du message");
@@ -364,9 +366,9 @@ export default function WhatsAppCrmView() {
               <h2 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
                 WhatsApp CRM
                 {apiConfig?.isLiveConfigured ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800" title="Connecté à Meta Graph API">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    LIVE
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300" title="Connecté à 360dialog WhatsApp Business Cloud API (+212 6 62 14 51 09)">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    360DIALOG LIVE
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-sky-100 text-sky-800" title="Mode direct GoCab CRM actif">
@@ -375,7 +377,7 @@ export default function WhatsAppCrmView() {
                   </span>
                 )}
               </h2>
-              <p className="text-[10px] text-gray-500 font-medium">Ligne directe chauffeurs & leads</p>
+              <p className="text-[10px] text-gray-500 font-medium">Ligne officielle +212 6 62 14 51 09 · GoCab SARL</p>
             </div>
           </div>
 
@@ -620,21 +622,16 @@ export default function WhatsAppCrmView() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Ligne Directe +212 6 62 14 51 09</span>
+                </div>
                 <a
                   href={`tel:${activeConversation.phoneNumber}`}
                   className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
                 >
                   <Phone className="w-3.5 h-3.5 text-navy" />
                   <span>Appeler</span>
-                </a>
-                <a
-                  href={`https://wa.me/${activeConversation.phoneNumber}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border border-emerald-200"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                  <span>WhatsApp Web</span>
                 </a>
                 <button
                   onClick={() => setShowSimulateModal(true)}
@@ -728,8 +725,16 @@ export default function WhatsAppCrmView() {
             </div>
 
             {/* Chat Input Footer */}
-            <div className="p-4 bg-white border-t border-gray-200/80">
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+            <div className="bg-white border-t border-gray-200/80">
+              <div className="px-5 py-1.5 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between text-[11px] text-emerald-900">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  🚀 Envoi direct CRM via WhatsApp Business API (+212 6 62 14 51 09)
+                </span>
+                <span className="text-gray-400 text-[10px] font-mono hidden sm:inline">Entrée ↵ pour envoyer</span>
+              </div>
+              <div className="p-4">
+                <form onSubmit={handleSendMessage} className="flex items-end gap-2">
                 <div className="flex-1 bg-gray-100/90 rounded-2xl p-1.5 border border-gray-200 focus-within:border-emerald-500 focus-within:bg-white transition-all">
                   <textarea
                     rows={2}
@@ -760,7 +765,8 @@ export default function WhatsAppCrmView() {
                 </button>
               </form>
             </div>
-          </>
+          </div>
+        </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-gray-400 space-y-3">
             <div className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400">

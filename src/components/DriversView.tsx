@@ -31,6 +31,7 @@ import toast from "react-hot-toast";
 import DriverCSVUploader from "./DriverCSVUploader";
 import AddDriverModal from "./AddDriverModal";
 import DriverDrawer from "./DriverDrawer";
+import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 
 interface Vehicle {
   id: string;
@@ -69,6 +70,8 @@ export default function DriversView() {
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<DriverProfile | null>(null);
+  const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   const fetchDrivers = async () => {
     try {
@@ -327,16 +330,26 @@ export default function DriversView() {
                           <p className="text-xs font-mono font-semibold text-gray-800">{driver.cinNumber}</p>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-500">{driver.phoneSanitized}</span>
-                            <a
-                              href={whatsappUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-emerald-600 hover:text-emerald-700 p-0.5 rounded"
-                              title="Contacter sur WhatsApp"
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDirectWhatsAppTarget({
+                                  phoneNumber: driver.phoneSanitized,
+                                  contactName: driver.fullName,
+                                  contactType: "DRIVER",
+                                  plateNumber: driver.assignedVehicle?.plate_number,
+                                  arrearsMAD: driver.currentArrearsMAD,
+                                  unpaidDays: driver.consecutiveUnpaidDays,
+                                  defaultMessage: `Bonjour ${driver.fullName},\n\nNous vous contactons depuis le siège GoCab.\n\nL'équipe GoCab Operations.`,
+                                });
+                                setIsWhatsAppModalOpen(true);
+                              }}
+                              className="text-emerald-600 hover:text-emerald-700 p-0.5 rounded cursor-pointer"
+                              title="Envoyer un WhatsApp direct depuis le CRM"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
-                            </a>
+                            </button>
                           </div>
                         </div>
                       </td>
@@ -443,6 +456,19 @@ export default function DriversView() {
         isOpen={Boolean(selectedDriver)}
         onClose={() => setSelectedDriver(null)}
         onUpdate={fetchDrivers}
+      />
+
+      {/* Direct WhatsApp Sending Modal */}
+      <WhatsAppDirectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        target={directWhatsAppTarget}
+        onOpenFullChat={(phone) => {
+          try {
+            localStorage.setItem("gocab_target_whatsapp_phone", phone);
+          } catch (e) {}
+          window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
+        }}
       />
     </div>
   );

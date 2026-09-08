@@ -38,11 +38,74 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Verify it's a WhatsApp webhook notification
-    if (body.object !== "whatsapp_business_account") {
-      return NextResponse.json({ status: "ignored" }, { status: 200 });
+    // Helper to process messages
+    const processMessages = async (messages: any[], contactName?: string) => {
+      for (const msg of messages) {
+        let messageText = "";
+
+        if (msg.type === "text" && msg.text?.body) {
+          messageText = msg.text.body;
+        } else if (msg.type === "image") {
+          messageText = msg.image?.caption || "📷 Photo reçue";
+        } else if (msg.type === "document") {
+          messageText = msg.document?.caption || `📄 Document reçu (${msg.document?.filename || "fichier"})`;
+        } else if (msg.type === "audio" || msg.type === "voice") {
+          messageText = "🎙️ Message vocal reçu";
+        } else if (msg.type === "location") {
+          messageText = `📍 Position partagée: ${msg.location?.latitude}, ${msg.location?.longitude}`;
+        } else if (msg.type === "interactive") {
+          messageText =
+            msg.interactive?.button_reply?.title ||
+            msg.interactive?.list_reply?.title ||
+            "Réponse interactive";
+        } else {
+          messageText = `Message de type [${msg.type || "inconnu"}] reçu`;
+        }
+
+        await handleInboundWhatsAppMessage({
+          fromPhone: msg.from,
+          contactName: contactName,
+          text: messageText,
+          waMessageId: msg.id,
+        });
+      }
+    };
+
+    // Helper to process status updates
+    const processStatuses = async (statuses: any[]) => {
+      for (const statusObj of statuses) {
+        const waMsgId = statusObj.id;
+        const rawStatus = (statusObj.status || "").toLowerCase();
+        const newStatus =
+          rawStatus === "read"
+            ? "READ"
+            : rawStatus === "delivered"
+            ? "DELIVERED"
+            : rawStatus === "sent"
+            ? "SENT"
+            : rawStatus === "failed"
+            ? "FAILED"
+            : statusObj.status;
+
+        if (waMsgId && newStatus) {
+          await getDbMsg().updateMany({
+            where: { wa_message_id: waMsgId },
+            data: { status: newStatus },
+          });
+        }
+      }
+    };
+
+    // Case 1: Direct 360dialog payload format
+    if (Array.isArray(body.messages) && body.messages.length > 0) {
+      const contactName = body.contacts?.[0]?.profile?.name;
+      await processMessages(body.messages, contactName);
+    }
+    if (Array.isArray(body.statuses) && body.statuses.length > 0) {
+      await processStatuses(body.statuses);
     }
 
+    // Case 2: Standard Meta Cloud API nested payload format
     const entries = body.entry || [];
     for (const entry of entries) {
       const changes = entry.changes || [];
@@ -50,64 +113,13 @@ export async function POST(req: NextRequest) {
         const value = change.value;
         if (!value) continue;
 
-        // 1. Process Inbound Messages
         if (value.messages && Array.isArray(value.messages)) {
-          const contactProfile = value.contacts?.[0]?.profile;
-          const contactName = contactProfile?.name;
-
-          for (const msg of value.messages) {
-            let messageText = "";
-
-            if (msg.type === "text" && msg.text?.body) {
-              messageText = msg.text.body;
-            } else if (msg.type === "image") {
-              messageText = msg.image?.caption || "📷 Photo reçue";
-            } else if (msg.type === "document") {
-              messageText = msg.document?.caption || `📄 Document reçu (${msg.document?.filename || "fichier"})`;
-            } else if (msg.type === "audio" || msg.type === "voice") {
-              messageText = "🎙️ Message vocal reçu";
-            } else if (msg.type === "location") {
-              messageText = `📍 Position partagée: ${msg.location?.latitude}, ${msg.location?.longitude}`;
-            } else if (msg.type === "interactive") {
-              messageText =
-                msg.interactive?.button_reply?.title ||
-                msg.interactive?.list_reply?.title ||
-                "Réponse interactive";
-            } else {
-              messageText = `Message de type [${msg.type}] reçu`;
-            }
-
-            await handleInboundWhatsAppMessage({
-              fromPhone: msg.from,
-              contactName: contactName,
-              text: messageText,
-              waMessageId: msg.id,
-            });
-          }
+          const contactName = value.contacts?.[0]?.profile?.name;
+          await processMessages(value.messages, contactName);
         }
 
-        // 2. Process Status updates (sent -> delivered -> read)
         if (value.statuses && Array.isArray(value.statuses)) {
-          for (const statusObj of value.statuses) {
-            const waMsgId = statusObj.id;
-            const newStatus =
-              statusObj.status === "read"
-                ? "READ"
-                : statusObj.status === "delivered"
-                ? "DELIVERED"
-                : statusObj.status === "sent"
-                ? "SENT"
-                : statusObj.status === "failed"
-                ? "FAILED"
-                : statusObj.status;
-
-            if (waMsgId && newStatus) {
-              await getDbMsg().updateMany({
-                where: { wa_message_id: waMsgId },
-                data: { status: newStatus },
-              });
-            }
-          }
+          await processStatuses(value.statuses);
         }
       }
     }

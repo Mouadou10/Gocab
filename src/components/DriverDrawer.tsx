@@ -23,6 +23,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import WhatsAppDirectModal from "./WhatsAppDirectModal";
 
 interface Vehicle {
   id: string;
@@ -66,6 +67,7 @@ export default function DriverDrawer({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [availableVehicles, setAvailableVehicles] = useState<Vehicle[]>([]);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Editable fields
   const [fullName, setFullName] = useState("");
@@ -206,15 +208,15 @@ export default function DriverDrawer({
               <Phone className="w-3.5 h-3.5 text-navy" />
               <span>Appeler</span>
             </a>
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors"
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer"
+              title="Envoyer un WhatsApp direct depuis le CRM"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>WhatsApp</span>
-            </a>
+              <span>WhatsApp Direct</span>
+            </button>
           </div>
 
           {/* Drawer Body */}
@@ -432,6 +434,27 @@ export default function DriverDrawer({
           </div>
         </div>
       </div>
+
+      <WhatsAppDirectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        target={{
+          phoneNumber: driver.phoneSanitized,
+          contactName: driver.fullName,
+          contactType: "DRIVER",
+          plateNumber: driver.assignedVehicle?.plate_number,
+          arrearsMAD: driver.currentArrearsMAD,
+          unpaidDays: driver.consecutiveUnpaidDays,
+          defaultMessage: `Bonjour ${driver.fullName},\n\nNous vous contactons depuis le siège GoCab (${driver.assignedVehicle?.plate_number ? `véhicule ${driver.assignedVehicle.plate_number}` : "votre contrat"}).\n\nL'équipe GoCab Operations.`,
+        }}
+        onOpenFullChat={(phone) => {
+          try {
+            localStorage.setItem("gocab_target_whatsapp_phone", phone);
+          } catch (e) {}
+          onClose();
+          window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
+        }}
+      />
     </div>
   );
 }

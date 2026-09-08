@@ -37,6 +37,7 @@ import {
   ChevronRight,
   PlusCircle,
   RefreshCw,
+  MessageCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -53,6 +54,7 @@ import {
 } from "recharts";
 import toast from "react-hot-toast";
 import AddExpenseModal from "./AddExpenseModal";
+import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 
 interface FinancialSummary {
   total_fleet: number;
@@ -117,6 +119,8 @@ export default function DashboardView() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedVehicleForExpense, setSelectedVehicleForExpense] = useState<any | null>(null);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   const fetchFinancialReport = async () => {
     try {
@@ -611,15 +615,26 @@ export default function DashboardView() {
                         </strong>
                       </div>
 
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs rounded-xl shadow-2xs transition-colors flex items-center gap-1"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDirectWhatsAppTarget({
+                            phoneNumber: driver.phoneSanitized,
+                            contactName: driver.fullName,
+                            contactType: "DRIVER",
+                            plateNumber: driver.vehicle?.plate_number,
+                            arrearsMAD: driver.currentArrearsMAD,
+                            unpaidDays: driver.consecutiveUnpaidDays,
+                            defaultMessage: `Bonjour ${driver.fullName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule GoCab (${driver.vehicle?.plate_number || ""}).\nVotre solde d'arriérés est de : ${driver.currentArrearsMAD} MAD.\nMerci de régulariser immédiatement pour éviter l'immobilisation du véhicule.\n\nL'équipe GoCab Operations.`,
+                          });
+                          setIsWhatsAppModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs rounded-xl shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Envoyer un WhatsApp direct depuis le CRM"
                       >
-                        <span>WhatsApp</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </a>
+                        <MessageCircle className="w-3 h-3" />
+                        <span>WhatsApp Direct</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -888,6 +903,19 @@ export default function DashboardView() {
         }}
         onSuccess={fetchFinancialReport}
         initialVehicle={selectedVehicleForExpense}
+      />
+
+      {/* Direct WhatsApp Sending Modal */}
+      <WhatsAppDirectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        target={directWhatsAppTarget}
+        onOpenFullChat={(phone) => {
+          try {
+            localStorage.setItem("gocab_target_whatsapp_phone", phone);
+          } catch (e) {}
+          window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
+        }}
       />
     </div>
   );

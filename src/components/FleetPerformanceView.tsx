@@ -42,6 +42,7 @@ import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useLanguage } from "@/context/LanguageContext";
 import BalanceReconciliationModal from "./BalanceReconciliationModal";
+import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 
 interface DriverDailyItem {
   id: string;
@@ -99,6 +100,8 @@ export default function FleetPerformanceView() {
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
   const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Recovery trigger state & active recovery tracking
   const [triggeringRecoveryId, setTriggeringRecoveryId] = useState<string | null>(null);
@@ -926,15 +929,28 @@ export default function FleetPerformanceView() {
                                   <span>Valider</span>
                                 </button>
 
-                                <a
-                                  href={getWhatsAppReminderURL(driver)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-2xs transition-colors"
-                                  title="Relancer sur WhatsApp avec le solde exact"
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const amountDue = driver.currentArrearsMAD > 0 ? driver.currentArrearsMAD : driver.expectedTodayMAD;
+                                    const contractText = driver.contractType === "WEEKLY" ? "hebdomadaire (1,800 MAD/lundi)" : "journalier (300 MAD/jour)";
+                                    const defaultMsg = `Bonjour ${driver.fullName},\n\nNous vous contactons concernant votre versement GoCab (${contractText}).\nVotre solde d'impayé actuel est de : ${amountDue} MAD.\nMerci de procéder au règlement pour éviter tout blocage du véhicule (${driver.vehicle?.plate_number || ""}).\n\nL'équipe GoCab Operations.`;
+                                    setDirectWhatsAppTarget({
+                                      phoneNumber: driver.phoneSanitized,
+                                      contactName: driver.fullName,
+                                      contactType: "DRIVER",
+                                      plateNumber: driver.vehicle?.plate_number,
+                                      arrearsMAD: driver.currentArrearsMAD,
+                                      unpaidDays: driver.consecutiveUnpaidDays,
+                                      defaultMessage: defaultMsg,
+                                    });
+                                    setIsWhatsAppModalOpen(true);
+                                  }}
+                                  className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors cursor-pointer"
+                                  title="Envoyer un WhatsApp direct depuis le CRM"
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" />
-                                </a>
+                                </button>
                               </div>
                             </div>
                           );
@@ -954,6 +970,19 @@ export default function FleetPerformanceView() {
         onClose={() => setIsBalanceModalOpen(false)}
         selectedDate={selectedDate}
         onSuccess={fetchDriverCollections}
+      />
+
+      {/* Direct WhatsApp Sending Modal */}
+      <WhatsAppDirectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        target={directWhatsAppTarget}
+        onOpenFullChat={(phone) => {
+          try {
+            localStorage.setItem("gocab_target_whatsapp_phone", phone);
+          } catch (e) {}
+          window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
+        }}
       />
     </div>
   );

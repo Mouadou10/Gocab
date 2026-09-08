@@ -250,6 +250,17 @@ export default function KanbanBoard() {
     }
   };
 
+  // Global tab navigation event listener
+  useEffect(() => {
+    const handleNavEvent = (e: any) => {
+      if (e.detail && allowedTabs.includes(e.detail)) {
+        handleSelectTab(e.detail);
+      }
+    };
+    window.addEventListener("gocab_navigate_tab", handleNavEvent);
+    return () => window.removeEventListener("gocab_navigate_tab", handleNavEvent);
+  }, [allowedTabs]);
+
   // Drawer state
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);

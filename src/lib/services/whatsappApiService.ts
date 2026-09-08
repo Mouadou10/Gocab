@@ -31,12 +31,18 @@ export interface InboundMessagePayload {
 
 /**
  * Retrieves WhatsApp Cloud API settings from database Setting table or environment
+ * Supports official 360dialog WhatsApp Business Cloud API and Meta Cloud API.
  */
 export async function getWhatsAppApiConfig() {
   const settings = await prisma.setting.findMany({
     where: {
       key: {
         in: [
+          "whatsapp_provider",
+          "whatsapp_360dialog_api_key",
+          "whatsapp_360dialog_api_url",
+          "whatsapp_phone_number",
+          "whatsapp_channel_id",
           "whatsapp_phone_number_id",
           "whatsapp_access_token",
           "whatsapp_verify_token",
@@ -48,15 +54,66 @@ export async function getWhatsAppApiConfig() {
 
   const map = new Map(settings.map((s) => [s.key, s.value]));
 
+  const d360ApiKey =
+    map.get("whatsapp_360dialog_api_key") ||
+    process.env.WHATSAPP_360DIALOG_API_KEY ||
+    "cAT0snZ5THgwe9XWha04qQUPAK";
+
+  const d360ApiUrl =
+    map.get("whatsapp_360dialog_api_url") ||
+    process.env.WHATSAPP_360DIALOG_API_URL ||
+    "https://waba-v2.360dialog.io";
+
+  const phoneNumber =
+    map.get("whatsapp_phone_number") ||
+    process.env.WHATSAPP_PHONE_NUMBER ||
+    "+212662145109";
+
+  const channelId =
+    map.get("whatsapp_channel_id") ||
+    process.env.WHATSAPP_CHANNEL_ID ||
+    "1317638361430129";
+
+  const phoneNumberId =
+    map.get("whatsapp_phone_number_id") ||
+    process.env.WHATSAPP_PHONE_NUMBER_ID ||
+    "";
+
+  const accessToken =
+    map.get("whatsapp_access_token") ||
+    process.env.WHATSAPP_ACCESS_TOKEN ||
+    "";
+
+  const verifyToken =
+    map.get("whatsapp_verify_token") ||
+    process.env.WHATSAPP_VERIFY_TOKEN ||
+    "gocab_whatsapp_crm_token_2026";
+
+  const wabaId =
+    map.get("whatsapp_waba_id") ||
+    process.env.WHATSAPP_WABA_ID ||
+    "Gocab SARL";
+
+  const provider =
+    map.get("whatsapp_provider") ||
+    (d360ApiKey ? "360dialog" : accessToken ? "meta" : "360dialog");
+
+  const isLiveConfigured = Boolean(
+    (provider === "360dialog" && d360ApiKey) ||
+    (provider === "meta" && phoneNumberId && accessToken)
+  );
+
   return {
-    phoneNumberId: map.get("whatsapp_phone_number_id") || process.env.WHATSAPP_PHONE_NUMBER_ID || "",
-    accessToken: map.get("whatsapp_access_token") || process.env.WHATSAPP_ACCESS_TOKEN || "",
-    verifyToken: map.get("whatsapp_verify_token") || process.env.WHATSAPP_VERIFY_TOKEN || "gocab_whatsapp_crm_token_2026",
-    wabaId: map.get("whatsapp_waba_id") || process.env.WHATSAPP_WABA_ID || "",
-    isLiveConfigured: Boolean(
-      (map.get("whatsapp_phone_number_id") || process.env.WHATSAPP_PHONE_NUMBER_ID) &&
-      (map.get("whatsapp_access_token") || process.env.WHATSAPP_ACCESS_TOKEN)
-    ),
+    provider,
+    d360ApiKey,
+    d360ApiUrl,
+    phoneNumber,
+    channelId,
+    phoneNumberId,
+    accessToken,
+    verifyToken,
+    wabaId,
+    isLiveConfigured,
   };
 }
 
@@ -248,16 +305,18 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   let waMessageId: string | null = null;
   let status = "SENT";
   let apiError: string | null = null;
+  let deliveryMode = "CRM_LIVE_SIMULATION";
 
-  // If Meta WhatsApp Cloud API credentials are provided, call Meta Graph API
+  // Dispatch live WhatsApp Business API message
   if (config.isLiveConfigured) {
-    try {
-      const metaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
-        {
+    if (config.provider === "360dialog" && config.d360ApiKey) {
+      try {
+        const d360Base = config.d360ApiUrl.replace(/\/$/, "");
+        // 360dialog Messaging API Endpoint
+        const d360Res = await fetch(`${d360Base}/messages`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${config.accessToken}`,
+            "D360-API-KEY": config.d360ApiKey,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -265,24 +324,70 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
             recipient_type: "individual",
             to: cleanPhone,
             type: "text",
-            text: { preview_url: false, body: opts.text },
+            text: { body: opts.text },
           }),
-        }
-      );
+        });
 
-      const metaData = await metaRes.json();
-      if (metaRes.ok && metaData.messages && metaData.messages[0]) {
-        waMessageId = metaData.messages[0].id;
-        status = "SENT";
-      } else {
-        console.warn("WhatsApp Cloud API warning response:", metaData);
-        apiError = metaData?.error?.message || "Erreur Meta Cloud API";
+        const d360Data = await d360Res.json().catch(() => null);
+
+        if (d360Res.ok && d360Data?.messages && d360Data.messages[0]) {
+          waMessageId = d360Data.messages[0].id;
+          status = "SENT";
+          deliveryMode = "360DIALOG_WABA";
+        } else {
+          console.warn("360dialog response:", d360Res.status, d360Data);
+          apiError =
+            d360Data?.meta?.developer_message ||
+            d360Data?.error?.message ||
+            d360Data?.message ||
+            (d360Data?.errors && d360Data.errors[0]?.details) ||
+            `Erreur 360dialog HTTP ${d360Res.status}`;
+          status = "FAILED";
+          deliveryMode = "360DIALOG_WABA";
+        }
+      } catch (err: any) {
+        console.error("360dialog network error:", err);
+        apiError = err.message || "Erreur de connexion 360dialog";
         status = "FAILED";
+        deliveryMode = "360DIALOG_WABA";
       }
-    } catch (err: any) {
-      console.error("WhatsApp Cloud API network error:", err);
-      apiError = err.message;
-      status = "FAILED";
+    } else if (config.phoneNumberId && config.accessToken) {
+      try {
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: cleanPhone,
+              type: "text",
+              text: { preview_url: false, body: opts.text },
+            }),
+          }
+        );
+
+        const metaData = await metaRes.json().catch(() => null);
+        if (metaRes.ok && metaData?.messages && metaData.messages[0]) {
+          waMessageId = metaData.messages[0].id;
+          status = "SENT";
+          deliveryMode = "META_GRAPH_API";
+        } else {
+          console.warn("Meta Cloud API warning response:", metaData);
+          apiError = metaData?.error?.message || "Erreur Meta Cloud API";
+          status = "FAILED";
+          deliveryMode = "META_GRAPH_API";
+        }
+      } catch (err: any) {
+        console.error("WhatsApp Cloud API network error:", err);
+        apiError = err.message;
+        status = "FAILED";
+        deliveryMode = "META_GRAPH_API";
+      }
     }
   }
 
@@ -312,7 +417,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     success: status !== "FAILED",
     message,
     apiError,
-    mode: config.isLiveConfigured ? "META_CLOUD_API" : "CRM_LIVE_SIMULATION",
+    mode: deliveryMode,
   };
 }
 
