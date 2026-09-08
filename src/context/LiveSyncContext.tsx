@@ -18,6 +18,7 @@ interface LiveSyncContextValue {
   isOnline: boolean;
   appUpdateAvailable: boolean;
   triggerAppReload: () => void;
+  forceAllSessionsRefresh: () => Promise<void>;
 }
 
 const LiveSyncContext = createContext<LiveSyncContextValue | null>(null);
@@ -37,6 +38,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
     process.env.NEXT_PUBLIC_BUILD_TIME ||
     "";
   const clientVersionRef = useRef<string>(initialVersion);
+  const sessionStartTimeRef = useRef<number>(Date.now());
 
   // Monitored entity timestamps
   const lastSyncRef = useRef<{
@@ -124,7 +126,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       const { type, entity } = event.data || {};
       if (type === "LOCAL_MUTATION" && entity) {
         dispatchUpdate(entity);
-      } else if (type === "APP_UPDATE_DETECTED") {
+      } else if (type === "APP_UPDATE_DETECTED" || type === "FORCE_SESSION_RELOAD") {
         setAppUpdateAvailable(true);
       }
     };
@@ -195,6 +197,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       if (clientVersionRef.current) {
         params.set("version", clientVersionRef.current);
       }
+      params.set("sessionStart", sessionStartTimeRef.current.toString());
 
       const res = await fetch(`/api/system/sync-status?${params.toString()}`, {
         cache: "no-store",
@@ -204,6 +207,22 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
 
       setIsOnline(true);
       const data = await res.json();
+
+      // Check for forced refresh signal across all sessions or deployment update
+      if (
+        data.shouldRefreshApp ||
+        (data.forceRefreshAt && data.forceRefreshAt > sessionStartTimeRef.current)
+      ) {
+        setAppUpdateAvailable(true);
+        if (broadcastChannelRef.current) {
+          try {
+            broadcastChannelRef.current.postMessage({
+              type: "FORCE_SESSION_RELOAD",
+            });
+          } catch (_) {}
+        }
+        return;
+      }
 
       // Check for application deployment update
       if (data.version) {
@@ -345,6 +364,14 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const forceAllSessionsRefresh = useCallback(async () => {
+    try {
+      await fetch("/api/system/sync-status", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to trigger global force refresh:", e);
+    }
+  }, []);
+
   return (
     <LiveSyncContext.Provider
       value={{
@@ -353,6 +380,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
         isOnline,
         appUpdateAvailable,
         triggerAppReload,
+        forceAllSessionsRefresh,
       }}
     >
       {children}
@@ -399,6 +427,7 @@ export function useLiveSync(
   notifyMutation: (entity: SyncEntity) => void;
   isOnline: boolean;
   appUpdateAvailable: boolean;
+  forceAllSessionsRefresh: () => Promise<void>;
 } {
   const context = useContext(LiveSyncContext);
 
@@ -412,5 +441,6 @@ export function useLiveSync(
     notifyMutation: context?.notifyMutation || (() => {}),
     isOnline: context?.isOnline ?? true,
     appUpdateAvailable: context?.appUpdateAvailable ?? false,
+    forceAllSessionsRefresh: context?.forceAllSessionsRefresh || (async () => {}),
   };
 }

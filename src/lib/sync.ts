@@ -13,6 +13,7 @@ export interface SyncState {
   settings: number;
   collections: number;
   version: string;
+  forceRefreshAt?: number;
   updatedAt: number;
 }
 
@@ -39,6 +40,7 @@ export async function getSyncState(): Promise<SyncState> {
     settings: SERVER_START_TIME,
     collections: SERVER_START_TIME,
     version: SERVER_VERSION,
+    forceRefreshAt: 0,
     updatedAt: SERVER_START_TIME,
   };
 
@@ -49,12 +51,14 @@ export async function getSyncState(): Promise<SyncState> {
 
     if (record?.value) {
       const parsed = JSON.parse(record.value);
+      const forceRefreshAt = Number(parsed.forceRefreshAt) || 0;
       const state: SyncState = {
         leads: Number(parsed.leads) || fallback.leads,
         tickets: Number(parsed.tickets) || fallback.tickets,
         settings: Number(parsed.settings) || fallback.settings,
         collections: Number(parsed.collections) || fallback.collections,
-        version: SERVER_VERSION, // Always report current server version
+        version: forceRefreshAt ? `${SERVER_VERSION}-force-${forceRefreshAt}` : SERVER_VERSION,
+        forceRefreshAt,
         updatedAt: Number(parsed.updatedAt) || Date.now(),
       };
       globalForSync.syncCache = state;
@@ -65,6 +69,35 @@ export async function getSyncState(): Promise<SyncState> {
   }
 
   return fallback;
+}
+
+/**
+ * Forces all active client sessions across all browsers to reload.
+ */
+export async function forceGlobalSessionRefresh(): Promise<SyncState> {
+  const now = Date.now();
+  const current = await getSyncState();
+
+  const nextState: SyncState = {
+    ...current,
+    leads: now,
+    tickets: now,
+    settings: now,
+    collections: now,
+    forceRefreshAt: now,
+    version: `${SERVER_VERSION}-force-${now}`,
+    updatedAt: now,
+  };
+
+  globalForSync.syncCache = nextState;
+
+  await prisma.setting.upsert({
+    where: { key: SYNC_SETTING_KEY },
+    update: { value: JSON.stringify(nextState) },
+    create: { key: SYNC_SETTING_KEY, value: JSON.stringify(nextState) },
+  });
+
+  return nextState;
 }
 
 /**
@@ -82,7 +115,7 @@ export async function touchSyncState(
     tickets: entity === "tickets" || entity === "all" ? now : current.tickets,
     settings: entity === "settings" || entity === "all" ? now : current.settings,
     collections: entity === "collections" || entity === "all" ? now : current.collections,
-    version: SERVER_VERSION,
+    version: current.forceRefreshAt ? `${SERVER_VERSION}-force-${current.forceRefreshAt}` : SERVER_VERSION,
     updatedAt: now,
   };
 

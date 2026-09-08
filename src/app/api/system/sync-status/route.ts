@@ -15,10 +15,15 @@ export async function GET(request: NextRequest) {
     const clientTickets = Number(searchParams.get("tickets")) || 0;
     const clientSettings = Number(searchParams.get("settings")) || 0;
     const clientCollections = Number(searchParams.get("collections")) || 0;
+    const clientSessionStart = Number(searchParams.get("sessionStart")) || 0;
     const clientVersion = searchParams.get("version") || "";
 
     const syncState = await getSyncState();
-    const currentVersion = getServerVersion();
+    const currentVersion = syncState.version;
+
+    const shouldHardReload =
+      (clientVersion.length > 0 && currentVersion.length > 0 && clientVersion !== currentVersion) ||
+      Boolean(syncState.forceRefreshAt && clientSessionStart > 0 && syncState.forceRefreshAt > clientSessionStart);
 
     const response = {
       leads: syncState.leads,
@@ -26,14 +31,12 @@ export async function GET(request: NextRequest) {
       settings: syncState.settings,
       collections: syncState.collections,
       version: currentVersion,
+      forceRefreshAt: syncState.forceRefreshAt || 0,
       shouldRefreshLeads: clientLeads > 0 && syncState.leads > clientLeads,
       shouldRefreshTickets: clientTickets > 0 && syncState.tickets > clientTickets,
       shouldRefreshSettings: clientSettings > 0 && syncState.settings > clientSettings,
       shouldRefreshCollections: clientCollections > 0 && syncState.collections > clientCollections,
-      shouldRefreshApp:
-        clientVersion.length > 0 &&
-        currentVersion.length > 0 &&
-        clientVersion !== currentVersion,
+      shouldRefreshApp: shouldHardReload,
       serverTime: Date.now(),
     };
 
@@ -59,6 +62,29 @@ export async function GET(request: NextRequest) {
         serverTime: Date.now(),
       },
       { status: 200 }
+    );
+  }
+}
+
+/**
+ * POST /api/system/sync-status
+ * Sends a global reload signal to all open tabs and browser sessions.
+ */
+export async function POST() {
+  try {
+    const { forceGlobalSessionRefresh } = await import("@/lib/sync");
+    const updatedState = await forceGlobalSessionRefresh();
+    return NextResponse.json({
+      success: true,
+      message: "Signal d'actualisation globale transmis avec succès à toutes les sessions ouvertes",
+      forceRefreshAt: updatedState.forceRefreshAt,
+      version: updatedState.version,
+    });
+  } catch (error: any) {
+    console.error("POST /api/system/sync-status error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Impossible de forcer le rafraîchissement global" },
+      { status: 500 }
     );
   }
 }
