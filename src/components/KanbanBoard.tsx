@@ -11,7 +11,7 @@
  * Implements @dnd-kit drag-and-drop and sliding sidebar drawer detail views.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import {
