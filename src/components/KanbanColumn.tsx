@@ -86,6 +86,10 @@ interface KanbanColumnProps {
   dailyTrainingTarget?: number;
   callsDoneToday?: number;
   dailyCallsTarget?: number;
+  trainingDateFilter?: string;
+  onTrainingDateFilterChange?: (date: string) => void;
+  availableTrainingDates?: { date: string; label: string; count: number }[];
+  totalTrainingFixedCount?: number;
 }
 
 export default function KanbanColumn({
@@ -99,6 +103,10 @@ export default function KanbanColumn({
   dailyTrainingTarget,
   callsDoneToday,
   dailyCallsTarget,
+  trainingDateFilter,
+  onTrainingDateFilterChange,
+  availableTrainingDates,
+  totalTrainingFixedCount,
 }: KanbanColumnProps) {
   const safeLeads = Array.isArray(leads) ? leads : [];
   const { setNodeRef, isOver, attributes, listeners, transform, transition } = useSortable({
@@ -154,6 +162,107 @@ export default function KanbanColumn({
             : safeLeads.length}
         </span>
       </div>
+
+      {/* Interactive Date Filter Strip for Training Fixed / Scheduled Column */}
+      {(columnId === "Training fixed" || columnId === "Scheduled") && onTrainingDateFilterChange && (
+        <div
+          className="px-3.5 py-2.5 bg-emerald-50/80 border-b border-emerald-100 flex flex-col gap-2 cursor-default"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between text-[11px] text-emerald-950 font-bold">
+            <span className="flex items-center gap-1">
+              <span>📅</span>
+              <span>Filtrer par date :</span>
+            </span>
+            {trainingDateFilter && trainingDateFilter !== "ALL" && (
+              <button
+                type="button"
+                onClick={() => onTrainingDateFilterChange("ALL")}
+                className="text-[10px] text-emerald-700 hover:text-emerald-950 underline font-semibold cursor-pointer"
+              >
+                Voir toutes ({totalTrainingFixedCount || safeLeads.length})
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <input
+                type="date"
+                value={
+                  trainingDateFilter &&
+                  trainingDateFilter !== "ALL" &&
+                  trainingDateFilter !== "TODAY" &&
+                  trainingDateFilter !== "TOMORROW"
+                    ? trainingDateFilter
+                    : ""
+                }
+                onChange={(e) => onTrainingDateFilterChange(e.target.value || "ALL")}
+                className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+              />
+              {trainingDateFilter &&
+                trainingDateFilter !== "ALL" &&
+                trainingDateFilter !== "TODAY" &&
+                trainingDateFilter !== "TOMORROW" && (
+                  <button
+                    type="button"
+                    onClick={() => onTrainingDateFilterChange("ALL")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 text-xs font-bold"
+                    title="Effacer filtre date"
+                  >
+                    ✕
+                  </button>
+                )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onTrainingDateFilterChange("TODAY")}
+              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
+                trainingDateFilter === "TODAY"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+              }`}
+              title="Aujourd'hui"
+            >
+              Aujourd&apos;hui
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTrainingDateFilterChange("ALL")}
+              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
+                trainingDateFilter === "ALL"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+              }`}
+              title="Toutes les dates"
+            >
+              Toutes
+            </button>
+          </div>
+
+          {/* Quick Date Pills */}
+          {availableTrainingDates && availableTrainingDates.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none pt-0.5">
+              {availableTrainingDates.slice(0, 5).map((qd) => (
+                <button
+                  key={qd.date}
+                  type="button"
+                  onClick={() => onTrainingDateFilterChange(qd.date)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    trainingDateFilter === qd.date
+                      ? "bg-emerald-700 text-white shadow-2xs"
+                      : "bg-emerald-100/90 text-emerald-900 hover:bg-emerald-200 border border-emerald-200/60"
+                  }`}
+                >
+                  {qd.label} ({qd.count})
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Drop Zone + Card List */}
       <div className="flex-1 p-3 space-y-2.5 overflow-y-auto">
