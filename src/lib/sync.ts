@@ -57,7 +57,10 @@ export async function getSyncState(): Promise<SyncState> {
         tickets: Number(parsed.tickets) || fallback.tickets,
         settings: Number(parsed.settings) || fallback.settings,
         collections: Number(parsed.collections) || fallback.collections,
-        version: forceRefreshAt ? `${SERVER_VERSION}-force-${forceRefreshAt}` : SERVER_VERSION,
+        // version is ALWAYS the raw server version — never decorated with a -force- suffix.
+        // The force-refresh signal is conveyed by forceRefreshAt alone.
+        // Keeping version stable prevents infinite reload loops after a hard reload.
+        version: SERVER_VERSION,
         forceRefreshAt,
         updatedAt: Number(parsed.updatedAt) || Date.now(),
       };
@@ -85,7 +88,8 @@ export async function forceGlobalSessionRefresh(): Promise<SyncState> {
     settings: now,
     collections: now,
     forceRefreshAt: now,
-    version: `${SERVER_VERSION}-force-${now}`,
+    // version stays as raw SERVER_VERSION — do NOT add -force- suffix here.
+    version: SERVER_VERSION,
     updatedAt: now,
   };
 
@@ -115,7 +119,8 @@ export async function touchSyncState(
     tickets: entity === "tickets" || entity === "all" ? now : current.tickets,
     settings: entity === "settings" || entity === "all" ? now : current.settings,
     collections: entity === "collections" || entity === "all" ? now : current.collections,
-    version: current.forceRefreshAt ? `${SERVER_VERSION}-force-${current.forceRefreshAt}` : SERVER_VERSION,
+    // version always = raw SERVER_VERSION, never decorated.
+    version: SERVER_VERSION,
     updatedAt: now,
   };
 
