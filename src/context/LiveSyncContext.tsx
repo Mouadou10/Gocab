@@ -32,13 +32,18 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
   const [appUpdateAvailable, setAppUpdateAvailable] = useState(false);
   const [updateCountdown, setUpdateCountdown] = useState<number | null>(null);
 
-  // Initial client version
+  // Initial client version — captured once at component mount from env vars
+  // This is compared against server version on each poll to detect new deployments.
   const initialVersion =
     process.env.NEXT_PUBLIC_APP_VERSION ||
     process.env.NEXT_PUBLIC_BUILD_TIME ||
     "";
+  // Set to a placeholder so the FIRST server response sets the canonical version,
+  // and any subsequent change triggers a reload.
   const clientVersionRef = useRef<string>(initialVersion);
   const sessionStartTimeRef = useRef<number>(Date.now());
+  // Track whether we already triggered a reload to avoid firing twice
+  const reloadTriggeredRef = useRef<boolean>(false);
 
   // Monitored entity timestamps
   const lastSyncRef = useRef<{
@@ -85,7 +90,22 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
 
   // Trigger immediate hard reload for new application build
   const triggerAppReload = useCallback(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !reloadTriggeredRef.current) {
+      reloadTriggeredRef.current = true;
+      window.location.reload();
+    }
+  }, []);
+
+  // Unconditional immediate reload — no toast, no countdown, no user action needed
+  const forceImmediateReload = useCallback(() => {
+    if (typeof window !== "undefined" && !reloadTriggeredRef.current) {
+      reloadTriggeredRef.current = true;
+      // Broadcast to all same-browser tabs so they reload simultaneously
+      if (broadcastChannelRef.current) {
+        try {
+          broadcastChannelRef.current.postMessage({ type: "FORCE_SESSION_RELOAD" });
+        } catch (_) {}
+      }
       window.location.reload();
     }
   }, []);
@@ -126,7 +146,13 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       const { type, entity } = event.data || {};
       if (type === "LOCAL_MUTATION" && entity) {
         dispatchUpdate(entity);
-      } else if (type === "APP_UPDATE_DETECTED" || type === "FORCE_SESSION_RELOAD") {
+      } else if (type === "FORCE_SESSION_RELOAD") {
+        // Another tab detected a force-refresh — reload this tab immediately too
+        if (!reloadTriggeredRef.current) {
+          reloadTriggeredRef.current = true;
+          window.location.reload();
+        }
+      } else if (type === "APP_UPDATE_DETECTED") {
         setAppUpdateAvailable(true);
       }
     };
@@ -208,34 +234,34 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       setIsOnline(true);
       const data = await res.json();
 
-      // Check for forced refresh signal across all sessions or deployment update
+      // ─── Force-refresh signal: mandatory immediate reload for ALL sessions ───
+      // Triggered by POST /api/system/sync-status (admin action or new deployment)
       if (
         data.shouldRefreshApp ||
         (data.forceRefreshAt && data.forceRefreshAt > sessionStartTimeRef.current)
       ) {
-        setAppUpdateAvailable(true);
-        if (broadcastChannelRef.current) {
-          try {
-            broadcastChannelRef.current.postMessage({
-              type: "FORCE_SESSION_RELOAD",
-            });
-          } catch (_) {}
-        }
+        // Do not show a toast — reload immediately and unconditionally
+        forceImmediateReload();
         return;
       }
 
-      // Check for application deployment update
+      // ─── Passive deployment detection: new app build rolled out ───
+      // On first poll: seed clientVersionRef with the server version.
+      // On subsequent polls: if the version changed, show the update banner.
       if (data.version) {
         if (!clientVersionRef.current) {
+          // Seed initial version from server (env var may be empty in some deploys)
           clientVersionRef.current = data.version;
         } else if (clientVersionRef.current !== data.version) {
-          // New deployment detected!
+          // New deployment detected — show 5s countdown banner
           setAppUpdateAvailable(true);
           if (broadcastChannelRef.current) {
-            broadcastChannelRef.current.postMessage({
-              type: "APP_UPDATE_DETECTED",
-              version: data.version,
-            });
+            try {
+              broadcastChannelRef.current.postMessage({
+                type: "APP_UPDATE_DETECTED",
+                version: data.version,
+              });
+            } catch (_) {}
           }
         }
       }
@@ -275,7 +301,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       // Network hiccup — keep previous state
     }
-  }, [dispatchUpdate]);
+  }, [dispatchUpdate, forceImmediateReload]);
 
   // Periodic Poller with visibility handling
   useEffect(() => {
