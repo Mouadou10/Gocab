@@ -440,13 +440,10 @@ export default function KanbanBoard() {
     (lead: Lead, filter: string): boolean => {
       if (!filter || filter === "ALL") return true;
 
-      // Check reminder_date (scheduled session date)
+      // Only match on reminder_date — the date the training is SCHEDULED FOR.
+      // Do NOT fall back to status_changed_at (that's the date the agent
+      // marked the status, which is unrelated to when the training takes place).
       if (lead.reminder_date && matchesDate(lead.reminder_date, filter)) {
-        return true;
-      }
-
-      // Also check status_changed_at (date when the training was fixed by the agent)
-      if (lead.status_changed_at && matchesDate(lead.status_changed_at, filter)) {
         return true;
       }
 
@@ -465,7 +462,9 @@ export default function KanbanBoard() {
           (l.training_status === "Scheduled" || !l.training_status));
       if (!isTrainingFixed) return;
 
-      const dateStr = l.reminder_date || l.status_changed_at;
+      // Only index by reminder_date (the actual training session date).
+      // Skip leads without a scheduled training date — they have no date chip to show.
+      const dateStr = l.reminder_date;
       if (!dateStr) return;
       try {
         const d = new Date(dateStr);
