@@ -94,10 +94,11 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      success: true,
+      success: result.success,
       message: result.message,
       mode: result.mode,
       apiError: result.apiError,
+      error: !result.success ? result.apiError || "Échec d'envoi WhatsApp API" : undefined,
     });
   } catch (error: any) {
     console.error("POST /api/whatsapp/messages error:", error);

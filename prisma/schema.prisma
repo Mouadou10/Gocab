@@ -455,6 +455,7 @@ model WhatsAppMessage {
   text            String
   status          String               @default("SENT") // PENDING, SENT, DELIVERED, READ, FAILED
   wa_message_id   String?
+  error_message   String?
   media_url       String?
   created_at      DateTime             @default(now())
 

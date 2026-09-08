@@ -71,7 +71,7 @@ export default function WhatsAppDirectModal({
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.message?.status !== "FAILED") {
         const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setSentSuccessAt(timeNow);
         setDeliveryMode(data.mode || "360DIALOG_WABA");
@@ -80,7 +80,12 @@ export default function WhatsAppDirectModal({
           duration: 4000,
         });
       } else {
-        toast.error(data.error || "Échec d'envoi du message WhatsApp direct");
+        const errorDetail =
+          data.apiError ||
+          data.error ||
+          data.message?.error_message ||
+          "Échec d'envoi API (Vérifiez le forfait 360dialog ou la fenêtre Meta 24h)";
+        toast.error(`⚠️ Échec d'envoi: ${errorDetail}`, { duration: 6000 });
       }
     } catch (err: any) {
       toast.error(err.message || "Erreur réseau");

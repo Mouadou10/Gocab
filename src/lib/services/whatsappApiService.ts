@@ -169,11 +169,16 @@ export async function ensureWhatsAppTables(): Promise<void> {
         "text" TEXT NOT NULL,
         "status" TEXT NOT NULL DEFAULT 'SENT',
         "wa_message_id" TEXT,
+        "error_message" TEXT,
         "media_url" TEXT,
         "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "WhatsAppMessage_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "WhatsAppConversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE
       )
     `);
+
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "WhatsAppMessage" ADD COLUMN "error_message" TEXT`);
+    } catch (_) {}
 
     await prisma.$executeRawUnsafe(`
       CREATE INDEX IF NOT EXISTS "WhatsAppMessage_conversation_id_created_at_idx" 
@@ -401,6 +406,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
       text: opts.text,
       status: status,
       wa_message_id: waMessageId || `local-${Date.now()}`,
+      error_message: apiError || null,
     },
   });
 

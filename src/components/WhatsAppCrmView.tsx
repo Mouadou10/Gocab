@@ -63,6 +63,7 @@ interface MessageItem {
   sender_name: string | null;
   text: string;
   status: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  error_message?: string | null;
   created_at: string;
   media_url?: string | null;
 }
@@ -241,7 +242,7 @@ export default function WhatsAppCrmView() {
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.message?.status !== "FAILED") {
         // Replace optimistic with real message
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? (data.message as MessageItem) : m))
@@ -253,15 +254,31 @@ export default function WhatsAppCrmView() {
           toast.success("✓ Message WhatsApp enregistré dans le CRM", { icon: "✅" });
         }
       } else {
-        toast.error(data.error || "Erreur lors de l'envoi du message");
+        const errorDetail =
+          data.apiError ||
+          data.error ||
+          data.message?.error_message ||
+          "Échec de remise par l'API WhatsApp (Vérifiez le forfait 360dialog ou la fenêtre Meta 24h)";
+        toast.error(`⚠️ Échec d'envoi: ${errorDetail}`, { duration: 6000 });
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, status: "FAILED" } : m))
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...(data.message || m),
+                  status: "FAILED",
+                  error_message: errorDetail,
+                }
+              : m
+          )
         );
       }
     } catch (err: any) {
-      toast.error(err.message || "Erreur réseau");
+      const errMsg = err.message || "Erreur réseau";
+      toast.error(`Erreur: ${errMsg}`);
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, status: "FAILED" } : m))
+        prev.map((m) =>
+          m.id === tempId ? { ...m, status: "FAILED", error_message: errMsg } : m
+        )
       );
     } finally {
       setIsSending(false);
@@ -663,6 +680,30 @@ export default function WhatsAppCrmView() {
 
             {/* Chat Message Scroll Area */}
             <div className="flex-1 p-6 overflow-y-auto space-y-3.5">
+              {/* Diagnostic Banner if any message failed */}
+              {messages.some((m) => m.status === "FAILED") && (
+                <div className="bg-amber-50/95 border border-amber-200/80 rounded-2xl p-3.5 text-xs text-amber-950 mb-3 shadow-xs space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Pourquoi ces messages affichent &quot;Échec&quot; ?</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-amber-900/90 pl-6">
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/50">
+                      <p className="font-bold text-gray-900 mb-0.5">1. Forfait 360dialog requis</p>
+                      <p className="text-gray-600">
+                        Sur votre console 360dialog Hub (<a href="https://app.360dialog.com" target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline font-semibold">app.360dialog.com</a>), validez le bandeau <em>&quot;Action needed: Choose a plan to start messaging&quot;</em> pour activer l&apos;envoi API.
+                      </p>
+                    </div>
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/50">
+                      <p className="font-bold text-gray-900 mb-0.5">2. Règle Meta des 24 heures</p>
+                      <p className="text-gray-600">
+                        Meta bloque l&apos;envoi de messages texte libres si le contact n&apos;a pas envoyé un message WhatsApp vers le <strong>+212 6 62 14 51 09</strong> dans les 24h. Envoyez un &quot;Bonjour&quot; depuis votre téléphone vers ce numéro pour débloquer la session de test !
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isLoadingMessages ? (
                 <div className="flex items-center justify-center h-48">
                   <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -710,9 +751,19 @@ export default function WhatsAppCrmView() {
                             {msg.status === "DELIVERED" && <span className="text-gray-400 font-bold text-[11px] leading-none">✓✓</span>}
                             {msg.status === "READ" && <span className="text-blue-500 font-bold text-[11px] leading-none">✓✓</span>}
                             {msg.status === "FAILED" && (
-                              <span className="text-red-500 font-bold flex items-center gap-0.5">
-                                <AlertTriangle className="w-3 h-3" /> Échec
-                              </span>
+                              <div className="flex flex-col items-end">
+                                <span
+                                  className="text-red-600 font-bold flex items-center gap-1 text-[10px] bg-red-100/90 px-1.5 py-0.5 rounded"
+                                  title={msg.error_message || "Échec d'envoi API"}
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-red-600" /> Échec
+                                </span>
+                                {msg.error_message && (
+                                  <span className="text-[9px] text-red-600 font-medium max-w-[220px] text-right mt-0.5 leading-tight">
+                                    {msg.error_message}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
