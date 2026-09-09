@@ -41,6 +41,7 @@ import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
 import DriversView from "./DriversView";
 import PasswordChangeModal from "./PasswordChangeModal";
+import UserProfileModal from "./UserProfileModal";
 import AddLeadModal from "./AddLeadModal";
 import PowerBiDashboardView from "./PowerBiDashboardView";
 import WhatsAppCrmView from "./WhatsAppCrmView";
@@ -140,7 +141,7 @@ const TRAINING_COLUMNS = [
 
 export default function KanbanBoard() {
   const { language, setLanguage, t, dir } = useLanguage();
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const userRole = session?.user?.role || "ADMIN";
   const userName = session?.user?.name || "";
 
@@ -157,6 +158,9 @@ export default function KanbanBoard() {
   }
 
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null);
+  const [customName, setCustomName] = useState<string | null>(null);
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
   const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
@@ -168,6 +172,32 @@ export default function KanbanBoard() {
       setShowPasswordChangeModal(true);
     }
   }, [session]);
+
+  // Load latest profile info (custom avatar & name)
+  useEffect(() => {
+    if (session?.user?.email) {
+      fetch("/api/users/profile")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.user) {
+            if (data.user.image) setCustomAvatar(data.user.image);
+            if (data.user.name) setCustomName(data.user.name);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [session?.user?.email]);
+
+  const effectiveUserName = customName || userName;
+  const effectiveAvatar = customAvatar || (session?.user as any)?.image || null;
+  const isPresetAvatar = Boolean(effectiveAvatar && effectiveAvatar.length <= 4);
+  const isCustomAvatar = Boolean(effectiveAvatar && effectiveAvatar.startsWith("data:image"));
+  const userInitials = (effectiveUserName || "Agent")
+    .split(" ")
+    .map((n: string) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1317,19 +1347,47 @@ export default function KanbanBoard() {
               </span>
             </button>
             
-            {/* User info badge */}
-            {userName && (
-              <div className="hidden xl:flex items-center gap-2 pl-3 border-l border-gray-200">
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-800 leading-none">{userName}</p>
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${ROLE_COLORS[userRole] || "bg-gray-100 text-gray-600"}`}>
-                    {roleLabels[userRole] || DEFAULT_ROLE_LABELS[userRole] || userRole}
-                  </span>
-                </div>
+            {/* User Profile Pill & Trigger */}
+            {effectiveUserName && (
+              <div className="flex items-center gap-1.5 pl-2 sm:pl-3 border-l border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(true)}
+                  className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-2xl hover:bg-gray-100 border border-transparent hover:border-gray-200 transition-all cursor-pointer group text-left shadow-2xs"
+                  title={language === "fr" ? "Mon Profil (Nom, Photo, Mot de passe)" : "My Profile (Name, Photo, Password)"}
+                >
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-2xl overflow-hidden bg-gradient-to-tr from-navy to-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-navy/15 group-hover:ring-navy/30 transition-all shadow-xs">
+                      {isCustomAvatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={effectiveAvatar!}
+                          alt={effectiveUserName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : isPresetAvatar ? (
+                        <span className="text-base select-none">{effectiveAvatar}</span>
+                      ) : (
+                        <span>{userInitials}</span>
+                      )}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+                  </div>
+
+                  <div className="hidden lg:block text-left leading-tight">
+                    <p className="text-xs font-bold text-gray-800 group-hover:text-navy transition-colors truncate max-w-[130px]">
+                      {effectiveUserName}
+                    </p>
+                    <span className={`inline-block text-[9px] font-semibold px-1.5 py-0.2 rounded-full ${ROLE_COLORS[userRole] || "bg-gray-100 text-gray-600"}`}>
+                      {roleLabels[userRole] || DEFAULT_ROLE_LABELS[userRole] || userRole}
+                    </span>
+                  </div>
+                </button>
+
                 <button
                   onClick={() => signOut({ callbackUrl: "/login" })}
                   title={t.signOut}
-                  className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                  className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-xl hover:bg-red-50 cursor-pointer shrink-0"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1612,9 +1670,30 @@ export default function KanbanBoard() {
         isOpen={isAgentLogOpen}
         onClose={() => setIsAgentLogOpen(false)}
         onSelectLead={(lead) => setSelectedLead(lead)}
-        currentUserName={userName}
+        currentUserName={effectiveUserName}
         currentUserRole={userRole}
       />
+
+      {/* Agent & User Profile Management Modal */}
+      {session?.user && (
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          currentUser={{
+            name: effectiveUserName,
+            email: session.user.email,
+            role: roleLabels[userRole] || DEFAULT_ROLE_LABELS[userRole] || userRole,
+            image: effectiveAvatar,
+          }}
+          onProfileUpdated={(updated) => {
+            if (updated.name) setCustomName(updated.name);
+            if (updated.image !== undefined) setCustomAvatar(updated.image);
+            if (updateSession) {
+              updateSession({ name: updated.name, image: updated.image });
+            }
+          }}
+        />
+      )}
 
       {/* Reminder Alerts - Only for Lead Acquisition Junior */}
       {userRole === "LEAD_ACQUISITION_JR" && <ReminderAlert leads={leads} />}

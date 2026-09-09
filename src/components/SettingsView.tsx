@@ -1231,10 +1231,17 @@ export default function SettingsView() {
                     <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
                       <td className="py-3.5 px-4 font-semibold text-gray-900">
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-full font-bold flex items-center justify-center text-xs ${
+                          <div className={`w-8 h-8 rounded-2xl overflow-hidden font-bold flex items-center justify-center text-xs shadow-2xs ${
                             isPrimaryManager ? "bg-[#f5c842] text-navy ring-2 ring-navy/20" : "bg-navy/10 text-navy"
                           }`}>
-                            {u.name.charAt(0).toUpperCase()}
+                            {(u as any).image && (u as any).image.startsWith("data:image") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={(u as any).image} alt={u.name} className="w-full h-full object-cover" />
+                            ) : (u as any).image && (u as any).image.length <= 4 ? (
+                              <span className="text-sm select-none">{(u as any).image}</span>
+                            ) : (
+                              u.name.charAt(0).toUpperCase()
+                            )}
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">

@@ -79,7 +79,21 @@ export async function GET() {
       orderBy: { created_at: "asc" },
     });
 
-    return NextResponse.json({ users });
+    const avatarSettings = await prisma.setting.findMany({
+      where: { key: { startsWith: "user_avatar_" } },
+    });
+    const avatarMap = new Map<string, string>();
+    for (const s of avatarSettings) {
+      const emailKey = s.key.replace("user_avatar_", "");
+      avatarMap.set(emailKey, s.value);
+    }
+
+    const usersWithAvatars = users.map((u) => ({
+      ...u,
+      image: avatarMap.get(u.email.toLowerCase()) || null,
+    }));
+
+    return NextResponse.json({ users: usersWithAvatars });
   } catch (error: any) {
     console.error("GET /api/users error:", error);
     return NextResponse.json(

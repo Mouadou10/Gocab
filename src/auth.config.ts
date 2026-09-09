@@ -39,11 +39,16 @@ export const authConfig: NextAuthConfig = {
 
       return true;
     },
-    jwt({ token, user }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.mustChangePassword = (user as any).mustChangePassword;
+        token.image = (user as any).image || token.image || null;
+      }
+      if (trigger === "update" && session) {
+        if (session.name) token.name = session.name;
+        if (session.image !== undefined) token.image = session.image;
       }
       return token;
     },
@@ -52,6 +57,12 @@ export const authConfig: NextAuthConfig = {
         session.user.id = token.id as string;
         (session.user as any).role = token.role as string;
         (session.user as any).mustChangePassword = token.mustChangePassword as boolean;
+        if (token.image) {
+          session.user.image = token.image as string;
+        }
+        if (token.name) {
+          session.user.name = token.name as string;
+        }
       }
       return session;
     },
