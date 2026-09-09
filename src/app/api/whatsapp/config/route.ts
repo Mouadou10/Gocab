@@ -116,9 +116,35 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Automatically register Webhook with 360dialog if a new key is provided
+    let webhookRegistered = false;
+    if (d360ApiKey && d360ApiKey.trim().length > 10 && !d360ApiKey.includes("...")) {
+      const host = req.headers.get("host") || "gocab-iota.vercel.app";
+      const protocol = host.includes("localhost") ? "http" : "https";
+      const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
+      const baseUrl = (d360ApiUrl || "https://waba-v2.360dialog.io").replace(/\/$/, "");
+
+      try {
+        const whRes = await fetch(`${baseUrl}/v1/configs/webhook`, {
+          method: "POST",
+          headers: {
+            "D360-API-KEY": d360ApiKey.trim(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: webhookUrl }),
+        });
+        webhookRegistered = whRes.ok;
+      } catch (err) {
+        console.warn("Auto-register webhook failed:", err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Configuration WhatsApp sauvegardée avec succès",
+      message: webhookRegistered
+        ? "Configuration sauvegardée et Webhook 360dialog enregistré automatiquement avec succès !"
+        : "Configuration WhatsApp sauvegardée avec succès",
+      webhookRegistered,
     });
   } catch (error: any) {
     console.error("Error saving WhatsApp config:", error);
