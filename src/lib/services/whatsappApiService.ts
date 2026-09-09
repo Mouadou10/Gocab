@@ -226,25 +226,25 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
     return conversation;
   }
 
-  // Look up driver profile
-  const drivers = await prisma.driverProfile.findMany({
-    include: { assignedVehicle: true },
-  }).catch(() => []);
-  const matchedDriver = drivers.find((d: any) => {
-    const dNorm = normalizeWhatsAppPhone(d.phoneSanitized);
-    return dNorm === cleanPhone || dNorm.slice(-9) === cleanPhone.slice(-9);
-  });
+  // Fast targeted lookup for driver profile
+  const shortPhone = cleanPhone.slice(-9);
+  const matchedDriver = await prisma.driverProfile.findFirst({
+    where: {
+      phoneSanitized: { contains: shortPhone },
+    },
+    select: { id: true, fullName: true },
+  }).catch(() => null);
 
-  // Look up lead
+  // Fast targeted lookup for lead
   let matchedLead: any = null;
   if (!matchedDriver) {
-    const leads = await prisma.lead.findMany({
-      where: { is_archived: false },
-    }).catch(() => []);
-    matchedLead = leads.find((l: any) => {
-      const lNorm = normalizeWhatsAppPhone(l.sanitized_phone);
-      return lNorm === cleanPhone || lNorm.slice(-9) === cleanPhone.slice(-9);
-    });
+    matchedLead = await prisma.lead.findFirst({
+      where: {
+        sanitized_phone: { contains: shortPhone },
+        is_archived: false,
+      },
+      select: { id: true, raw_name: true },
+    }).catch(() => null);
   }
 
   const finalName =
