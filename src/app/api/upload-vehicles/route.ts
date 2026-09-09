@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
 
       // Insurance
       const insuranceType = getField(row, ["insurance type", "type assurance", "assurance"]);
-      const insurancePolicy = getField(row, ["insurance policy number", "police assurance", "policy number", "numéro police"]) || null;
+      const insurancePolicy = getField(row, ["insurance policy number", "insurance polic", "insurance policy", "police assurance", "policy number", "numéro police"]) || null;
       const isInsuranceActive = Boolean(insuranceType || insurancePolicy);
 
       // Hub City & Supervisor
@@ -147,14 +147,27 @@ export async function POST(request: NextRequest) {
       const manager = getField(row, ["manager", "superviseur", "supervisor"]);
       const hub_city = extractCity(managerGroup, manager);
 
-      // Extra notes
+      // Duration Status (e.g. "120 days", "9 days")
+      const rawDuration = getField(row, ["duration status", "duration", "duree statut", "durée"]);
+      let downtimeDays = 0;
+      if (rawDuration) {
+        const match = rawDuration.match(/\d+/);
+        if (match) downtimeDays = parseInt(match[0], 10);
+      }
+
+      // Extra notes & attributes from spreadsheet
       const color = getField(row, ["color", "couleur"]);
       const oldNumber = getField(row, ["old number", "ancien matricule"]);
+      const regNu = getField(row, ["registration nu", "registration number", "numéro enregistrement"]);
+      const externalYang = getField(row, ["external yang", "yang", "external"]);
       const notesArray: string[] = [];
       if (color) notesArray.push(`Couleur: ${color}`);
       if (manager) notesArray.push(`Superviseur: ${manager}`);
       if (managerGroup) notesArray.push(`Groupe: ${managerGroup}`);
       if (oldNumber && oldNumber !== plate_number) notesArray.push(`Ancien N°: ${oldNumber}`);
+      if (regNu && regNu !== plate_number) notesArray.push(`Enreg: ${regNu}`);
+      if (rawDuration) notesArray.push(`Durée statut: ${rawDuration}`);
+      if (externalYang) notesArray.push(`Ext: ${externalYang}`);
       const notes = notesArray.length > 0 ? notesArray.join(" · ") : null;
 
       // Check if vehicle already exists (by exact plate or normalized plate)
@@ -173,6 +186,7 @@ export async function POST(request: NextRequest) {
             vin,
             hub_city,
             status,
+            total_downtime_days: downtimeDays,
             insurance_policy_number: insurancePolicy,
             isInsuranceActive,
             assigned_driver_name: driverName,
@@ -193,6 +207,7 @@ export async function POST(request: NextRequest) {
             vin: vin || existing.vin,
             hub_city,
             status,
+            total_downtime_days: downtimeDays || existing.total_downtime_days,
             insurance_policy_number: insurancePolicy || existing.insurance_policy_number,
             isInsuranceActive: isInsuranceActive || existing.isInsuranceActive,
             assigned_driver_name: driverName || existing.assigned_driver_name,
