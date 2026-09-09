@@ -61,6 +61,14 @@ const MOROCCAN_CITIES = [
   "Other",
 ] as const;
 
+function getTodayDateStr(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 interface Lead {
   id: string;
   raw_name: string;
@@ -125,16 +133,27 @@ export default function LeadDrawer({
     lead.preorder_amount !== null ? String(lead.preorder_amount) : ""
   );
 
-  const [recallDate, setRecallDate] = useState(
-    lead.brand_status === "To Recall" && lead.reminder_date
-      ? new Date(lead.reminder_date).toISOString().split("T")[0]
-      : ""
-  );
+  const [recallDate, setRecallDate] = useState(() => {
+    if (lead.brand_status === "To Recall") {
+      if (lead.reminder_date) {
+        return new Date(lead.reminder_date).toISOString().split("T")[0];
+      }
+      return getTodayDateStr();
+    }
+    return "";
+  });
   const [recallTime, setRecallTime] = useState(
     lead.brand_status === "To Recall" && lead.reminder_date
       ? new Date(lead.reminder_date).toTimeString().slice(0, 5)
       : ""
   );
+
+  // Auto-default recallDate to today whenever Brand Status is set to "To Recall"
+  useEffect(() => {
+    if (boardType === "leads" && brandStatus === "To Recall" && !recallDate) {
+      setRecallDate(getTodayDateStr());
+    }
+  }, [boardType, brandStatus, recallDate]);
 
   const [notes, setNotes] = useState<string>(lead.notes || "");
   const [isRecalled, setIsRecalled] = useState<boolean>(false);
@@ -477,13 +496,14 @@ export default function LeadDrawer({
           payload.board_column = "BRAND_PRE_FILTER";
           payload.brand_status = "To Recall";
 
-          if (recallDate) {
+          const effectiveRecallDate = recallDate || getTodayDateStr();
+          if (effectiveRecallDate) {
             if (recallTime) {
               // Specific time: YYYY-MM-DDTHH:MM:00
-              payload.reminder_date = new Date(`${recallDate}T${recallTime}:00`).toISOString();
+              payload.reminder_date = new Date(`${effectiveRecallDate}T${recallTime}:00`).toISOString();
             } else {
               // Only date: scheduled for midnight (end of day)
-              payload.reminder_date = new Date(`${recallDate}T23:59:59.999`).toISOString();
+              payload.reminder_date = new Date(`${effectiveRecallDate}T23:59:59.999`).toISOString();
             }
           }
         } else {
@@ -661,10 +681,14 @@ export default function LeadDrawer({
                 <select
                   value={brandStatus}
                   onChange={(e) => {
-                    setBrandStatus(e.target.value);
+                    const newStatus = e.target.value;
+                    setBrandStatus(newStatus);
                     setTrainingDate("");
                     setIsManualEdit(false);
                     setWaSentSuccessAt(null);
+                    if (newStatus === "To Recall" && !recallDate) {
+                      setRecallDate(getTodayDateStr());
+                    }
                   }}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                 >
@@ -688,7 +712,7 @@ export default function LeadDrawer({
                     type="date"
                     value={trainingDate}
                     onChange={(e) => setTrainingDate(e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
+                    min={getTodayDateStr()}
                     className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                   />
                   <p className="text-xs text-gray-500 mt-2 leading-normal">
@@ -719,7 +743,7 @@ export default function LeadDrawer({
                         type="date"
                         value={recallDate}
                         onChange={(e) => setRecallDate(e.target.value)}
-                        min={new Date().toISOString().split("T")[0]}
+                        min={getTodayDateStr()}
                         className="w-full border border-amber-300 bg-white rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
                     </div>
