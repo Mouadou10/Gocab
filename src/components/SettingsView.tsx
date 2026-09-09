@@ -280,6 +280,38 @@ export default function SettingsView() {
     });
   }
 
+  // Toggle WhatsApp access for a specific role and save immediately
+  async function handleToggleWhatsAppRoleAccess(roleKey: string) {
+    const currentTabs = permissions[roleKey] || [];
+    const hasAccess = currentTabs.includes("whatsapp");
+    const updatedTabs = hasAccess
+      ? currentTabs.filter((t) => t !== "whatsapp")
+      : [...currentTabs, "whatsapp"];
+
+    const updatedPermissions = { ...permissions, [roleKey]: updatedTabs };
+    setPermissions(updatedPermissions);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "role_tab_permissions",
+          value: JSON.stringify(updatedPermissions),
+        }),
+      });
+      if (res.ok) {
+        toast.success(
+          hasAccess
+            ? `Accès WhatsApp retiré pour ${roleLabels[roleKey] || roleKey}`
+            : `Accès WhatsApp accordé à ${roleLabels[roleKey] || roleKey}`
+        );
+      }
+    } catch {
+      toast.error("Erreur lors de l'enregistrement de l'accès");
+    }
+  }
+
   // Save Role Tab Permissions
   async function handleSavePermissions() {
     setIsSaving(true);
@@ -1479,7 +1511,75 @@ export default function SettingsView() {
             </div>
           </div>
 
-          {/* 4.2 Template Configuration */}
+          {/* 4.2 Role Access Control for WhatsApp CRM */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <span>🔑</span> Accès WhatsApp CRM par Rôle
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Définissez précisément quels rôles de votre équipe ont accès à la page WhatsApp CRM dans la navigation.
+                </p>
+              </div>
+              <span className="text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
+                {Object.keys(permissions).filter((r) => (permissions[r] || []).includes("whatsapp")).length} rôle(s) autorisé(s)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.keys(permissions).map((roleKey) => {
+                const label = roleLabels[roleKey] || roleKey;
+                const hasAccess = (permissions[roleKey] || []).includes("whatsapp");
+                const membersCount = users.filter((u) => u.role === roleKey).length;
+
+                return (
+                  <div
+                    key={roleKey}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                      hasAccess
+                        ? "bg-emerald-50/40 border-emerald-200 shadow-2xs"
+                        : "bg-gray-50/60 border-gray-200 opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-bold text-xs text-gray-900 truncate">{label}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">{roleKey}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        {membersCount} membre(s) dans l&apos;équipe
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleWhatsAppRoleAccess(roleKey)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
+                        hasAccess
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-white hover:bg-gray-100 text-gray-700 border border-gray-300"
+                      }`}
+                    >
+                      {hasAccess ? (
+                        <>
+                          <span>✓</span>
+                          <span>Accès Activé</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>✕</span>
+                          <span>Accès Bloqué</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4.3 Template Configuration */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
             <div>
               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">

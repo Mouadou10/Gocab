@@ -44,6 +44,7 @@ import PasswordChangeModal from "./PasswordChangeModal";
 import AddLeadModal from "./AddLeadModal";
 import PowerBiDashboardView from "./PowerBiDashboardView";
 import WhatsAppCrmView from "./WhatsAppCrmView";
+import AgentActivityModal from "./AgentActivityModal";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
@@ -151,7 +152,11 @@ export default function KanbanBoard() {
   if (!allowedTabs.includes("kpi-dashboard")) {
     allowedTabs = ["dashboard", "kpi-dashboard", ...allowedTabs.filter((t) => t !== "dashboard")];
   }
+  if ((userRole === "ADMIN" || userRole === "OPS_MANAGER") && !allowedTabs.includes("whatsapp")) {
+    allowedTabs = [...allowedTabs, "whatsapp"];
+  }
 
+  const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
   const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
@@ -314,6 +319,9 @@ export default function KanbanBoard() {
               }
               if (!tabs.includes("kpi-dashboard")) {
                 tabs.push("kpi-dashboard");
+              }
+              if ((k === "ADMIN" || k === "OPS_MANAGER") && !tabs.includes("whatsapp")) {
+                tabs.push("whatsapp");
               }
               merged[k] = tabs;
             }
@@ -1295,6 +1303,19 @@ export default function KanbanBoard() {
                 <CSVUploader onUploadComplete={fetchLeads} />
               </div>
             )}
+
+            {/* Agent Activity Log Button */}
+            <button
+              type="button"
+              onClick={() => setIsAgentLogOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              title={language === "fr" ? "Consulter mon journal d'activité" : language === "ar" ? "سجل نشاطي" : "My Activity Log"}
+            >
+              <span>📋</span>
+              <span className="hidden sm:inline">
+                {language === "fr" ? "Mon Journal" : language === "ar" ? "سجلي" : "My Log"}
+              </span>
+            </button>
             
             {/* User info badge */}
             {userName && (
@@ -1584,6 +1605,15 @@ export default function KanbanBoard() {
         onClose={() => setIsAddLeadModalOpen(false)}
         onLeadAdded={fetchLeads}
         activeTab={activeTab}
+      />
+
+      {/* Agent Personal & Team Activity Log Drawer */}
+      <AgentActivityModal
+        isOpen={isAgentLogOpen}
+        onClose={() => setIsAgentLogOpen(false)}
+        onSelectLead={(lead) => setSelectedLead(lead)}
+        currentUserName={userName}
+        currentUserRole={userRole}
       />
 
       {/* Reminder Alerts - Only for Lead Acquisition Junior */}
