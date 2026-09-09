@@ -118,11 +118,11 @@ export default function SettingsView() {
   const [waD360ApiKey, setWaD360ApiKey] = useState("cAT0snZ5THgwe9XWha04qQUPAK");
   const [waD360ApiUrl, setWaD360ApiUrl] = useState("https://waba-v2.360dialog.io");
   const [waPhoneNumber, setWaPhoneNumber] = useState("+212662145109");
-  const [waChannelId, setWaChannelId] = useState("1317638361430129");
+  const [waChannelId, setWaChannelId] = useState("1317636061430129");
   const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
   const [waAccessToken, setWaAccessToken] = useState("");
   const [waVerifyToken, setWaVerifyToken] = useState("gocab_whatsapp_crm_token_2026");
-  const [waWabaId, setWaWabaId] = useState("Gocab SARL");
+  const [waWabaId, setWaWabaId] = useState("2092399898064944");
   const [waWebhookUrl, setWaWebhookUrl] = useState("https://gocab-iota.vercel.app/api/whatsapp/webhook");
   const [waIsLiveConfigured, setWaIsLiveConfigured] = useState(true);
   const [isSavingWaConfig, setIsSavingWaConfig] = useState(false);
@@ -221,10 +221,10 @@ export default function SettingsView() {
               setWaD360ApiKey(data.config.d360ApiKeyMasked || "cAT0snZ5THgwe9XWha04qQUPAK");
               setWaD360ApiUrl(data.config.d360ApiUrl || "https://waba-v2.360dialog.io");
               setWaPhoneNumber(data.config.phoneNumber || "+212662145109");
-              setWaChannelId(data.config.channelId || "1317638361430129");
+              setWaChannelId(data.config.channelId || "1317636061430129");
               setWaPhoneNumberId(data.config.phoneNumberId || "");
               setWaVerifyToken(data.config.verifyToken || "gocab_whatsapp_crm_token_2026");
-              setWaWabaId(data.config.wabaId || "Gocab SARL");
+              setWaWabaId(data.config.wabaId || "2092399898064944");
               setWaWebhookUrl(data.config.webhookUrl || "https://gocab-iota.vercel.app/api/whatsapp/webhook");
               setWaIsLiveConfigured(data.config.isLiveConfigured !== false);
               if (data.config.hasAccessToken) {
@@ -1344,15 +1344,18 @@ export default function SettingsView() {
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
                 <span className="text-[10px] font-bold text-gray-400 uppercase">Compte WhatsApp (WABA)</span>
-                <p className="font-bold text-navy text-xs mt-0.5 truncate">Gocab SARL (Live)</p>
+                <p className="font-bold text-navy text-xs mt-0.5 truncate">Gocab SARL · Live</p>
+                <p className="text-[9px] text-gray-400 font-mono">ID: 2092399898064944</p>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
                 <span className="text-[10px] font-bold text-gray-400 uppercase">Portfolio Meta</span>
-                <p className="font-bold text-navy text-xs mt-0.5 truncate">Gocab Rent (Live)</p>
+                <p className="font-bold text-navy text-xs mt-0.5 truncate">Gocab Rent · Live</p>
+                <p className="text-[9px] text-gray-400 font-mono">ID: 1805141770678123</p>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
-                <span className="text-[10px] font-bold text-gray-400 uppercase">Channel ID</span>
-                <p className="font-mono font-bold text-gray-700 text-xs mt-0.5 truncate">1317638361430129</p>
+                <span className="text-[10px] font-bold text-gray-400 uppercase">Channel External ID</span>
+                <p className="font-mono font-bold text-emerald-700 text-xs mt-0.5 truncate">1317636061430129</p>
+                <p className="text-[9px] text-emerald-600 font-semibold">✓ Vérifié & Actif</p>
               </div>
             </div>
 

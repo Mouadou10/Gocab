@@ -72,7 +72,7 @@ export async function getWhatsAppApiConfig() {
   const channelId =
     map.get("whatsapp_channel_id") ||
     process.env.WHATSAPP_CHANNEL_ID ||
-    "1317638361430129";
+    "1317636061430129";
 
   const phoneNumberId =
     map.get("whatsapp_phone_number_id") ||
@@ -92,7 +92,7 @@ export async function getWhatsAppApiConfig() {
   const wabaId =
     map.get("whatsapp_waba_id") ||
     process.env.WHATSAPP_WABA_ID ||
-    "Gocab SARL";
+    "2092399898064944";
 
   const provider =
     map.get("whatsapp_provider") ||

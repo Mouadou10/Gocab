@@ -94,10 +94,10 @@ export async function POST(req: NextRequest) {
       { key: "whatsapp_provider", value: provider || "360dialog" },
       { key: "whatsapp_360dialog_api_url", value: d360ApiUrl || "https://waba-v2.360dialog.io" },
       { key: "whatsapp_phone_number", value: phoneNumber || "+212662145109" },
-      { key: "whatsapp_channel_id", value: channelId || "1317638361430129" },
+      { key: "whatsapp_channel_id", value: channelId || "1317636061430129" },
       { key: "whatsapp_phone_number_id", value: phoneNumberId ?? "" },
       { key: "whatsapp_verify_token", value: verifyToken || "gocab_whatsapp_crm_token_2026" },
-      { key: "whatsapp_waba_id", value: wabaId || "Gocab SARL" },
+      { key: "whatsapp_waba_id", value: wabaId || "2092399898064944" },
     ];
 
     if (d360ApiKey && d360ApiKey.trim().length > 0 && !d360ApiKey.includes("...")) {
