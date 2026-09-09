@@ -86,7 +86,9 @@ export default function TicketKanbanCard({
           {ticket.ticket_type === "AdBleu" && "💧 AdBleu"}
           {ticket.ticket_type === "Repair" && "🔧 Repair"}
           {ticket.ticket_type === "Accident" && "💥 Accident"}
-          {!["Vidange", "AdBleu", "Repair", "Accident"].includes(ticket.ticket_type) && ticket.ticket_type}
+          {ticket.ticket_type === "Fourrière" && "🚔 Fourrière"}
+          {ticket.ticket_type === "Police Immobilization" && "🛑 Immobilisation Police"}
+          {!["Vidange", "AdBleu", "Repair", "Accident", "Fourrière", "Police Immobilization"].includes(ticket.ticket_type) && ticket.ticket_type}
         </span>
         
         {isResolved && ticket.field_status && ticket.field_status !== "COMPLETED" && (

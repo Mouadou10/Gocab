@@ -16,6 +16,10 @@ interface VehicleUploadSummary {
   inserted: number;
   updated: number;
   skipped_invalid: number;
+  linked_drivers?: number;
+  tickets_created?: number;
+  tickets_updated?: number;
+  tickets_resolved?: number;
 }
 
 interface VehicleCSVUploaderProps {
@@ -86,7 +90,11 @@ export default function VehicleCSVUploader({
       }
 
       setSummary(data.summary);
-      toast.success(`${data.summary.inserted} véhicules ajoutés et ${data.summary.updated} mis à jour!`);
+      let msg = `${data.summary.inserted} véhicules ajoutés, ${data.summary.updated} mis à jour`;
+      if (data.summary.tickets_created > 0 || data.summary.tickets_resolved > 0) {
+        msg += ` · 🎫 ${data.summary.tickets_created || 0} tickets créés, ${data.summary.tickets_resolved || 0} résolus`;
+      }
+      toast.success(msg, { duration: 5000 });
       onUploadSuccess();
     } catch (err: any) {
       toast.error("Erreur réseau lors du téléversement");
@@ -197,8 +205,16 @@ export default function VehicleCSVUploader({
                   <p className="text-base font-bold text-blue-600">{summary.updated}</p>
                 </div>
                 <div className="p-3 bg-white rounded-xl border border-emerald-100">
-                  <p className="text-gray-500">Lignes invalides</p>
-                  <p className="text-base font-bold text-gray-600">{summary.skipped_invalid}</p>
+                  <p className="text-gray-500">Chauffeurs associés</p>
+                  <p className="text-base font-bold text-purple-600">{summary.linked_drivers || 0}</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                  <p className="text-amber-800 font-semibold">Tickets Fourrière/Police</p>
+                  <p className="text-base font-bold text-amber-900">+{summary.tickets_created || 0} créés</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                  <p className="text-emerald-800 font-semibold">Tickets Remis en Service</p>
+                  <p className="text-base font-bold text-emerald-900">✓ {summary.tickets_resolved || 0} résolus</p>
                 </div>
               </div>
               {summary.skipped_invalid > 0 && (

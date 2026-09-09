@@ -32,11 +32,13 @@ export interface MaintenanceTicket {
 }
 
 const TICKET_TYPES = [
+  { id: "Fourrière", label: "🚔 Fourrière Municipale (Impounded)", statusImpact: "impounded" },
+  { id: "Police Immobilization", label: "🛑 Immobilisation Police / Sabot", statusImpact: "police_immobilization" },
   { id: "VEHICLE_RECOVERY", label: "🚨 Blocage Véhicule / Récupération (Vehicle Recovery)", statusImpact: "Blocked" },
   { id: "Vidange", label: "🛢️ Vidange (Oil Change)", statusImpact: "Actif" },
   { id: "AdBleu", label: "💧 AdBleu Refill", statusImpact: "Actif" },
-  { id: "Repair", label: "🔧 Repair / Mechanical", statusImpact: "Actif" },
-  { id: "Accident", label: "💥 Accident / Insurance", statusImpact: "Accident" },
+  { id: "Repair", label: "🔧 Repair / Mechanical", statusImpact: "In garage" },
+  { id: "Accident", label: "💥 Accident / Insurance", statusImpact: "In garage" },
 ] as const;
 
 interface TicketDrawerProps {

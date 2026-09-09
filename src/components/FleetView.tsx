@@ -28,8 +28,11 @@ const HUB_CITIES = [
 const VEHICLE_STATUSES = [
   "Available",
   "Actif",
+  "In garage",
+  "impounded",
+  "police_immobilization",
   "Accident",
-  "impounded by police",
+  "Blocked",
 ] as const;
 
 export default function FleetView() {
@@ -184,21 +187,54 @@ export default function FleetView() {
     }
   }
 
-  /** Gets styling for the 6 vehicle operational statuses */
+  /** Format user-friendly status labels for Moroccan fleet operations */
+  function formatStatusLabel(status: string) {
+    switch (status) {
+      case "Available":
+        return "Disponible (Au parc)";
+      case "Actif":
+      case "working":
+        return "Actif (En service)";
+      case "In garage":
+      case "maintenance":
+        return "En maintenance / Garage";
+      case "impounded":
+        return "Fourrière Municipale";
+      case "police_immobilization":
+        return "Immobilisation Police / Sabot";
+      case "impounded by police":
+        return "Fourrière / Police";
+      case "Accident":
+        return "Accidenté";
+      case "Blocked":
+        return "Bloqué";
+      default:
+        return status;
+    }
+  }
+
+  /** Gets styling for vehicle operational statuses */
   function getStatusStyle(status: string) {
     switch (status) {
       case "Available":
         return "bg-emerald-100 text-emerald-800 border-emerald-200";
       case "Actif":
+      case "working":
         return "bg-blue-100 text-blue-800 border-blue-200";
       case "In garage":
+      case "maintenance":
         return "bg-amber-100 text-amber-800 border-amber-200";
       case "In service":
         return "bg-purple-100 text-purple-800 border-purple-200";
       case "Accident":
         return "bg-red-100 text-red-800 border-red-200";
+      case "impounded":
+        return "bg-rose-950 text-white border-rose-950";
+      case "police_immobilization":
       case "impounded by police":
         return "bg-slate-900 text-white border-slate-900";
+      case "Blocked":
+        return "bg-red-900 text-white border-red-800";
       default:
         return "bg-gray-100 text-gray-800 border-gray-200";
     }
@@ -313,7 +349,7 @@ export default function FleetView() {
             <option value="">All Statuses</option>
             {VEHICLE_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {formatStatusLabel(s)}
               </option>
             ))}
           </select>
@@ -383,12 +419,12 @@ export default function FleetView() {
                       >
                         {!VEHICLE_STATUSES.includes(v.status as any) && (
                           <option value={v.status} className="bg-white text-gray-900 font-normal">
-                            {v.status}
+                            {formatStatusLabel(v.status)}
                           </option>
                         )}
                         {VEHICLE_STATUSES.map((s) => (
                           <option key={s} value={s} className="bg-white text-gray-900 font-normal">
-                            {s}
+                            {formatStatusLabel(s)}
                           </option>
                         ))}
                       </select>

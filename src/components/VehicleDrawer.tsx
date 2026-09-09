@@ -29,11 +29,11 @@ const HUB_CITIES = [
 const VEHICLE_STATUSES = [
   "Available",
   "Actif",
-  "Blocked",
   "In garage",
-  "In service",
+  "impounded",
+  "police_immobilization",
   "Accident",
-  "impounded by police",
+  "Blocked",
 ] as const;
 
 export interface Vehicle {
