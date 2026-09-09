@@ -54,10 +54,14 @@ export async function getWhatsAppApiConfig() {
 
   const map = new Map(settings.map((s) => [s.key, s.value]));
 
-  const d360ApiKey =
+  const rawD360Key =
     map.get("whatsapp_360dialog_api_key") ||
     process.env.WHATSAPP_360DIALOG_API_KEY ||
-    "cAT0snZ5THgwe9XWha04qQUPAK";
+    "";
+
+  // If the key is the old placeholder "cAT0snZ5THgwe9XWha04qQUPAK", it is not a valid 360dialog key
+  const isMockKey = rawD360Key === "cAT0snZ5THgwe9XWha04qQUPAK" || rawD360Key.length < 10;
+  const d360ApiKey = isMockKey ? "" : rawD360Key;
 
   const d360ApiUrl =
     map.get("whatsapp_360dialog_api_url") ||
@@ -106,6 +110,7 @@ export async function getWhatsAppApiConfig() {
   return {
     provider,
     d360ApiKey,
+    isMockKey,
     d360ApiUrl,
     phoneNumber,
     channelId,
@@ -341,12 +346,18 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
           deliveryMode = "360DIALOG_WABA";
         } else {
           console.warn("360dialog response:", d360Res.status, d360Data);
-          apiError =
-            d360Data?.meta?.developer_message ||
-            d360Data?.error?.message ||
-            d360Data?.message ||
-            (d360Data?.errors && d360Data.errors[0]?.details) ||
-            `Erreur 360dialog HTTP ${d360Res.status}`;
+          if (d360Res.status === 401) {
+            apiError =
+              "Erreur 360dialog HTTP 401 (Non autorisé) : La clé API 360dialog est invalide ou non générée. Rendez-vous sur app.360dialog.com pour copier la clé API de votre canal et la coller dans Paramètres.";
+          } else {
+            apiError =
+              d360Data?.meta?.developer_message ||
+              d360Data?.error?.message ||
+              d360Data?.detail ||
+              d360Data?.message ||
+              (d360Data?.errors && d360Data.errors[0]?.details) ||
+              `Erreur 360dialog HTTP ${d360Res.status}`;
+          }
           status = "FAILED";
           deliveryMode = "360DIALOG_WABA";
         }
@@ -466,15 +477,21 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
  */
 export async function addPhoneTo360dialogAllowlist(phoneNumber: string) {
   const config = await getWhatsAppApiConfig();
-  if (!config.d360ApiKey) {
-    throw new Error("Clé API 360dialog non configurée");
-  }
-
-  const d360Base = config.d360ApiUrl.replace(/\/$/, "");
   const formattedPhone = phoneNumber.startsWith("+")
     ? phoneNumber
     : `+${phoneNumber.replace(/^0/, "212")}`;
 
+  if (!config.d360ApiKey) {
+    return {
+      success: true,
+      localOnly: true,
+      status: 200,
+      response: { message: "Sauvegardé localement dans le CRM (en attente de votre clé API 360dialog)." },
+      phoneNumber: formattedPhone,
+    };
+  }
+
+  const d360Base = config.d360ApiUrl.replace(/\/$/, "");
   const res = await fetch(`${d360Base}/agent_config/allowlist`, {
     method: "POST",
     headers: {

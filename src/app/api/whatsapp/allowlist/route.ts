@@ -66,9 +66,12 @@ export async function POST(req: NextRequest) {
         apiResult = await addPhoneTo360dialogAllowlist(phoneToAdd);
         if (!apiResult.success) {
           apiError =
-            apiResult.response?.meta?.developer_message ||
-            apiResult.response?.error?.message ||
-            `HTTP ${apiResult.status}`;
+            apiResult.status === 401
+              ? "Clé API 360dialog non autorisée (HTTP 401). Rendez-vous sur app.360dialog.com pour copier votre clé API de canal et l'enregistrer dans Paramètres."
+              : apiResult.response?.meta?.developer_message ||
+                apiResult.response?.error?.message ||
+                apiResult.response?.detail ||
+                `HTTP ${apiResult.status}`;
         }
       } catch (err: any) {
         apiError = err.message;

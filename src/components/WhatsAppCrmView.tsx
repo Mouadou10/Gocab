@@ -261,7 +261,13 @@ export default function WhatsAppCrmView() {
           data.error ||
           data.message?.error_message ||
           "Échec de remise par l'API WhatsApp (Vérifiez la fenêtre 24h)";
-        toast.error(`⚠️ Échec d'envoi: ${errorDetail}`, { duration: 5000 });
+        const is401 = errorDetail.includes("401");
+        toast.error(
+          is401
+            ? "⚠️ Clé API 360dialog non autorisée (HTTP 401). Rendez-vous dans Paramètres pour renseigner la clé générée sur app.360dialog.com"
+            : `⚠️ Échec d'envoi: ${errorDetail}`,
+          { duration: 7000 }
+        );
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId

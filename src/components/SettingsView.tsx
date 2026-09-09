@@ -115,7 +115,7 @@ export default function SettingsView() {
 
   // WhatsApp Cloud API Configuration (360dialog & Meta)
   const [waProvider, setWaProvider] = useState("360dialog");
-  const [waD360ApiKey, setWaD360ApiKey] = useState("cAT0snZ5THgwe9XWha04qQUPAK");
+  const [waD360ApiKey, setWaD360ApiKey] = useState("");
   const [waD360ApiUrl, setWaD360ApiUrl] = useState("https://waba-v2.360dialog.io");
   const [waPhoneNumber, setWaPhoneNumber] = useState("+212662145109");
   const [waChannelId, setWaChannelId] = useState("1317636061430129");
@@ -224,7 +224,7 @@ export default function SettingsView() {
           .then((data) => {
             if (data.config) {
               setWaProvider(data.config.provider || "360dialog");
-              setWaD360ApiKey(data.config.d360ApiKeyMasked || "cAT0snZ5THgwe9XWha04qQUPAK");
+              setWaD360ApiKey(data.config.d360ApiKeyMasked || "");
               setWaD360ApiUrl(data.config.d360ApiUrl || "https://waba-v2.360dialog.io");
               setWaPhoneNumber(data.config.phoneNumber || "+212662145109");
               setWaChannelId(data.config.channelId || "1317636061430129");
@@ -1409,6 +1409,27 @@ export default function SettingsView() {
                 <p className="font-mono font-bold text-emerald-700 text-xs mt-0.5 truncate">1317636061430129</p>
                 <p className="text-[9px] text-emerald-600 font-semibold">✓ Vérifié & Actif</p>
               </div>
+            </div>
+
+            {/* Notice Guide: How to get 360dialog API Key */}
+            <div className="p-4 bg-gradient-to-r from-amber-50 to-amber-100/60 border border-amber-200/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <span>🔑</span> Clé API 360dialog requise pour envoyer en direct (Évite l&apos;Erreur HTTP 401)
+                </p>
+                <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                  1. Connectez-vous sur votre console <strong>app.360dialog.com</strong> ➔ 2. Ouvrez le canal <strong>Gocab SARL (+212 6 62 14 51 09)</strong> ➔ 3. Cliquez sur <strong>&quot;Generate API Key&quot;</strong> ➔ 4. Collez la clé ci-dessous et cliquez sur <em>Sauvegarder</em>.
+                </p>
+              </div>
+              <a
+                href="https://app.360dialog.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Ouvrir 360dialog Hub</span>
+                <span>↗</span>
+              </a>
             </div>
 
             <form onSubmit={handleSaveWhatsAppConfig} className="space-y-5">
