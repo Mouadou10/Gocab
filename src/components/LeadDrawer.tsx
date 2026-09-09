@@ -181,6 +181,53 @@ export default function LeadDrawer({
   const [recentWaMessages, setRecentWaMessages] = useState<any[]>([]);
   const [isLoadingWaHistory, setIsLoadingWaHistory] = useState<boolean>(false);
 
+  // ── Activity Log ──────────────────────────────────────────────────────────
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [newLogText, setNewLogText] = useState("");
+  const [isSubmittingLog, setIsSubmittingLog] = useState(false);
+
+  const fetchActivityLog = React.useCallback(() => {
+    setIsLoadingActivity(true);
+    fetch(`/api/leads/${lead.id}/activity`)
+      .then((r) => r.json())
+      .then((d) => setActivityLogs(d.logs || []))
+      .catch(() => setActivityLogs([]))
+      .finally(() => setIsLoadingActivity(false));
+  }, [lead.id]);
+
+  useEffect(() => {
+    fetchActivityLog();
+  }, [fetchActivityLog]);
+
+  const handleAddActivityLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLogText.trim() || isSubmittingLog) return;
+    setIsSubmittingLog(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/activity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "NOTE_ADDED",
+          detail: newLogText.trim(),
+          agent: session?.user?.name || session?.user?.email || "Agent",
+        }),
+      });
+      if (res.ok) {
+        setNewLogText("");
+        fetchActivityLog();
+        toast.success("Événement consigné au journal");
+      }
+    } catch {
+      toast.error("Erreur lors de l'enregistrement");
+    } finally {
+      setIsSubmittingLog(false);
+    }
+  };
+  // ──────────────────────────────────────────────────────────────────────────
+
   // Missing documents list for KYC template
   const missingDocsList: string[] = [];
   if (!hasCin) missingDocsList.push("Carte Nationale d'Identité (CIN)");
@@ -335,6 +382,16 @@ export default function LeadDrawer({
         setWaDeliveryMode(data.mode || "SENT");
         toast.success("✓ Message WhatsApp envoyé avec succès !");
         fetchRecentWaMessages();
+        // Consigner l'envoi dans le journal d'activité
+        fetch(`/api/leads/${lead.id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "WHATSAPP_SENT",
+            detail: `Message WhatsApp envoyé : "${waMessageText.slice(0, 60)}${waMessageText.length > 60 ? "..." : ""}"`,
+            agent: session?.user?.name || session?.user?.email || "Agent",
+          }),
+        }).then(() => fetchActivityLog()).catch(() => {});
       } else {
         toast.error(data.error || "Échec d'envoi du message WhatsApp");
       }
@@ -350,6 +407,15 @@ export default function LeadDrawer({
   const handleOpenWhatsAppWeb = () => {
     const url = generateWhatsAppWebURL(lead.sanitized_phone, waMessageText);
     window.open(url, "_blank");
+    fetch(`/api/leads/${lead.id}/activity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "WHATSAPP_OPENED",
+        detail: "Discussion ouverte sur WhatsApp Web",
+        agent: session?.user?.name || session?.user?.email || "Agent",
+      }),
+    }).then(() => fetchActivityLog()).catch(() => {});
   };
 
   // Jump to full WhatsApp CRM tab
@@ -494,6 +560,8 @@ export default function LeadDrawer({
       if (res.ok) {
         const data = await res.json();
         toast.success("Lead updated successfully");
+        // Refresh activity log before closing so it's ready next open
+        fetchActivityLog();
         onUpdate(data.lead);
         handleClose();
       } else if (res.status === 422) {
@@ -1230,6 +1298,102 @@ export default function LeadDrawer({
               onChange={(e) => setNotes(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy resize-none"
             />
+          </div>
+
+          {/* ── Activity Log (Embedded in scrollable body) ────────────────────── */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+            <button
+              type="button"
+              onClick={() => setShowActivityLog((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/80 transition-colors text-xs font-bold text-slate-700"
+            >
+              <span className="flex items-center gap-2">
+                <span>📋</span>
+                Journal d&apos;activité
+                {activityLogs.length > 0 && (
+                  <span className="bg-navy/10 text-navy text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {activityLogs.length}
+                  </span>
+                )}
+              </span>
+              <span className="text-slate-400 text-xs">{showActivityLog ? "▲" : "▼"}</span>
+            </button>
+
+            {showActivityLog && (
+              <div>
+                {/* Quick Add Log Entry */}
+                <form onSubmit={handleAddActivityLog} className="p-2.5 bg-slate-50/70 border-b border-slate-100 flex gap-2">
+                  <input
+                    type="text"
+                    value={newLogText}
+                    onChange={(e) => setNewLogText(e.target.value)}
+                    placeholder="Consigner un événement (ex: Candidat injoignable, rappel demandé)..."
+                    className="flex-1 text-xs bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-navy/30"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubmittingLog || !newLogText.trim()}
+                    className="px-3 py-1.5 bg-navy text-white rounded-lg text-xs font-semibold disabled:opacity-40 hover:bg-navy/90 transition-colors shrink-0 cursor-pointer"
+                  >
+                    {isSubmittingLog ? "..." : "+ Ajouter"}
+                  </button>
+                </form>
+
+                {isLoadingActivity ? (
+                  <div className="flex items-center justify-center py-6 text-xs text-slate-400">
+                    <span className="animate-spin mr-2">⏳</span> Chargement...
+                  </div>
+                ) : activityLogs.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    Aucune activité enregistrée pour ce candidat.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                    {activityLogs.map((log: any, idx: number) => {
+                      const actionIcons: Record<string, string> = {
+                        STATUS_CHANGED: "🔄",
+                        TRAINING_STATUS_CHANGED: "🎓",
+                        RECALL_SET: "⏰",
+                        PRESENCE_CONFIRMED: "✅",
+                        NOTE_ADDED: "📝",
+                        KYC_UPDATED: "📄",
+                        COLUMN_MOVED: "➡️",
+                        CITY_SET: "📍",
+                        PREORDER_SET: "💰",
+                        WHATSAPP_SENT: "💬",
+                        WHATSAPP_OPENED: "📱",
+                      };
+                      const icon = actionIcons[log.action] || "🔹";
+                      const when = new Date(log.created_at);
+                      const timeLabel =
+                        when.toLocaleDateString("fr-FR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        }) +
+                        " " +
+                        when.toLocaleTimeString("fr-FR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                      return (
+                        <div key={log.id || idx} className="flex items-start gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors">
+                          <span className="text-base mt-0.5 shrink-0">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-800 leading-snug">{log.detail || log.action}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] text-slate-500 font-semibold truncate max-w-[120px]">{log.agent}</span>
+                              <span className="text-[10px] text-slate-300">•</span>
+                              <span className="text-[10px] text-slate-400">{timeLabel}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

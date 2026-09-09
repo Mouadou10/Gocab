@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { LeadUpdateSchema } from "@/lib/validations";
 import { touchSyncState } from "@/lib/sync";
+import { logManyLeadActivities } from "@/lib/activity-log";
 
 export async function PATCH(
   request: NextRequest,
@@ -114,6 +115,106 @@ export async function PATCH(
 
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("leads").catch(() => {});
+
+    // ── Activity Log — record what the agent just did ────────────────────────
+    const agentName =
+      body.handled_by ||
+      session?.user?.name ||
+      session?.user?.email ||
+      "Agent";
+    const logEntries: { lead_id: string; agent: string; action: string; detail: string }[] = [];
+
+    if (body.brand_status !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "STATUS_CHANGED",
+        detail: `Statut → ${body.brand_status || "(vide)"}`,
+      });
+    }
+    if (body.training_status !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "TRAINING_STATUS_CHANGED",
+        detail: `Formation → ${body.training_status || "(vide)"}`,
+      });
+    }
+    if (body.reminder_date !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "RECALL_SET",
+        detail: body.reminder_date
+          ? `Rappel fixé au ${new Date(body.reminder_date).toLocaleDateString("fr-FR")}`
+          : "Rappel supprimé",
+      });
+    }
+    if (body.presence_confirmed !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "PRESENCE_CONFIRMED",
+        detail: body.presence_confirmed
+          ? "Présence confirmée par appel"
+          : "Confirmation de présence retirée",
+      });
+    }
+    if (body.notes !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "NOTE_ADDED",
+        detail: body.notes ? `Note : ${body.notes.slice(0, 80)}${body.notes.length > 80 ? "..." : ""}` : "Note effacée",
+      });
+    }
+    if (
+      body.has_cin !== undefined ||
+      body.has_permis !== undefined ||
+      body.has_fiche_anthropometrique !== undefined ||
+      body.has_confirmation_adresse !== undefined
+    ) {
+      const docs: string[] = [];
+      if (body.has_cin !== undefined) docs.push(`CIN ${body.has_cin ? "✓" : "✗"}`);
+      if (body.has_permis !== undefined) docs.push(`Permis ${body.has_permis ? "✓" : "✗"}`);
+      if (body.has_fiche_anthropometrique !== undefined) docs.push(`Fiche anthropo. ${body.has_fiche_anthropometrique ? "✓" : "✗"}`);
+      if (body.has_confirmation_adresse !== undefined) docs.push(`Conf. adresse ${body.has_confirmation_adresse ? "✓" : "✗"}`);
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "KYC_UPDATED",
+        detail: `Documents : ${docs.join(", ")}`,
+      });
+    }
+    if (body.board_column !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "COLUMN_MOVED",
+        detail: `Déplacé vers → ${body.board_column}`,
+      });
+    }
+    if (body.city !== undefined && body.city) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "CITY_SET",
+        detail: `Ville → ${body.city}`,
+      });
+    }
+    if (body.preorder_amount !== undefined) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "PREORDER_SET",
+        detail: `Précommande → ${body.preorder_amount ? body.preorder_amount + " MAD" : "supprimée"}`,
+      });
+    }
+
+    if (logEntries.length > 0) {
+      logManyLeadActivities(logEntries).catch(() => {});
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     // ── Auto-Convert Lead to DriverProfile & Assign Vehicle ────────────────
     if (

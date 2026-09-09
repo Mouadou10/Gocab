@@ -1,4 +1,4 @@
-// GoCab CRM — Prisma Schema (SQLite Version)
+// GoCab CRM â€” Prisma Schema (SQLite Version)
 // Defines Lead pipeline, Blacklist, Vehicle Fleet, and Setting models.
 
 generator client {
@@ -66,7 +66,7 @@ model Vehicle {
   assigned_driver_name        String?   // Driver name if assigned
   assigned_driver_phone       String?   // Driver phone if assigned
   
-  // Staff Assignment — each supervisor handles ~150 vehicles
+  // Staff Assignment â€” each supervisor handles ~150 vehicles
   assigned_supervisor         String?   // Field Supervisor name responsible for this vehicle
   assigned_collector          String?   // Fleet Performance agent who collects cash for this vehicle
   
@@ -129,7 +129,7 @@ model MaintenanceTicket {
   @@index([status])
 }
 
-/// Daily cash collection summary — one entry per collector per day.
+/// Daily cash collection summary â€” one entry per collector per day.
 /// The Fleet Performance agent writes the total expected in the morning,
 /// and the total collected at end of day.
 model DailyCollection {
@@ -143,7 +143,7 @@ model DailyCollection {
   updated_at           DateTime  @updatedAt
 }
 
-/// Individual driver payment cancellation — tracked per driver per day.
+/// Individual driver payment cancellation â€” tracked per driver per day.
 model PaymentCancellation {
   id               String    @id @default(uuid())
   date                 DateTime  // The business day
@@ -160,7 +160,7 @@ model PaymentCancellation {
   updated_at       DateTime  @updatedAt
 }
 
-/// Field Supervisor work items — vehicle recovery, garage pickup, monthly checkups.
+/// Field Supervisor work items â€” vehicle recovery, garage pickup, monthly checkups.
 model FieldTask {
   id               String    @id @default(uuid())
   task_type        String    // VEHICLE_RECOVERY, MONTHLY_CHECKUP, GARAGE_PICKUP
@@ -192,7 +192,7 @@ model FieldTask {
   @@index([status])
 }
 
-/// Monthly mechanical inspection report for a vehicle — scored checklist.
+/// Monthly mechanical inspection report for a vehicle â€” scored checklist.
 /// Each checkpoint is rated 1-5 (1=Critical, 5=Excellent).
 /// Overall health_score is averaged from all checkpoints.
 model VehicleInspection {
@@ -248,7 +248,7 @@ model User {
   role          String   // LEAD_ACQUISITION_JR | FLEET_PERF_MANAGER | FIELD_SUPERVISOR | FINANCE_OFFICER | OPS_MANAGER | ADMIN
   region        String   @default("CASABLANCA") // e.g. CASABLANCA, RABAT
   assignedCars  Int      @default(0)
-  passwordHash        String?  // bcrypt hash — set during seed, changeable via admin panel
+  passwordHash        String?  // bcrypt hash â€” set during seed, changeable via admin panel
   mustChangePassword  Boolean  @default(false)
   isActive            Boolean  @default(true)
   created_at          DateTime @default(now())
@@ -369,7 +369,7 @@ model AccidentClaim {
 
 /// Logs driver contract terminations (churn events).
 /// Auto-created by the backend when a Fleet Perf Manager unlinks a driver
-/// from a vehicle (vehicle status: Actif → Available, driver unassigned).
+/// from a vehicle (vehicle status: Actif â†’ Available, driver unassigned).
 model ChurnEvent {
   id              String   @id @default(uuid())
   vehicle_id      String
@@ -463,3 +463,18 @@ model WhatsAppMessage {
   @@index([wa_message_id])
 }
 
+
+/// Tracks every agent action taken on a lead - status changes, recall set,
+/// KYC updates, notes, presence confirmed, column moves, WhatsApp sent.
+/// Used to render the per-lead activity timeline in the CRM drawer.
+model LeadActivityLog {
+  id         String   @id @default(uuid())
+  lead_id    String
+  agent      String
+  action     String
+  detail     String?
+  created_at DateTime @default(now())
+
+  @@index([lead_id, created_at])
+  @@index([agent])
+}

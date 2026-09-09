@@ -132,7 +132,18 @@ const DDL_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "Setting" (
     "key" TEXT NOT NULL PRIMARY KEY,
     "value" TEXT NOT NULL
-  )`
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS "LeadActivityLog" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "lead_id" TEXT NOT NULL,
+    "agent" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "detail" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "LeadActivityLog_lead_id_created_at_idx" ON "LeadActivityLog"("lead_id", "created_at")`,
+  `CREATE INDEX IF NOT EXISTS "LeadActivityLog_agent_idx" ON "LeadActivityLog"("agent")`
 ];
 
 export async function GET() {
