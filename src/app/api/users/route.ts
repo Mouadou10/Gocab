@@ -13,6 +13,58 @@ export async function GET() {
   if ("error" in authResult) return authResult.error;
 
   try {
+    // Ensure core agent accounts exist with updated gocab.io emails
+    const defaultAgents = [
+      {
+        email: "kaoutar.ouardi@gocab.io",
+        name: "Kaoutar Ouardi",
+        fullName: "Kaoutar Ouardi",
+        role: "LEAD_ACQUISITION_JR",
+      },
+      {
+        email: "salma.abouri@gocab.io",
+        name: "Salma Abouri",
+        fullName: "Salma Abouri",
+        role: "LEAD_ACQUISITION_JR",
+      },
+    ];
+
+    for (const ag of defaultAgents) {
+      const firstName = ag.name.split(" ")[0];
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: ag.email },
+            { fullName: { contains: firstName } },
+            { name: { contains: firstName } },
+          ],
+        },
+      });
+
+      if (existing) {
+        if (existing.email !== ag.email) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: { email: ag.email, name: ag.name, fullName: ag.fullName, isActive: true },
+          });
+        }
+      } else {
+        const passwordHash = await bcrypt.hash("GoCab2024!", 12);
+        await prisma.user.create({
+          data: {
+            email: ag.email,
+            name: ag.name,
+            fullName: ag.fullName,
+            role: ag.role,
+            region: "CASABLANCA",
+            passwordHash,
+            isActive: true,
+            mustChangePassword: false,
+          },
+        });
+      }
+    }
+
     const users = await prisma.user.findMany({
       select: {
         id: true,

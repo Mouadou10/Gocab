@@ -22,6 +22,22 @@ const TEAM_MEMBERS = [
     region: "CASABLANCA",
     password: process.env.SEED_ADMIN_PASSWORD,
   },
+  {
+    email: "kaoutar.ouardi@gocab.io",
+    name: "Kaoutar Ouardi",
+    fullName: "Kaoutar Ouardi",
+    role: "LEAD_ACQUISITION_JR",
+    region: "CASABLANCA",
+    password: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+  },
+  {
+    email: "salma.abouri@gocab.io",
+    name: "Salma Abouri",
+    fullName: "Salma Abouri",
+    role: "LEAD_ACQUISITION_JR",
+    region: "CASABLANCA",
+    password: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+  },
 ];
 
 async function main() {

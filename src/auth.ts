@@ -43,42 +43,98 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = (credentials.email as string).trim().toLowerCase();
         const inputPassword = credentials.password as string;
 
-        // Master account direct authentication for Ops Manager
+        const CORE_TEAM_ACCOUNTS: Record<
+          string,
+          { name: string; fullName: string; role: string; fallbackId: string }
+        > = {
+          "mouad.koudia@gocab.io": {
+            name: "Mouad Koudia",
+            fullName: "Mouad Koudia",
+            role: "OPS_MANAGER",
+            fallbackId: "ops-manager-master-id",
+          },
+          "kaoutar.ouardi@gocab.io": {
+            name: "Kaoutar Ouardi",
+            fullName: "Kaoutar Ouardi",
+            role: "LEAD_ACQUISITION_JR",
+            fallbackId: "agent-kaoutar-ouardi-id",
+          },
+          "salma.abouri@gocab.io": {
+            name: "Salma Abouri",
+            fullName: "Salma Abouri",
+            role: "LEAD_ACQUISITION_JR",
+            fallbackId: "agent-salma-abouri-id",
+          },
+        };
+
         const masterPassword = process.env.SEED_ADMIN_PASSWORD || "Moulana@pc1995";
-        if (email === "mouad.koudia@gocab.io" && inputPassword === masterPassword) {
-          try {
-            let user = await prisma.user.findFirst({ where: { email } });
-            if (!user) {
-              const passwordHash = await bcrypt.hash(inputPassword, 12);
-              user = await prisma.user.create({
-                data: {
-                  email: "mouad.koudia@gocab.io",
-                  name: "Mouad Koudia",
-                  fullName: "Mouad Koudia",
-                  passwordHash,
-                  role: "OPS_MANAGER",
-                  region: "CASABLANCA",
-                  isActive: true,
-                  mustChangePassword: false,
-                },
-              });
+        const defaultTeamPassword = process.env.DEFAULT_TEAM_PASSWORD || "GoCab2024!";
+
+        // 1. Direct bootstrap & team authentication for core accounts
+        if (CORE_TEAM_ACCOUNTS[email]) {
+          const isMasterPass = inputPassword === masterPassword;
+          const isDefaultPass = inputPassword === defaultTeamPassword;
+
+          if (isMasterPass || isDefaultPass) {
+            const teamMeta = CORE_TEAM_ACCOUNTS[email];
+            try {
+              let user = await prisma.user.findFirst({ where: { email } });
+              if (!user) {
+                // Check if an existing user was under an older email format
+                const firstName = teamMeta.name.split(" ")[0];
+                const altMatch = await prisma.user.findFirst({
+                  where: {
+                    OR: [
+                      { fullName: { contains: firstName } },
+                      { name: { contains: firstName } },
+                    ],
+                  },
+                });
+
+                if (altMatch) {
+                  user = await prisma.user.update({
+                    where: { id: altMatch.id },
+                    data: {
+                      email,
+                      name: teamMeta.name,
+                      fullName: teamMeta.fullName,
+                      role: teamMeta.role,
+                      isActive: true,
+                    },
+                  });
+                } else {
+                  const passwordHash = await bcrypt.hash(inputPassword, 12);
+                  user = await prisma.user.create({
+                    data: {
+                      email,
+                      name: teamMeta.name,
+                      fullName: teamMeta.fullName,
+                      passwordHash,
+                      role: teamMeta.role,
+                      region: "CASABLANCA",
+                      isActive: true,
+                      mustChangePassword: false,
+                    },
+                  });
+                }
+              }
+              return {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                mustChangePassword: false,
+              };
+            } catch (err: any) {
+              console.warn("DB bootstrap warning on login:", err?.message);
+              return {
+                id: teamMeta.fallbackId,
+                name: teamMeta.name,
+                email,
+                role: teamMeta.role,
+                mustChangePassword: false,
+              };
             }
-            return {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              mustChangePassword: false,
-            };
-          } catch (err: any) {
-            console.warn("DB bootstrap warning on login:", err?.message);
-            return {
-              id: "ops-manager-master-id",
-              name: "Mouad Koudia",
-              email: "mouad.koudia@gocab.io",
-              role: "OPS_MANAGER",
-              mustChangePassword: false,
-            };
           }
         }
 

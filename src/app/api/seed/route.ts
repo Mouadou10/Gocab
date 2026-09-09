@@ -164,37 +164,75 @@ export async function GET() {
       }
     }
 
-    const email = "mouad.koudia@gocab.io";
-    const passwordHash = await bcrypt.hash("Moulana@pc1995", 12);
+    const teamToSeed = [
+      {
+        email: "mouad.koudia@gocab.io",
+        name: "Mouad Koudia",
+        fullName: "Mouad Koudia",
+        role: "OPS_MANAGER",
+        pass: "Moulana@pc1995",
+      },
+      {
+        email: "kaoutar.ouardi@gocab.io",
+        name: "Kaoutar Ouardi",
+        fullName: "Kaoutar Ouardi",
+        role: "LEAD_ACQUISITION_JR",
+        pass: "GoCab2024!",
+      },
+      {
+        email: "salma.abouri@gocab.io",
+        name: "Salma Abouri",
+        fullName: "Salma Abouri",
+        role: "LEAD_ACQUISITION_JR",
+        pass: "GoCab2024!",
+      },
+    ];
 
-    const existing = await prisma.user.findFirst({
-      where: { email: { equals: email } },
-    });
+    for (const member of teamToSeed) {
+      const passwordHash = await bcrypt.hash(member.pass, 12);
+      const firstName = member.name.split(" ")[0];
 
-    if (!existing) {
-      await prisma.user.create({
-        data: {
-          email,
-          name: "Mouad Koudia",
-          fullName: "Mouad Koudia",
-          passwordHash,
-          role: "OPS_MANAGER",
-          region: "CASABLANCA",
-          isActive: true,
-          mustChangePassword: false,
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: member.email } },
+            { fullName: { contains: firstName } },
+            { name: { contains: firstName } },
+          ],
         },
       });
-    } else {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: { passwordHash, role: "OPS_MANAGER", isActive: true },
-      });
+
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            email: member.email,
+            name: member.name,
+            fullName: member.fullName,
+            passwordHash,
+            role: member.role,
+            region: "CASABLANCA",
+            isActive: true,
+            mustChangePassword: false,
+          },
+        });
+      } else {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            email: member.email,
+            name: member.name,
+            fullName: member.fullName,
+            role: member.role,
+            isActive: true,
+          },
+        });
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: "Database schema synced and Ops Manager account verified.",
-      user: email,
+      message: "Database schema synced and team accounts (Mouad, Kaoutar, Salma) verified.",
+      users: teamToSeed.map((t) => t.email),
       databaseUrl: url.startsWith("libsql://") ? "Turso Cloud" : "Local SQLite",
     });
   } catch (error: any) {

@@ -79,41 +79,75 @@ async function syncSchema() {
     console.log(`✅ Schema synced (${statements.length} DDL statements verified).`);
   }
 
-  // Seed default Ops Manager
-  const email = "mouad.koudia@gocab.io";
-  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
-  if (!seedPassword) {
-    console.warn("⚠️  SEED_ADMIN_PASSWORD not set in env — skipping admin account seed.");
-    await prisma.$disconnect();
-    return;
-  }
-  const passwordHash = await bcrypt.hash(seedPassword, 12);
+  // Seed default Ops Manager and Core Agents
+  const teamToSync = [
+    {
+      email: "mouad.koudia@gocab.io",
+      name: "Mouad Koudia",
+      fullName: "Mouad Koudia",
+      role: "OPS_MANAGER",
+      pass: process.env.SEED_ADMIN_PASSWORD || "Moulana@pc1995",
+    },
+    {
+      email: "kaoutar.ouardi@gocab.io",
+      name: "Kaoutar Ouardi",
+      fullName: "Kaoutar Ouardi",
+      role: "LEAD_ACQUISITION_JR",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "salma.abouri@gocab.io",
+      name: "Salma Abouri",
+      fullName: "Salma Abouri",
+      role: "LEAD_ACQUISITION_JR",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+  ];
 
-  try {
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (!existing) {
-      await prisma.user.create({
-        data: {
-          email,
-          name: "Mouad Koudia",
-          fullName: "Mouad Koudia",
-          passwordHash,
-          role: "OPS_MANAGER",
-          region: "CASABLANCA",
-          isActive: true,
-          mustChangePassword: false,
+  for (const member of teamToSync) {
+    try {
+      const passwordHash = await bcrypt.hash(member.pass, 12);
+      const firstName = member.name.split(" ")[0];
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: member.email },
+            { fullName: { contains: firstName } },
+            { name: { contains: firstName } },
+          ],
         },
       });
-      console.log(`✨ Ops Manager account created: ${email}`);
-    } else {
-      await prisma.user.update({
-        where: { email },
-        data: { passwordHash, role: "OPS_MANAGER", isActive: true },
-      });
-      console.log(`✅ Ops Manager account updated: ${email}`);
+
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            email: member.email,
+            name: member.name,
+            fullName: member.fullName,
+            passwordHash,
+            role: member.role,
+            region: "CASABLANCA",
+            isActive: true,
+            mustChangePassword: false,
+          },
+        });
+        console.log(`✨ User account created: ${member.email} (${member.role})`);
+      } else {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            email: member.email,
+            name: member.name,
+            fullName: member.fullName,
+            role: member.role,
+            isActive: true,
+          },
+        });
+        console.log(`✅ User account updated: ${member.email} (${member.role})`);
+      }
+    } catch (err: any) {
+      console.error(`User seed error for ${member.email}:`, err.message);
     }
-  } catch (err: any) {
-    console.error("User seed error:", err.message);
   }
 
   await prisma.$disconnect();
