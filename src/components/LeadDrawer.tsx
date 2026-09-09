@@ -676,25 +676,37 @@ export default function LeadDrawer({
                       type="button"
                       onClick={() => {
                         const d = new Date();
+                        d.setMinutes(d.getMinutes() + 15);
                         setRecallDate(d.toISOString().split("T")[0]);
-                        d.setHours(d.getHours() + 1);
                         setRecallTime(d.toTimeString().slice(0, 5));
                       }}
                       className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
                     >
-                      +1 Heure
+                      +15 min
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         const d = new Date();
+                        d.setMinutes(d.getMinutes() + 30);
                         setRecallDate(d.toISOString().split("T")[0]);
-                        d.setHours(d.getHours() + 2);
                         setRecallTime(d.toTimeString().slice(0, 5));
                       }}
                       className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
                     >
-                      +2 Heures
+                      +30 min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setHours(d.getHours() + 2);
+                        setRecallDate(d.toISOString().split("T")[0]);
+                        setRecallTime(d.toTimeString().slice(0, 5));
+                      }}
+                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
+                    >
+                      +2h
                     </button>
                     <button
                       type="button"
@@ -702,22 +714,11 @@ export default function LeadDrawer({
                         const tomorrow = new Date();
                         tomorrow.setDate(tomorrow.getDate() + 1);
                         setRecallDate(tomorrow.toISOString().split("T")[0]);
-                        setRecallTime("09:30");
+                        setRecallTime("11:00");
                       }}
                       className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
                     >
-                      Demain 09:30
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const today = new Date().toISOString().split("T")[0];
-                        setRecallDate(today);
-                        setRecallTime("");
-                      }}
-                      className="px-2 py-0.5 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg text-3xs font-bold transition-colors cursor-pointer"
-                    >
-                      Minuit
+                      Demain à 11h
                     </button>
                   </div>
 
