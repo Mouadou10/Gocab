@@ -460,3 +460,104 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
 
   return { success: true, message, conversationId: conversation.id };
 }
+
+/**
+ * Add phone number to 360dialog allowlist (for testing / controlled launch before payment)
+ */
+export async function addPhoneTo360dialogAllowlist(phoneNumber: string) {
+  const config = await getWhatsAppApiConfig();
+  if (!config.d360ApiKey) {
+    throw new Error("Clé API 360dialog non configurée");
+  }
+
+  const d360Base = config.d360ApiUrl.replace(/\/$/, "");
+  const formattedPhone = phoneNumber.startsWith("+")
+    ? phoneNumber
+    : `+${phoneNumber.replace(/^0/, "212")}`;
+
+  const res = await fetch(`${d360Base}/agent_config/allowlist`, {
+    method: "POST",
+    headers: {
+      "D360-API-KEY": config.d360ApiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ phone_number: formattedPhone }),
+  });
+
+  const data = await res.json().catch(() => null);
+  return {
+    success: res.ok,
+    status: res.status,
+    response: data,
+    phoneNumber: formattedPhone,
+  };
+}
+
+/**
+ * Get current 360dialog allowlist and AI audience configuration
+ */
+export async function get360dialogAllowlist() {
+  const config = await getWhatsAppApiConfig();
+  if (!config.d360ApiKey) {
+    return { allowlist: [], audience: "ALLOWLISTED_ONLY" };
+  }
+
+  const d360Base = config.d360ApiUrl.replace(/\/$/, "");
+  try {
+    const res = await fetch(`${d360Base}/agent_config/allowlist`, {
+      headers: { "D360-API-KEY": config.d360ApiKey },
+    });
+    const data = await res.json().catch(() => null);
+
+    let audience = "ALLOWLISTED_ONLY";
+    try {
+      const configRes = await fetch(`${d360Base}/agent_config`, {
+        headers: { "D360-API-KEY": config.d360ApiKey },
+      });
+      const configData = await configRes.json().catch(() => null);
+      if (configData?.ai_audience) {
+        audience = configData.ai_audience;
+      }
+    } catch {}
+
+    const list = Array.isArray(data)
+      ? data
+      : data?.phone_numbers || data?.allowlist || [];
+
+    return {
+      success: res.ok,
+      allowlist: list,
+      audience,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message, allowlist: [], audience: "ALLOWLISTED_ONLY" };
+  }
+}
+
+/**
+ * Set 360dialog AI Audience (ALLOWLISTED_ONLY or EVERYONE)
+ */
+export async function set360dialogAudience(audience: "ALLOWLISTED_ONLY" | "EVERYONE") {
+  const config = await getWhatsAppApiConfig();
+  if (!config.d360ApiKey) {
+    throw new Error("Clé API 360dialog non configurée");
+  }
+
+  const d360Base = config.d360ApiUrl.replace(/\/$/, "");
+  const res = await fetch(`${d360Base}/agent_config`, {
+    method: "POST",
+    headers: {
+      "D360-API-KEY": config.d360ApiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ai_audience: audience }),
+  });
+
+  const data = await res.json().catch(() => null);
+  return {
+    success: res.ok,
+    status: res.status,
+    response: data,
+    audience,
+  };
+}

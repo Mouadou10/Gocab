@@ -132,6 +132,12 @@ export default function SettingsView() {
   const [testWhatsAppPhone, setTestWhatsAppPhone] = useState("+212662145109");
   const [testWhatsAppMessage, setTestWhatsAppMessage] = useState("Test de message WhatsApp direct depuis GoCab CRM !");
 
+  // 360dialog Allowlist State
+  const [waAllowlist, setWaAllowlist] = useState<string[]>(["+212645398932"]);
+  const [waAudience, setWaAudience] = useState<string>("ALLOWLISTED_ONLY");
+  const [newAllowlistPhone, setNewAllowlistPhone] = useState("+212645398932");
+  const [isAddingAllowlist, setIsAddingAllowlist] = useState(false);
+
   // Telegram Notifications State
   const [telegramBotToken, setTelegramBotToken] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
@@ -233,6 +239,15 @@ export default function SettingsView() {
             }
           })
           .catch(() => {});
+
+        // Fetch 360dialog allowlist
+        fetch("/api/whatsapp/allowlist")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.allowlist) setWaAllowlist(data.allowlist);
+            if (data.audience) setWaAudience(data.audience);
+          })
+          .catch(() => {});
       } catch (err) {
         console.error("Failed to load settings:", err);
         toast.error("Failed to load settings data");
@@ -242,6 +257,36 @@ export default function SettingsView() {
     }
     loadData();
   }, []);
+
+  // Handle adding phone number to 360dialog allowlist
+  async function handleAddAllowlistPhone(phoneToAdd: string) {
+    if (!phoneToAdd || !phoneToAdd.trim()) {
+      toast.error("Veuillez saisir un numéro de téléphone");
+      return;
+    }
+
+    setIsAddingAllowlist(true);
+    try {
+      const res = await fetch("/api/whatsapp/allowlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: phoneToAdd.trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || `✓ ${phoneToAdd} ajouté à la allowlist 360dialog !`, { icon: "🛡️" });
+        if (data.allowlist) setWaAllowlist(data.allowlist);
+        setNewAllowlistPhone("");
+      } else {
+        toast.error(data.error || "Échec d'ajout à la allowlist");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erreur réseau");
+    } finally {
+      setIsAddingAllowlist(false);
+    }
+  }
 
   // Save Department Targets
   async function handleSaveTargets(e: React.FormEvent) {
@@ -1521,7 +1566,134 @@ export default function SettingsView() {
             </div>
           </div>
 
-          {/* 4.2 Role Access Control for WhatsApp CRM */}
+          {/* 4.2 Allowlist 360dialog (Mode Test Gratuit & Lancement Contrôlé) */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span>🛡️</span> Allowlist 360dialog (Mode Test avant Paiement)
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                    ALLOWLISTED_ONLY
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Permet de tester les échanges WhatsApp CRM avec vos numéros autorisés avant de payer le forfait 360dialog.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
+                  {waAllowlist.length} numéro(s) autorisé(s)
+                </span>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Allow for +212645398932 */}
+            <div className="p-4 bg-gradient-to-r from-amber-50/90 to-orange-50/70 rounded-2xl border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                  <span>📱</span> Numéro de test principal demandé :
+                </span>
+                <p className="font-mono font-black text-sm text-navy">
+                  +212 6 45 39 89 32
+                </p>
+                <p className="text-[11px] text-amber-900/80">
+                  Ajoute ce numéro à la allowlist 360dialog pour débloquer immédiatement l&apos;envoi et la réception de tests.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAddAllowlistPhone("+212645398932")}
+                disabled={isAddingAllowlist}
+                className="px-4 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-500/20 transition-all cursor-pointer shrink-0 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isAddingAllowlist ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>✓</span>
+                )}
+                <span>Autoriser +212 6 45 39 89 32 en 1 clic</span>
+              </button>
+            </div>
+
+            {/* Add custom number form */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Ajouter un autre numéro à la Allowlist
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newAllowlistPhone}
+                    onChange={(e) => setNewAllowlistPhone(e.target.value)}
+                    placeholder="+212645398932"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddAllowlistPhone(newAllowlistPhone)}
+                    disabled={isAddingAllowlist || !newAllowlistPhone.trim()}
+                    className="px-4 py-2 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    Ajouter
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Numéros actuellement autorisés
+                </label>
+                <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 rounded-xl border border-gray-100 min-h-[38px] items-center">
+                  {waAllowlist.length === 0 ? (
+                    <span className="text-[11px] text-gray-400">Aucun numéro enregistré</span>
+                  ) : (
+                    waAllowlist.map((ph, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1"
+                      >
+                        <span>✓</span>
+                        <span>{ph}</span>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Official cURL Command Preview (From Documentation) */}
+            <div className="bg-gray-900 text-gray-200 p-4 rounded-2xl space-y-2 text-xs font-mono">
+              <div className="flex items-center justify-between text-gray-400 text-[11px]">
+                <span className="flex items-center gap-1.5 font-bold text-gray-300">
+                  <span>💻</span> Commande cURL officielle (Documentation 360dialog)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cmd = `curl -s -X POST https://waba-v2.360dialog.io/agent_config/allowlist \\\n  -H "D360-API-KEY: ${waD360ApiKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{ "phone_number": "+212645398932" }'`;
+                    navigator.clipboard.writeText(cmd);
+                    toast.success("Commande cURL copiée !");
+                  }}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
+                >
+                  Copier la commande
+                </button>
+              </div>
+              <pre className="text-[11px] text-emerald-400 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+{`curl -s -X POST https://waba-v2.360dialog.io/agent_config/allowlist \\
+  -H "D360-API-KEY: ${waD360ApiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "phone_number": "+212645398932" }'`}
+              </pre>
+            </div>
+          </div>
+
+          {/* 4.3 Role Access Control for WhatsApp CRM */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
               <div>
