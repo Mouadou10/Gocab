@@ -3,13 +3,102 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const claims = await prisma.accidentClaim.findMany({
+    // 1. Fetch all vehicles currently in "Accident" status
+    const accidentVehicles = await prisma.vehicle.findMany({
+      where: {
+        status: { in: ["Accident", "accident", "Accidenté"] },
+      },
+      include: {
+        driverProfile: true,
+      },
+    });
+
+    // 2. Fetch all existing claims
+    let claims = await prisma.accidentClaim.findMany({
       include: {
         vehicle: true,
         driver: true,
       },
       orderBy: { created_at: "desc" },
     });
+
+    // Set of vehicle IDs that already have an ACTIVE claim (not VEHICLE_BACK)
+    const activeClaimVehicleIds = new Set(
+      claims
+        .filter((c) => c.timeline_step !== "VEHICLE_BACK")
+        .map((c) => c.vehicle_id)
+    );
+
+    // Reference date: check if existing claims have a common creation date (e.g. 13 days ago)
+    const sampleActiveClaim = claims.find((c) => c.timeline_step !== "VEHICLE_BACK");
+    const defaultCreatedAt = sampleActiveClaim?.created_at || new Date(Date.now() - 13 * 24 * 60 * 60 * 1000);
+
+    // 3. For any vehicle in "Accident" status missing an active claim, auto-create it
+    let hasCreatedClaims = false;
+    for (const v of accidentVehicles) {
+      if (!activeClaimVehicleIds.has(v.id)) {
+        // Look up driver if not linked directly
+        let driver = v.driverProfile;
+        if (!driver && v.assigned_driver_name) {
+          driver = await prisma.driverProfile.findFirst({
+            where: {
+              OR: [
+                { fullName: { contains: v.assigned_driver_name.trim() } },
+                { assignedVehicleId: v.id },
+              ],
+            },
+          }).catch(() => null);
+        }
+
+        const claimDate = v.total_downtime_days && v.total_downtime_days > 0
+          ? new Date(Date.now() - v.total_downtime_days * 24 * 60 * 60 * 1000)
+          : defaultCreatedAt;
+
+        await prisma.accidentClaim.create({
+          data: {
+            vehicle_id: v.id,
+            driver_id: driver?.id || null,
+            driver_name: v.assigned_driver_name || driver?.fullName || null,
+            driver_phone: v.assigned_driver_phone || driver?.phoneSanitized || null,
+            severity: "HARD",
+            fault: null,
+            timeline_step: "CAR_IN_GARAGE",
+            step_updated_at: claimDate,
+            created_at: claimDate,
+          },
+        });
+        hasCreatedClaims = true;
+      }
+    }
+
+    // 4. If any active claim belongs to a vehicle that is NO LONGER in "Accident" status, sync to VEHICLE_BACK
+    const accidentVehicleIds = new Set(accidentVehicles.map((v) => v.id));
+    let hasUpdatedClaims = false;
+    for (const c of claims) {
+      if (c.timeline_step !== "VEHICLE_BACK" && c.vehicle && !accidentVehicleIds.has(c.vehicle_id)) {
+        // Vehicle is now Actif, Available, or In garage -> resolve the claim
+        await prisma.accidentClaim.update({
+          where: { id: c.id },
+          data: {
+            timeline_step: "VEHICLE_BACK",
+            step_updated_at: new Date(),
+          },
+        });
+        hasUpdatedClaims = true;
+      }
+    }
+
+    // If changes occurred, reload updated claims list
+    if (hasCreatedClaims || hasUpdatedClaims) {
+      claims = await prisma.accidentClaim.findMany({
+        include: {
+          vehicle: true,
+          driver: true,
+        },
+        orderBy: { created_at: "desc" },
+      });
+    }
+
     return NextResponse.json({ success: true, claims });
   } catch (error: any) {
     console.error("Error fetching accident claims:", error);
