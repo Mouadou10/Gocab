@@ -12,12 +12,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 function GoCabLogoLarge() {
   return (
-    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-14 h-14">
-      <rect width="48" height="48" rx="14" fill="#1e3a5f" />
-      <path d="M10 28l8-12 6 8 5-6 9 10" stroke="#f5c842" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="34" cy="32" r="4" fill="#f5c842"/>
-      <circle cx="18" cy="32" r="4" fill="#f5c842"/>
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/logo.png"
+      alt="GoCab Logo"
+      className="w-16 h-16 object-contain drop-shadow-md"
+    />
   );
 }
 
