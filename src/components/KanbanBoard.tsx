@@ -1346,6 +1346,12 @@ export default function KanbanBoard() {
                 {language === "fr" ? "Mon Journal" : language === "ar" ? "سجلي" : "My Log"}
               </span>
             </button>
+
+            {/* Notification Icon for Due Reminders */}
+            <ReminderAlert
+              leads={leads}
+              onSelectLead={(lead) => setSelectedLead(lead)}
+            />
             
             {/* User Profile Pill & Trigger */}
             {effectiveUserName && (
@@ -1695,8 +1701,7 @@ export default function KanbanBoard() {
         />
       )}
 
-      {/* Reminder Alerts - Only for Lead Acquisition Junior */}
-      {userRole === "LEAD_ACQUISITION_JR" && <ReminderAlert leads={leads} />}
+
 
       {/* Target Reached Celebration Modal (Lead Acquisition Only) */}
       {showCelebrationModal && (activeTab === "leads" || userRole === "LEAD_ACQUISITION_JR") && (
