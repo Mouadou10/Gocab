@@ -48,9 +48,37 @@ export async function PATCH(req: Request, context: any) {
       isStatusChange = true;
     }
 
+    // Comment Handling: Append new comment with timeline_step & author
+    if (body.comment && typeof body.comment === "string" && body.comment.trim().length > 0) {
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+      } catch {
+        existingComments = [];
+      }
+
+      const commentStep = body.timeline_step || currentClaim.timeline_step;
+      const newCommentEntry = {
+        id: crypto.randomUUID(),
+        comment: body.comment.trim(),
+        timeline_step: commentStep,
+        author: body.author || "Agent",
+        created_at: new Date().toISOString(),
+      };
+
+      existingComments.unshift(newCommentEntry);
+      updateData.comments = JSON.stringify(existingComments);
+    } else if (body.comments !== undefined) {
+      updateData.comments = typeof body.comments === "string" ? body.comments : JSON.stringify(body.comments);
+    }
+
     const updatedClaim = await prisma.accidentClaim.update({
       where: { id },
       data: updateData,
+      include: {
+        vehicle: true,
+        driver: true,
+      },
     });
 
     // Integration Logic: If it moved to READY_FOR_PICKUP, create a FieldTask

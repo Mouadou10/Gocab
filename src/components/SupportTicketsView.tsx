@@ -213,8 +213,8 @@ export default function SupportTicketsView() {
           restore_vehicle_status: true,
           target_vehicle_status: "Actif",
           repair_cost: repairCost ? Number(repairCost) : null,
-          garage_name: garageName,
-          resolution_notes: resolutionNotes,
+          garage_name: garageName ? garageName.trim() : null,
+          resolution_notes: resolutionNotes ? resolutionNotes.trim() : null,
         }),
       });
 
@@ -232,6 +232,13 @@ export default function SupportTicketsView() {
     } finally {
       setIsResolvingSubmitting(false);
     }
+  }
+
+  function handleOpenResolutionModal(ticket: MaintenanceTicket) {
+    setResolvingTicket(ticket);
+    setGarageName(ticket.garage_name || "");
+    setRepairCost(ticket.repair_cost !== undefined && ticket.repair_cost !== null ? String(ticket.repair_cost) : "");
+    setResolutionNotes(ticket.resolution_notes || "");
   }
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -256,6 +263,7 @@ export default function SupportTicketsView() {
     if (isActiveTicket) {
       setTickets((tickets) => {
         const activeIndex = tickets.findIndex((t) => t.id === activeId);
+        if (activeIndex === -1) return tickets;
         
         let newStatus = tickets[activeIndex].status;
         
@@ -280,14 +288,20 @@ export default function SupportTicketsView() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    const originalTicket = activeDragTicket;
     setActiveDragTicket(null);
+
     const { active, over } = event;
-    if (!over) return;
+    if (!over || !originalTicket) {
+      // Revert visual change if dropped outside any column
+      fetchTickets();
+      return;
+    }
 
-    const activeTicket = tickets.find((t) => t.id === active.id);
-    if (!activeTicket) return;
+    const activeId = active.id as string;
+    const sourceStatus = originalTicket.status;
 
-    let targetStatus = activeTicket.status;
+    let targetStatus: string | null = null;
 
     if (TICKET_COLUMNS.includes(over.id as any)) {
       targetStatus = over.id as string;
@@ -298,28 +312,41 @@ export default function SupportTicketsView() {
       }
     }
 
-    if (targetStatus === activeTicket.status) return;
+    if (!targetStatus || targetStatus === sourceStatus) {
+      // Revert if dropped back in original column or invalid target
+      fetchTickets();
+      return;
+    }
 
-    if (targetStatus === "RESOLVED") {
-      setResolvingTicket(activeTicket);
-      setRepairCost("");
-      setGarageName("");
-      setResolutionNotes("");
-    } else {
-      try {
-        await fetch(`/api/tickets/${activeTicket.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: targetStatus }),
-        });
-        toast.success("Ticket status updated");
+    try {
+      const payload: any = { status: targetStatus };
+      if (targetStatus === "RESOLVED") {
+        payload.restore_vehicle_status = true;
+        payload.target_vehicle_status = "Actif";
+      }
+
+      const res = await fetch(`/api/tickets/${activeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        toast.success(
+          targetStatus === "RESOLVED"
+            ? "Ticket marked as resolved"
+            : `Ticket moved to ${targetStatus === "IN_PROGRESS" ? "In Progress" : "Open"}`
+        );
         fetchTickets();
         notifyMutation("tickets");
-      } catch (err: any) {
+      } else {
         toast.error("Failed to update status");
-        console.error("Failed to update status on drag end", err);
         fetchTickets();
       }
+    } catch (err: any) {
+      toast.error("Failed to update status");
+      console.error("Failed to update status on drag end", err);
+      fetchTickets();
     }
   };
 
@@ -469,6 +496,7 @@ export default function SupportTicketsView() {
                   }}
                   onDeleteClick={handleDeleteTicket}
                   onCancelWaiverClick={handleCancelWaiver}
+                  onResolveClick={handleOpenResolutionModal}
                 />
               ))}
             </div>
@@ -578,7 +606,8 @@ export default function SupportTicketsView() {
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-bold text-navy flex items-center gap-2">
-                <span>✅</span> Resolve Ticket
+                <span>{resolvingTicket.status === "RESOLVED" ? "📝" : "✅"}</span>{" "}
+                {resolvingTicket.status === "RESOLVED" ? "Resolution Details" : "Resolve Ticket"}
               </h3>
               <button
                 onClick={() => setResolvingTicket(null)}
@@ -624,11 +653,10 @@ export default function SupportTicketsView() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Resolution Notes
+                  Resolution Notes (Optional)
                 </label>
                 <textarea
-                  required
-                  placeholder="Describe what was fixed..."
+                  placeholder="Describe what was fixed or actions taken..."
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-navy/30 focus:outline-none min-h-[80px]"
@@ -648,7 +676,7 @@ export default function SupportTicketsView() {
                   disabled={isResolvingSubmitting}
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
                 >
-                  {isResolvingSubmitting ? "Resolving..." : "Confirm & Resolve"}
+                  {isResolvingSubmitting ? "Saving..." : resolvingTicket.status === "RESOLVED" ? "Save Details" : "Confirm & Resolve"}
                 </button>
               </div>
             </form>

@@ -194,7 +194,8 @@ export default function FleetPerformanceView() {
         // Pre-populate input values with cleared amounts
         const initialInputs: Record<string, number> = {};
         for (const d of data.drivers) {
-          initialInputs[d.id] = d.clearedTodayMAD > 0 ? d.clearedTodayMAD : d.expectedTodayMAD;
+          initialInputs[d.id] =
+            d.clearedTodayMAD !== undefined && d.clearedTodayMAD !== null ? d.clearedTodayMAD : 0;
         }
         setPaymentInputs(initialInputs);
       }
@@ -671,7 +672,6 @@ export default function FleetPerformanceView() {
               <tr>
                 <th className="py-4 px-6">Chauffeur & Contact</th>
                 <th className="py-4 px-4">Véhicule</th>
-                <th className="py-4 px-4">Type Contrat</th>
                 <th className="py-4 px-4 text-center">Attendu Aujourd'hui</th>
                 <th className="py-4 px-4 text-center">Montant Encaissé (MAD)</th>
                 <th className="py-4 px-4 text-center">Jours Sans Versement</th>
@@ -682,7 +682,7 @@ export default function FleetPerformanceView() {
             <tbody className="divide-y divide-gray-100">
               {filteredDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-400">
+                  <td colSpan={7} className="py-12 text-center text-gray-400">
                     Aucun chauffeur trouvé pour ces critères.
                   </td>
                 </tr>
@@ -739,42 +739,21 @@ export default function FleetPerformanceView() {
                         )}
                       </td>
 
-                      {/* Contract Type */}
-                      <td className="py-4 px-4">
-                        <select
-                          value={driver.contractType}
-                          onChange={async (e) => {
-                            const newType = e.target.value;
-                            try {
-                              const res = await fetch(`/api/drivers/${driver.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ contractType: newType }),
-                              });
-                              if (res.ok) {
-                                fetchDriverCollections(); // Refresh the list
-                              }
-                            } catch (err) {
-                              console.error(err);
-                            }
-                          }}
-                          className={`w-full px-2 py-1.5 font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
-                            driver.contractType === 'WEEKLY'
-                              ? 'border-purple-200 bg-purple-50 text-purple-700 focus:ring-purple-200'
-                              : 'border-blue-200 bg-blue-50 text-blue-700 focus:ring-blue-200'
-                          }`}
-                        >
-                          <option value="DAILY">📅 Journalier (300 DH)</option>
-                          <option value="WEEKLY">🗓️ Hebdo (1800 DH)</option>
-                        </select>
-                      </td>
-
                       {/* Expected Today */}
                       <td className="py-4 px-4 text-center font-mono font-bold text-gray-700">
                         {driver.expectedTodayMAD > 0 ? (
-                          <span>{driver.expectedTodayMAD} MAD</span>
+                          <div className="flex flex-col items-center justify-center">
+                            <span>{driver.expectedTodayMAD} MAD</span>
+                            {driver.contractType === "WEEKLY" && (
+                              <span className="text-3xs text-purple-700 bg-purple-50 font-semibold px-1.5 py-0.5 rounded-md mt-0.5">
+                                Hebdo
+                              </span>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-gray-400 text-2xs">0 MAD (Repos)</span>
+                          <span className="text-gray-400 text-2xs">
+                            {driver.contractType === "WEEKLY" ? "0 MAD (Repos Hebdo)" : "0 MAD (Repos)"}
+                          </span>
                         )}
                       </td>
 

@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import toast from "react-hot-toast";
 import VehicleDrawer, { Vehicle } from "./VehicleDrawer";
 import TicketDrawer from "./TicketDrawer";
 import VehicleCSVUploader from "./VehicleCSVUploader";
@@ -103,10 +104,18 @@ export default function FleetView() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
+        if (newStatus === "Accident") {
+          toast.success("Statut Accidenté : Tickets Support et Assurance créés automatiquement !");
+        } else {
+          toast.success("Statut du véhicule mis à jour");
+        }
         fetchVehicles();
+      } else {
+        toast.error("Erreur lors de la mise à jour du statut");
       }
     } catch (err) {
       console.error("Failed to update status:", err);
+      toast.error("Erreur réseau");
     }
   }
 

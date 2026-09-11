@@ -10,6 +10,7 @@ interface TicketKanbanCardProps {
   onWaiveClick: (ticket: MaintenanceTicket) => void;
   onDeleteClick: (id: string) => void;
   onCancelWaiverClick: (id: string) => void;
+  onResolveClick?: (ticket: MaintenanceTicket) => void;
   isResolved: boolean;
 }
 
@@ -19,6 +20,7 @@ export default function TicketKanbanCard({
   onWaiveClick,
   onDeleteClick,
   onCancelWaiverClick,
+  onResolveClick,
   isResolved,
 }: TicketKanbanCardProps) {
   const {
@@ -150,14 +152,48 @@ export default function TicketKanbanCard({
         </div>
       )}
 
-      {/* Action Buttons (visible on hover or always on touch devices via media query, but let's just make them visible at the bottom) */}
-      <div className="flex items-center justify-between mt-1 pt-3 border-t border-gray-100">
-        <button
-          onClick={() => onWaiveClick(ticket)}
-          className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
-        >
-          💸 Waive Payment
-        </button>
+      {/* Resolution Details (if available) */}
+      {isResolved && (ticket.garage_name || (ticket.repair_cost !== undefined && ticket.repair_cost !== null) || ticket.resolution_notes) && (
+        <div className="bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-[10px] p-2.5 rounded-xl space-y-1">
+          <div className="font-bold text-emerald-800 flex items-center justify-between">
+            <span>🔧 Resolution Info</span>
+            {ticket.repair_cost !== undefined && ticket.repair_cost !== null && (
+              <span className="font-mono font-bold bg-emerald-100 text-emerald-850 px-1.5 py-0.5 rounded">
+                {ticket.repair_cost.toLocaleString()} MAD
+              </span>
+            )}
+          </div>
+          {ticket.garage_name && (
+            <div className="text-[10px] text-emerald-700">
+              📍 <strong>Garage:</strong> {ticket.garage_name}
+            </div>
+          )}
+          {ticket.resolution_notes && (
+            <p className="text-[10px] text-emerald-700 italic line-clamp-2">
+              "{ticket.resolution_notes}"
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex items-center justify-between mt-1 pt-3 border-t border-gray-100 gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onWaiveClick(ticket)}
+            className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
+          >
+            💸 Waive
+          </button>
+          {onResolveClick && (
+            <button
+              onClick={() => onResolveClick(ticket)}
+              className="text-xs font-semibold text-navy hover:text-navy/80 transition-colors"
+            >
+              {isResolved ? "📝 Details" : "✅ Resolve"}
+            </button>
+          )}
+        </div>
         <button
           onClick={() => onDeleteClick(ticket.id)}
           className="text-xs text-gray-400 hover:text-red-600 transition-colors"

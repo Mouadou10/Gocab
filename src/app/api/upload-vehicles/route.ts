@@ -24,9 +24,9 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "impounded";
   }
 
-  // 3. Maintenance & Accident (accident is maintenance per user specifications)
-  if (s.includes("garage") || s.includes("maintenance") || s.includes("repair") || s.includes("accident")) {
-    return "In garage";
+  // 3. Maintenance & Accident (maintenance status is Accident status in the CRM per user specifications)
+  if (s.includes("accident") || s.includes("maintenance") || s.includes("garage") || s.includes("repair") || s.includes("panne")) {
+    return "Accident";
   }
 
   // 4. Blocked
@@ -359,17 +359,16 @@ export async function POST(request: NextRequest) {
               });
               tickets_created++;
             }
-          } else if (status === "In garage") {
-            // 3. Maintenance or Accident (accident is treated as maintenance per instructions)
-            const isAccident = rawStatus?.toLowerCase().includes("accident");
-            const ticketType = isAccident ? "Accident" : "Repair";
-            const priority = isAccident ? "Critical" : "Normal";
+          } else if (status === "Accident" || status === "In garage") {
+            // 3. Maintenance / Accident: create BOTH Support Ticket (MaintenanceTicket) AND Assurance Ticket (AccidentClaim)
+            const priority = downtimeDays >= 7 ? "Critical" : "Urgent";
+            const desc = `💥 Véhicule en maintenance / accident signalé via import CSV (${downtimeDays > 0 ? `${downtimeDays} jours d'immobilisation` : "En cours"}).`;
 
+            // A. Create or update Support Ticket (Driver Support Kanban)
             const existingTicket = await prisma.maintenanceTicket.findFirst({
               where: {
                 vehicle_id: vehicleId,
                 status: { in: ["OPEN", "IN_PROGRESS"] },
-                ticket_type: { in: ["Repair", "Accident", "Maintenance", "Vidange"] },
               },
             });
 
@@ -378,20 +377,53 @@ export async function POST(request: NextRequest) {
                 data: {
                   vehicle_id: vehicleId,
                   plate_number,
-                  driver_name: driverName || null,
+                  driver_name: driverName || matchedDriver?.fullName || null,
                   driver_phone: matchedDriver?.phoneSanitized || null,
-                  ticket_type: ticketType,
+                  ticket_type: "Accident",
                   priority,
                   status: "OPEN",
-                  description: `🛠️ ${isAccident ? "Accident déclaré" : "Entrée en maintenance"} signalée via import CSV (${downtimeDays > 0 ? `${downtimeDays} jours d'immobilisation` : "En cours"}).`,
+                  description: desc,
                   created_at: statusStartDate,
                   sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
                 },
               });
               tickets_created++;
             }
+
+            // B. Create or update Assurance Ticket (Insurance & Accidents Claim)
+            const existingClaim = await prisma.accidentClaim.findFirst({
+              where: {
+                vehicle_id: vehicleId,
+                timeline_step: { not: "VEHICLE_BACK" },
+              },
+            });
+
+            if (!existingClaim) {
+              await prisma.accidentClaim.create({
+                data: {
+                  vehicle_id: vehicleId,
+                  driver_id: matchedDriver?.id || null,
+                  driver_name: driverName || matchedDriver?.fullName || null,
+                  driver_phone: matchedDriver?.phoneSanitized || null,
+                  severity: "HARD",
+                  fault: null,
+                  timeline_step: "CAR_IN_GARAGE",
+                  step_updated_at: statusStartDate,
+                  created_at: statusStartDate,
+                  comments: JSON.stringify([
+                    {
+                      id: crypto.randomUUID(),
+                      timeline_step: "CAR_IN_GARAGE",
+                      comment: `Dossier créé automatiquement via import Flotte CSV (${downtimeDays > 0 ? `${downtimeDays} jours d'immobilisation` : "En cours"}).`,
+                      author: "Import Flotte",
+                      created_at: statusStartDate.toISOString(),
+                    },
+                  ]),
+                },
+              });
+            }
           } else if (status === "Actif" || status === "Available") {
-            // 4. Vehicle is back on the road -> auto-resolve open downtime tickets!
+            // 4. Vehicle is back on the road -> auto-resolve open downtime tickets & assurance claims!
             const openTickets = await prisma.maintenanceTicket.findMany({
               where: {
                 vehicle_id: vehicleId,
@@ -413,6 +445,18 @@ export async function POST(request: NextRequest) {
               });
               tickets_resolved += openTickets.length;
             }
+
+            // Auto-resolve active accident claims in Assurance
+            await prisma.accidentClaim.updateMany({
+              where: {
+                vehicle_id: vehicleId,
+                timeline_step: { not: "VEHICLE_BACK" },
+              },
+              data: {
+                timeline_step: "VEHICLE_BACK",
+                step_updated_at: new Date(),
+              },
+            });
           }
         } catch (ticketErr: any) {
           console.warn("Ticket auto-management warning:", ticketErr?.message);

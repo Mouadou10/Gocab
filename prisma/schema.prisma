@@ -360,6 +360,7 @@ model AccidentClaim {
   
   timeline_step     String    @default("NEW_ACCIDENT") // NEW_ACCIDENT, CAR_IN_GARAGE, STARTING_REPAIR, INSURANCE_DOCS, READY_FOR_PICKUP, VEHICLE_BACK
   step_updated_at   DateTime  @default(now())
+  comments          String?   @default("[]") // JSON string: [{ id, timeline_step, comment, author, created_at }]
   
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt

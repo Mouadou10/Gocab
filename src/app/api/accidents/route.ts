@@ -65,9 +65,43 @@ export async function GET() {
             timeline_step: "CAR_IN_GARAGE",
             step_updated_at: claimDate,
             created_at: claimDate,
+            comments: JSON.stringify([
+              {
+                id: crypto.randomUUID(),
+                timeline_step: "CAR_IN_GARAGE",
+                comment: "Dossier accident synchronisé automatiquement depuis la flotte.",
+                author: "Système",
+                created_at: claimDate.toISOString(),
+              },
+            ]),
           },
         });
         hasCreatedClaims = true;
+
+        // Ensure Support ticket also exists
+        const existingSupportTicket = await prisma.maintenanceTicket.findFirst({
+          where: {
+            vehicle_id: v.id,
+            status: { in: ["OPEN", "IN_PROGRESS"] },
+          },
+        });
+
+        if (!existingSupportTicket) {
+          await prisma.maintenanceTicket.create({
+            data: {
+              vehicle_id: v.id,
+              plate_number: v.plate_number,
+              driver_name: v.assigned_driver_name || driver?.fullName || null,
+              driver_phone: v.assigned_driver_phone || driver?.phoneSanitized || null,
+              ticket_type: "Accident",
+              priority: (v.total_downtime_days || 0) >= 7 ? "Critical" : "Urgent",
+              status: "OPEN",
+              description: `💥 Véhicule en statut Accidenté. Réparation & assurance requises.`,
+              created_at: claimDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          });
+        }
       }
     }
 

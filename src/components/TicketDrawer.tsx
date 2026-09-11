@@ -27,6 +27,9 @@ export interface MaintenanceTicket {
   payment_waived: boolean;
   waived_days: number;
   waiver_reason: string | null;
+  repair_cost?: number | null;
+  garage_name?: string | null;
+  resolution_notes?: string | null;
   created_at: string;
   resolved_at: string | null;
 }

@@ -48,9 +48,12 @@ export async function GET(request: NextRequest) {
       orderBy: { fullName: "asc" },
     });
 
-    // Check if morning CSV was uploaded for this target date
+    // Check if morning or evening CSV was uploaded for this target date
     const hasMorningCsv = drivers.some((d) =>
       d.payments.some((p) => p.morningBalance !== null && p.morningBalance !== undefined)
+    );
+    const hasEveningCsv = drivers.some((d) =>
+      d.payments.some((p) => p.eveningBalance !== null && p.eveningBalance !== undefined)
     );
 
     let totalMorningTargetMAD = 0;
@@ -86,24 +89,30 @@ export async function GET(request: NextRequest) {
         morningDebt = Math.abs(Math.min(0, todayPayment.morningBalance));
       }
 
+      // Current arrears: reflects latest balance (evening if uploaded, morning if uploaded, else driver profile)
+      let currentArrears = driver.currentArrearsMAD;
+      if (todayPayment?.eveningBalance !== null && todayPayment?.eveningBalance !== undefined) {
+        currentArrears = Math.abs(Math.min(0, todayPayment.eveningBalance));
+      } else if (hasMorningCsv && todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
+        currentArrears = morningDebt;
+      }
+
       totalMorningTargetMAD += morningDebt;
       totalExpectedContractMAD += expectedTodayMAD;
       totalClearedTodayMAD += clearedTodayMAD;
-      if (hasMorningCsv) {
-        totalArrearsAllMAD += driver.currentArrearsMAD;
-      }
+      totalArrearsAllMAD += currentArrears;
 
-      // 3rd Day Red Rule: Only evaluated when morning CSV has been uploaded
+      // 3rd Day Red Rule: Evaluated when morning or evening CSV has been uploaded
       let isCriticalRed = false;
       const unpaidDays =
         driver.consecutiveUnpaidDays > 0
           ? driver.consecutiveUnpaidDays
-          : driver.currentArrearsMAD > 0
-          ? Math.max(1, Math.ceil(driver.currentArrearsMAD / 300))
+          : currentArrears > 0
+          ? Math.max(1, Math.ceil(currentArrears / 300))
           : 0;
 
-      if (hasMorningCsv) {
-        isCriticalRed = unpaidDays >= 3 || driver.currentArrearsMAD >= 900;
+      if (hasMorningCsv || hasEveningCsv) {
+        isCriticalRed = unpaidDays >= 3 || currentArrears >= 900;
         if (isCriticalRed) criticalRedCount++;
       }
 
@@ -121,8 +130,8 @@ export async function GET(request: NextRequest) {
               status: driver.assignedVehicle.status,
             }
           : null,
-        currentArrearsMAD: hasMorningCsv ? morningDebt : driver.currentArrearsMAD,
-        consecutiveUnpaidDays: hasMorningCsv ? unpaidDays : 0,
+        currentArrearsMAD: currentArrears,
+        consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
         isCriticalRed,
         expectedTodayMAD,
         clearedTodayMAD,
@@ -147,17 +156,19 @@ export async function GET(request: NextRequest) {
       date: dateParam,
       dayOfWeek,
       hasMorningCsv,
+      hasEveningCsv,
       summary: {
         totalDrivers: drivers.length,
         totalExpectedTodayMAD: effectiveMorningTargetMAD,
         totalMorningTargetMAD: effectiveMorningTargetMAD,
         totalClearedTodayMAD,
         remainingToCollectMAD,
-        totalArrearsAllMAD: hasMorningCsv ? effectiveMorningTargetMAD : totalArrearsAllMAD,
+        totalArrearsAllMAD,
         target60PercentMAD,
         collectionPercentage,
         criticalRedCount,
         hasMorningCsv,
+        hasEveningCsv,
       },
       drivers: driverList,
     });

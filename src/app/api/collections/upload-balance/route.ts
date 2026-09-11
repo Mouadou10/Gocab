@@ -90,8 +90,14 @@ export async function POST(request: NextRequest) {
     const endOfDay = new Date(targetDate);
     endOfDay.setUTCHours(23, 59, 59, 999);
 
-    // Fetch all active drivers and vehicles from database
-    const [allDrivers, allVehicles] = await Promise.all([
+    // If Monday (dayOfWeek === 1), fetch previous Friday through Sunday ledgers to compare balances
+    const fridayDate = new Date(targetDate);
+    fridayDate.setUTCDate(fridayDate.getUTCDate() - 3); // 3 days before Monday is Friday
+    const startOfFriday = new Date(fridayDate);
+    startOfFriday.setUTCHours(0, 0, 0, 0);
+
+    // Fetch all active drivers, vehicles, and prior ledgers on Monday from database
+    const [allDrivers, allVehicles, priorLedgers] = await Promise.all([
       prisma.driverProfile.findMany({
         include: {
           assignedVehicle: true,
@@ -106,7 +112,28 @@ export async function POST(request: NextRequest) {
         },
       }),
       prisma.vehicle.findMany(),
+      dayOfWeek === 1
+        ? prisma.paymentLedger.findMany({
+            where: {
+              paymentDate: {
+                gte: startOfFriday,
+                lt: startOfDay,
+              },
+            },
+            orderBy: {
+              paymentDate: "desc",
+            },
+          })
+        : Promise.resolve([] as any[]),
     ]);
+
+    // Map driverId -> most recent prior ledger (Friday evening/morning)
+    const priorLedgerMap = new Map<string, (typeof priorLedgers)[0]>();
+    for (const pl of priorLedgers) {
+      if (!priorLedgerMap.has(pl.driverId)) {
+        priorLedgerMap.set(pl.driverId, pl);
+      }
+    }
 
     // Build fast lookup maps
     const phoneMap = new Map<string, typeof allDrivers[0]>();
@@ -329,8 +356,60 @@ export async function POST(request: NextRequest) {
         (driver as any).assignedVehicle = vehicle;
       }
 
-      // Expected amount for this driver today
-      const contract = (rawContract || driver.contractType || "DAILY").toUpperCase();
+      // Contract detection & expected amount
+      let contract = (rawContract || driver.contractType || "DAILY").toUpperCase();
+
+      if (dayOfWeek === 1) {
+        // MONDAY CONTRACT AUTO-DETECTION (WEEKLY 1,800 DH vs DAILY 300 DH)
+        // Retrieve driver's Friday (or most recent prior) balance
+        const priorEntry = priorLedgerMap.get(driver.id);
+        let fridayDebt = 0;
+        if (priorEntry) {
+          if (priorEntry.eveningBalance !== null && priorEntry.eveningBalance !== undefined) {
+            fridayDebt = priorEntry.eveningBalance < 0 ? Math.abs(priorEntry.eveningBalance) : 0;
+          } else if (priorEntry.morningBalance !== null && priorEntry.morningBalance !== undefined) {
+            fridayDebt = priorEntry.morningBalance < 0 ? Math.abs(priorEntry.morningBalance) : 0;
+          } else {
+            fridayDebt = priorEntry.arrearsMAD || 0;
+          }
+        } else {
+          fridayDebt = driver.currentArrearsMAD || 0;
+        }
+
+        const mondayDebt = balance < 0 ? Math.abs(balance) : 0;
+        const deltaDebt = mondayDebt - fridayDebt;
+
+        // Detection rules:
+        // 1. If added debt on Monday is ~1800 DH -> WEEKLY
+        // 2. If added debt is ~300 DH or ~600 DH (Saturday + Monday) -> DAILY
+        // 3. If fridayDebt was 0 and mondayDebt is ~1800 DH -> WEEKLY
+        // 4. If fridayDebt was 0 and mondayDebt is ~300 or ~600 DH -> DAILY
+        // 5. Special Edge Case: If mondayDebt is 1800, but fridayDebt > 0 (e.g. 1200 DH) and deltaDebt != 1800
+        //    (e.g. 1200 remaining + 300 Sat + 300 Mon = 1800 DH), this is DAILY, not weekly!
+        if (Math.abs(deltaDebt - 1800) <= 50) {
+          contract = "WEEKLY";
+        } else if (Math.abs(deltaDebt - 300) <= 50 || Math.abs(deltaDebt - 600) <= 50) {
+          contract = "DAILY";
+        } else if (fridayDebt === 0 && Math.abs(mondayDebt - 1800) <= 50) {
+          contract = "WEEKLY";
+        } else if (fridayDebt === 0 && (Math.abs(mondayDebt - 300) <= 50 || Math.abs(mondayDebt - 600) <= 50)) {
+          contract = "DAILY";
+        } else if (Math.abs(mondayDebt - 1800) <= 50 && fridayDebt > 0 && Math.abs(deltaDebt - 1800) > 100) {
+          contract = "DAILY";
+        }
+
+        // Persist detected contract type if changed
+        if (contract !== driver.contractType) {
+          await prisma.driverProfile
+            .update({
+              where: { id: driver.id },
+              data: { contractType: contract },
+            })
+            .catch(() => {});
+          driver.contractType = contract;
+        }
+      }
+
       let expectedMAD = 0;
       if (contract === "WEEKLY") {
         if (dayOfWeek === 1) expectedMAD = 1800;
