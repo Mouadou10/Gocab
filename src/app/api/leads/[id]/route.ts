@@ -97,14 +97,38 @@ export async function PATCH(
     // Guardrails removed per user request
     // ───────────────────────────────────────────────────────────────────────
 
-    // If status or column is changed or marked as called, stamp when it happened
-    if (
-      body.is_recalled ||
-      body.mark_as_called ||
-      body.brand_status !== undefined ||
-      body.training_status !== undefined ||
-      (body.board_column && body.board_column !== "NEW_LEADS")
-    ) {
+    // Retrieve the existing lead before update to accurately detect changes
+    const existingLead = await prisma.lead.findUnique({
+      where: { id },
+    });
+    if (!existingLead) {
+      return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
+    }
+
+    // Check if status or column actually changed compared to current database record
+    const isColumnChanged = body.board_column !== undefined && body.board_column !== existingLead.board_column;
+    const isBrandStatusChanged = body.brand_status !== undefined && body.brand_status !== existingLead.brand_status;
+    const isTrainingStatusChanged = body.training_status !== undefined && body.training_status !== existingLead.training_status;
+
+    // Explicit call confirm from the agent (e.g. checkbox "Marquer comme Rappelé (+1 Appel Comptabilisé)")
+    const isExplicitlyCalled = Boolean(body.mark_as_called || body.is_recalled);
+
+    // Presence confirmed call newly checked (e.g. "Appel de confirmation de présence effectué")
+    const isPresenceNewlyConfirmed = Boolean(body.presence_confirmed && !existingLead.presence_confirmed);
+
+    // Only update status_changed_at (counting as a call / status transition) if:
+    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called)
+    // 2. The agent newly confirmed presence by call
+    // 3. Status or pipeline column actually changed (e.g. initial transition out of NEW_LEADS or movement between columns)
+    // CRITICAL: Changing training date alone on a training fixed lead WITHOUT call confirm does NOT update status_changed_at.
+    const shouldStampStatusChanged =
+      isExplicitlyCalled ||
+      isPresenceNewlyConfirmed ||
+      isColumnChanged ||
+      isBrandStatusChanged ||
+      isTrainingStatusChanged;
+
+    if (shouldStampStatusChanged) {
       (updateData as any).status_changed_at = new Date();
     }
 
@@ -124,7 +148,7 @@ export async function PATCH(
       "Agent";
     const logEntries: { lead_id: string; agent: string; action: string; detail: string }[] = [];
 
-    if (body.brand_status !== undefined) {
+    if (isBrandStatusChanged) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -132,7 +156,7 @@ export async function PATCH(
         detail: `Statut → ${body.brand_status || "(vide)"}`,
       });
     }
-    if (body.training_status !== undefined) {
+    if (isTrainingStatusChanged) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -140,17 +164,54 @@ export async function PATCH(
         detail: `Formation → ${body.training_status || "(vide)"}`,
       });
     }
-    if (body.reminder_date !== undefined) {
+
+    // Detect if training date or recall date changed
+    const oldReminderStr = existingLead.reminder_date
+      ? new Date(existingLead.reminder_date).toISOString().split("T")[0]
+      : null;
+    const newReminderStr = body.reminder_date
+      ? new Date(body.reminder_date).toISOString().split("T")[0]
+      : null;
+    const isReminderChanged = body.reminder_date !== undefined && oldReminderStr !== newReminderStr;
+
+    if (isReminderChanged) {
+      const isTrainingFixedLead =
+        body.brand_status === "Training fixed" ||
+        existingLead.brand_status === "Training fixed" ||
+        body.board_column === "TRAINING_PIPELINE" ||
+        existingLead.board_column === "TRAINING_PIPELINE";
+
+      const action = isTrainingFixedLead ? "TRAINING_DATE_SET" : "RECALL_SET";
+      const formattedDate = newReminderStr
+        ? new Date(body.reminder_date!).toLocaleDateString("fr-FR")
+        : null;
+
+      const detail = formattedDate
+        ? isTrainingFixedLead
+          ? `Date de formation modifiée au ${formattedDate}`
+          : `Rappel fixé au ${formattedDate}`
+        : isTrainingFixedLead
+          ? "Date de formation supprimée"
+          : "Rappel supprimé";
+
       logEntries.push({
         lead_id: id,
         agent: agentName,
-        action: "RECALL_SET",
-        detail: body.reminder_date
-          ? `Rappel fixé au ${new Date(body.reminder_date).toLocaleDateString("fr-FR")}`
-          : "Rappel supprimé",
+        action,
+        detail,
       });
     }
-    if (body.presence_confirmed !== undefined) {
+
+    if (isExplicitlyCalled) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "CALL_INITIATED",
+        detail: "Appel effectué / prospect rappelé (+1 Appel Comptabilisé)",
+      });
+    }
+
+    if (body.presence_confirmed !== undefined && body.presence_confirmed !== existingLead.presence_confirmed) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -160,7 +221,7 @@ export async function PATCH(
           : "Confirmation de présence retirée",
       });
     }
-    if (body.notes !== undefined) {
+    if (body.notes !== undefined && body.notes !== existingLead.notes) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -169,10 +230,10 @@ export async function PATCH(
       });
     }
     if (
-      body.has_cin !== undefined ||
-      body.has_permis !== undefined ||
-      body.has_fiche_anthropometrique !== undefined ||
-      body.has_confirmation_adresse !== undefined
+      (body.has_cin !== undefined && body.has_cin !== existingLead.has_cin) ||
+      (body.has_permis !== undefined && body.has_permis !== existingLead.has_permis) ||
+      (body.has_fiche_anthropometrique !== undefined && body.has_fiche_anthropometrique !== existingLead.has_fiche_anthropometrique) ||
+      (body.has_confirmation_adresse !== undefined && body.has_confirmation_adresse !== existingLead.has_confirmation_adresse)
     ) {
       const docs: string[] = [];
       if (body.has_cin !== undefined) docs.push(`CIN ${body.has_cin ? "✓" : "✗"}`);
@@ -186,7 +247,7 @@ export async function PATCH(
         detail: `Documents : ${docs.join(", ")}`,
       });
     }
-    if (body.board_column !== undefined) {
+    if (isColumnChanged) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -194,7 +255,7 @@ export async function PATCH(
         detail: `Déplacé vers → ${body.board_column}`,
       });
     }
-    if (body.city !== undefined && body.city) {
+    if (body.city !== undefined && body.city !== existingLead.city && body.city) {
       logEntries.push({
         lead_id: id,
         agent: agentName,
@@ -202,7 +263,7 @@ export async function PATCH(
         detail: `Ville → ${body.city}`,
       });
     }
-    if (body.preorder_amount !== undefined) {
+    if (body.preorder_amount !== undefined && body.preorder_amount !== existingLead.preorder_amount) {
       logEntries.push({
         lead_id: id,
         agent: agentName,

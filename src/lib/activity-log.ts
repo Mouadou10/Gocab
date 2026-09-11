@@ -109,7 +109,9 @@ export async function getAgentActivityLogs(options: GetAgentActivityOptions = {}
     if (options.action === "WHATSAPP") {
       whereClause.action = { in: ["WHATSAPP_SENT", "WHATSAPP_OPENED"] };
     } else if (options.action === "STATUS") {
-      whereClause.action = { in: ["STATUS_CHANGED", "TRAINING_STATUS_CHANGED", "COLUMN_MOVED"] };
+      whereClause.action = { in: ["STATUS_CHANGED", "TRAINING_STATUS_CHANGED", "COLUMN_MOVED", "TRAINING_DATE_SET"] };
+    } else if (options.action === "RECALL_SET") {
+      whereClause.action = { in: ["RECALL_SET", "TRAINING_DATE_SET"] };
     } else {
       whereClause.action = options.action;
     }
@@ -209,7 +211,7 @@ export async function getAgentActivityLogs(options: GetAgentActivityOptions = {}
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     statusChanged: enrichedLogs.filter((l: any) => l.action === "STATUS_CHANGED" || l.action === "TRAINING_STATUS_CHANGED" || l.action === "COLUMN_MOVED").length,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recallSet: enrichedLogs.filter((l: any) => l.action === "RECALL_SET").length,
+    recallSet: enrichedLogs.filter((l: any) => l.action === "RECALL_SET" || l.action === "TRAINING_DATE_SET").length,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     whatsappSent: enrichedLogs.filter((l: any) => l.action === "WHATSAPP_SENT" || l.action === "WHATSAPP_OPENED").length,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -213,6 +213,14 @@ export default function AgentActivityModal({
           iconBg: "bg-amber-50 text-amber-700 border-amber-100",
           dotColor: "bg-amber-500",
         };
+      case "TRAINING_DATE_SET":
+        return {
+          icon: <Calendar className="w-3.5 h-3.5" />,
+          label: "Date Formation",
+          badgeColor: "bg-blue-50 text-blue-800 border-blue-200",
+          iconBg: "bg-blue-50 text-blue-700 border-blue-100",
+          dotColor: "bg-blue-500",
+        };
       case "CALL_INITIATED":
         return {
           icon: <Phone className="w-3.5 h-3.5" />,
