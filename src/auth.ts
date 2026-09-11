@@ -62,7 +62,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           "salma.abouri@gocab.io": {
             name: "Salma Abouri",
             fullName: "Salma Abouri",
-            role: "LEAD_ACQUISITION_JR",
+            role: "FLEET_PERF_MANAGER",
             fallbackId: "agent-salma-abouri-id",
           },
         };
@@ -98,7 +98,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                       email,
                       name: teamMeta.name,
                       fullName: teamMeta.fullName,
-                      role: teamMeta.role,
+                      role: altMatch.role || teamMeta.role,
                       isActive: true,
                     },
                   });

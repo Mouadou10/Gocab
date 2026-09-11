@@ -57,9 +57,9 @@ async function main() {
     if (existing) {
       await prisma.user.update({
         where: { email: member.email },
-        data: { ...memberData, passwordHash, mustChangePassword, isActive: true },
+        data: { ...memberData, role: existing.role || member.role, passwordHash, mustChangePassword, isActive: true },
       });
-      console.log(`✅ Updated:  ${member.email} (${member.role})`);
+      console.log(`✅ Updated:  ${member.email} (${existing.role || member.role})`);
     } else {
       await prisma.user.create({
         data: { ...memberData, passwordHash, mustChangePassword, isActive: true },

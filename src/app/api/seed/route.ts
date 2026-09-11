@@ -222,7 +222,7 @@ export async function GET() {
             email: member.email,
             name: member.name,
             fullName: member.fullName,
-            role: member.role,
+            role: existing.role || member.role,
             isActive: true,
           },
         });

@@ -133,17 +133,20 @@ async function syncSchema() {
         });
         console.log(`✨ User account created: ${member.email} (${member.role})`);
       } else {
+        // IMPORTANT: Preserve existing.role set by Ops Manager in Settings
+        // Never overwrite customized roles on redeployment!
+        const preservedRole = existing.role || member.role;
         await prisma.user.update({
           where: { id: existing.id },
           data: {
             email: member.email,
             name: member.name,
             fullName: member.fullName,
-            role: member.role,
+            role: preservedRole,
             isActive: true,
           },
         });
-        console.log(`✅ User account updated: ${member.email} (${member.role})`);
+        console.log(`✅ User account verified: ${member.email} (retained role: ${preservedRole})`);
       }
     } catch (err: any) {
       console.error(`User seed error for ${member.email}:`, err.message);

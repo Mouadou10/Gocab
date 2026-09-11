@@ -160,6 +160,11 @@ export default function SettingsView() {
   const [newUserPassword, setNewUserPassword] = useState("GoCab2024!");
   const [newUserRole, setNewUserRole] = useState("LEAD_ACQUISITION_JR");
 
+  // Role saving states
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [savedUserIds, setSavedUserIds] = useState<Record<string, boolean>>({});
+  const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
+
   // Load all settings and users on mount
   useEffect(() => {
     async function loadData() {
@@ -646,8 +651,9 @@ export default function SettingsView() {
     }
   }
 
-  // Change User Role
+  // Change User Role & Persist in Database
   async function handleUserRoleChange(userId: string, newRole: string) {
+    setSavingUserId(userId);
     try {
       const res = await fetch("/api/users", {
         method: "PATCH",
@@ -656,15 +662,27 @@ export default function SettingsView() {
       });
 
       if (res.ok) {
-        toast.success("User role updated successfully!");
+        const userName = users.find((u) => u.id === userId)?.name || "L'agent";
+        toast.success(`Rôle de ${userName} enregistré avec succès (${roleLabels[newRole] || newRole}) ! Conservé lors des redéploiements.`);
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
         );
+        setPendingRoles((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        setSavedUserIds((prev) => ({ ...prev, [userId]: true }));
+        setTimeout(() => {
+          setSavedUserIds((prev) => ({ ...prev, [userId]: false }));
+        }, 3000);
       } else {
-        toast.error("Failed to update user role");
+        toast.error("Échec de l'enregistrement du rôle");
       }
     } catch (err) {
-      toast.error("Network error updating user role");
+      toast.error("Erreur réseau lors de la mise à jour du rôle");
+    } finally {
+      setSavingUserId(null);
     }
   }
 
@@ -1318,18 +1336,57 @@ export default function SettingsView() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <select
-                          value={u.role}
-                          disabled={isPrimaryManager}
-                          onChange={(e) => handleUserRoleChange(u.id, e.target.value)}
-                          className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy font-medium text-gray-800 disabled:opacity-50"
-                        >
-                          {Object.keys(permissions).map((roleKey) => (
-                            <option key={roleKey} value={roleKey}>
-                              {roleLabels[roleKey] || roleKey}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={pendingRoles[u.id] !== undefined ? pendingRoles[u.id] : u.role}
+                            disabled={isPrimaryManager}
+                            onChange={(e) => {
+                              const selected = e.target.value;
+                              setPendingRoles((prev) => ({ ...prev, [u.id]: selected }));
+                              handleUserRoleChange(u.id, selected);
+                            }}
+                            className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy font-medium text-gray-800 disabled:opacity-50 cursor-pointer"
+                          >
+                            {Object.keys(permissions).map((roleKey) => (
+                              <option key={roleKey} value={roleKey}>
+                                {roleLabels[roleKey] || roleKey}
+                              </option>
+                            ))}
+                          </select>
+
+                          {!isPrimaryManager && (
+                            <button
+                              type="button"
+                              disabled={savingUserId === u.id}
+                              onClick={() => handleUserRoleChange(u.id, pendingRoles[u.id] || u.role)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 ${
+                                savedUserIds[u.id]
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : savingUserId === u.id
+                                  ? "bg-navy/10 text-navy animate-pulse"
+                                  : "bg-navy hover:bg-navy/90 text-white"
+                              }`}
+                              title="Sauvegarder définitivement ce rôle en base de données"
+                            >
+                              {savedUserIds[u.id] ? (
+                                <>
+                                  <span>✅</span>
+                                  <span>Enregistré</span>
+                                </>
+                              ) : savingUserId === u.id ? (
+                                <>
+                                  <span>⏳</span>
+                                  <span>Sauvegarde...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>💾</span>
+                                  <span>Sauvegarder</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         {!isPrimaryManager && (
