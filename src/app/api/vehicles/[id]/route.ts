@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
+import { processVehicleSideEffects } from "@/lib/services/vehicleService";
+import { logAudit } from "@/lib/services/auditLogger";
 
 /**
  * PATCH /api/vehicles/[id]
@@ -15,7 +17,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const { id } = await params;
     const body = await request.json();
 
@@ -84,24 +86,27 @@ export async function PATCH(
       data: updateData,
     });
 
-    // Import the vehicle service and audit logger at the top of the file (added in next chunk if needed)
+    const userId = session?.user?.name || session?.user?.email || session?.user?.id || "agent";
     
-    // Process Side-effects
-    const { processVehicleSideEffects } = require("@/lib/services/vehicleService");
-    // We assume the user ID is retrieved from auth or fallback
-    const userId = "ops_manager"; // In a real setup, extract from session
+    // Process Side-effects defensively
+    try {
+      await processVehicleSideEffects(id, body, prevVehicle, vehicle, userId);
+    } catch (sideEffectErr) {
+      console.error("Error processing vehicle side-effects:", sideEffectErr);
+    }
     
-    await processVehicleSideEffects(id, body, prevVehicle, vehicle, userId);
-    
-    // Log the update
-    const { logAudit } = require("@/lib/services/auditLogger");
-    await logAudit({
-      userId,
-      action: "UPDATE",
-      entityType: "Vehicle",
-      entityId: vehicle.id,
-      changes: updateData,
-    });
+    // Log the update defensively
+    try {
+      await logAudit({
+        userId,
+        action: "UPDATE",
+        entityType: "Vehicle",
+        entityId: vehicle.id,
+        changes: updateData,
+      });
+    } catch (auditErr) {
+      console.error("Error logging vehicle update audit:", auditErr);
+    }
 
     return NextResponse.json({ vehicle });
 
@@ -110,7 +115,7 @@ export async function PATCH(
     const authResp = (() => { try { return handleAuthError(error); } catch { return null; } })();
     if (authResp) return authResp;
     return NextResponse.json(
-      { error: "Failed to update vehicle" },
+      { error: error instanceof Error ? error.message : "Failed to update vehicle" },
       { status: 500 }
     );
   }
@@ -125,7 +130,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const { id } = await params;
 
     // Wrap in a transaction
@@ -148,14 +153,17 @@ export async function DELETE(
       });
       
       // Log audit
-      const { logAudit } = require("@/lib/services/auditLogger");
-      await logAudit({
-        userId: "ops_manager",
-        action: "ARCHIVE",
-        entityType: "Vehicle",
-        entityId: id,
-        changes: { status: "Archived", unlinked_driver: true },
-      });
+      try {
+        await logAudit({
+          userId: session?.user?.name || session?.user?.email || session?.user?.id || "agent",
+          action: "ARCHIVE",
+          entityType: "Vehicle",
+          entityId: id,
+          changes: { status: "Archived", unlinked_driver: true },
+        });
+      } catch (auditErr) {
+        console.error("Error logging delete audit:", auditErr);
+      }
     });
 
     return NextResponse.json({ success: true });
@@ -164,7 +172,7 @@ export async function DELETE(
     const authResp = (() => { try { return handleAuthError(error); } catch { return null; } })();
     if (authResp) return authResp;
     return NextResponse.json(
-      { error: "Failed to delete vehicle. It may have related records that could not be removed." },
+      { error: error instanceof Error ? error.message : "Failed to delete vehicle. It may have related records that could not be removed." },
       { status: 500 }
     );
   }

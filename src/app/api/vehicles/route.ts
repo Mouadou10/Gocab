@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth-guard";
+import { logAudit } from "@/lib/services/auditLogger";
 
 /**
  * GET /api/vehicles
@@ -115,14 +117,20 @@ export async function POST(request: Request) {
       },
     });
 
-    const { logAudit } = require("@/lib/services/auditLogger");
-    await logAudit({
-      userId: "ops_manager", // TODO: Extract from session
-      action: "CREATE",
-      entityType: "Vehicle",
-      entityId: vehicle.id,
-      changes: vehicle,
-    });
+    const session = await requireAuth().catch(() => null);
+    const userId = session?.user?.name || session?.user?.email || "agent";
+
+    try {
+      await logAudit({
+        userId,
+        action: "CREATE",
+        entityType: "Vehicle",
+        entityId: vehicle.id,
+        changes: vehicle,
+      });
+    } catch (auditErr) {
+      console.error("Failed to write audit log:", auditErr);
+    }
 
     return NextResponse.json({ vehicle }, { status: 201 });
   } catch (error) {

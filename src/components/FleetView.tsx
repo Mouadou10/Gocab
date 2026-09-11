@@ -111,7 +111,8 @@ export default function FleetView() {
         }
         fetchVehicles();
       } else {
-        toast.error("Erreur lors de la mise à jour du statut");
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Erreur lors de la mise à jour du statut");
       }
     } catch (err) {
       console.error("Failed to update status:", err);
