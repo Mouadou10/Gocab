@@ -623,7 +623,25 @@ export default function LeadDrawer({
           <div>
             <h3 className="text-base font-bold tracking-tight">{lead.raw_name}</h3>
             <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs text-white/70 font-mono">{formatDisplayPhone(lead.sanitized_phone)}</p>
+              <a
+                href={`tel:${lead.sanitized_phone}`}
+                onClick={() => {
+                  fetch(`/api/leads/${lead.id}/activity`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "CALL_INITIATED",
+                      detail: `Appel téléphonique lancé vers ${formatDisplayPhone(lead.sanitized_phone)}`,
+                      agent: session?.user?.name || session?.user?.email || "Agent",
+                    }),
+                  }).then(() => fetchActivityLog()).catch(() => {});
+                }}
+                className="text-xs text-white/90 hover:text-white font-mono flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                title="Cliquer pour lancer l'appel"
+              >
+                <span>📞</span>
+                <span>{formatDisplayPhone(lead.sanitized_phone)}</span>
+              </a>
               <button
                 type="button"
                 onClick={handleJumpToWhatsAppCrm}

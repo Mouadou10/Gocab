@@ -296,7 +296,17 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
               )}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                fetch(`/api/leads/${lead.id}/activity`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "WHATSAPP_OPENED",
+                    detail: `Invitation formation WhatsApp envoyée à ${lead.raw_name}`,
+                  }),
+                }).catch(() => {});
+              }}
               className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
             >
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
@@ -310,7 +320,17 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
               href={generateThankYouURL(lead.sanitized_phone)}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                fetch(`/api/leads/${lead.id}/activity`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "WHATSAPP_OPENED",
+                    detail: `Message de remerciement WhatsApp envoyé à ${lead.raw_name}`,
+                  }),
+                }).catch(() => {});
+              }}
               className="inline-flex items-center gap-1.5 bg-olive hover:bg-olive/90 text-white text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
             >
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
