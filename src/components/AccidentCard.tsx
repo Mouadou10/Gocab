@@ -46,6 +46,7 @@ export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim
   const { data: session } = useSession();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
 
   // Comment field & history states
   const [commentText, setCommentText] = useState("");
@@ -77,6 +78,37 @@ export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim
 
   // Calculate driver history of faults if driver is loaded
   const driverAtFaultCount = claim.driver?.accidentClaims?.filter(c => c.fault === "DRIVER").length || 0;
+
+  const handleReopen = async () => {
+    setIsUpdating(true);
+    setIsReopening(true);
+    try {
+      const agentName = session?.user?.name || session?.user?.email || "Agent";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reopen: true,
+          timeline_step: "CAR_IN_GARAGE",
+          comment: "Dossier accident réouvert par l'agent depuis la flotte.",
+          author: agentName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Ticket d'accident réouvert avec succès ! Replacé dans les Dossiers En Cours.");
+        onUpdate();
+      } else {
+        toast.error("Échec de la réouverture du ticket");
+      }
+    } catch (err) {
+      console.error("Failed to reopen accident ticket:", err);
+      toast.error("Erreur lors de la réouverture du ticket");
+    } finally {
+      setIsUpdating(false);
+      setIsReopening(false);
+    }
+  };
 
   const handleUpdate = async (field: string, value: string) => {
     setIsUpdating(true);
@@ -318,12 +350,41 @@ export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim
             })}
           </div>
 
-          {/* Action Button */}
+          {/* Action Button & Reopen Toggle */}
           <div className="flex justify-end mt-8">
             {isCompleted ? (
-              <span className="px-4 py-2 bg-green-100 text-green-800 rounded font-bold text-sm">
-                ✅ Vehicle Restored
-              </span>
+              <div className="flex flex-wrap items-center justify-between gap-3 w-full bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-xs flex items-center gap-1.5 border border-emerald-300">
+                    <span>✅</span> Véhicule Rétabli (Clos)
+                  </span>
+                  <span className="text-2xs text-gray-500 hidden sm:inline">Dossier clôturé</span>
+                </div>
+                
+                {/* Reopen Toggle */}
+                <div className="flex items-center gap-2.5 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-2xs">
+                  <span className="text-xs font-bold text-gray-700">Rouvrir le ticket</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isReopening}
+                    onClick={handleReopen}
+                    disabled={isUpdating}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:opacity-50 ${
+                      isReopening ? "bg-amber-500" : "bg-gray-300 hover:bg-amber-400"
+                    }`}
+                    title="Activer pour rouvrir le dossier d'accident et le renvoyer en réparation"
+                  >
+                    <span className="sr-only">Activer pour rouvrir le ticket</span>
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                        isReopening ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             ) : claim.timeline_step === "READY_FOR_PICKUP" ? (
               <div className="px-4 py-2 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded font-semibold text-sm">
                 ⏳ Waiting for Field Supervisor Pickup...

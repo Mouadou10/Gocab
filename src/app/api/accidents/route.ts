@@ -149,15 +149,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "vehicle_id is required" }, { status: 400 });
     }
 
+    // Lookup vehicle to enrich claim with driver info if not explicitly passed
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: vehicle_id },
+      include: { driverProfile: true },
+    });
+
+    const finalDriverName = driver_name || vehicle?.assigned_driver_name || vehicle?.driverProfile?.fullName || null;
+    const finalDriverPhone = driver_phone || vehicle?.assigned_driver_phone || vehicle?.driverProfile?.phoneSanitized || null;
+    const finalDriverId = driver_id || vehicle?.driverProfile?.id || null;
+
     // Create the accident claim
     const claim = await prisma.accidentClaim.create({
       data: {
         vehicle_id,
-        driver_id,
-        driver_name,
-        driver_phone,
-        severity,
-        fault,
+        driver_id: finalDriverId,
+        driver_name: finalDriverName,
+        driver_phone: finalDriverPhone,
+        severity: severity || "HARD",
+        fault: fault || null,
+        timeline_step: "NEW_ACCIDENT",
+        comments: JSON.stringify([
+          {
+            id: crypto.randomUUID(),
+            timeline_step: "NEW_ACCIDENT",
+            comment: "Dossier accident ouvert manuellement par l'agent depuis la page Assurance.",
+            author: "Agent",
+            created_at: new Date().toISOString(),
+          },
+        ]),
       },
       include: {
         vehicle: true,
@@ -170,6 +190,30 @@ export async function POST(req: Request) {
       where: { id: vehicle_id },
       data: { status: "Accident" }
     });
+
+    // Also ensure a Support ticket exists
+    const existingTicket = await prisma.maintenanceTicket.findFirst({
+      where: {
+        vehicle_id,
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+      },
+    });
+
+    if (!existingTicket && vehicle) {
+      await prisma.maintenanceTicket.create({
+        data: {
+          vehicle_id,
+          plate_number: vehicle.plate_number,
+          driver_name: finalDriverName,
+          driver_phone: finalDriverPhone,
+          ticket_type: "Accident",
+          priority: "Urgent",
+          status: "OPEN",
+          description: `💥 Véhicule signalé en accident depuis la page Assurance. Réparation mécanique requise.`,
+          sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      }).catch((e: any) => console.warn("Could not create support ticket:", e));
+    }
 
     return NextResponse.json({ success: true, claim });
   } catch (error: any) {

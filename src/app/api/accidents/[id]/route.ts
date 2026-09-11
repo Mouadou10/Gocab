@@ -42,7 +42,11 @@ export async function PATCH(req: Request, context: any) {
     if (body.fault !== undefined) updateData.fault = body.fault;
     
     let isStatusChange = false;
-    if (body.timeline_step && body.timeline_step !== currentClaim.timeline_step) {
+    if (body.reopen && currentClaim.timeline_step === "VEHICLE_BACK") {
+      updateData.timeline_step = body.timeline_step || "CAR_IN_GARAGE";
+      updateData.step_updated_at = new Date();
+      isStatusChange = true;
+    } else if (body.timeline_step && body.timeline_step !== currentClaim.timeline_step) {
       updateData.timeline_step = body.timeline_step;
       updateData.step_updated_at = new Date();
       isStatusChange = true;
@@ -115,6 +119,20 @@ export async function PATCH(req: Request, context: any) {
         await prisma.vehicle.update({
           where: { id: updatedClaim.vehicle_id },
           data: { status: hasDriver ? "Actif" : "Available" },
+        });
+      }
+    }
+
+    // When ticket is REOPENED from VEHICLE_BACK
+    if (
+      (isStatusChange && currentClaim.timeline_step === 'VEHICLE_BACK' && updatedClaim.timeline_step !== 'VEHICLE_BACK') ||
+      (body.reopen && currentClaim.timeline_step === 'VEHICLE_BACK')
+    ) {
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
+      if (vehicle && vehicle.status !== "Accident") {
+        await prisma.vehicle.update({
+          where: { id: updatedClaim.vehicle_id },
+          data: { status: "Accident" },
         });
       }
     }
