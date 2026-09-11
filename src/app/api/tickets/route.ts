@@ -37,7 +37,38 @@ export async function GET(request: Request) {
       orderBy: { created_at: "desc" },
     });
 
-    return NextResponse.json({ tickets });
+    // For accident tickets, fetch active AccidentClaim timeline step
+    const accidentVehicleIds = tickets
+      .filter((t) => t.ticket_type === "Accident")
+      .map((t) => t.vehicle_id);
+
+    let accidentClaimsMap: Record<string, any> = {};
+    if (accidentVehicleIds.length > 0) {
+      const claims = await prisma.accidentClaim.findMany({
+        where: {
+          vehicle_id: { in: accidentVehicleIds },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      for (const claim of claims) {
+        if (!accidentClaimsMap[claim.vehicle_id]) {
+          accidentClaimsMap[claim.vehicle_id] = claim;
+        }
+      }
+    }
+
+    const enrichedTickets = tickets.map((t) => {
+      if (t.ticket_type === "Accident" && accidentClaimsMap[t.vehicle_id]) {
+        return {
+          ...t,
+          accident_claim_id: accidentClaimsMap[t.vehicle_id].id,
+          accident_step: accidentClaimsMap[t.vehicle_id].timeline_step,
+        };
+      }
+      return t;
+    });
+
+    return NextResponse.json({ tickets: enrichedTickets });
   } catch (error) {
     console.error("GET /api/tickets error:", error);
     return NextResponse.json(

@@ -30,6 +30,8 @@ export interface MaintenanceTicket {
   repair_cost?: number | null;
   garage_name?: string | null;
   resolution_notes?: string | null;
+  accident_claim_id?: string | null;
+  accident_step?: string | null;
   created_at: string;
   resolved_at: string | null;
 }

@@ -11,6 +11,7 @@ interface TicketKanbanCardProps {
   onDeleteClick: (id: string) => void;
   onCancelWaiverClick: (id: string) => void;
   onResolveClick?: (ticket: MaintenanceTicket) => void;
+  onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
   isResolved: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function TicketKanbanCard({
   onDeleteClick,
   onCancelWaiverClick,
   onResolveClick,
+  onStatusChange,
   isResolved,
 }: TicketKanbanCardProps) {
   const {
@@ -173,6 +175,99 @@ export default function TicketKanbanCard({
               "{ticket.resolution_notes}"
             </p>
           )}
+        </div>
+      )}
+
+      {/* Accident Pipeline Status Selector OR Regular Status Controls */}
+      {ticket.ticket_type === "Accident" ? (
+        <div className="bg-red-50/80 border border-red-200 rounded-xl p-2.5 space-y-1.5 shadow-2xs">
+          <div className="flex items-center justify-between text-2xs">
+            <span className="font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
+              <span>🚨</span> Statut Dossier Accident
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+              ticket.status === "RESOLVED"
+                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                : ticket.status === "IN_PROGRESS"
+                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                : "bg-blue-100 text-blue-800 border border-blue-200"
+            }`}>
+              {ticket.status === "RESOLVED" ? "✅ Résolu" : ticket.status === "IN_PROGRESS" ? "⏳ En cours" : "🔵 Ouvert"}
+            </span>
+          </div>
+
+          <select
+            value={
+              ticket.accident_step ||
+              (ticket.status === "RESOLVED"
+                ? "VEHICLE_BACK"
+                : ticket.status === "IN_PROGRESS"
+                ? "CAR_IN_GARAGE"
+                : "NEW_ACCIDENT")
+            }
+            onChange={(e) => {
+              const selectedStep = e.target.value;
+              let targetColumnStatus = "IN_PROGRESS";
+              if (selectedStep === "VEHICLE_BACK") {
+                targetColumnStatus = "RESOLVED";
+              } else if (selectedStep === "NEW_ACCIDENT") {
+                targetColumnStatus = "OPEN";
+              } else {
+                targetColumnStatus = "IN_PROGRESS";
+              }
+              onStatusChange?.(ticket, targetColumnStatus, selectedStep);
+            }}
+            className="w-full bg-white border border-red-300 rounded-lg py-1.5 px-2.5 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 cursor-pointer shadow-2xs"
+          >
+            <option value="NEW_ACCIDENT">1. 🔴 Nouvel Accident (Initial / Ouvert)</option>
+            <option value="CAR_IN_GARAGE">2. 🚙 Au Garage (En cours)</option>
+            <option value="STARTING_REPAIR">3. 🔧 Début Réparation (En cours)</option>
+            <option value="INSURANCE_DOCS">4. 📑 Dossier Assurance (En cours)</option>
+            <option value="READY_FOR_PICKUP">5. ⏳ Prêt pour Récupération (En cours)</option>
+            <option value="VEHICLE_BACK">6. ✅ Véhicule Rétabli (Résolu)</option>
+          </select>
+          <p className="text-[10px] text-gray-500 italic">
+            Changer le statut depuis l&apos;état initial passe automatiquement le véhicule &quot;En cours&quot;.
+          </p>
+        </div>
+      ) : (
+        /* Regular Ticket Quick Status Buttons */
+        <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl border border-gray-200/80 gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 pl-1">
+            Statut :
+          </span>
+          <div className="flex items-center gap-1.5">
+            {ticket.status !== "OPEN" && (
+              <button
+                type="button"
+                onClick={() => onStatusChange?.(ticket, "OPEN")}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-gray-200 hover:border-blue-200 transition-colors shadow-2xs cursor-pointer"
+                title="Passer en Ouvert"
+              >
+                🔵 Ouvert
+              </button>
+            )}
+            {ticket.status !== "IN_PROGRESS" && (
+              <button
+                type="button"
+                onClick={() => onStatusChange?.(ticket, "IN_PROGRESS")}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-amber-50 text-amber-700 border border-gray-200 hover:border-amber-200 transition-colors shadow-2xs cursor-pointer"
+                title="Passer en cours de traitement"
+              >
+                ⏳ En cours
+              </button>
+            )}
+            {ticket.status !== "RESOLVED" && (
+              <button
+                type="button"
+                onClick={() => onResolveClick ? onResolveClick(ticket) : onStatusChange?.(ticket, "RESOLVED")}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 hover:border-emerald-200 transition-colors shadow-2xs cursor-pointer"
+                title="Marquer comme résolu"
+              >
+                ✅ Résolu
+              </button>
+            )}
+          </div>
         </div>
       )}
 

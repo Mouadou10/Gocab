@@ -241,6 +241,42 @@ export default function SupportTicketsView() {
     setResolutionNotes(ticket.resolution_notes || "");
   }
 
+  async function handleStatusChange(ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) {
+    try {
+      const payload: any = { status: newStatus };
+      if (accidentStep) {
+        payload.accident_step = accidentStep;
+      }
+      if (newStatus === "RESOLVED") {
+        payload.restore_vehicle_status = true;
+        payload.target_vehicle_status = "Actif";
+      }
+
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        toast.success(
+          newStatus === "RESOLVED"
+            ? "Ticket résolu avec succès"
+            : newStatus === "IN_PROGRESS"
+            ? (accidentStep ? `Étape enregistrée : ${accidentStep} (Passé En cours)` : "Ticket passé En cours")
+            : "Ticket replacé en Ouvert"
+        );
+        fetchTickets();
+        notifyMutation("tickets");
+      } else {
+        toast.error("Échec de la mise à jour du statut");
+      }
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      toast.error("Erreur réseau");
+    }
+  }
+
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const activeData = active.data.current;
@@ -497,6 +533,7 @@ export default function SupportTicketsView() {
                   onDeleteClick={handleDeleteTicket}
                   onCancelWaiverClick={handleCancelWaiver}
                   onResolveClick={handleOpenResolutionModal}
+                  onStatusChange={handleStatusChange}
                 />
               ))}
             </div>

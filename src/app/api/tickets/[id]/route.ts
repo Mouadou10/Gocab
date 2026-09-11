@@ -16,9 +16,47 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    const currentTicket = await prisma.maintenanceTicket.findUnique({ where: { id } });
+    if (!currentTicket) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+
     const updateData: any = {};
 
-    if (body.status !== undefined) {
+    // 1. Accident Ticket Step Synchronization
+    if (body.accident_step !== undefined) {
+      // Look up and update the linked/active AccidentClaim
+      const claim = await prisma.accidentClaim.findFirst({
+        where: { vehicle_id: currentTicket.vehicle_id },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (claim) {
+        await prisma.accidentClaim.update({
+          where: { id: claim.id },
+          data: {
+            timeline_step: body.accident_step,
+            step_updated_at: new Date(),
+          },
+        });
+      }
+
+      // If changed from the initial one (NEW_ACCIDENT) to any repair step -> vehicle is IN_PROGRESS
+      if (body.accident_step === "VEHICLE_BACK") {
+        updateData.status = "RESOLVED";
+        updateData.resolved_at = new Date();
+        updateData.field_status = "READY_FOR_PICKUP";
+      } else if (body.accident_step === "NEW_ACCIDENT") {
+        updateData.status = "OPEN";
+        updateData.resolved_at = null;
+        updateData.field_status = null;
+      } else {
+        // Any intermediate step (CAR_IN_GARAGE, STARTING_REPAIR, INSURANCE_DOCS, READY_FOR_PICKUP) means IN_PROGRESS
+        updateData.status = "IN_PROGRESS";
+        updateData.resolved_at = null;
+        updateData.field_status = null;
+      }
+    } else if (body.status !== undefined) {
       updateData.status = body.status;
       if (body.status === "RESOLVED") {
         updateData.resolved_at = new Date();
@@ -26,6 +64,32 @@ export async function PATCH(
       } else if (body.status === "OPEN" || body.status === "IN_PROGRESS") {
         updateData.resolved_at = null;
         updateData.field_status = null;
+      }
+
+      // If this is an accident ticket, also sync the AccidentClaim step
+      if (currentTicket.ticket_type === "Accident") {
+        const claim = await prisma.accidentClaim.findFirst({
+          where: { vehicle_id: currentTicket.vehicle_id },
+          orderBy: { created_at: "desc" },
+        });
+
+        if (claim) {
+          let targetStep = claim.timeline_step;
+          if (body.status === "IN_PROGRESS" && claim.timeline_step === "NEW_ACCIDENT") {
+            targetStep = "CAR_IN_GARAGE";
+          } else if (body.status === "RESOLVED" && claim.timeline_step !== "VEHICLE_BACK") {
+            targetStep = "VEHICLE_BACK";
+          } else if (body.status === "OPEN" && claim.timeline_step !== "NEW_ACCIDENT") {
+            targetStep = "NEW_ACCIDENT";
+          }
+
+          if (targetStep !== claim.timeline_step) {
+            await prisma.accidentClaim.update({
+              where: { id: claim.id },
+              data: { timeline_step: targetStep, step_updated_at: new Date() },
+            });
+          }
+        }
       }
     }
 
@@ -53,8 +117,8 @@ export async function PATCH(
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("tickets").catch(() => {});
 
-    // When ticket is resolved, auto-create a Field Task for the Field Supervisor
-    if (body.status === "RESOLVED") {
+    // When ticket transitions to resolved, auto-create a Field Task for the Field Supervisor
+    if (updateData.status === "RESOLVED" && currentTicket.status !== "RESOLVED") {
       await prisma.fieldTask.create({
         data: {
           task_type: "GARAGE_PICKUP",
