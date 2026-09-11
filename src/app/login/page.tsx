@@ -9,15 +9,18 @@
 import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { GOCAB_LOGO_SRC } from "@/lib/logo-data";
 
 function GoCabLogoLarge() {
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/logo.png"
-      alt="GoCab Logo"
-      className="w-16 h-16 object-contain drop-shadow-md"
-    />
+    <div className="w-20 h-20 rounded-3xl bg-white p-2.5 shadow-2xl ring-4 ring-white/10 flex items-center justify-center">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={GOCAB_LOGO_SRC}
+        alt="GoCab"
+        className="w-full h-full object-contain"
+      />
+    </div>
   );
 }
 
