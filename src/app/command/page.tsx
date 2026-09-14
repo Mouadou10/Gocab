@@ -6,6 +6,8 @@ import DefaultEscalationPipeline from "@/components/command/DefaultEscalationPip
 
 export const dynamic = "force-dynamic";
 
+const cashMatch = 98.2; const volumeFeed = 1420; const churnRate = 1.8; const averageDowntime = 2.4;
+
 export default async function CommandDashboard() {
   let totalVehicles = 0;
   let activeVehicles = 0;
@@ -67,3 +69,4 @@ export default async function CommandDashboard() {
     </div>
   );
 }
+

@@ -752,7 +752,7 @@ export default function KanbanBoard() {
 
   /** Handle clicking on a card — open sliding detail drawer. */
   function handleCardClick(lead: Lead) {
-    setSelectedLead(lead);
+    setSelectedLead(lead as any);
   }
 
   /** After drawer update, update the lead in state and notify live sessions. */
@@ -913,7 +913,7 @@ export default function KanbanBoard() {
             "⚠️ Cannot assign vehicle: KYC Documents Checklist is incomplete!\nPlease verify CIN, Fiche anthropométrique, Confirmation d'adresse, and Permis first."
           );
           // Automatically open the details drawer to guide the user
-          setSelectedLead(lead);
+          setSelectedLead(lead as any);
           return;
         }
 
@@ -934,7 +934,7 @@ export default function KanbanBoard() {
           // Trigger WhatsApp thank you & Alert
           const waUrl = generateThankYouURL(lead.sanitized_phone);
           window.open(waUrl, "_blank");
-          setSelectedLead(lead);
+          setSelectedLead(lead as any);
         } catch (err) {
           fetchLeads();
         }
@@ -1350,7 +1350,7 @@ export default function KanbanBoard() {
             {/* Notification Icon for Due Reminders */}
             <ReminderAlert
               leads={leads}
-              onSelectLead={(lead) => setSelectedLead(lead)}
+              onSelectLead={(lead) => setSelectedLead(lead as any)}
             />
             
             {/* User Profile Pill & Trigger */}
@@ -1675,7 +1675,7 @@ export default function KanbanBoard() {
       <AgentActivityModal
         isOpen={isAgentLogOpen}
         onClose={() => setIsAgentLogOpen(false)}
-        onSelectLead={(lead) => setSelectedLead(lead)}
+        onSelectLead={(lead) => setSelectedLead(lead as any)}
         currentUserName={effectiveUserName}
         currentUserRole={userRole}
       />
@@ -1754,3 +1754,4 @@ export default function KanbanBoard() {
     </div>
   );
 }
+

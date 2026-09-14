@@ -44,6 +44,7 @@ interface Vehicle {
 }
 
 interface DriverProfile {
+  consecutiveUnpaidDays?: number;
   id: string;
   cinNumber: string;
   fullName: string;
@@ -473,3 +474,4 @@ export default function DriversView() {
     </div>
   );
 }
+

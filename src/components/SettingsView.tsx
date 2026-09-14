@@ -339,7 +339,7 @@ export default function SettingsView() {
       : [...currentTabs, "whatsapp"];
 
     const updatedPermissions = { ...permissions, [roleKey]: updatedTabs };
-    setPermissions(updatedPermissions);
+    setPermissions(updatedPermissions as any);
 
     try {
       const res = await fetch("/api/settings", {
@@ -2229,3 +2229,4 @@ export default function SettingsView() {
     </div>
   );
 }
+
