@@ -121,6 +121,7 @@ model MaintenanceTicket {
   resolution_notes String?
   is_archived    Boolean   @default(false)
   
+  started_at     DateTime?
   created_at     DateTime  @default(now())
   resolved_at    DateTime?
   updated_at     DateTime  @updatedAt

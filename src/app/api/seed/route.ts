@@ -77,6 +77,7 @@ const DDL_STATEMENTS = [
     "estimated_cost" REAL,
     "actual_cost" REAL,
     "garage_name" TEXT,
+    "started_at" DATETIME,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "resolved_at" DATETIME

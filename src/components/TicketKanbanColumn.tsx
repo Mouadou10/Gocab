@@ -8,12 +8,14 @@ import TicketKanbanCard from "./TicketKanbanCard";
 interface TicketKanbanColumnProps {
   columnId: string;
   tickets: MaintenanceTicket[];
-  getDowntimeDuration: (createdAt: string, resolvedAt: string | null) => string;
+  getDowntimeDuration: (createdAt: string, resolvedAt: string | null, startedAt?: string | null, ticketType?: string) => string;
   onWaiveClick: (ticket: MaintenanceTicket) => void;
   onDeleteClick: (id: string) => void;
   onCancelWaiverClick: (id: string) => void;
   onResolveClick?: (ticket: MaintenanceTicket) => void;
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
+  onStartClick?: (ticket: MaintenanceTicket) => void;
+  onStopClick?: (ticket: MaintenanceTicket) => void;
 }
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -37,6 +39,8 @@ export default function TicketKanbanColumn({
   onCancelWaiverClick,
   onResolveClick,
   onStatusChange,
+  onStartClick,
+  onStopClick,
 }: TicketKanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
@@ -71,13 +75,15 @@ export default function TicketKanbanColumn({
             <TicketKanbanCard
               key={ticket.id}
               ticket={ticket}
-              downtimeStr={getDowntimeDuration(ticket.created_at, ticket.resolved_at)}
+              downtimeStr={getDowntimeDuration(ticket.created_at, ticket.resolved_at, ticket.started_at, ticket.ticket_type)}
               isResolved={ticket.status === "RESOLVED"}
               onWaiveClick={onWaiveClick}
               onDeleteClick={onDeleteClick}
               onCancelWaiverClick={onCancelWaiverClick}
               onResolveClick={onResolveClick}
               onStatusChange={onStatusChange}
+              onStartClick={onStartClick}
+              onStopClick={onStopClick}
             />
           ))}
         </SortableContext>

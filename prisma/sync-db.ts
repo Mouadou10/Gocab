@@ -64,6 +64,7 @@ async function syncSchema() {
       "ALTER TABLE Lead ADD COLUMN handled_by TEXT",
       "ALTER TABLE Vehicle ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE MaintenanceTicket ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
+      "ALTER TABLE MaintenanceTicket ADD COLUMN started_at DATETIME",
       "ALTER TABLE DriverProfile ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE VehicleExpense ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
     ];

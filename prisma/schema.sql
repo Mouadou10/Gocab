@@ -212,6 +212,7 @@ CREATE TABLE "MaintenanceTicket" (
     "repair_cost" REAL,
     "garage_name" TEXT,
     "resolution_notes" TEXT,
+    "started_at" DATETIME,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "resolved_at" DATETIME,
     "updated_at" DATETIME NOT NULL

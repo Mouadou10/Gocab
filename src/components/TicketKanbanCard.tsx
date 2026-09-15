@@ -12,6 +12,8 @@ interface TicketKanbanCardProps {
   onCancelWaiverClick: (id: string) => void;
   onResolveClick?: (ticket: MaintenanceTicket) => void;
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
+  onStartClick?: (ticket: MaintenanceTicket) => void;
+  onStopClick?: (ticket: MaintenanceTicket) => void;
   isResolved: boolean;
 }
 
@@ -23,6 +25,8 @@ export default function TicketKanbanCard({
   onCancelWaiverClick,
   onResolveClick,
   onStatusChange,
+  onStartClick,
+  onStopClick,
   isResolved,
 }: TicketKanbanCardProps) {
   const {
@@ -115,24 +119,129 @@ export default function TicketKanbanCard({
         </div>
       )}
 
-      {/* Downtime Counter Box */}
-      <div
-        className={`p-2.5 rounded-xl border text-center w-full ${
-          isResolved
-            ? "bg-gray-50 border-gray-200 text-gray-600"
-            : "bg-amber-50/80 border-amber-200 text-amber-900"
-        }`}
-      >
-        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-          {isResolved ? "Total Downtime" : "⏱️ Elapsed Downtime"}
-        </div>
-        <div className="text-base font-black font-mono tracking-tight text-navy">
-          {downtimeStr}
-        </div>
-        <div className="text-[9px] text-gray-400 mt-1 truncate">
-          {new Date(ticket.created_at).toLocaleString()}
-        </div>
-      </div>
+      {/* Downtime Counter / Start & Stop Timer Box */}
+      {(() => {
+        const isServiceTicket = ticket.ticket_type === "Vidange" || ticket.ticket_type === "AdBleu";
+        const hasStarted = Boolean(ticket.started_at);
+
+        // State 1: Resolved Ticket
+        if (isResolved) {
+          return (
+            <div className="p-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50/60 text-center w-full shadow-2xs">
+              <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-0.5 flex items-center justify-center gap-1">
+                <span>✅</span> Durée totale d&apos;intervention
+              </div>
+              <div className="text-base font-black font-mono tracking-tight text-emerald-950">
+                {downtimeStr}
+              </div>
+              <div className="text-[9px] text-emerald-700/80 mt-0.5">
+                {ticket.started_at && ticket.resolved_at ? (
+                  <span>
+                    {new Date(ticket.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} →{" "}
+                    {new Date(ticket.resolved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                ) : (
+                  <span>Résolu le {new Date(ticket.resolved_at || ticket.created_at).toLocaleDateString()}</span>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        // State 2: Timer is Running / In Progress
+        if (hasStarted) {
+          return (
+            <div className="p-3 rounded-xl border-2 border-amber-300 bg-amber-50/90 text-center w-full flex flex-col items-center gap-1.5 shadow-sm">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                  <span>⏱️</span> Chrono Intervention
+                </span>
+                <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                  EN COURS
+                </span>
+              </div>
+
+              <div className="py-1 text-center w-full">
+                <div className="text-xl font-black font-mono tracking-tight text-navy">
+                  {downtimeStr}
+                </div>
+                <div className="text-[10px] text-amber-800 font-medium mt-0.5">
+                  Démarré à {new Date(ticket.started_at!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </div>
+              </div>
+
+              {onStopClick && (
+                <button
+                  type="button"
+                  onClick={() => onStopClick(ticket)}
+                  className="w-full mt-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/25 transition-all cursor-pointer"
+                >
+                  <span className="text-sm">⏹️</span>
+                  <span>Stop (Terminer & Résoudre)</span>
+                </button>
+              )}
+              <span className="text-[9px] text-gray-500 italic">
+                Arrête le compteur et passe le ticket en &quot;Résolu&quot;
+              </span>
+            </div>
+          );
+        }
+
+        // State 3: Vidange / AdBleu Waiting to Start
+        if (isServiceTicket) {
+          return (
+            <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/50 text-center w-full flex flex-col items-center gap-1.5 shadow-2xs">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1">
+                  <span>⏱️</span> Service {ticket.ticket_type}
+                </span>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                  ⏸️ En attente
+                </span>
+              </div>
+
+              <div className="py-0.5 text-center">
+                <div className="text-xs text-gray-600 font-medium">
+                  Le chauffeur n&apos;a pas encore commencé
+                </div>
+                <div className="text-[10px] text-gray-400">
+                  Créé à {new Date(ticket.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+
+              {onStartClick && (
+                <button
+                  type="button"
+                  onClick={() => onStartClick(ticket)}
+                  className="w-full mt-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  <span className="text-sm">▶️</span>
+                  <span>Start (Démarrer {ticket.ticket_type})</span>
+                </button>
+              )}
+              <span className="text-[9px] text-gray-500 italic">
+                Cliquer dès que le chauffeur commence l&apos;opération
+              </span>
+            </div>
+          );
+        }
+
+        // State 4: Other ticket types (Default Downtime Box)
+        return (
+          <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/80 text-center w-full">
+            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
+              ⏱️ Elapsed Downtime
+            </div>
+            <div className="text-base font-black font-mono tracking-tight text-navy">
+              {downtimeStr}
+            </div>
+            <div className="text-[9px] text-gray-400 mt-1 truncate">
+              {new Date(ticket.created_at).toLocaleString()}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Fleet Performance Payment Waiver */}
       {ticket.payment_waived ? (

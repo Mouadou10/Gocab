@@ -95,6 +95,7 @@ export async function POST(request: Request) {
       description,
       priority,
       update_vehicle_status,
+      started_at,
     } = body;
 
     if (!vehicle_id || !plate_number || !ticket_type || !description) {
@@ -115,7 +116,8 @@ export async function POST(request: Request) {
         ticket_type: ticket_type.trim(),
         description: description.trim(),
         priority: priority || "Normal",
-        status: "OPEN",
+        status: started_at ? "IN_PROGRESS" : "OPEN",
+        started_at: started_at ? new Date(started_at) : null,
         sla_deadline: slaDeadline,
       },
     });

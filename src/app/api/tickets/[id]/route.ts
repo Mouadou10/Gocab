@@ -93,6 +93,13 @@ export async function PATCH(
       }
     }
 
+    if (body.started_at !== undefined) {
+      updateData.started_at = body.started_at ? new Date(body.started_at) : null;
+      if (body.started_at && !body.status && currentTicket.status === "OPEN") {
+        updateData.status = "IN_PROGRESS";
+      }
+    }
+
     if (body.field_status !== undefined) updateData.field_status = body.field_status;
     if (body.priority !== undefined) updateData.priority = body.priority;
     if (body.description !== undefined) updateData.description = body.description.trim();
@@ -134,7 +141,8 @@ export async function PATCH(
 
       // Calculate downtime and update vehicle
       const now = new Date();
-      const downtimeDays = Math.max(1, Math.ceil((now.getTime() - ticket.created_at.getTime()) / (1000 * 3600 * 24)));
+      const startTime = (ticket.started_at ? new Date(ticket.started_at) : ticket.created_at).getTime();
+      const downtimeDays = Math.max(1, Math.ceil((now.getTime() - startTime) / (1000 * 3600 * 24)));
       await prisma.vehicle.update({
         where: { id: ticket.vehicle_id },
         data: {

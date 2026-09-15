@@ -77,7 +77,7 @@ export default function SupportTicketsView() {
   useEffect(() => {
     const interval = setInterval(() => {
       setNowTimestamp(Date.now());
-    }, 10000);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -105,12 +105,24 @@ export default function SupportTicketsView() {
     fetchTickets();
   }, [fetchTickets]);
 
-  /** Formats elapsed downtime duration into readable Days, Hours, Minutes string */
-  function getDowntimeDuration(createdAt: string, resolvedAt: string | null) {
-    const start = new Date(createdAt).getTime();
+  /** Formats elapsed downtime duration into readable Days, Hours, Minutes, Seconds string */
+  function getDowntimeDuration(
+    createdAt: string,
+    resolvedAt: string | null,
+    startedAt?: string | null,
+    ticketType?: string
+  ) {
+    const isService = ticketType === "Vidange" || ticketType === "AdBleu";
+    // If it's a Vidange/AdBleu and not started and not resolved yet, return "00m 00s"
+    if (isService && !startedAt && !resolvedAt) {
+      return "00m 00s";
+    }
+
+    const start = (startedAt ? new Date(startedAt) : new Date(createdAt)).getTime();
     const end = resolvedAt ? new Date(resolvedAt).getTime() : nowTimestamp;
     const diffMs = Math.max(0, end - start);
 
+    const seconds = Math.floor((diffMs / 1000) % 60);
     const minutes = Math.floor((diffMs / (1000 * 60)) % 60);
     const hours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
     const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -119,9 +131,9 @@ export default function SupportTicketsView() {
       return `${days}d ${hours}h ${minutes}m`;
     }
     if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+      return `${hours}h ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
     }
-    return `${minutes}m`;
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
   }
 
   async function handleDeleteTicket(id: string) {
@@ -274,6 +286,56 @@ export default function SupportTicketsView() {
     } catch (err) {
       console.error("Failed to update status:", err);
       toast.error("Erreur réseau");
+    }
+  }
+
+  async function handleStartTicket(ticket: MaintenanceTicket) {
+    try {
+      const nowIso = new Date().toISOString();
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          started_at: nowIso,
+          status: "IN_PROGRESS",
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`⏱️ Opération ${ticket.ticket_type} démarrée pour ${ticket.plate_number}!`);
+        fetchTickets();
+        notifyMutation("tickets");
+      } else {
+        toast.error("Échec du démarrage de l'opération");
+      }
+    } catch (err) {
+      console.error("Failed to start ticket timer:", err);
+      toast.error("Erreur lors du démarrage du chronomètre");
+    }
+  }
+
+  async function handleStopTicket(ticket: MaintenanceTicket) {
+    try {
+      const nowIso = new Date().toISOString();
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "RESOLVED",
+          resolved_at: nowIso,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`✅ Opération terminée & Ticket résolu automatiquement (${ticket.plate_number})`);
+        fetchTickets();
+        notifyMutation("tickets");
+      } else {
+        toast.error("Échec de la résolution du ticket");
+      }
+    } catch (err) {
+      console.error("Failed to stop ticket:", err);
+      toast.error("Erreur lors de l'arrêt du ticket");
     }
   }
 
@@ -534,6 +596,8 @@ export default function SupportTicketsView() {
                   onCancelWaiverClick={handleCancelWaiver}
                   onResolveClick={handleOpenResolutionModal}
                   onStatusChange={handleStatusChange}
+                  onStartClick={handleStartTicket}
+                  onStopClick={handleStopTicket}
                 />
               ))}
             </div>
@@ -544,7 +608,7 @@ export default function SupportTicketsView() {
               <div className="rotate-2 opacity-95 pointer-events-none w-[320px]">
                 <TicketKanbanCard
                   ticket={activeDragTicket}
-                  downtimeStr={getDowntimeDuration(activeDragTicket.created_at, activeDragTicket.resolved_at)}
+                  downtimeStr={getDowntimeDuration(activeDragTicket.created_at, activeDragTicket.resolved_at, activeDragTicket.started_at, activeDragTicket.ticket_type)}
                   isResolved={activeDragTicket.status === "RESOLVED"}
                   onWaiveClick={() => {}}
                   onDeleteClick={() => {}}

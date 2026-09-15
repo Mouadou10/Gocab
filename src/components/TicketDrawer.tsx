@@ -32,6 +32,7 @@ export interface MaintenanceTicket {
   resolution_notes?: string | null;
   accident_claim_id?: string | null;
   accident_step?: string | null;
+  started_at?: string | null;
   created_at: string;
   resolved_at: string | null;
 }
@@ -67,6 +68,7 @@ export default function TicketDrawer({
   const [priority, setPriority] = useState<string>("Normal");
   const [description, setDescription] = useState("");
   const [updateVehicleStatus, setUpdateVehicleStatus] = useState(true);
+  const [startTimerNow, setStartTimerNow] = useState(false);
 
   // Searchable vehicle selector states
   const [vehicleSearch, setVehicleSearch] = useState("");
@@ -146,6 +148,7 @@ export default function TicketDrawer({
           priority,
           description,
           update_vehicle_status: updateVehicleStatus,
+          started_at: (startTimerNow && (ticketType === "Vidange" || ticketType === "AdBleu")) ? new Date().toISOString() : null,
         }),
       });
 
@@ -465,6 +468,27 @@ export default function TicketDrawer({
               </p>
             </label>
           </div>
+
+          {/* Vidange / AdBleu immediate timer option */}
+          {(ticketType === "Vidange" || ticketType === "AdBleu") && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2 text-xs text-emerald-900 animate-fadeIn">
+              <input
+                type="checkbox"
+                id="start-timer-now-check"
+                checked={startTimerNow}
+                onChange={(e) => setStartTimerNow(e.target.checked)}
+                className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <label htmlFor="start-timer-now-check" className="cursor-pointer select-none">
+                <span className="font-bold flex items-center gap-1.5 text-emerald-950">
+                  <span>⏱️</span> Démarrer le chronomètre immédiatement
+                </span>
+                <p className="text-[11px] text-emerald-700 mt-0.5">
+                  Cochez si le chauffeur est déjà sur place et commence l&apos;opération maintenant (le bouton &quot;Stop&quot; sera immédiatement disponible pour le résoudre).
+                </p>
+              </label>
+            </div>
+          )}
         </form>
 
         {/* Footer */}
