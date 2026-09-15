@@ -43,7 +43,7 @@ const TIMELINE_STEPS = [
 ];
 
 export default function AccidentCard({ claim, onUpdate }: { claim: AccidentClaim; onUpdate: () => void }) {
-  const { data: session } = useSession();
+  const { data: session } = useSession() || {};
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isReopening, setIsReopening] = useState(false);

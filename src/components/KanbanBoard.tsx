@@ -141,7 +141,7 @@ const TRAINING_COLUMNS = [
 
 export default function KanbanBoard() {
   const { language, setLanguage, t, dir } = useLanguage();
-  const { data: session, update: updateSession } = useSession();
+  const { data: session, update: updateSession } = useSession() || {};
   const userRole = session?.user?.role || "ADMIN";
   const userName = session?.user?.name || "";
 

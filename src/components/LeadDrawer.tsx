@@ -111,7 +111,7 @@ export default function LeadDrawer({
   whatsappMissingDocsTemplate,
   onOpenWhatsAppChat,
 }: LeadDrawerProps) {
-  const { data: session } = useSession();
+  const { data: session } = useSession() || {};
   const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
   const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
   const [city, setCity] = useState(lead.city || "");

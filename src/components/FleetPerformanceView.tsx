@@ -89,7 +89,7 @@ export default function FleetPerformanceView() {
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const { data: session } = useSession();
+  const { data: session } = useSession() || {};
   const currentUserName = session?.user?.name || "Fleet Performance Manager";
 
   // Filter & Search states
