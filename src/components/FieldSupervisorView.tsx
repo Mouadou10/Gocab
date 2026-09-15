@@ -17,6 +17,7 @@ import toast from "react-hot-toast";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import CarModel3D from "./CarModel3D";
 import FieldMobileQuickActions from "./FieldMobileQuickActions";
+import AttestationModal, { AttestationData } from "./AttestationModal";
 
 interface FieldTask {
   id: string;
@@ -85,6 +86,13 @@ interface VehicleInspection {
   health_score: number;
   previous_health_score: number;
   notes: string | null;
+  vehicle?: {
+    make_model: string;
+    plate_number: string;
+    vin: string | null;
+    assigned_driver_name: string | null;
+    driver_cin: string;
+  } | null;
 }
 
 const SCORE_LABELS: Record<number, { label: string; color: string; bg: string }> = {
@@ -149,6 +157,10 @@ export default function FieldSupervisorView() {
   // Past inspections viewer
   const [viewInspections, setViewInspections] = useState<VehicleInspection[] | null>(null);
   const [viewPlate, setViewPlate] = useState("");
+
+  // Generated Attestation Modal State
+  const [attestationData, setAttestationData] = useState<AttestationData | null>(null);
+  const [showAttestationModal, setShowAttestationModal] = useState(false);
 
   const [failingTask, setFailingTask] = useState<FieldTask | null>(null);
   const [failureReason, setFailureReason] = useState("");
@@ -303,7 +315,7 @@ export default function FieldSupervisorView() {
       : inspNotes;
 
     try {
-      await fetch("/api/inspections", {
+      const res = await fetch("/api/inspections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -315,6 +327,9 @@ export default function FieldSupervisorView() {
           notes: finalNotes || null,
         }),
       });
+
+      const data = await res.json();
+
       setInspectionVehicle(null);
       setInspectorName(""); setInspMileage(""); setInspNotes(""); setDamagedParts([]);
       setInspScores({
@@ -322,7 +337,15 @@ export default function FieldSupervisorView() {
         lights_score: 0, suspension_score: 0, body_condition_score: 0,
         interior_score: 0, battery_score: 0, exhaust_score: 0,
       });
-      toast.success("Inspection submitted successfully");
+
+      if (data.attestationData) {
+        setAttestationData(data.attestationData);
+        setShowAttestationModal(true);
+        toast.success("Inspection enregistrée — Attestation générée !");
+      } else {
+        toast.success("Inspection submitted successfully");
+      }
+
       fetchDueCheckups();
     } catch (err: any) {
       toast.error(err.message || "Failed to submit inspection");
@@ -373,7 +396,7 @@ export default function FieldSupervisorView() {
         borderRadius: 10, padding: 16, opacity: isCompleted ? 0.7 : 1,
         transition: "all 0.2s",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 18 }}>{config.icon}</span>
             <span style={{ fontWeight: 700, color: "#1a1a2e", fontSize: 15 }}>{task.plate_number || "No Plate"}</span>
@@ -521,7 +544,7 @@ export default function FieldSupervisorView() {
     return (
       <div style={{ marginBottom: 24 }}>
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
           padding: "12px 16px", background: config.bg, border: `1px solid ${config.border}`,
           borderRadius: "12px 12px 0 0",
         }}>
@@ -600,7 +623,7 @@ export default function FieldSupervisorView() {
     return (
       <div style={{ marginBottom: 24 }}>
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
           padding: "12px 16px", background: config.bg, border: `1px solid ${config.border}`,
           borderRadius: "12px 12px 0 0",
         }}>
@@ -631,7 +654,7 @@ export default function FieldSupervisorView() {
                 borderRadius: 10, padding: 16,
                 transition: "all 0.2s",
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 18 }}>{config.icon}</span>
                     <span style={{ fontWeight: 700, color: "#1a1a2e", fontSize: 15 }}>{vehicle.plate_number}</span>
@@ -708,7 +731,7 @@ export default function FieldSupervisorView() {
   };
 
   return (
-    <div style={{ padding: "20px 24px", maxWidth: 1200, margin: "0 auto" }}>
+    <div className="px-3 sm:px-6 py-4 sm:py-6 max-w-7xl mx-auto space-y-6">
       {/* Mobile-Optimized Supervisor Quick Actions */}
       <FieldMobileQuickActions
         onSearchPlate={(plate) => setSearchTerm(plate)}
@@ -723,131 +746,178 @@ export default function FieldSupervisorView() {
         pendingRecoveriesCount={recoveryTasks.filter((t) => t.status !== "COMPLETED").length}
       />
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+      {/* Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a1a2e" }}>
-            🛡️ Field Supervisor — Task Queue
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span>🛡️</span> Superviseur Terrain — Tâches & Contrôles
           </h2>
-          <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 14 }}>
-            Vehicle recovery, garage pickups, and monthly mechanical inspections.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Récupérations, retours garages, et inspections mécaniques mensuelles.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <input
-            type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="🔍 Search plate, driver..."
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, width: 200 }}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="🔍 Matricule, chauffeur..."
+            className="flex-1 sm:w-52 px-3 py-2 text-xs sm:text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
           />
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-            style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }}>
-            <option value="">All Status</option>
-            <option value="PENDING">Pending</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="COMPLETED">Completed</option>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 text-xs sm:text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+          >
+            <option value="">Tous les statuts</option>
+            <option value="PENDING">En attente</option>
+            <option value="IN_PROGRESS">En cours</option>
+            <option value="COMPLETED">Complété</option>
           </select>
-          <button onClick={() => setShowCreateModal(true)}
-            style={{
-              padding: "8px 16px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-              color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14,
-            }}>
-            + New Task
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <span>+</span> Nouvelle Tâche
           </button>
         </div>
       </div>
 
-      {/* KPI Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fef2f2", padding: 16, borderRadius: 10, border: "1px solid #fca5a5" }}>
-          <div style={{ fontSize: 11, color: "#b91c1c", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Recovery</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#b91c1c", marginTop: 2 }}>{recoveryTasks.filter((t) => t.status !== "COMPLETED").length}</div>
+      {/* KPI Row (2 columns on mobile, 4 columns on laptop/desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-red-50 dark:bg-red-950/30 p-3.5 sm:p-4 rounded-xl border border-red-200 dark:border-red-900/50 shadow-sm">
+          <div className="text-[10px] sm:text-xs text-red-700 dark:text-red-400 font-bold uppercase tracking-wider">Récupérations</div>
+          <div className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 mt-1">
+            {recoveryTasks.filter((t) => t.status !== "COMPLETED").length}
+          </div>
         </div>
-        <div style={{ background: "#fff7ed", padding: 16, borderRadius: 10, border: "1px solid #fed7aa" }}>
-          <div style={{ fontSize: 11, color: "#c2410c", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Garage Pickup</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#c2410c", marginTop: 2 }}>{pickupTasks.filter((t) => t.status !== "COMPLETED").length}</div>
+        <div className="bg-orange-50 dark:bg-orange-950/30 p-3.5 sm:p-4 rounded-xl border border-orange-200 dark:border-orange-900/50 shadow-sm">
+          <div className="text-[10px] sm:text-xs text-orange-700 dark:text-orange-400 font-bold uppercase tracking-wider">Retraits Garages</div>
+          <div className="text-xl sm:text-2xl font-black text-orange-600 dark:text-orange-400 mt-1">
+            {pickupTasks.filter((t) => t.status !== "COMPLETED").length}
+          </div>
         </div>
-        <div style={{ background: "#eff6ff", padding: 16, borderRadius: 10, border: "1px solid #bfdbfe" }}>
-          <div style={{ fontSize: 11, color: "#1d4ed8", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Checkups Due</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#1d4ed8", marginTop: 2 }}>{checkupsDue.length}</div>
+        <div className="bg-blue-50 dark:bg-blue-950/30 p-3.5 sm:p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 shadow-sm">
+          <div className="text-[10px] sm:text-xs text-blue-700 dark:text-blue-400 font-bold uppercase tracking-wider">Checkups Dus</div>
+          <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+            {checkupsDue.length}
+          </div>
         </div>
-        <div style={{ background: "#f0fdf4", padding: 16, borderRadius: 10, border: "1px solid #bbf7d0" }}>
-          <div style={{ fontSize: 11, color: "#15803d", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Completed Today</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#15803d", marginTop: 2 }}>
+        <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3.5 sm:p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm">
+          <div className="text-[10px] sm:text-xs text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">Validés Aujourd&apos;hui</div>
+          <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             {tasks.filter((t) => t.status === "COMPLETED" && t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
           </div>
         </div>
       </div>
 
       {isLoading ? (
-        <div style={{ padding: 60, textAlign: "center", color: "#9ca3af" }}>Loading tasks...</div>
+        <div className="py-12 text-center text-slate-400">Chargement des tâches...</div>
       ) : (
-        <>
+        <div className="space-y-6">
           {renderSection("Vehicle Recovery", "VEHICLE_RECOVERY", recoveryTasks)}
           {renderSection("Garage Pickup", "GARAGE_PICKUP", pickupTasks)}
           {renderCheckupsDueSection()}
-        </>
+        </div>
       )}
 
       {/* Create Task Modal */}
       {showCreateModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 460, maxWidth: "90vw", boxShadow: "0 25px 50px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>🛡️ Create Field Task</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-3 sm:p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-7 w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 my-auto">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-4">🛡️ Créer une Tâche Terrain</h3>
+            <div className="flex flex-col gap-3">
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Task Type *</label>
-                <select value={newTaskType} onChange={(e) => setNewTaskType(e.target.value)}
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }}>
-                  <option value="VEHICLE_RECOVERY">🚨 Vehicle Recovery</option>
-                  <option value="GARAGE_PICKUP">🔧 Garage Pickup</option>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Type de Tâche *</label>
+                <select
+                  value={newTaskType}
+                  onChange={(e) => setNewTaskType(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="VEHICLE_RECOVERY">🚨 Récupération de Véhicule</option>
+                  <option value="GARAGE_PICKUP">🔧 Retrait au Garage</option>
                 </select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Vehicle Plate</label>
-                  <input value={newPlate} onChange={(e) => setNewPlate(e.target.value)} placeholder="e.g. 12345-A-6"
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Matricule</label>
+                  <input
+                    value={newPlate}
+                    onChange={(e) => setNewPlate(e.target.value)}
+                    placeholder="ex: 12345-A-6"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Driver Name</label>
-                  <input value={newDriver} onChange={(e) => setNewDriver(e.target.value)} placeholder="Driver name"
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Nom Chauffeur</label>
+                  <input
+                    value={newDriver}
+                    onChange={(e) => setNewDriver(e.target.value)}
+                    placeholder="Nom du chauffeur"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Priority</label>
-                  <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }}>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Priorité</label>
+                  <select
+                    value={newPriority}
+                    onChange={(e) => setNewPriority(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  >
                     <option>Normal</option>
                     <option>Urgent</option>
                     <option>Critical</option>
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Assigned To</label>
-                  <input value={newAssignedTo} onChange={(e) => setNewAssignedTo(e.target.value)} placeholder="Supervisor name"
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Assigné à</label>
+                  <input
+                    value={newAssignedTo}
+                    onChange={(e) => setNewAssignedTo(e.target.value)}
+                    placeholder="Nom du superviseur"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
               </div>
               {newTaskType === "MONTHLY_CHECKUP" && (
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Due Date</label>
-                  <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Date d&apos;échéance</label>
+                  <input
+                    type="date"
+                    value={newDueDate}
+                    onChange={(e) => setNewDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
               )}
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Description *</label>
-                <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} rows={3} placeholder="Task details..."
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, resize: "vertical", boxSizing: "border-box" }} />
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Description *</label>
+                <textarea
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  rows={3}
+                  placeholder="Détails de l'intervention..."
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 resize-y"
+                />
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowCreateModal(false)}
-                style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleCreateTask}
-                style={{ padding: "8px 18px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Create Task</button>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateTask}
+                className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Créer la Tâche
+              </button>
             </div>
           </div>
         </div>
@@ -855,69 +925,103 @@ export default function FieldSupervisorView() {
 
       {/* Mechanical Inspection Form Modal */}
       {inspectionVehicle && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 580, maxWidth: "95vw", maxHeight: "90vh", overflow: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.15)", margin: "20px 0" }}>
-            <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>
-              📋 Vehicle Mechanical Inspection
+        <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-7 w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl my-auto border border-slate-200 dark:border-slate-800">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1">
+              📋 Contrôle Mécanique du Véhicule
             </h3>
-            <p style={{ margin: "0 0 18px", color: "#6b7280", fontSize: 14 }}>
-              Vehicle: <strong>{inspectionVehicle.plate_number}</strong> • Rate each checkpoint from 1 (Critical) to 5 (Excellent)
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
+              Véhicule : <strong className="text-slate-900 dark:text-white">{inspectionVehicle.plate_number}</strong> • Notez chaque élément de 1 (Critique) à 5 (Excellent)
             </p>
 
-            <div style={{ marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 14, color: "#374151" }}>Advanced 3D Damage Report</h4>
+            <div className="mb-5">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Rapport Visuel 3D des Dommages</h4>
               <CarModel3D damagedParts={damagedParts} onChange={setDamagedParts} />
             </div>
 
             {/* Overall Score Preview */}
-            <div style={{
-              background: inspAvg >= 4 ? "#f0fdf4" : inspAvg >= 3 ? "#fffbeb" : inspAvg >= 1 ? "#fef2f2" : "#f9fafb",
-              border: `2px solid ${inspAvg >= 4 ? "#bbf7d0" : inspAvg >= 3 ? "#fde68a" : inspAvg >= 1 ? "#fca5a5" : "#e5e7eb"}`,
-              borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 18,
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1 }}>Overall Health Score</div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: inspAvg >= 4 ? "#15803d" : inspAvg >= 3 ? "#b45309" : inspAvg >= 1 ? "#b91c1c" : "#9ca3af" }}>
+            <div
+              className={`p-4 rounded-xl text-center mb-5 border-2 transition-all ${
+                inspAvg >= 4
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800"
+                  : inspAvg >= 3
+                  ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
+                  : inspAvg >= 1
+                  ? "bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800"
+                  : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              }`}
+            >
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Score Global de Santé</div>
+              <div
+                className={`text-3xl sm:text-4xl font-extrabold mt-1 ${
+                  inspAvg >= 4
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : inspAvg >= 3
+                    ? "text-amber-600 dark:text-amber-400"
+                    : inspAvg >= 1
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-slate-400"
+                }`}
+              >
                 {inspAvg > 0 ? `${inspAvg} / 5` : "—"}
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {/* Inputs: 1 col on mobile, 2 cols on laptop */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Inspector Name *</label>
-                <input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder="Your name"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Nom de l&apos;Inspecteur *</label>
+                <input
+                  type="text"
+                  value={inspectorName}
+                  onChange={(e) => setInspectorName(e.target.value)}
+                  placeholder="Votre nom"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Current Mileage (KM)</label>
-                <input type="number" value={inspMileage} onChange={(e) => setInspMileage(e.target.value)} placeholder="e.g. 45000"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Kilométrage Actuel (KM)</label>
+                <input
+                  type="number"
+                  value={inspMileage}
+                  onChange={(e) => setInspMileage(e.target.value)}
+                  placeholder="ex: 45000"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
             </div>
 
             {/* Scored Checkpoints */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            <div className="flex flex-col gap-2.5 mb-5">
               {Object.entries(CHECKPOINT_LABELS).map(([key, cp]) => (
-                <div key={key} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-                  background: "#f9fafb", borderRadius: 8, border: "1px solid #e5e7eb",
-                }}>
-                  <span style={{ fontSize: 18, width: 28 }}>{cp.icon}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "#1a1a2e" }}>{cp.label}</div>
-                    <div style={{ fontSize: 11, color: "#9ca3af" }}>{cp.hint}</div>
+                <div
+                  key={key}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 shadow-xs"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-xl w-7 text-center">{cp.icon}</span>
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">{cp.label}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">{cp.hint}</div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto">
                     {[1, 2, 3, 4, 5].map((score) => {
                       const sl = SCORE_LABELS[score];
                       const isSelected = inspScores[key] === score;
                       return (
-                        <button key={score} onClick={() => setInspScores({ ...inspScores, [key]: score })}
+                        <button
+                          type="button"
+                          key={score}
+                          onClick={() => setInspScores({ ...inspScores, [key]: score })}
                           title={sl.label}
+                          className="flex-1 sm:flex-initial w-10 sm:w-9 h-10 sm:h-9 rounded-lg font-bold text-sm transition-all cursor-pointer flex items-center justify-center active:scale-95 border-2 shadow-xs"
                           style={{
-                            width: 34, height: 34, borderRadius: 6, border: `2px solid ${isSelected ? sl.color : "#e5e7eb"}`,
-                            background: isSelected ? sl.bg : "#fff", color: isSelected ? sl.color : "#9ca3af",
-                            fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.15s",
-                          }}>
+                            borderColor: isSelected ? sl.color : "#e2e8f0",
+                            background: isSelected ? sl.bg : "#ffffff",
+                            color: isSelected ? sl.color : "#94a3b8",
+                          }}
+                        >
                           {score}
                         </button>
                       );
@@ -928,17 +1032,33 @@ export default function FieldSupervisorView() {
             </div>
 
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>Inspector Notes</label>
-              <textarea value={inspNotes} onChange={(e) => setInspNotes(e.target.value)} rows={3} placeholder="Issues found, recommendations..."
-                style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, resize: "vertical", boxSizing: "border-box" }} />
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Remarques de l&apos;Inspecteur</label>
+              <textarea
+                value={inspNotes}
+                onChange={(e) => setInspNotes(e.target.value)}
+                rows={3}
+                placeholder="Problèmes constatés, recommandations..."
+                className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+              />
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
-              <button onClick={() => { setInspectionVehicle(null); setDamagedParts([]); }}
-                style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSubmitInspection}
-                style={{ padding: "8px 18px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>
-                Submit Inspection
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setInspectionVehicle(null);
+                  setDamagedParts([]);
+                }}
+                className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitInspection}
+                className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Valider l&apos;Inspection
               </button>
             </div>
           </div>
@@ -947,62 +1067,88 @@ export default function FieldSupervisorView() {
 
       {/* Past Inspections History Modal */}
       {viewInspections !== null && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 640, maxWidth: "95vw", maxHeight: "90vh", overflow: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>
-              📊 Inspection History — {viewPlate}
-            </h3>
+        <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>📊</span> Historique des Contrôles — {viewPlate}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setViewInspections(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
             {viewInspections.length === 0 ? (
-              <div style={{ padding: 30, textAlign: "center", color: "#9ca3af" }}>No previous inspections found.</div>
+              <div className="py-12 text-center text-slate-400">Aucun contrôle antérieur trouvé.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {viewInspections.map((insp, idx) => {
+              <div className="flex flex-col gap-4">
+                {viewInspections.map((insp) => {
                   const delta = insp.health_score - insp.previous_health_score;
                   const hasPrev = insp.previous_health_score > 0;
                   return (
-                    <div key={insp.id} style={{ background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb", padding: 16 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                        <div>
-                          <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
-                            {new Date(insp.inspection_date).toLocaleDateString()}
+                    <div key={insp.id} className="bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3.5 sm:p-4 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                        <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {new Date(insp.inspection_date).toLocaleDateString("fr-FR")}
                           </span>
-                          <span style={{ margin: "0 8px", color: "#9ca3af" }}>•</span>
-                          <span style={{ color: "#6b7280", fontSize: 13 }}>by {insp.inspector_name}</span>
-                          <span style={{ margin: "0 8px", color: "#9ca3af" }}>•</span>
-                          <span style={{ color: "#6b7280", fontSize: 13 }}>{insp.current_mileage.toLocaleString()} KM</span>
+                          <span className="mx-2 text-slate-400">•</span>
+                          <span>par {insp.inspector_name}</span>
+                          <span className="mx-2 text-slate-400">•</span>
+                          <span className="font-semibold">{insp.current_mileage.toLocaleString()} KM</span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{
-                            fontSize: 22, fontWeight: 800,
-                            color: insp.health_score >= 4 ? "#15803d" : insp.health_score >= 3 ? "#b45309" : "#b91c1c",
-                          }}>
-                            {insp.health_score}/5
-                          </span>
-                          {hasPrev && (
-                            <span style={{
-                              fontSize: 13, fontWeight: 700,
-                              color: delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#6b7280",
-                            }}>
-                              {delta > 0 ? `▲ +${delta.toFixed(1)}` : delta < 0 ? `▼ ${delta.toFixed(1)}` : "→ 0"}
+                        <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAttestationData({
+                                fullName: insp.vehicle?.assigned_driver_name || "",
+                                cin: insp.vehicle?.driver_cin || "",
+                                brand: insp.vehicle?.make_model || "",
+                                immat: insp.plate_number,
+                                chassisNumber: insp.vehicle?.vin || "",
+                                date: new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(insp.inspection_date)),
+                                inspectionId: insp.id,
+                              });
+                              setShowAttestationModal(true);
+                            }}
+                            title="Générer et imprimer l'attestation de location"
+                            className="px-3 py-1 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <span>🖨️</span> Attestation
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xl sm:text-2xl font-black ${
+                              insp.health_score >= 4 ? "text-emerald-600 dark:text-emerald-400" : insp.health_score >= 3 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
+                            }`}>
+                              {insp.health_score}/5
                             </span>
-                          )}
+                            {hasPrev && (
+                              <span className={`text-xs font-bold ${delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-600" : "text-slate-400"}`}>
+                                {delta > 0 ? `▲ +${delta.toFixed(1)}` : delta < 0 ? `▼ ${delta.toFixed(1)}` : "→ 0"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                         {Object.entries(CHECKPOINT_LABELS).map(([key, cp]) => {
                           const val = (insp as any)[key] as number;
                           const sl = SCORE_LABELS[val] || { label: "N/A", color: "#9ca3af", bg: "#f3f4f6" };
                           return (
-                            <div key={key} style={{ textAlign: "center", padding: "6px 4px", borderRadius: 6, background: val > 0 ? sl.bg : "#f3f4f6" }}>
-                              <div style={{ fontSize: 14 }}>{cp.icon}</div>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: val > 0 ? sl.color : "#9ca3af" }}>{val > 0 ? val : "—"}</div>
-                              <div style={{ fontSize: 9, color: "#9ca3af" }}>{cp.label}</div>
+                            <div key={key} className="text-center p-2 rounded-lg border border-slate-200 dark:border-slate-700/60" style={{ background: val > 0 ? sl.bg : "#f8fafc" }}>
+                              <div className="text-base">{cp.icon}</div>
+                              <div className="text-xs font-bold" style={{ color: val > 0 ? sl.color : "#94a3b8" }}>{val > 0 ? val : "—"}</div>
+                              <div className="text-[10px] text-slate-600 truncate">{cp.label}</div>
                             </div>
                           );
                         })}
                       </div>
                       {insp.notes && (
-                        <p style={{ margin: "10px 0 0", fontSize: 13, color: "#374151", fontStyle: "italic" }}>
+                        <p className="mt-2.5 text-xs text-slate-600 dark:text-slate-400 italic bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
                           📝 {insp.notes}
                         </p>
                       )}
@@ -1011,9 +1157,14 @@ export default function FieldSupervisorView() {
                 })}
               </div>
             )}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button onClick={() => setViewInspections(null)}
-                style={{ padding: "8px 18px", background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Close</button>
+            <div className="flex justify-end mt-5">
+              <button
+                type="button"
+                onClick={() => setViewInspections(null)}
+                className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 transition-colors cursor-pointer"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>
@@ -1043,7 +1194,7 @@ export default function FieldSupervisorView() {
       {/* Vehicle Recovery Handover Checklist Modal */}
       {recoveryModalTask && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 520, overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", border: "1px solid #fee2e2" }}>
+          <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", border: "1px solid #fee2e2" }}>
             
             {/* Modal Header */}
             <div style={{ padding: "20px 24px", background: "linear-gradient(135deg, #991b1b, #b91c1c)", color: "#fff" }}>
@@ -1266,6 +1417,15 @@ export default function FieldSupervisorView() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Generated Attestation Modal */}
+      {attestationData && (
+        <AttestationModal
+          data={attestationData}
+          isOpen={showAttestationModal}
+          onClose={() => setShowAttestationModal(false)}
+        />
       )}
     </div>
   );

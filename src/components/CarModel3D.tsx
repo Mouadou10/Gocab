@@ -193,48 +193,41 @@ export default function CarModel3D({ damagedParts, onChange }: CarModel3DProps) 
   const activeCheckpoints = viewMode === "exterior" ? EXTERIOR_CHECKPOINTS : INTERIOR_CHECKPOINTS;
 
   return (
-    <div style={{ width: "100%", height: 400, background: "#1f2937", borderRadius: 12, overflow: "hidden", position: "relative", border: "1px solid #374151" }}>
+    <div className="w-full h-[260px] sm:h-[380px] bg-slate-800 rounded-xl overflow-hidden relative border border-slate-700">
       
       {/* UI Controls Overlay */}
-      <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10, display: "flex", gap: 10 }}>
+      <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
         <button
+          type="button"
           onClick={() => setViewMode("exterior")}
-          style={{
-            padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
-            background: viewMode === "exterior" ? "#3b82f6" : "rgba(255,255,255,0.1)",
-            color: viewMode === "exterior" ? "#fff" : "#9ca3af",
-            transition: "all 0.2s"
-          }}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+            viewMode === "exterior" ? "bg-blue-600 text-white shadow" : "bg-white/10 text-slate-300 hover:bg-white/20"
+          }`}
         >
           🚘 Exterior
         </button>
         <button
+          type="button"
           onClick={() => setViewMode("interior")}
-          style={{
-            padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
-            background: viewMode === "interior" ? "#3b82f6" : "rgba(255,255,255,0.1)",
-            color: viewMode === "interior" ? "#fff" : "#9ca3af",
-            transition: "all 0.2s"
-          }}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+            viewMode === "interior" ? "bg-blue-600 text-white shadow" : "bg-white/10 text-slate-300 hover:bg-white/20"
+          }`}
         >
           💺 Interior
         </button>
 
         <button
+          type="button"
           onClick={() => setDebugMode(!debugMode)}
-          style={{
-            padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
-            background: debugMode ? "#dc2626" : "rgba(255,255,255,0.1)",
-            color: debugMode ? "#fff" : "#9ca3af",
-            transition: "all 0.2s",
-            marginLeft: 20
-          }}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer sm:ml-3 ${
+            debugMode ? "bg-red-600 text-white" : "bg-white/10 text-slate-400 hover:bg-white/20"
+          }`}
         >
           {debugMode ? "Disable Debug" : "Edit Positions"}
         </button>
       </div>
 
-      <div style={{ position: "absolute", bottom: 16, left: 16, zIndex: 10, color: "#9ca3af", fontSize: 12, fontWeight: 600 }}>
+      <div className="absolute bottom-3 left-3 z-10 text-slate-400 text-[10px] sm:text-xs font-medium pointer-events-none">
         {viewMode === "exterior" ? "Drag to Rotate • Scroll to Zoom" : "Inside Cabin View (Drag to look around)"}
       </div>
 

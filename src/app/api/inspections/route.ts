@@ -23,7 +23,31 @@ export async function GET(request: Request) {
       orderBy: { inspection_date: "desc" },
     });
 
-    return NextResponse.json({ inspections });
+    const vehicleIds = Array.from(new Set(inspections.map((i) => i.vehicle_id)));
+    const vehicles = await prisma.vehicle.findMany({
+      where: { id: { in: vehicleIds } },
+      include: { driverProfile: true },
+    });
+
+    const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
+
+    const enrichedInspections = inspections.map((i) => {
+      const v = vehicleMap.get(i.vehicle_id);
+      return {
+        ...i,
+        vehicle: v
+          ? {
+              make_model: v.make_model,
+              plate_number: v.plate_number,
+              vin: v.vin,
+              assigned_driver_name: v.assigned_driver_name,
+              driver_cin: v.driverProfile?.cinNumber || "",
+            }
+          : null,
+      };
+    });
+
+    return NextResponse.json({ inspections: enrichedInspections });
   } catch (error) {
     console.error("GET /api/inspections error:", error);
     return NextResponse.json({ error: "Failed to fetch inspections" }, { status: 500 });
@@ -34,6 +58,7 @@ export async function GET(request: Request) {
  * POST /api/inspections
  * Creates a new vehicle mechanical inspection with scored checkpoints.
  * Auto-calculates health_score and fetches previous_health_score.
+ * Returns generated attestation data with driver and vehicle variables.
  */
 export async function POST(request: Request) {
   try {
@@ -114,7 +139,29 @@ export async function POST(request: Request) {
       }).catch((e) => console.warn("Failed to auto-complete linked field task:", e));
     }
 
-    return NextResponse.json({ inspection }, { status: 201 });
+    // Fetch vehicle & assigned driver details for attestation generation
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: vehicle_id },
+      include: { driverProfile: true },
+    });
+
+    const todayFormatted = new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date());
+
+    const attestationData = {
+      fullName: vehicle?.assigned_driver_name || vehicle?.driverProfile?.fullName || "",
+      cin: vehicle?.driverProfile?.cinNumber || "",
+      brand: vehicle?.make_model || "",
+      immat: vehicle?.plate_number || plate_number,
+      chassisNumber: vehicle?.vin || "",
+      date: todayFormatted,
+      inspectionId: inspection.id,
+    };
+
+    return NextResponse.json({ inspection, attestationData }, { status: 201 });
   } catch (error) {
     console.error("POST /api/inspections error:", error);
     return NextResponse.json({ error: "Failed to create inspection" }, { status: 500 });

@@ -20,6 +20,9 @@ export async function GET(request: Request) {
           { technical_inspection_expiry: { not: null } },
         ],
       },
+      include: {
+        driverProfile: true,
+      },
     });
 
     // 2. Filter strictly for vehicles with documents expiring in <= 3 days or already expired
@@ -98,8 +101,10 @@ export async function GET(request: Request) {
         vehicle_id: v.id,
         plate_number: v.plate_number,
         make_model: v.make_model,
+        vin: v.vin,
         assigned_driver_name: v.assigned_driver_name,
         assigned_driver_phone: v.assigned_driver_phone,
+        driver_cin: v.driverProfile?.cinNumber || "",
         previous_health_score: prev ? prev.health_score : null,
         previous_inspection_date: prev ? prev.inspection_date : null,
         document_name: mostUrgent.name,
