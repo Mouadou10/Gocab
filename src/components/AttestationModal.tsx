@@ -274,34 +274,15 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
               </div>
             </div>
 
-            {/* Signature & Date Block with Official Stamp */}
-            <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-end text-[14px] font-bold gap-6">
+            {/* Signature & Date Block */}
+            <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-end text-[14px] font-bold gap-6 min-h-[90px]">
               <div>
                 Fait à Casablanca, le{" "}
                 <span className="font-semibold">{date || "_________________________"}</span>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-col items-end gap-1">
                 <div>Signé : HAMZA RASSID (Gérant)</div>
-                <div className="relative p-2.5 border-2 border-blue-800/80 rounded-xl bg-blue-50/20 text-blue-900 font-sans text-center transform -rotate-2 select-none pointer-events-none w-48 shadow-2xs">
-                  <div className="text-[10px] font-black tracking-widest uppercase text-blue-950">
-                    GOCAB MOROCCO
-                  </div>
-                  <div className="text-[8px] font-semibold leading-tight text-blue-800 mt-0.5">
-                    332, Bd. Brahim Roudani<br />
-                    Etage 5, N°21<br />
-                    Casablanca
-                  </div>
-                  <svg
-                    className="absolute inset-0 w-full h-full text-blue-700/60 pointer-events-none"
-                    viewBox="0 0 200 80"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M 30 55 C 60 20, 80 70, 110 35 C 130 15, 150 65, 175 40" strokeLinecap="round" />
-                    <path d="M 40 45 C 80 50, 120 40, 160 50" strokeLinecap="round" />
-                  </svg>
-                </div>
+                <div className="text-xs text-slate-400 italic">Signature & Cachet</div>
               </div>
             </div>
           </div>

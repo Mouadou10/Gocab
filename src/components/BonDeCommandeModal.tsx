@@ -709,29 +709,6 @@ export default function BonDeCommandeModal({
                   </p>
                   <p className="text-gray-500 italic pt-1">Signature & Cachet</p>
                 </div>
-
-                {/* Official GoCab Morocco Stamp Reproduction matching Photo 3 */}
-                <div className="relative p-3 border-2 border-blue-800/80 rounded-2xl bg-blue-50/20 text-blue-900 font-sans text-center transform -rotate-3 select-none pointer-events-none w-56 shadow-2xs">
-                  <div className="text-[11px] font-black tracking-widest uppercase text-blue-950">
-                    GOCAB MOROCCO
-                  </div>
-                  <div className="text-[9px] font-semibold leading-tight text-blue-800 mt-0.5">
-                    332, Bd. Brahim Roudani<br />
-                    Etage 5, N°21<br />
-                    Casablanca
-                  </div>
-                  {/* Stylized authentic stamp signature stroke */}
-                  <svg
-                    className="absolute inset-0 w-full h-full text-blue-700/60 pointer-events-none"
-                    viewBox="0 0 200 80"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M 30 55 C 60 20, 80 70, 110 35 C 130 15, 150 65, 175 40" strokeLinecap="round" />
-                    <path d="M 40 45 C 80 50, 120 40, 160 50" strokeLinecap="round" />
-                  </svg>
-                </div>
               </div>
             </div>
           </div>

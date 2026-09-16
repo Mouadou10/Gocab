@@ -118,30 +118,6 @@ export function generateAttestationPrintHtml(data: AttestationPrintData): string
       font-size: 11pt;
       font-weight: 700;
     }
-    .stamp-box {
-      position: relative;
-      width: 210px;
-      padding: 10px 12px;
-      border: 2px solid #1e40af;
-      border-radius: 12px;
-      background: rgba(239, 246, 255, 0.5) !important;
-      text-align: center;
-      transform: rotate(-2deg);
-    }
-    .stamp-title {
-      font-size: 9.5pt;
-      font-weight: 900;
-      color: #1e3a8a;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-    .stamp-text {
-      font-size: 7.5pt;
-      font-weight: 600;
-      color: #1d4ed8;
-      line-height: 1.25;
-      margin-top: 3px;
-    }
   </style>
 </head>
 <body>
@@ -201,26 +177,15 @@ export function generateAttestationPrintHtml(data: AttestationPrintData): string
       </div>
     </div>
 
-    <!-- Footer: Date, Signature & Official Stamp -->
+    <!-- Footer: Date & Signature -->
     <div class="footer-row">
       <div>
         Fait à Casablanca, le <span style="font-weight: 600;">${data.date || ""}</span>
       </div>
 
-      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+      <div style="display: flex; flex-direction: column; align-items: flex-end; min-height: 70px;">
         <div>Signé : ${data.validatorName || "HAMZA RASSID"} (${data.validatorRole || "Gérant"})</div>
-        <div class="stamp-box">
-          <div class="stamp-title">GOCAB MOROCCO</div>
-          <div class="stamp-text">
-            332, Bd. Brahim Roudani<br />
-            Etage 5, N°21<br />
-            Casablanca
-          </div>
-          <svg style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;" viewBox="0 0 200 80" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" opacity="0.65">
-            <path d="M 30 55 C 60 20, 80 70, 110 35 C 130 15, 150 65, 175 40" />
-            <path d="M 40 45 C 80 50, 120 40, 160 50" />
-          </svg>
-        </div>
+        <div style="font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 6px;">Signature & Cachet</div>
       </div>
     </div>
   </div>
