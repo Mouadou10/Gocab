@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Search, Car, X, Check, FileText } from "lucide-react";
+import toast from "react-hot-toast";
 import { Vehicle } from "./VehicleDrawer";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
@@ -137,14 +138,70 @@ export default function TicketDrawer({
     }
   }
 
-  const handleBcSave = (savedBc: BonDeCommandeData) => {
+  const handleBcSave = async (savedBc: BonDeCommandeData) => {
     setBonDeCommandeData(savedBc);
-    setIsBcModalOpen(false);
 
-    // Auto-populate description if empty or standard
-    if (!description.trim() || description.startsWith("[Bon de Commande") || description === "Vidange" || description === "AdBleu") {
-      const summaryItems = savedBc.items.map((i) => `${i.designation} (${i.quantity})`).join(", ");
-      setDescription(`[Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""}] ${summaryItems} · Total: ${savedBc.total_ttc} MAD TTC`);
+    // Determine vehicle id and plate
+    let vId = selectedVehicleId;
+    let plate = plateNumber || savedBc.vehicle_plate;
+
+    if (!vId && plate) {
+      const match = vehicles.find(
+        (v) =>
+          v.plate_number.toLowerCase().trim() === plate.toLowerCase().trim() ||
+          v.id === plate
+      );
+      if (match) {
+        vId = match.id;
+        plate = match.plate_number;
+      }
+    }
+
+    if (!vId || !plate) {
+      toast.error("Veuillez sélectionner un véhicule avant de valider le Bon de Commande.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const summaryItems = (savedBc.items || []).map((i) => `${i.designation} (${i.quantity})`).join(", ");
+      const ticketDesc = description.trim() && !description.startsWith("[Bon de Commande")
+        ? description
+        : `[Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""}] ${summaryItems || "Prestation"} · Total: ${savedBc.total_ttc} MAD TTC`;
+
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicle_id: vId,
+          plate_number: plate,
+          driver_name: driverName || null,
+          driver_phone: driverPhone || null,
+          ticket_type: ticketType,
+          priority,
+          description: ticketDesc,
+          update_vehicle_status: updateVehicleStatus,
+          started_at: (startTimerNow && (ticketType === "Vidange" || ticketType === "AdBleu" || ticketType === "Custom")) ? new Date().toISOString() : null,
+          repair_cost: savedBc.total_ttc,
+          garage_name: savedBc.supplier_name,
+          resolution_notes: JSON.stringify({ bon_de_commande: savedBc }),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Échec de création du ticket");
+      }
+
+      toast.success("Ticket créé et Bon de Commande validé avec succès !");
+      setIsBcModalOpen(false);
+      onSaveSuccess();
+      handleClose();
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la création du ticket");
+      console.error("handleBcSave error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

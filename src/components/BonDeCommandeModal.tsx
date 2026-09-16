@@ -8,7 +8,9 @@ import {
   calculateBonDeCommandeTotals,
   getFormattedToday,
   CatalogItem,
+  printBonDeCommande,
 } from "@/lib/bonDeCommandeCatalog";
+import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
 import { Printer, Check, Plus, Trash2, X, Car, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -145,8 +147,8 @@ export default function BonDeCommandeModal({
     setItems(updated);
   };
 
-  const handleValidateAndSave = () => {
-    const data: BonDeCommandeData = {
+  const getCurrentData = (): BonDeCommandeData => {
+    return {
       bc_number: bcNumber.trim(),
       date,
       issuer_name: "GoCab Rent",
@@ -170,49 +172,25 @@ export default function BonDeCommandeModal({
       validated: true,
       validated_at: new Date().toISOString(),
     };
+  };
 
+  const handleValidateAndSave = () => {
+    const data = getCurrentData();
     setIsValidated(true);
     if (onSave) {
       onSave(data);
     }
-    toast.success("Bon de Commande validé et enregistré !");
   };
 
   const handlePrint = () => {
-    window.print();
+    const data = getCurrentData();
+    printBonDeCommande(data);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-xs print:p-0 print:bg-white print:static print:inset-auto">
-      {/* Print styles */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #bon-de-commande-print-area,
-          #bon-de-commande-print-area * {
-            visibility: visible;
-          }
-          #bon-de-commande-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 15mm 20mm;
-            background: white !important;
-            box-shadow: none !important;
-            border: none !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-xs">
       {/* Main Modal Container */}
-      <div className="relative w-full max-w-4xl bg-gray-100 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:shadow-none print:rounded-none print:bg-white">
+      <div className="relative w-full max-w-4xl bg-gray-100 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] bg-white">
         {/* Modal Top Bar (Screen only) */}
         <div className="no-print bg-navy px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -398,15 +376,12 @@ export default function BonDeCommandeModal({
             <div>
               <div className="flex items-center justify-between pb-3 border-b-2 border-gray-800">
                 <div className="flex items-center gap-3">
-                  {/* GoCab Logo Representation */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full border-3 border-gray-800 flex items-center justify-center font-black text-gray-800 text-sm tracking-tighter">
-                      GC
-                    </div>
-                    <span className="text-2xl font-black tracking-wider text-gray-900 uppercase">
-                      GOCAB
-                    </span>
-                  </div>
+                  {/* Official GoCab Logo */}
+                  <img
+                    src={GOCAB_OFFICIAL_LOGO_BASE64}
+                    alt="GoCab Logo"
+                    className="h-14 w-auto object-contain"
+                  />
                 </div>
                 <div className="text-right">
                   <h1 className="text-xl font-black tracking-tight text-gray-900 uppercase">
