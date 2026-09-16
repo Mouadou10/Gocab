@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       where,
       include: {
         driverProfile: {
-          select: { id: true, fullName: true, phoneSanitized: true }
+          select: { id: true, fullName: true, phoneSanitized: true, cinNumber: true }
         }
       },
       orderBy: { created_at: "desc" },

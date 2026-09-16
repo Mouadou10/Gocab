@@ -5,6 +5,162 @@ import { processVehicleSideEffects } from "@/lib/services/vehicleService";
 import { logAudit } from "@/lib/services/auditLogger";
 
 /**
+ * GET /api/vehicles/[id]
+ * Fetches vehicle details, vidange history (counts of simple & complète, dates),
+ * saved Bons de Commande, and Attestations de Location.
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id },
+      include: {
+        driverProfile: true,
+      },
+    });
+
+    if (!vehicle) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+
+    // Fetch all maintenance tickets for this vehicle
+    const tickets = await prisma.maintenanceTicket.findMany({
+      where: {
+        OR: [
+          { vehicle_id: id },
+          { plate_number: vehicle.plate_number },
+        ],
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    // Parse vidanges and bons de commande
+    const vidanges: any[] = [];
+    let simpleCount = 0;
+    let completeCount = 0;
+    const bonsDeCommande: any[] = [];
+
+    for (const t of tickets) {
+      let parsedBc: any = null;
+      if (t.resolution_notes) {
+        try {
+          const parsed = JSON.parse(t.resolution_notes);
+          if (parsed && parsed.bon_de_commande) {
+            parsedBc = parsed.bon_de_commande;
+            bonsDeCommande.push({
+              ticket_id: t.id,
+              ticket_type: t.ticket_type,
+              status: t.status,
+              created_at: t.created_at,
+              bc: parsedBc,
+            });
+          }
+        } catch {
+          // not JSON
+        }
+      }
+
+      // Check if ticket is a Vidange or has vidange items in its BC
+      const isVidangeTicket = t.ticket_type === "Vidange";
+      let hasVidangeBcItem = false;
+      let vidangeItemType: "Vidange Complète" | "Vidange Simple" | null = null;
+
+      if (parsedBc && Array.isArray(parsedBc.items)) {
+        for (const item of parsedBc.items) {
+          const des = (item.designation || "").toLowerCase();
+          if (des.includes("vidange")) {
+            hasVidangeBcItem = true;
+            if (des.includes("complète") || des.includes("complete")) {
+              vidangeItemType = "Vidange Complète";
+            } else {
+              vidangeItemType = "Vidange Simple";
+            }
+          }
+        }
+      }
+
+      if (isVidangeTicket || hasVidangeBcItem) {
+        let typeStr: "Vidange Complète" | "Vidange Simple" = "Vidange Simple";
+        if (vidangeItemType) {
+          typeStr = vidangeItemType;
+        } else {
+          const desc = (t.description || "").toLowerCase();
+          if (desc.includes("complète") || desc.includes("complete") || (t.repair_cost && t.repair_cost >= 900)) {
+            typeStr = "Vidange Complète";
+          }
+        }
+
+        if (typeStr === "Vidange Complète") {
+          completeCount++;
+        } else {
+          simpleCount++;
+        }
+
+        vidanges.push({
+          ticket_id: t.id,
+          date: t.created_at,
+          resolved_at: t.resolved_at,
+          status: t.status,
+          type: typeStr,
+          cost: t.repair_cost || (typeStr === "Vidange Complète" ? 960 : 510),
+          garage: t.garage_name || parsedBc?.supplier_name || "Hard Auto Services",
+          bc_number: parsedBc?.bc_number || null,
+          bc_data: parsedBc,
+          description: t.description,
+        });
+      }
+    }
+
+    // Fetch inspections / attestations for this vehicle
+    const inspections = await prisma.vehicleInspection.findMany({
+      where: {
+        OR: [
+          { vehicle_id: id },
+          { plate_number: vehicle.plate_number },
+        ],
+      },
+      orderBy: { inspection_date: "desc" },
+    });
+
+    const attestations = inspections.map((insp) => ({
+      id: insp.id,
+      date: new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(insp.inspection_date)),
+      raw_date: insp.inspection_date,
+      inspector: insp.inspector_name,
+      mileage: insp.current_mileage,
+      health_score: insp.health_score,
+      attestationData: {
+        fullName: vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || "",
+        cin: vehicle.driverProfile?.cinNumber || "",
+        brand: vehicle.make_model,
+        immat: vehicle.plate_number,
+        chassisNumber: vehicle.vin || "",
+        date: new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(insp.inspection_date)),
+        inspectionId: insp.id,
+      },
+    }));
+
+    return NextResponse.json({
+      vehicle,
+      vidangeStats: {
+        total: vidanges.length,
+        simpleCount,
+        completeCount,
+        history: vidanges,
+      },
+      bonsDeCommande,
+      attestations,
+    });
+  } catch (error) {
+    console.error("GET /api/vehicles/[id] error:", error);
+    return NextResponse.json({ error: "Failed to fetch vehicle details" }, { status: 500 });
+  }
+}
+
+/**
  * PATCH /api/vehicles/[id]
  * Updates vehicle metadata, mileage, status, and compliance dates.
  * Automations:

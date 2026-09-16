@@ -17,6 +17,7 @@ import TicketDrawer from "./TicketDrawer";
 import VehicleCSVUploader from "./VehicleCSVUploader";
 import AddExpenseModal from "./AddExpenseModal";
 import VehicleExpensesDrawer from "./VehicleExpensesDrawer";
+import AttestationModal, { AttestationData } from "./AttestationModal";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -57,6 +58,28 @@ export default function FleetView() {
   // Ticket Drawer state
   const [ticketVehicle, setTicketVehicle] = useState<Vehicle | null>(null);
   const [isTicketDrawerOpen, setIsTicketDrawerOpen] = useState(false);
+
+  // Quick Attestation Modal state
+  const [attestationVehicleData, setAttestationVehicleData] = useState<AttestationData | null>(null);
+  const [isAttestationModalOpen, setIsAttestationModalOpen] = useState(false);
+
+  function handleQuickAttestation(vehicle: Vehicle) {
+    const todayFormatted = new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date());
+
+    setAttestationVehicleData({
+      fullName: vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || "",
+      cin: vehicle.driverProfile?.cinNumber || "",
+      brand: vehicle.make_model,
+      immat: vehicle.plate_number,
+      chassisNumber: vehicle.vin || "",
+      date: todayFormatted,
+    });
+    setIsAttestationModalOpen(true);
+  }
 
   const fetchVehicles = useCallback(async () => {
     setIsLoading(true);
@@ -465,6 +488,15 @@ export default function FleetView() {
                     <td className="py-4 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => handleQuickAttestation(v)}
+                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 rounded-lg text-xs transition-colors font-semibold flex items-center gap-1"
+                          title="Générer / Imprimer l'Attestation de Location pour ce véhicule"
+                        >
+                          <span>📄</span>
+                          <span>Attestation</span>
+                        </button>
+
+                        <button
                           onClick={() => {
                             setExpenseVehicle(v);
                             setExpenseCategory(v.status === "impounded by police" ? "POLICE" : "REPAIR");
@@ -565,6 +597,18 @@ export default function FleetView() {
           setIsExpenseModalOpen(true);
         }}
       />
+
+      {/* Attestation de Location Modal */}
+      {attestationVehicleData && (
+        <AttestationModal
+          data={attestationVehicleData}
+          isOpen={isAttestationModalOpen}
+          onClose={() => {
+            setIsAttestationModalOpen(false);
+            setAttestationVehicleData(null);
+          }}
+        />
+      )}
     </div>
   );
 }

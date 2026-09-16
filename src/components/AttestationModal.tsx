@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import GoCabLogo from "./GoCabLogo";
+import { printAttestation } from "@/lib/attestationPrint";
+import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
 
 export interface AttestationData {
   fullName: string;
@@ -42,11 +43,18 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    window.print();
+    printAttestation({
+      fullName,
+      cin,
+      brand,
+      immat,
+      chassisNumber,
+      date,
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:bg-white print:static print:inset-auto">
+    <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       {/* Container Dialog */}
       <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none print:w-full print:max-w-none print:bg-white print:rounded-none">
         
@@ -184,11 +192,12 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
             <div>
               {/* Header Logo */}
               <div className="mb-4">
-                <div className="flex items-center gap-2">
-                  <GoCabLogo className="w-12 h-12" />
-                  <span className="font-extrabold text-2xl tracking-wider text-slate-800">
-                    GOCAB
-                  </span>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={GOCAB_OFFICIAL_LOGO_BASE64}
+                    alt="GoCab Logo"
+                    className="h-12 w-auto object-contain"
+                  />
                 </div>
                 <div className="mt-2 text-[13px] text-slate-700 italic font-serif">
                   Annexe 3 de la CONVENTION DE PARTENARIAT
@@ -215,7 +224,7 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
 
                 <p className="font-bold text-[14px]">Mr Hamza RASSID (Gérant)</p>
 
-                <p>Attestons par la présente avoir louer à :</p>
+                <p>Attestons par la présente avoir loué à :</p>
               </div>
 
               {/* Driver Details */}
@@ -233,18 +242,18 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
                   </li>
                   <li>
                     Immatriculation :{" "}
-                    <span className="font-semibold">{immat || "_________________________"}</span>
+                    <span className="font-semibold font-mono text-navy">{immat || "_________________________"}</span>
                   </li>
                   <li>
                     N° de châssis :{" "}
-                    <span className="font-semibold">
+                    <span className="font-semibold font-mono">
                       {chassisNumber || "_________________________"}
                     </span>
                   </li>
                   <li>
                     Durée de location :{" "}
                     <span className="font-bold">
-                      1 Mois renouvelable après consentement des deux parties ( la société et le
+                      1 Mois renouvelable après consentement des deux parties (la société et le
                       partenaire)
                     </span>
                   </li>
@@ -265,16 +274,33 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
               </div>
             </div>
 
-            {/* Signature & Date Block */}
+            {/* Signature & Date Block with Official Stamp */}
             <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-end text-[14px] font-bold gap-6">
               <div>
                 Fait à Casablanca, le{" "}
                 <span className="font-semibold">{date || "_________________________"}</span>
               </div>
-              <div className="text-right">
+              <div className="flex flex-col items-end gap-2">
                 <div>Signé : HAMZA RASSID (Gérant)</div>
-                <div className="mt-8 text-xs text-slate-400 italic">
-                  Cachet & Signature
+                <div className="relative p-2.5 border-2 border-blue-800/80 rounded-xl bg-blue-50/20 text-blue-900 font-sans text-center transform -rotate-2 select-none pointer-events-none w-48 shadow-2xs">
+                  <div className="text-[10px] font-black tracking-widest uppercase text-blue-950">
+                    GOCAB MOROCCO
+                  </div>
+                  <div className="text-[8px] font-semibold leading-tight text-blue-800 mt-0.5">
+                    332, Bd. Brahim Roudani<br />
+                    Etage 5, N°21<br />
+                    Casablanca
+                  </div>
+                  <svg
+                    className="absolute inset-0 w-full h-full text-blue-700/60 pointer-events-none"
+                    viewBox="0 0 200 80"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M 30 55 C 60 20, 80 70, 110 35 C 130 15, 150 65, 175 40" strokeLinecap="round" />
+                    <path d="M 40 45 C 80 50, 120 40, 160 50" strokeLinecap="round" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -297,43 +323,13 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
             <button
               type="button"
               onClick={handlePrint}
-              className="px-5 py-2 font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow transition-all active:scale-95 flex items-center gap-1.5"
+              className="px-5 py-2 font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
             >
               <span>🖨️ Imprimer</span>
             </button>
           </div>
         </div>
       </div>
-
-      {/* Global CSS for Print Mode */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-attestation,
-          #printable-attestation * {
-            visibility: visible !important;
-          }
-          #printable-attestation {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100vw !important;
-            min-height: 100vh !important;
-            margin: 0 !important;
-            padding: 15mm 15mm !important;
-            box-shadow: none !important;
-            border: none !important;
-            background: white !important;
-            color: #000 !important;
-            box-sizing: border-box !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
