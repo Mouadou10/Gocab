@@ -96,6 +96,9 @@ export async function POST(request: Request) {
       priority,
       update_vehicle_status,
       started_at,
+      repair_cost,
+      garage_name,
+      resolution_notes,
     } = body;
 
     if (!vehicle_id || !plate_number || !ticket_type || !description) {
@@ -119,6 +122,9 @@ export async function POST(request: Request) {
         status: started_at ? "IN_PROGRESS" : "OPEN",
         started_at: started_at ? new Date(started_at) : null,
         sla_deadline: slaDeadline,
+        repair_cost: repair_cost !== undefined && repair_cost !== null ? Number(repair_cost) : null,
+        garage_name: garage_name ? String(garage_name).trim() : null,
+        resolution_notes: resolution_notes ? String(resolution_notes) : null,
       },
     });
 

@@ -29,6 +29,8 @@ import toast from "react-hot-toast";
 import TicketDrawer, { MaintenanceTicket as BaseMaintenanceTicket } from "./TicketDrawer";
 import TicketKanbanColumn from "./TicketKanbanColumn";
 import TicketKanbanCard from "./TicketKanbanCard";
+import BonDeCommandeModal from "./BonDeCommandeModal";
+import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 
 // Extend with SLA fields added in Sprint 2
 export type MaintenanceTicket = BaseMaintenanceTicket & {
@@ -63,6 +65,10 @@ export default function SupportTicketsView() {
   const [waivedDays, setWaivedDays] = useState<number>(1);
   const [waiverReason, setWaiverReason] = useState<string>("");
   const [isWaiverSubmitting, setIsWaiverSubmitting] = useState(false);
+
+  // Bon de Commande Modal state
+  const [bcTicket, setBcTicket] = useState<MaintenanceTicket | null>(null);
+  const [bcInitialData, setBcInitialData] = useState<Partial<BonDeCommandeData> | null>(null);
 
   // Live timer tick every 10 seconds
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
@@ -251,6 +257,98 @@ export default function SupportTicketsView() {
     setGarageName(ticket.garage_name || "");
     setRepairCost(ticket.repair_cost !== undefined && ticket.repair_cost !== null ? String(ticket.repair_cost) : "");
     setResolutionNotes(ticket.resolution_notes || "");
+  }
+
+  async function handleOpenBcModal(ticket: MaintenanceTicket) {
+    setBcTicket(ticket);
+
+    // Check if ticket already has attached bon de commande
+    let existingBc: Partial<BonDeCommandeData> | null = null;
+    if (ticket.resolution_notes) {
+      try {
+        const parsed = JSON.parse(ticket.resolution_notes);
+        if (parsed && parsed.bon_de_commande) {
+          existingBc = parsed.bon_de_commande;
+        }
+      } catch {
+        // not JSON
+      }
+    }
+
+    if (existingBc) {
+      setBcInitialData(existingBc);
+    } else {
+      // Pre-fill from ticket & attempt to fetch vehicle details
+      let makeModel = "";
+      let mileage = "";
+      let vin = "";
+
+      try {
+        const res = await fetch(`/api/vehicles?search=${encodeURIComponent(ticket.plate_number)}`);
+        const data = await res.json();
+        const v = data.vehicles?.find(
+          (veh: any) =>
+            veh.plate_number.toLowerCase() === ticket.plate_number.toLowerCase() ||
+            veh.id === ticket.vehicle_id
+        );
+        if (v) {
+          makeModel = v.make_model || "";
+          mileage = v.current_mileage ? `${v.current_mileage.toLocaleString()} Km` : "";
+          vin = v.vin || "";
+        }
+      } catch (err) {
+        console.warn("Could not fetch vehicle details for BC:", err);
+      }
+
+      setBcInitialData({
+        bc_number: "",
+        date: getFormattedToday(),
+        supplier_name: ticket.garage_name || "Hard Auto Services",
+        vehicle_make_model: makeModel,
+        vehicle_plate: ticket.plate_number,
+        vehicle_mileage: mileage,
+        vehicle_vin: vin,
+        items:
+          ticket.ticket_type === "Vidange"
+            ? [{ id: "vidange_1", designation: "Vidange complète", quantity: 1, unit_price_ttc: 960, total_ttc: 960 }]
+            : ticket.ticket_type === "AdBleu"
+            ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
+            : [],
+        execution_delay: getFormattedToday(),
+        observations: "N/A",
+        validator_name: "Hamza RASSID",
+        validator_role: "Gérant",
+        validated: false,
+      });
+    }
+  }
+
+  async function handleSaveBc(savedBc: BonDeCommandeData) {
+    if (!bcTicket) return;
+    try {
+      const res = await fetch(`/api/tickets/${bcTicket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repair_cost: savedBc.total_ttc,
+          garage_name: savedBc.supplier_name,
+          resolution_notes: JSON.stringify({ bon_de_commande: savedBc }),
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Bon de Commande validé et enregistré !");
+        setBcTicket(null);
+        setBcInitialData(null);
+        fetchTickets();
+        notifyMutation("tickets");
+      } else {
+        toast.error("Échec de l'enregistrement du Bon de Commande");
+      }
+    } catch (err) {
+      console.error("Error saving Bon de Commande:", err);
+      toast.error("Erreur réseau");
+    }
   }
 
   async function handleStatusChange(ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) {
@@ -598,6 +696,7 @@ export default function SupportTicketsView() {
                   onStatusChange={handleStatusChange}
                   onStartClick={handleStartTicket}
                   onStopClick={handleStopTicket}
+                  onBonDeCommandeClick={handleOpenBcModal}
                 />
               ))}
             </div>
@@ -783,6 +882,19 @@ export default function SupportTicketsView() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Bon de Commande Modal for viewing, editing, or printing */}
+      {bcTicket && bcInitialData && (
+        <BonDeCommandeModal
+          isOpen={Boolean(bcTicket)}
+          onClose={() => {
+            setBcTicket(null);
+            setBcInitialData(null);
+          }}
+          onSave={handleSaveBc}
+          initialData={bcInitialData}
+        />
       )}
     </div>
   );

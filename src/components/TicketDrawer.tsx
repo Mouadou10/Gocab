@@ -10,8 +10,10 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Search, Car, X, Check } from "lucide-react";
+import { Search, Car, X, Check, FileText } from "lucide-react";
 import { Vehicle } from "./VehicleDrawer";
+import BonDeCommandeModal from "./BonDeCommandeModal";
+import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 
 export interface MaintenanceTicket {
   id: string;
@@ -38,13 +40,14 @@ export interface MaintenanceTicket {
 }
 
 const TICKET_TYPES = [
-  { id: "Fourrière", label: "🚔 Fourrière Municipale (Impounded)", statusImpact: "impounded" },
-  { id: "Police Immobilization", label: "🛑 Immobilisation Police / Sabot", statusImpact: "police_immobilization" },
-  { id: "VEHICLE_RECOVERY", label: "🚨 Blocage Véhicule / Récupération (Vehicle Recovery)", statusImpact: "Blocked" },
   { id: "Vidange", label: "🛢️ Vidange (Oil Change)", statusImpact: "Actif" },
   { id: "AdBleu", label: "💧 AdBleu Refill", statusImpact: "Actif" },
+  { id: "Custom", label: "📋 Custom (Bon de Commande)", statusImpact: "Actif" },
   { id: "Repair", label: "🔧 Repair / Mechanical", statusImpact: "In garage" },
   { id: "Accident", label: "💥 Accident / Insurance", statusImpact: "In garage" },
+  { id: "Fourrière", label: "🚔 Fourrière Municipale (Impounded)", statusImpact: "impounded" },
+  { id: "Police Immobilization", label: "🛑 Immobilisation Police / Sabot", statusImpact: "police_immobilization" },
+  { id: "VEHICLE_RECOVERY", label: "🚨 Blocage Véhicule / Récupération", statusImpact: "Blocked" },
 ] as const;
 
 interface TicketDrawerProps {
@@ -69,6 +72,10 @@ export default function TicketDrawer({
   const [description, setDescription] = useState("");
   const [updateVehicleStatus, setUpdateVehicleStatus] = useState(true);
   const [startTimerNow, setStartTimerNow] = useState(false);
+
+  // Bon de Commande state
+  const [bonDeCommandeData, setBonDeCommandeData] = useState<BonDeCommandeData | null>(null);
+  const [isBcModalOpen, setIsBcModalOpen] = useState(false);
 
   // Searchable vehicle selector states
   const [vehicleSearch, setVehicleSearch] = useState("");
@@ -116,8 +123,30 @@ export default function TicketDrawer({
       setPlateNumber(found.plate_number);
       setDriverName(found.assigned_driver_name || "");
       setDriverPhone(found.assigned_driver_phone || "");
+
+      // Update vehicle in bon de commande if already open
+      if (bonDeCommandeData) {
+        setBonDeCommandeData({
+          ...bonDeCommandeData,
+          vehicle_make_model: found.make_model,
+          vehicle_plate: found.plate_number,
+          vehicle_mileage: found.current_mileage ? `${found.current_mileage.toLocaleString()} Km` : "",
+          vehicle_vin: found.vin || "",
+        });
+      }
     }
   }
+
+  const handleBcSave = (savedBc: BonDeCommandeData) => {
+    setBonDeCommandeData(savedBc);
+    setIsBcModalOpen(false);
+
+    // Auto-populate description if empty or standard
+    if (!description.trim() || description.startsWith("[Bon de Commande") || description === "Vidange" || description === "AdBleu") {
+      const summaryItems = savedBc.items.map((i) => `${i.designation} (${i.quantity})`).join(", ");
+      setDescription(`[Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""}] ${summaryItems} · Total: ${savedBc.total_ttc} MAD TTC`);
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -148,7 +177,10 @@ export default function TicketDrawer({
           priority,
           description,
           update_vehicle_status: updateVehicleStatus,
-          started_at: (startTimerNow && (ticketType === "Vidange" || ticketType === "AdBleu")) ? new Date().toISOString() : null,
+          started_at: (startTimerNow && (ticketType === "Vidange" || ticketType === "AdBleu" || ticketType === "Custom")) ? new Date().toISOString() : null,
+          repair_cost: bonDeCommandeData ? bonDeCommandeData.total_ttc : null,
+          garage_name: bonDeCommandeData ? bonDeCommandeData.supplier_name : null,
+          resolution_notes: bonDeCommandeData ? JSON.stringify({ bon_de_commande: bonDeCommandeData }) : null,
         }),
       });
 
@@ -406,6 +438,70 @@ export default function TicketDrawer({
             </div>
           </div>
 
+          {/* Bon de Commande & Tarification Section */}
+          {(ticketType === "Vidange" || ticketType === "AdBleu" || ticketType === "Custom") && (
+            <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/50 border border-blue-200/90 rounded-2xl p-4 space-y-3 shadow-2xs animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-blue-600 text-white rounded-lg text-xs">📝</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-navy">Bon de Commande & Tarification</h4>
+                    <p className="text-3xs text-gray-500">Chiffrage automatique HT, TVA & TTC</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBcModalOpen(true)}
+                  className="px-3 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{bonDeCommandeData && bonDeCommandeData.items.length > 0 ? "Modifier BC" : "Rédiger BC"}</span>
+                </button>
+              </div>
+
+              {bonDeCommandeData && bonDeCommandeData.items.length > 0 ? (
+                <div className="bg-white border border-blue-200/80 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-700 flex items-center gap-1">
+                      <span>✅</span>
+                      <span>{bonDeCommandeData.items.length} prestation(s) sélectionnée(s)</span>
+                    </span>
+                    <span className="font-mono font-black text-navy text-sm">
+                      {bonDeCommandeData.total_ttc.toLocaleString()} MAD TTC
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 max-h-24 overflow-y-auto divide-y divide-gray-50">
+                    {bonDeCommandeData.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-3xs text-gray-700 py-1">
+                        <span className="font-medium truncate pr-2">{item.designation} (x{item.quantity})</span>
+                        <span className="font-mono font-bold text-blue-900 shrink-0">{item.total_ttc} DH</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-3xs text-gray-500 pt-1.5 border-t border-gray-100 font-medium">
+                    <span>N° BC : <strong className="text-gray-800 font-mono">{bonDeCommandeData.bc_number || "À compléter"}</strong></span>
+                    <span>Total HT : <strong className="text-gray-800 font-mono">{bonDeCommandeData.total_ht} MAD</strong></span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-blue-800/80 bg-white/80 border border-blue-100 rounded-xl p-3 flex items-center justify-between">
+                  <span className="text-3xs">
+                    Sélectionnez les prestations (Vidange simple/complète, AdBlue, Antigel, Freins, Pneus...).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsBcModalOpen(true)}
+                    className="text-xs font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer whitespace-nowrap ml-2"
+                  >
+                    + Ouvrir la grille
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Priority */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -510,6 +606,39 @@ export default function TicketDrawer({
           </button>
         </div>
       </div>
+
+      {/* Interactive Bon de Commande Modal */}
+      {isBcModalOpen && (
+        <BonDeCommandeModal
+          isOpen={isBcModalOpen}
+          onClose={() => setIsBcModalOpen(false)}
+          onSave={handleBcSave}
+          initialData={
+            bonDeCommandeData || {
+              bc_number: "",
+              date: getFormattedToday(),
+              supplier_name: "Hard Auto Services",
+              vehicle_make_model: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.make_model || "",
+              vehicle_plate: plateNumber || (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.plate_number || "",
+              vehicle_mileage: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.current_mileage
+                ? `${(vehicles.find((v) => v.id === selectedVehicleId) || vehicle)!.current_mileage.toLocaleString()} Km`
+                : "",
+              vehicle_vin: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.vin || "",
+              items:
+                ticketType === "Vidange"
+                  ? [{ id: "vidange_1", designation: "Vidange complète", quantity: 1, unit_price_ttc: 960, total_ttc: 960 }]
+                  : ticketType === "AdBleu"
+                  ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
+                  : [],
+              execution_delay: getFormattedToday(),
+              observations: "N/A",
+              validator_name: "Hamza RASSID",
+              validator_role: "Gérant",
+              validated: false,
+            }
+          }
+        />
+      )}
     </div>
   );
 }

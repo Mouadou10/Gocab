@@ -16,6 +16,7 @@ interface TicketKanbanColumnProps {
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
   onStartClick?: (ticket: MaintenanceTicket) => void;
   onStopClick?: (ticket: MaintenanceTicket) => void;
+  onBonDeCommandeClick?: (ticket: MaintenanceTicket) => void;
 }
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ export default function TicketKanbanColumn({
   onStatusChange,
   onStartClick,
   onStopClick,
+  onBonDeCommandeClick,
 }: TicketKanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
@@ -84,6 +86,7 @@ export default function TicketKanbanColumn({
               onStatusChange={onStatusChange}
               onStartClick={onStartClick}
               onStopClick={onStopClick}
+              onBonDeCommandeClick={onBonDeCommandeClick}
             />
           ))}
         </SortableContext>

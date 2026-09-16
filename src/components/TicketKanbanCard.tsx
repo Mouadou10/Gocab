@@ -14,6 +14,7 @@ interface TicketKanbanCardProps {
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
   onStartClick?: (ticket: MaintenanceTicket) => void;
   onStopClick?: (ticket: MaintenanceTicket) => void;
+  onBonDeCommandeClick?: (ticket: MaintenanceTicket) => void;
   isResolved: boolean;
 }
 
@@ -27,6 +28,7 @@ export default function TicketKanbanCard({
   onStatusChange,
   onStartClick,
   onStopClick,
+  onBonDeCommandeClick,
   isResolved,
 }: TicketKanbanCardProps) {
   const {
@@ -118,6 +120,73 @@ export default function TicketKanbanCard({
           {ticket.driver_phone && <span className="font-mono text-gray-500">({ticket.driver_phone})</span>}
         </div>
       )}
+
+      {/* Bon de Commande Section */}
+      {(() => {
+        let attachedBc: any = null;
+        if (ticket.resolution_notes) {
+          try {
+            const parsed = JSON.parse(ticket.resolution_notes);
+            if (parsed && parsed.bon_de_commande) {
+              attachedBc = parsed.bon_de_commande;
+            }
+          } catch {
+            // not JSON
+          }
+        }
+
+        if (attachedBc) {
+          return (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200/90 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-base">📄</span>
+                <div className="leading-tight truncate">
+                  <div className="text-xs font-bold text-navy flex items-center gap-1.5">
+                    <span>Bon de Commande</span>
+                    {attachedBc.bc_number ? (
+                      <span className="font-mono bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded text-[10px]">
+                        N° {attachedBc.bc_number}
+                      </span>
+                    ) : (
+                      <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                        Validé
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-600 font-semibold font-mono">
+                    {attachedBc.total_ttc ? Number(attachedBc.total_ttc).toLocaleString() : 0} MAD TTC
+                    {attachedBc.items && ` · ${attachedBc.items.length} art.`}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onBonDeCommandeClick?.(ticket)}
+                className="px-2.5 py-1.5 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 hover:border-blue-400 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                title="Ouvrir et imprimer le Bon de Commande"
+              >
+                <span>🖨️</span>
+                <span>Imprimer</span>
+              </button>
+            </div>
+          );
+        }
+
+        if (ticket.ticket_type === "Vidange" || ticket.ticket_type === "AdBleu" || ticket.ticket_type === "Custom" || ticket.ticket_type === "Repair") {
+          return (
+            <button
+              type="button"
+              onClick={() => onBonDeCommandeClick?.(ticket)}
+              className="w-full py-1.5 px-2.5 bg-blue-50/70 hover:bg-blue-100/80 text-blue-800 border border-blue-200/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              <span>📝</span>
+              <span>+ Bon de Commande</span>
+            </button>
+          );
+        }
+
+        return null;
+      })()}
 
       {/* Downtime Counter / Start & Stop Timer Box */}
       {(() => {
