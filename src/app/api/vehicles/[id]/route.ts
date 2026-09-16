@@ -143,6 +143,54 @@ export async function GET(
       },
     }));
 
+    // Fetch vehicle expenses
+    const expenses = await prisma.vehicleExpense.findMany({
+      where: {
+        OR: [
+          { vehicle_id: id },
+          { plate_number: vehicle.plate_number },
+        ],
+        is_archived: false,
+      },
+      orderBy: { paid_at: "desc" },
+    });
+
+    // Compute detailed financial spend metrics
+    let totalBcMad = 0;
+    let totalBcHt = 0;
+    let totalBcTva = 0;
+    for (const b of bonsDeCommande) {
+      if (b.bc) {
+        totalBcMad += Number(b.bc.total_ttc || 0);
+        totalBcHt += Number(b.bc.total_ht || 0);
+        totalBcTva += Number(b.bc.tva_amount || 0);
+      }
+    }
+
+    let totalExpensesMad = 0;
+    const expensesByCategory: Record<string, number> = {};
+    for (const e of expenses) {
+      const amt = e.amount_mad || 0;
+      totalExpensesMad += amt;
+      expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + amt;
+    }
+
+    const isExpenseFromBc = (e: any) => {
+      return (
+        (e.invoice_number && bonsDeCommande.some(b => b.bc?.bc_number === e.invoice_number)) ||
+        (e.description && e.description.includes("[Bon de Commande"))
+      );
+    };
+
+    const nonBcExpenses = expenses.filter(e => !isExpenseFromBc(e));
+    const nonBcExpensesTotal = nonBcExpenses.reduce((s, e) => s + (e.amount_mad || 0), 0);
+
+    // Grand total spent on vehicle: all Bons de Commande + non-BC expenses
+    let grandTotalSpentMad = totalBcMad + nonBcExpensesTotal;
+    if (grandTotalSpentMad === 0 && totalExpensesMad > 0) {
+      grandTotalSpentMad = totalExpensesMad;
+    }
+
     return NextResponse.json({
       vehicle,
       vidangeStats: {
@@ -153,6 +201,18 @@ export async function GET(
       },
       bonsDeCommande,
       attestations,
+      financialSummary: {
+        grandTotalSpentMad,
+        totalBcMad,
+        totalBcHt,
+        totalBcTva,
+        totalOtherExpensesMad: nonBcExpensesTotal,
+        totalExpensesMad,
+        expensesCount: expenses.length,
+        bonsDeCommandeCount: bonsDeCommande.length,
+        expensesByCategory,
+      },
+      expenses,
     });
   } catch (error) {
     console.error("GET /api/vehicles/[id] error:", error);

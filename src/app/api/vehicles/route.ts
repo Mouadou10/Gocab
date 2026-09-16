@@ -37,12 +37,24 @@ export async function GET(request: Request) {
       include: {
         driverProfile: {
           select: { id: true, fullName: true, phoneSanitized: true, cinNumber: true }
+        },
+        expenses: {
+          where: { is_archived: false },
+          select: { amount_mad: true, category: true }
         }
       },
       orderBy: { created_at: "desc" },
     });
 
-    return NextResponse.json({ vehicles });
+    const enrichedVehicles = vehicles.map((v: any) => {
+      const totalExpenseMad = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount_mad || 0), 0);
+      return {
+        ...v,
+        total_expenses_mad: totalExpenseMad,
+      };
+    });
+
+    return NextResponse.json({ vehicles: enrichedVehicles });
   } catch (error) {
     console.error("GET /api/vehicles error:", error);
     return NextResponse.json(

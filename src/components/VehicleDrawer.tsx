@@ -18,7 +18,7 @@ import toast from "react-hot-toast";
 import AddExpenseModal, { EXPENSE_CATEGORIES } from "./AddExpenseModal";
 import AttestationModal, { AttestationData } from "./AttestationModal";
 import BonDeCommandeModal from "./BonDeCommandeModal";
-import { BonDeCommandeData } from "@/lib/bonDeCommandeCatalog";
+import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck } from "lucide-react";
 
 const HUB_CITIES = [
@@ -56,6 +56,7 @@ export interface Vehicle {
   assigned_driver_name: string | null;
   assigned_driver_phone: string | null;
   driverProfile?: { id: string; fullName: string; phoneSanitized: string; cinNumber?: string | null } | null;
+  total_expenses_mad?: number;
   notes: string | null;
   created_at: string;
 }
@@ -115,6 +116,17 @@ export default function VehicleDrawer({
   } | null>(null);
   const [bonsDeCommande, setBonsDeCommande] = useState<any[]>([]);
   const [attestations, setAttestations] = useState<any[]>([]);
+  const [financialSummary, setFinancialSummary] = useState<{
+    grandTotalSpentMad: number;
+    totalBcMad: number;
+    totalBcHt: number;
+    totalBcTva: number;
+    totalOtherExpensesMad: number;
+    totalExpensesMad: number;
+    expensesCount: number;
+    bonsDeCommandeCount: number;
+    expensesByCategory: Record<string, number>;
+  } | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   // Modals state
@@ -122,6 +134,7 @@ export default function VehicleDrawer({
   const [attestationData, setAttestationData] = useState<AttestationData | null>(null);
   const [isBcModalOpen, setIsBcModalOpen] = useState(false);
   const [selectedBc, setSelectedBc] = useState<BonDeCommandeData | null>(null);
+  const [isNewBcModalOpen, setIsNewBcModalOpen] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -155,6 +168,8 @@ export default function VehicleDrawer({
         if (data.vidangeStats) setVidangeStats(data.vidangeStats);
         if (data.bonsDeCommande) setBonsDeCommande(data.bonsDeCommande);
         if (data.attestations) setAttestations(data.attestations);
+        if (data.financialSummary) setFinancialSummary(data.financialSummary);
+        if (data.expenses) setVehicleExpenses(data.expenses);
         if (data.vehicle?.driverProfile) {
           if (!assignedDriverId && data.vehicle.driverProfile.id) {
             setAssignedDriverId(data.vehicle.driverProfile.id);
@@ -165,6 +180,50 @@ export default function VehicleDrawer({
       console.error("Failed to load vehicle details:", err);
     } finally {
       setIsLoadingDetails(false);
+    }
+  }
+
+  async function handleCreateBcSave(bcData: BonDeCommandeData) {
+    if (!vehicle) return;
+    try {
+      const summaryItems = (bcData.items || [])
+        .map((i) => `${i.designation || "Prestation"} (x${i.quantity || 1})`)
+        .join(", ");
+      const isVidange = (bcData.items || []).some((it) =>
+        (it.designation || "").toLowerCase().includes("vidange")
+      );
+      const ticketType = isVidange ? "Vidange" : "Repair";
+
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicle_id: vehicle.id,
+          plate_number: vehicle.plate_number,
+          driver_name: vehicle.assigned_driver_name || null,
+          driver_phone: vehicle.assigned_driver_phone || null,
+          ticket_type: ticketType,
+          priority: "Normal",
+          description: `[Bon de Commande ${bcData.bc_number ? "N° " + bcData.bc_number : ""}] ${summaryItems || "Prestation"} · Total: ${bcData.total_ttc} MAD TTC`,
+          update_vehicle_status: false,
+          repair_cost: bcData.total_ttc,
+          garage_name: bcData.supplier_name,
+          resolution_notes: JSON.stringify({ bon_de_commande: bcData }),
+        }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Échec de création du Bon de Commande");
+      }
+
+      toast.success("Bon de Commande validé et dépense financière enregistrée !");
+      setIsNewBcModalOpen(false);
+      loadVehicleDetails();
+      loadExpenses();
+      onSaveSuccess();
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de l'enregistrement du Bon de Commande");
     }
   }
 
@@ -544,59 +603,90 @@ export default function VehicleDrawer({
               <>
                 {/* Section 4: Financial & Expenses History */}
                 <div className="pt-4 border-t border-gray-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-navy uppercase tracking-wider flex items-center gap-1.5">
-                    <span>💸</span> Frais & Réparations ({vehicleExpenses.length})
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddExpenseOpen(true)}
-                    className="flex items-center gap-1 text-xs font-bold text-navy bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Ajouter Frais</span>
-                  </button>
-                </div>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-navy uppercase tracking-wider flex items-center gap-1.5">
+                      <span>💸</span> Bilan Financier & Dépenses ({vehicleExpenses.length})
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddExpenseOpen(true)}
+                      className="flex items-center gap-1 text-xs font-bold text-navy bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Ajouter Frais</span>
+                    </button>
+                  </div>
 
-                {vehicleExpenses.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="p-3 bg-navy/5 rounded-xl flex items-center justify-between text-xs">
-                      <span className="text-gray-600 font-medium">Total Dépenses Véhicule :</span>
-                      <span className="font-extrabold text-navy text-sm">
-                        {vehicleExpenses.reduce((s, e) => s + (e.amount_mad || 0), 0).toLocaleString()} MAD
+                  {/* Financial Spend Summary Card */}
+                  <div className="p-3 bg-gradient-to-br from-navy/5 via-blue-50/40 to-navy/10 rounded-2xl border border-navy/10 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold uppercase tracking-wider text-[11px]">
+                        Total Dépensé sur ce Véhicule :
+                      </span>
+                      <span className="font-mono font-black text-navy text-base">
+                        {(financialSummary?.grandTotalSpentMad ?? vehicleExpenses.reduce((s, e) => s + (e.amount_mad || 0), 0)).toLocaleString()} MAD TTC
                       </span>
                     </div>
 
-                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                      {vehicleExpenses.map((exp: any) => (
-                        <div
-                          key={exp.id}
-                          className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs flex items-center justify-between gap-2"
-                        >
-                          <div className="space-y-0.5">
-                            <span className="font-semibold text-gray-800">
-                              {EXPENSE_CATEGORIES.find((c) => c.key === exp.category)?.label || exp.category}
-                            </span>
-                            {exp.description && (
-                              <p className="text-2xs text-gray-500 truncate max-w-[200px]">{exp.description}</p>
-                            )}
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className="font-bold text-navy">{exp.amount_mad.toLocaleString()} MAD</p>
-                            <p className="text-2xs text-gray-400">
-                              {new Date(exp.paid_at).toLocaleDateString("fr-FR")}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-navy/10 text-[11px]">
+                      {financialSummary && financialSummary.totalBcMad > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-blue-100/80 text-blue-900 font-semibold border border-blue-200">
+                          📋 Bons de Commande : <strong>{financialSummary.totalBcMad.toLocaleString()} MAD</strong> ({financialSummary.bonsDeCommandeCount} BC)
+                        </span>
+                      )}
+                      {financialSummary && financialSummary.totalOtherExpensesMad > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-amber-100/80 text-amber-900 font-semibold border border-amber-200">
+                          🔧 Autres Frais : <strong>{financialSummary.totalOtherExpensesMad.toLocaleString()} MAD</strong>
+                        </span>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <div className="p-3 bg-gray-50 rounded-xl text-center text-xs text-gray-400">
-                    Aucun frais enregistré pour ce véhicule.
-                  </div>
-                )}
-              </div>
+
+                  {vehicleExpenses.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        Historique des Lignes de Frais & Interventions :
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                        {vehicleExpenses.map((exp: any) => {
+                          const isFromBc = exp.invoice_number?.startsWith("BC") || exp.description?.includes("[Bon de Commande");
+                          return (
+                            <div
+                              key={exp.id}
+                              className="p-2.5 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-200 text-xs flex items-center justify-between gap-2 transition-colors"
+                            >
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-gray-800">
+                                    {EXPENSE_CATEGORIES.find((c) => c.key === exp.category)?.label || exp.category}
+                                  </span>
+                                  {isFromBc && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                      📋 {exp.invoice_number || "Bon de Commande"}
+                                    </span>
+                                  )}
+                                </div>
+                                {exp.description && (
+                                  <p className="text-2xs text-gray-500 truncate max-w-[240px]">{exp.description}</p>
+                                )}
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="font-bold text-navy">{exp.amount_mad.toLocaleString()} MAD</p>
+                                <p className="text-2xs text-gray-400">
+                                  {new Date(exp.paid_at).toLocaleDateString("fr-FR")}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-50 rounded-xl text-center text-xs text-gray-400">
+                      Aucun frais enregistré pour ce véhicule.
+                    </div>
+                  )}
+                </div>
 
               {/* Section 5: Suivi des Vidanges (Huile Moteur) */}
               <div className="pt-4 border-t border-gray-100 space-y-3">
@@ -692,24 +782,39 @@ export default function VehicleDrawer({
 
                 {/* Section 6: Documents & Attestations */}
                 <div className="pt-4 border-t border-gray-100 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-xs font-bold text-navy uppercase tracking-wider flex items-center gap-1.5">
                       <span>📑</span> Documents & Attestations
                     </h4>
-                    <button
-                      type="button"
-                      onClick={handleOpenNewAttestation}
-                      className="flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs transition-colors"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Attestation de Location</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setIsNewBcModalOpen(true)}
+                        className="flex items-center gap-1 text-xs font-bold text-navy bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-navy" />
+                        <span>Nouveau Bon de Commande</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenNewAttestation}
+                        className="flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs transition-colors"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Attestation</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     {/* Saved Bons de Commande */}
                     <div className="text-xs font-semibold text-gray-700 flex items-center justify-between">
                       <span>Bons de Commande Enregistrés ({bonsDeCommande.length})</span>
+                      {financialSummary && financialSummary.totalBcMad > 0 && (
+                        <span className="text-navy font-bold text-xs bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+                          Total Engagé : {financialSummary.totalBcMad.toLocaleString()} MAD TTC
+                        </span>
+                      )}
                     </div>
 
                     {bonsDeCommande.length > 0 ? (
@@ -823,7 +928,7 @@ export default function VehicleDrawer({
           />
         )}
 
-        {/* Bon De Commande Modal */}
+        {/* Bon De Commande Modal (View / Print) */}
         {selectedBc && (
           <BonDeCommandeModal
             isOpen={isBcModalOpen}
@@ -833,6 +938,23 @@ export default function VehicleDrawer({
             }}
             initialData={selectedBc}
             readOnly={true}
+          />
+        )}
+
+        {/* New Bon De Commande Modal (Create & Save directly for this Vehicle) */}
+        {isNewBcModalOpen && (
+          <BonDeCommandeModal
+            isOpen={isNewBcModalOpen}
+            onClose={() => setIsNewBcModalOpen(false)}
+            onSave={handleCreateBcSave}
+            initialData={{
+              vehicle_plate: plateNumber,
+              vehicle_make_model: makeModel,
+              vehicle_mileage: currentMileage ? currentMileage.toString() : "",
+              vehicle_vin: vin || "",
+              date: getFormattedToday(),
+            }}
+            readOnly={false}
           />
         )}
 

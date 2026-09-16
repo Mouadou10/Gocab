@@ -128,6 +128,66 @@ export async function POST(request: Request) {
       },
     });
 
+    // Auto-record Financial Expense from Bon de Commande / Repair Cost to track per-car spending
+    try {
+      let parsedBc: any = null;
+      if (resolution_notes) {
+        try {
+          const parsed = JSON.parse(resolution_notes);
+          if (parsed && parsed.bon_de_commande) {
+            parsedBc = parsed.bon_de_commande;
+          }
+        } catch {}
+      }
+
+      const costAmount = parsedBc?.total_ttc || (repair_cost !== undefined && repair_cost !== null ? Number(repair_cost) : 0);
+      if (costAmount > 0) {
+        const isVidangeOrMaintenance =
+          ticket_type === "Vidange" ||
+          ticket_type === "AdBleu" ||
+          (parsedBc?.items && parsedBc.items.some((it: any) => (it.designation || "").toLowerCase().includes("vidange")));
+
+        const expenseCategory = isVidangeOrMaintenance
+          ? "MAINTENANCE"
+          : ticket_type === "Accident"
+          ? "ACCIDENT"
+          : "REPAIR";
+
+        const itemsSummary = parsedBc?.items && parsedBc.items.length > 0
+          ? parsedBc.items.map((i: any) => `${i.designation || "Prestation"} (x${i.quantity || 1})`).join(", ")
+          : description;
+
+        const bcRef = parsedBc?.bc_number ? String(parsedBc.bc_number) : `BC-TICK-${ticket.id.slice(0, 8).toUpperCase()}`;
+
+        const linkedVehicle = await prisma.vehicle.findFirst({
+          where: {
+            OR: [
+              { id: vehicle_id },
+              { plate_number: plate_number.trim() },
+            ],
+          },
+        });
+
+        if (linkedVehicle) {
+          await prisma.vehicleExpense.create({
+            data: {
+              vehicle_id: linkedVehicle.id,
+              plate_number: linkedVehicle.plate_number,
+              category: expenseCategory,
+              amount_mad: Number(costAmount),
+              description: `[Bon de Commande ${bcRef}] ${itemsSummary} · Fournisseur: ${parsedBc?.supplier_name || garage_name || "Hard Auto Services"}`,
+              invoice_number: bcRef,
+              paid_by: "COMPANY",
+              status: "PAID",
+              paid_at: parsedBc?.date ? new Date(parsedBc.date) : new Date(),
+            },
+          });
+        }
+      }
+    } catch (expErr) {
+      console.warn("Auto-creating VehicleExpense from ticket Bon de Commande warning:", expErr);
+    }
+
     // Auto-update vehicle status and dispatch linked tasks based on ticket type
     const isRecoveryTicket = 
       ticket_type === "VEHICLE_RECOVERY" || 

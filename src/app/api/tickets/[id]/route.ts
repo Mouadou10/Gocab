@@ -121,6 +121,70 @@ export async function PATCH(
       data: updateData,
     });
 
+    // Auto-sync Financial Expense from Bon de Commande / Repair Cost
+    if (updateData.resolution_notes !== undefined || updateData.repair_cost !== undefined) {
+      try {
+        let parsedBc: any = null;
+        const notesStr = updateData.resolution_notes !== undefined ? updateData.resolution_notes : ticket.resolution_notes;
+        if (notesStr) {
+          try {
+            const p = JSON.parse(notesStr);
+            if (p && p.bon_de_commande) parsedBc = p.bon_de_commande;
+          } catch {}
+        }
+        const costAmount = parsedBc?.total_ttc || (ticket.repair_cost !== null && ticket.repair_cost !== undefined ? Number(ticket.repair_cost) : 0);
+        if (costAmount > 0 && ticket.vehicle_id) {
+          const bcRef = parsedBc?.bc_number ? String(parsedBc.bc_number) : `BC-TICK-${ticket.id.slice(0, 8).toUpperCase()}`;
+          const isVidange =
+            ticket.ticket_type === "Vidange" ||
+            ticket.ticket_type === "AdBleu" ||
+            (parsedBc?.items && parsedBc.items.some((it: any) => (it.designation || "").toLowerCase().includes("vidange")));
+          const category = isVidange ? "MAINTENANCE" : (ticket.ticket_type === "Accident" ? "ACCIDENT" : "REPAIR");
+          const itemsSummary = parsedBc?.items && parsedBc.items.length > 0
+            ? parsedBc.items.map((i: any) => `${i.designation || "Prestation"} (x${i.quantity || 1})`).join(", ")
+            : ticket.description;
+
+          const existingExpense = await prisma.vehicleExpense.findFirst({
+            where: {
+              OR: [
+                { invoice_number: bcRef },
+                { description: { contains: ticket.id.slice(0, 8) } }
+              ],
+              vehicle_id: ticket.vehicle_id,
+            },
+          });
+
+          if (existingExpense) {
+            await prisma.vehicleExpense.update({
+              where: { id: existingExpense.id },
+              data: {
+                amount_mad: costAmount,
+                description: `[Bon de Commande ${bcRef}] ${itemsSummary} · Fournisseur: ${parsedBc?.supplier_name || ticket.garage_name || "Hard Auto Services"}`,
+                invoice_number: bcRef,
+                category,
+              },
+            });
+          } else {
+            await prisma.vehicleExpense.create({
+              data: {
+                vehicle_id: ticket.vehicle_id,
+                plate_number: ticket.plate_number,
+                category,
+                amount_mad: costAmount,
+                description: `[Bon de Commande ${bcRef}] ${itemsSummary} · Fournisseur: ${parsedBc?.supplier_name || ticket.garage_name || "Hard Auto Services"}`,
+                invoice_number: bcRef,
+                paid_by: "COMPANY",
+                status: "PAID",
+                paid_at: parsedBc?.date ? new Date(parsedBc.date) : new Date(),
+              },
+            });
+          }
+        }
+      } catch (expErr) {
+        console.warn("Error syncing VehicleExpense on PATCH ticket:", expErr);
+      }
+    }
+
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("tickets").catch(() => {});
 

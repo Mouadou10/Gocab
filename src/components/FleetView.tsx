@@ -412,6 +412,7 @@ export default function FleetView() {
                   <th className="py-3.5 px-4">Hub City</th>
                   <th className="py-3.5 px-4">Operational Status</th>
                   <th className="py-3.5 px-4">Mileage</th>
+                  <th className="py-3.5 px-4">Dépenses (MAD)</th>
                   <th className="py-3.5 px-4">Regulatory Compliance Health</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -472,6 +473,26 @@ export default function FleetView() {
                     {/* Mileage */}
                     <td className="py-4 px-4 font-mono text-gray-600">
                       {v.current_mileage.toLocaleString()} KM
+                    </td>
+
+                    {/* Dépenses / Financials */}
+                    <td className="py-4 px-4 font-mono">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingVehicle(v);
+                          setIsDrawerOpen(true);
+                        }}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          (v.total_expenses_mad || 0) > 0
+                            ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
+                            : "bg-gray-50 hover:bg-gray-100 text-gray-400 border border-gray-100"
+                        }`}
+                        title="Cliquer pour voir le détail des dépenses et Bons de Commande de ce véhicule"
+                      >
+                        <span>💰</span>
+                        <span>{(v.total_expenses_mad || 0).toLocaleString()} MAD</span>
+                      </button>
                     </td>
 
                     {/* Compliance Health */}
