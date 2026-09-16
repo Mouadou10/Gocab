@@ -12,17 +12,57 @@ import React, { useState, useEffect } from 'react';
 interface TrainingScorecardProps {
   leads: any[];
   onSelectStatus?: (status: string) => void;
+  selectedDate?: string;
+  onDateChange?: (date: string) => void;
 }
 
-export default function TrainingScorecard({ leads, onSelectStatus }: TrainingScorecardProps) {
-  const [dateFilter, setDateFilter] = useState<string>('');
+export default function TrainingScorecard({
+  leads,
+  onSelectStatus,
+  selectedDate,
+  onDateChange,
+}: TrainingScorecardProps) {
+  const getInitialDate = () => {
+    if (selectedDate !== undefined) {
+      if (!selectedDate || selectedDate === 'ALL') return '';
+      if (selectedDate === 'TODAY') return new Date().toISOString().split('T')[0];
+      if (selectedDate === 'TOMORROW') {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow.toISOString().split('T')[0];
+      }
+      return selectedDate;
+    }
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const [dateFilter, setDateFilter] = useState<string>(getInitialDate);
   const [dailyPreordersTarget, setDailyPreordersTarget] = useState(9);
   const [targetConversionRate, setTargetConversionRate] = useState(25);
 
+  // Synchronize internal dateFilter with selectedDate prop from parent (KanbanBoard)
   useEffect(() => {
-    // Default to today
-    const today = new Date().toISOString().split('T')[0];
-    setDateFilter(today);
+    if (selectedDate !== undefined) {
+      if (!selectedDate || selectedDate === 'ALL') {
+        setDateFilter('');
+      } else if (selectedDate === 'TODAY') {
+        setDateFilter(new Date().toISOString().split('T')[0]);
+      } else if (selectedDate === 'TOMORROW') {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setDateFilter(tomorrow.toISOString().split('T')[0]);
+      } else {
+        setDateFilter(selectedDate);
+      }
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    // If selectedDate wasn't passed, default to today
+    if (selectedDate === undefined) {
+      const today = new Date().toISOString().split('T')[0];
+      setDateFilter(today);
+    }
 
     // Fetch objectives from Settings
     fetch('/api/settings')
@@ -45,7 +85,7 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
         }
       })
       .catch(console.error);
-  }, []);
+  }, [selectedDate]);
 
   // Training leads are those in TRAINING_PIPELINE or VEHICLE_ASSIGNMENT
   const safeLeads = Array.isArray(leads) ? leads : [];
@@ -53,11 +93,27 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
     l.board_column === 'TRAINING_PIPELINE' || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
 
-  // Filter by date using updated_at (training status changes trigger updated_at)
+  // Filter by date using status_changed_at, updated_at, reminder_date, or created_at
   const filteredLeads = trainingLeads.filter(lead => {
     if (!dateFilter) return true;
-    const changedDate = new Date(lead.updated_at || lead.created_at).toISOString().split('T')[0];
-    return changedDate === dateFilter;
+    const candidates = [
+      lead.status_changed_at,
+      lead.updated_at,
+      lead.reminder_date,
+      lead.created_at,
+    ].filter(Boolean);
+
+    return candidates.some((val: any) => {
+      try {
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return false;
+        const iso = d.toISOString().split('T')[0];
+        const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return iso === dateFilter || local === dateFilter;
+      } catch {
+        return false;
+      }
+    });
   });
 
   const totalInTraining = filteredLeads.length;
@@ -120,12 +176,20 @@ export default function TrainingScorecard({ leads, onSelectStatus }: TrainingSco
           <input
             type="date"
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="border border-gray-300 rounded-lg shadow-sm text-sm p-2 focus:ring-2 focus:ring-navy/30 focus:border-navy"
+            onChange={(e) => {
+              const val = e.target.value;
+              setDateFilter(val);
+              onDateChange?.(val || "ALL");
+            }}
+            className="border border-gray-300 rounded-lg shadow-sm text-sm p-2 focus:ring-2 focus:ring-navy/30 focus:border-navy cursor-pointer"
           />
           <button
-            onClick={() => setDateFilter('')}
-            className="text-xs text-blue-600 hover:underline"
+            type="button"
+            onClick={() => {
+              setDateFilter('');
+              onDateChange?.("ALL");
+            }}
+            className="text-xs text-blue-600 hover:underline cursor-pointer"
           >
             All Time
           </button>

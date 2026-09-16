@@ -630,16 +630,39 @@ export default function KanbanBoard() {
     // Helper: Check if a date matches today (handles fr-FR date tag, local time & ISO UTC strings)
     const isDateMatchToday = (dateVal: any) => isScheduledDateToday(dateVal);
 
-    // Helper: Check if lead had its status changed TODAY strictly (using status_changed_at)
+    // Helper: Check if lead had its status changed TODAY strictly (using status_changed_at or updated_at)
     const isStatusChangedToday = (l: Lead) => {
-      if (!l.status_changed_at) return false;
-      return isScheduledDateToday(l.status_changed_at);
+      if (l.status_changed_at && isScheduledDateToday(l.status_changed_at)) return true;
+      if ((l as any).updated_at && isScheduledDateToday((l as any).updated_at)) return true;
+      return false;
     };
 
     // Helper: Check if lead is scheduled to attend TODAY strictly (date tag must equal today's date tag)
     const isScheduledToAttendToday = (l: Lead) => {
       if (!l.reminder_date) return false;
       return isScheduledDateToday(l.reminder_date);
+    };
+
+    // Helper: Match training leads to the current trainingDateFilter
+    const isLeadStatusMatchingTrainingFilter = (l: Lead, filter: string): boolean => {
+      if (!filter || filter === "ALL") return true;
+      if (filter === "TODAY") {
+        if (isStatusChangedToday(l)) return true;
+        if (l.reminder_date && isScheduledDateToday(l.reminder_date)) return true;
+        return false;
+      }
+      if (filter === "TOMORROW") {
+        if (l.reminder_date && matchesDate(l.reminder_date, "TOMORROW")) return true;
+        if (l.status_changed_at && matchesDate(l.status_changed_at, "TOMORROW")) return true;
+        if ((l as any).updated_at && matchesDate((l as any).updated_at, "TOMORROW")) return true;
+        return false;
+      }
+      // Specific date (YYYY-MM-DD or fr-FR DD/MM/YYYY)
+      if (l.status_changed_at && matchesDate(l.status_changed_at, filter)) return true;
+      if ((l as any).updated_at && matchesDate((l as any).updated_at, filter)) return true;
+      if (l.reminder_date && matchesDate(l.reminder_date, filter)) return true;
+      if ((l as any).created_at && matchesDate((l as any).created_at, filter)) return true;
+      return false;
     };
 
     if (activeTab === "leads") {
@@ -710,7 +733,7 @@ export default function KanbanBoard() {
             l.training_status === "Accept offer";
           if (!isVehicleMatch) return false;
           if (isSearching) return true;
-          return isStatusChangedToday(l);
+          return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
         });
       }
 
@@ -725,27 +748,22 @@ export default function KanbanBoard() {
         });
       }
 
-      // For Pending: display ONLY leads who have today's date tag
+      // For Pending: display leads matching trainingDateFilter (or today if specific role)
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
-          const isToday = isScheduledDateToday(l.reminder_date);
-          if (userRole === "LEAD_ACQUISITION_JR" || trainingDateFilter === "TODAY") {
-            return isToday;
-          }
-          return true;
+          if (isSearching) return true;
+          return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
         });
       }
 
       // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
-      // Every morning these start EMPTY and are filled today as agents process today's scheduled leads!
       return filteredLeads.filter((l) => {
         if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
           return false;
         }
         if (isSearching) return true;
-        // Must have been moved to this status TODAY
-        return isStatusChangedToday(l);
+        return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
       });
     }
   }
@@ -1592,6 +1610,8 @@ export default function KanbanBoard() {
               <TrainingScorecard
                 leads={leads}
                 onSelectStatus={handleBringColumnToSecond}
+                selectedDate={trainingDateFilter}
+                onDateChange={setTrainingDateFilter}
               />
             )}
             
