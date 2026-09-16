@@ -458,6 +458,14 @@ export default function KanbanBoard() {
         return localYMD === tomorrowLocalYMD || utcYMD === tomorrowUtcYMD;
       }
 
+      // Date range: "YYYY-MM-DD..YYYY-MM-DD", "YYYY-MM-DD..", or "..YYYY-MM-DD"
+      if (targetFilter.includes("..")) {
+        const [rangeStart, rangeEnd] = targetFilter.split("..");
+        const checkLocal = (!rangeStart || localYMD >= rangeStart) && (!rangeEnd || localYMD <= rangeEnd);
+        const checkUtc = (!rangeStart || utcYMD >= rangeStart) && (!rangeEnd || utcYMD <= rangeEnd);
+        return checkLocal || checkUtc;
+      }
+
       // Exact YYYY-MM-DD string
       if (targetFilter === localYMD || targetFilter === utcYMD) {
         return true;
@@ -1518,32 +1526,52 @@ export default function KanbanBoard() {
               >
                 Demain
               </button>
-              <div className="relative flex items-center pl-1 border-l border-emerald-200/80">
-                <input
-                  type="date"
-                  value={
-                    trainingDateFilter !== "ALL" &&
-                    trainingDateFilter !== "TODAY" &&
-                    trainingDateFilter !== "TOMORROW"
-                      ? trainingDateFilter
-                      : ""
-                  }
-                  onChange={(e) => setTrainingDateFilter(e.target.value || "ALL")}
-                  className="bg-white border border-emerald-200 rounded-lg px-2 py-0.5 text-xs text-gray-800 font-semibold outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-2xs"
-                  title="Choisir une date de formation personnalisée"
-                />
-                {trainingDateFilter !== "ALL" &&
-                  trainingDateFilter !== "TODAY" &&
-                  trainingDateFilter !== "TOMORROW" && (
+              <div className="relative flex items-center pl-1 border-l border-emerald-200/80 gap-1">
+                {trainingDateFilter.includes("..") ? (
+                  <div className="flex items-center gap-1 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg text-xs font-semibold text-emerald-900 shadow-2xs">
+                    <span>
+                      {trainingDateFilter.split("..")[0] ? new Date(trainingDateFilter.split("..")[0] + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "—"}
+                      {" → "}
+                      {trainingDateFilter.split("..")[1] ? new Date(trainingDateFilter.split("..")[1] + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "—"}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setTrainingDateFilter("ALL")}
-                      className="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold p-0.5 cursor-pointer"
+                      className="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold cursor-pointer"
                       title="Réinitialiser"
                     >
                       ✕
                     </button>
-                  )}
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="date"
+                      value={
+                        trainingDateFilter !== "ALL" &&
+                        trainingDateFilter !== "TODAY" &&
+                        trainingDateFilter !== "TOMORROW"
+                          ? trainingDateFilter
+                          : ""
+                      }
+                      onChange={(e) => setTrainingDateFilter(e.target.value || "ALL")}
+                      className="bg-white border border-emerald-200 rounded-lg px-2 py-0.5 text-xs text-gray-800 font-semibold outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-2xs"
+                      title="Choisir une date de formation personnalisée"
+                    />
+                    {trainingDateFilter !== "ALL" &&
+                      trainingDateFilter !== "TODAY" &&
+                      trainingDateFilter !== "TOMORROW" && (
+                        <button
+                          type="button"
+                          onClick={() => setTrainingDateFilter("ALL")}
+                          className="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold p-0.5 cursor-pointer"
+                          title="Réinitialiser"
+                        >
+                          ✕
+                        </button>
+                      )}
+                  </>
+                )}
               </div>
             </div>
           </div>
