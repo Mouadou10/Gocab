@@ -94,7 +94,7 @@ export default function SupportTicketsView() {
       if (searchTerm) params.set("search", searchTerm);
       if (selectedType) params.set("type", selectedType);
 
-      const res = await fetch(`/api/tickets?${params.toString()}`);
+      const res = await fetch(`/api/tickets?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       setTickets(data.tickets || []);
     } catch (err) {
@@ -144,16 +144,20 @@ export default function SupportTicketsView() {
 
   async function handleDeleteTicket(id: string) {
     if (!confirm("Are you sure you want to delete this ticket?")) return;
+    const previousTickets = tickets;
+    // Optimistically remove immediately from UI
+    setTickets((prev) => prev.filter((t) => t.id !== id));
     try {
       const res = await fetch(`/api/tickets/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Ticket deleted");
-        fetchTickets();
         notifyMutation("tickets");
       } else {
+        setTickets(previousTickets);
         toast.error("Failed to delete ticket");
       }
     } catch (err) {
+      setTickets(previousTickets);
       console.error("Failed to delete ticket:", err);
       toast.error("Error deleting ticket");
     }

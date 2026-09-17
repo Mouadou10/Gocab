@@ -247,6 +247,8 @@ export async function PATCH(
   }
 }
 
+export const dynamic = "force-dynamic";
+
 /**
  * DELETE /api/tickets/[id]
  */
@@ -256,12 +258,37 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await prisma.maintenanceTicket.delete({ where: { id } });
+
+    const ticket = await prisma.maintenanceTicket.findUnique({ where: { id } });
+    if (ticket) {
+      // 1. Delete any linked FieldTasks
+      await prisma.fieldTask.deleteMany({
+        where: {
+          OR: [
+            { linked_ticket_id: id },
+            { plate_number: ticket.plate_number, task_type: "VEHICLE_RECOVERY" }
+          ]
+        }
+      }).catch((e) => console.warn("Failed to delete linked field tasks on ticket delete:", e));
+
+      // 2. If recovery ticket set vehicle to Blocked, restore vehicle to Actif
+      if (ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type.includes("Recovery") || ticket.ticket_type.includes("Blocage")) {
+        await prisma.vehicle.update({
+          where: { id: ticket.vehicle_id },
+          data: { status: "Actif" }
+        }).catch(() => {});
+      }
+
+      // 3. Delete the ticket
+      await prisma.maintenanceTicket.delete({ where: { id } });
+    }
+
+    touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("DELETE /api/tickets/[id] error:", error);
     return NextResponse.json(
-      { error: "Failed to delete ticket" },
+      { error: error?.message || "Failed to delete ticket" },
       { status: 500 }
     );
   }

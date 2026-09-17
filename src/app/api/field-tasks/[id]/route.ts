@@ -134,6 +134,8 @@ export async function PATCH(
   }
 }
 
+export const dynamic = "force-dynamic";
+
 /**
  * DELETE /api/field-tasks/[id]
  */
@@ -143,11 +145,35 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await prisma.fieldTask.delete({ where: { id } });
+
+    const task = await prisma.fieldTask.findUnique({ where: { id } });
+    if (task) {
+      if (task.linked_ticket_id) {
+        await prisma.maintenanceTicket.delete({ where: { id: task.linked_ticket_id } }).catch(() => {});
+      } else if (task.task_type === "VEHICLE_RECOVERY" && task.plate_number) {
+        await prisma.maintenanceTicket.deleteMany({
+          where: {
+            plate_number: task.plate_number,
+            ticket_type: "VEHICLE_RECOVERY",
+          },
+        }).catch(() => {});
+      }
+
+      // If vehicle was blocked by this recovery task, restore status if needed
+      if (task.task_type === "VEHICLE_RECOVERY" && task.vehicle_id) {
+        await prisma.vehicle.update({
+          where: { id: task.vehicle_id },
+          data: { status: "Actif" }
+        }).catch(() => {});
+      }
+
+      await prisma.fieldTask.delete({ where: { id } });
+    }
+
     touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("DELETE /api/field-tasks/[id] error:", error);
-    return NextResponse.json({ error: "Failed to delete field task" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Failed to delete field task" }, { status: 500 });
   }
 }

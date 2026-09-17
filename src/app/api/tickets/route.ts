@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/tickets
  * Fetches all maintenance and support tickets with optional filtering.

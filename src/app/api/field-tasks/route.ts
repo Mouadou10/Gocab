@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
+import { touchSyncState } from "@/lib/sync";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/field-tasks
@@ -26,65 +29,6 @@ export async function GET(request: Request) {
 
     if (status) where.status = status;
     if (type) where.task_type = type;
-
-    // Auto-sync any open VEHICLE_RECOVERY tickets into FieldTasks so they always display on the Field page
-    try {
-      const openRecoveryTickets = await prisma.maintenanceTicket.findMany({
-        where: {
-          OR: [
-            { ticket_type: "VEHICLE_RECOVERY" },
-            { ticket_type: { contains: "Recovery" } },
-            { ticket_type: { contains: "Blocage" } },
-            { ticket_type: { contains: "Blocked" } },
-          ],
-          status: { notIn: ["RESOLVED", "CANCELLED"] },
-          is_archived: false,
-        },
-      });
-
-      if (openRecoveryTickets.length > 0) {
-        const existingTasks = await prisma.fieldTask.findMany({
-          where: {
-            task_type: "VEHICLE_RECOVERY",
-            OR: [
-              { linked_ticket_id: { in: openRecoveryTickets.map((t) => t.id) } },
-              { plate_number: { in: openRecoveryTickets.map((t) => t.plate_number) } },
-            ],
-          },
-        });
-
-        const linkedTicketIds = new Set(existingTasks.map((t) => t.linked_ticket_id).filter(Boolean));
-        const activePlates = new Set(
-          existingTasks
-            .filter((t) => t.status !== "COMPLETED" && t.status !== "FAILED")
-            .map((t) => t.plate_number?.trim().toLowerCase())
-            .filter(Boolean)
-        );
-
-        for (const t of openRecoveryTickets) {
-          const plateKey = t.plate_number.trim().toLowerCase();
-          if (!linkedTicketIds.has(t.id) && !activePlates.has(plateKey)) {
-            await prisma.fieldTask.create({
-              data: {
-                task_type: "VEHICLE_RECOVERY",
-                vehicle_id: t.vehicle_id,
-                plate_number: t.plate_number.trim(),
-                driver_name: t.driver_name ? t.driver_name.trim() : null,
-                driver_phone: t.driver_phone ? t.driver_phone.trim() : null,
-                description: t.description.trim(),
-                priority: t.priority || "Critical",
-                status: t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "PENDING",
-                linked_ticket_id: t.id,
-                created_at: t.created_at,
-              },
-            });
-            activePlates.add(plateKey);
-          }
-        }
-      }
-    } catch (syncErr) {
-      console.warn("Auto-syncing recovery tickets to FieldTasks warning:", syncErr);
-    }
 
     const tasks = await prisma.fieldTask.findMany({
       where,
@@ -178,7 +122,47 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const tasksToDelete = await prisma.fieldTask.findMany({
+      where,
+      select: { id: true, linked_ticket_id: true, task_type: true, vehicle_id: true, plate_number: true },
+    });
+
+    const ticketIdsToDelete = tasksToDelete
+      .map((t) => t.linked_ticket_id)
+      .filter((id): id is string => Boolean(id));
+
+    if (ticketIdsToDelete.length > 0) {
+      await prisma.maintenanceTicket.deleteMany({
+        where: { id: { in: ticketIdsToDelete } },
+      }).catch(() => {});
+    }
+
+    if (type === "VEHICLE_RECOVERY" || clearAll) {
+      const plates = tasksToDelete
+        .map((t) => t.plate_number)
+        .filter((p): p is string => Boolean(p));
+      if (plates.length > 0) {
+        await prisma.maintenanceTicket.deleteMany({
+          where: {
+            plate_number: { in: plates },
+            ticket_type: "VEHICLE_RECOVERY",
+          },
+        }).catch(() => {});
+      }
+
+      const vehicleIds = tasksToDelete
+        .map((t) => t.vehicle_id)
+        .filter((vid): vid is string => Boolean(vid));
+      if (vehicleIds.length > 0) {
+        await prisma.vehicle.updateMany({
+          where: { id: { in: vehicleIds }, status: "Blocked" },
+          data: { status: "Actif" },
+        }).catch(() => {});
+      }
+    }
+
     const result = await prisma.fieldTask.deleteMany({ where });
+    touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true, count: result.count });
   } catch (error: any) {
     console.error("DELETE /api/field-tasks error:", error);

@@ -468,7 +468,12 @@ export default function TicketKanbanCard({
           )}
         </div>
         <button
-          onClick={() => onDeleteClick(ticket.id)}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onDeleteClick(ticket.id);
+          }}
           className="text-xs text-gray-400 hover:text-red-600 transition-colors"
         >
           🗑️ Delete

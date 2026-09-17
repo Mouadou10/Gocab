@@ -221,7 +221,7 @@ export default function FieldSupervisorView() {
       if (filterStatus) params.set("status", filterStatus);
       if (filterType) params.set("type", filterType);
 
-      const res = await fetch(`/api/field-tasks?${params.toString()}`);
+      const res = await fetch(`/api/field-tasks?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       setTasks(data.tasks || []);
     } catch (err) {
@@ -367,11 +367,22 @@ export default function FieldSupervisorView() {
 
   // Delete task
   const handleDeleteTask = async (id: string) => {
+    if (!confirm("Voulez-vous vraiment supprimer cette tâche ?")) return;
+    const prevTasks = tasks;
+    setTasks((prev) => prev.filter((t) => t.id !== id));
     try {
-      await fetch(`/api/field-tasks/${id}`, { method: "DELETE" });
-      fetchTasks();
+      const res = await fetch(`/api/field-tasks/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Tâche supprimée avec succès");
+        notifyMutation("tickets");
+      } else {
+        setTasks(prevTasks);
+        toast.error("Échec de la suppression de la tâche");
+      }
     } catch (err) {
+      setTasks(prevTasks);
       console.error("Failed to delete task:", err);
+      toast.error("Erreur lors de la suppression de la tâche");
     }
   };
 
@@ -528,8 +539,15 @@ export default function FieldSupervisorView() {
                 )}
               </>
             )}
-            <button onClick={() => handleDeleteTask(task.id)}
-              style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleDeleteTask(task.id);
+              }}
+              style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
               🗑
             </button>
           </div>
@@ -560,13 +578,26 @@ export default function FieldSupervisorView() {
 
           {type === "VEHICLE_RECOVERY" && sectionTasks.length > 0 && (
             <button
-              onClick={async () => {
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 if (confirm("Voulez-vous vider toutes les tâches de récupération de véhicule ?")) {
+                  const prevTasks = tasks;
+                  setTasks((prev) => prev.filter((t) => t.task_type !== "VEHICLE_RECOVERY"));
                   try {
-                    await fetch("/api/field-tasks?type=VEHICLE_RECOVERY", { method: "DELETE" });
-                    fetchTasks();
+                    const res = await fetch("/api/field-tasks?type=VEHICLE_RECOVERY", { method: "DELETE" });
+                    if (res.ok) {
+                      toast.success("File de récupération vidée avec succès");
+                      notifyMutation("tickets");
+                    } else {
+                      setTasks(prevTasks);
+                      toast.error("Échec du vidage de la file");
+                    }
                   } catch (e) {
+                    setTasks(prevTasks);
                     console.error(e);
+                    toast.error("Erreur réseau");
                   }
                 }
               }}
