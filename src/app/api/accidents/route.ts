@@ -17,7 +17,11 @@ export async function GET() {
     let claims = await prisma.accidentClaim.findMany({
       include: {
         vehicle: true,
-        driver: true,
+        driver: {
+          include: {
+            accidentClaims: true,
+          },
+        },
       },
       orderBy: { created_at: "desc" },
     });
@@ -127,7 +131,11 @@ export async function GET() {
       claims = await prisma.accidentClaim.findMany({
         include: {
           vehicle: true,
-          driver: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
         },
         orderBy: { created_at: "desc" },
       });
