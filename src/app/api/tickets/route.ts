@@ -32,7 +32,11 @@ export async function GET(request: Request) {
     }
 
     if (type) {
-      where.ticket_type = type;
+      if (type === "VEHICLE_RECOVERY" || type === "Vehicle Recovery") {
+        where.ticket_type = { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] };
+      } else {
+        where.ticket_type = type;
+      }
     }
 
     const tickets = await prisma.maintenanceTicket.findMany({

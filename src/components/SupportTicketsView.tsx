@@ -610,13 +610,17 @@ export default function SupportTicketsView() {
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-navy/30 focus:outline-none bg-white text-gray-700 font-medium"
+            className="border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-navy/30 focus:outline-none bg-white text-gray-700 font-medium cursor-pointer"
           >
             <option value="">All Types</option>
+            <option value="VEHICLE_RECOVERY">🚨 Vehicle Recovery</option>
             <option value="Vidange">🛢️ Vidange</option>
             <option value="AdBleu">💧 AdBleu</option>
             <option value="Repair">🔧 Repair</option>
             <option value="Accident">💥 Accident</option>
+            <option value="Fourrière">🚔 Fourrière</option>
+            <option value="Police Immobilization">🛑 Immobilisation Police</option>
+            <option value="Custom">📋 Custom (BC)</option>
           </select>
 
           <button

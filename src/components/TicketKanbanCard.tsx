@@ -91,14 +91,20 @@ export default function TicketKanbanCard({
 
       {/* Type & Field Status */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-navy/10 text-navy whitespace-nowrap">
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap ${
+          ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type === "Vehicle Recovery"
+            ? "bg-red-50 text-red-700 border border-red-200"
+            : "bg-navy/10 text-navy"
+        }`}>
           {ticket.ticket_type === "Vidange" && "🛢️ Vidange"}
           {ticket.ticket_type === "AdBleu" && "💧 AdBleu"}
           {ticket.ticket_type === "Repair" && "🔧 Repair"}
           {ticket.ticket_type === "Accident" && "💥 Accident"}
           {ticket.ticket_type === "Fourrière" && "🚔 Fourrière"}
           {ticket.ticket_type === "Police Immobilization" && "🛑 Immobilisation Police"}
-          {!["Vidange", "AdBleu", "Repair", "Accident", "Fourrière", "Police Immobilization"].includes(ticket.ticket_type) && ticket.ticket_type}
+          {(ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type === "Vehicle Recovery") && "🚨 Vehicle Recovery"}
+          {ticket.ticket_type === "Custom" && "📋 Custom (BC)"}
+          {!["Vidange", "AdBleu", "Repair", "Accident", "Fourrière", "Police Immobilization", "VEHICLE_RECOVERY", "Vehicle Recovery", "Custom"].includes(ticket.ticket_type) && ticket.ticket_type}
         </span>
         
         {isResolved && ticket.field_status && ticket.field_status !== "COMPLETED" && (
