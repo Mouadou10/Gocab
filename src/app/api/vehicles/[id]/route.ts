@@ -349,38 +349,35 @@ export async function DELETE(
     const session = await requireAuth();
     const { id } = await params;
 
-    // Wrap in a transaction
-    await prisma.$transaction(async (tx) => {
-      // 1. Unlink any DriverProfile assigned to this vehicle
-      await tx.driverProfile.updateMany({
+    // Execute atomic batch update (unlinking driver and archiving vehicle)
+    await prisma.$transaction([
+      prisma.driverProfile.updateMany({
         where: { assignedVehicleId: id },
         data: { assignedVehicleId: null },
-      });
-
-      // 2. Soft delete the vehicle itself
-      await tx.vehicle.update({
+      }),
+      prisma.vehicle.update({
         where: { id },
         data: { 
           is_archived: true, 
           assigned_driver_name: null,
           assigned_driver_phone: null,
-          status: "Archived"
+          status: "Archived",
         },
+      }),
+    ]);
+
+    // Log audit after transaction successfully commits
+    try {
+      await logAudit({
+        userId: session?.user?.name || session?.user?.email || session?.user?.id || "agent",
+        action: "ARCHIVE",
+        entityType: "Vehicle",
+        entityId: id,
+        changes: { status: "Archived", unlinked_driver: true },
       });
-      
-      // Log audit
-      try {
-        await logAudit({
-          userId: session?.user?.name || session?.user?.email || session?.user?.id || "agent",
-          action: "ARCHIVE",
-          entityType: "Vehicle",
-          entityId: id,
-          changes: { status: "Archived", unlinked_driver: true },
-        });
-      } catch (auditErr) {
-        console.error("Error logging delete audit:", auditErr);
-      }
-    });
+    } catch (auditErr) {
+      console.error("Error logging delete audit:", auditErr);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

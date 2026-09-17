@@ -10,9 +10,10 @@ interface AuditLogPayload {
   changes: any;
 }
 
-export async function logAudit(payload: AuditLogPayload) {
+export async function logAudit(payload: AuditLogPayload, dbClient?: any) {
   try {
-    await prisma.auditLog.create({
+    const client = dbClient || prisma;
+    await client.auditLog.create({
       data: {
         user_id: payload.userId,
         action: payload.action,
