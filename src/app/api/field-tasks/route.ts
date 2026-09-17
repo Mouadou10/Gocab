@@ -17,6 +17,44 @@ export async function GET(request: Request) {
     const status = searchParams.get("status") || "";
     const type = searchParams.get("type") || "";
 
+    // Auto-sync any open recovery tickets from Support Kanban into FieldTask
+    const openRecoveryTickets = await prisma.maintenanceTicket.findMany({
+      where: {
+        ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] },
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+      },
+    });
+
+    if (openRecoveryTickets.length > 0) {
+      const existingTasks = await prisma.fieldTask.findMany({
+        where: {
+          task_type: "VEHICLE_RECOVERY",
+          linked_ticket_id: { in: openRecoveryTickets.map((t) => t.id) },
+        },
+        select: { linked_ticket_id: true },
+      });
+      const existingIds = new Set(existingTasks.map((t) => t.linked_ticket_id));
+
+      for (const t of openRecoveryTickets) {
+        if (!existingIds.has(t.id)) {
+          await prisma.fieldTask.create({
+            data: {
+              task_type: "VEHICLE_RECOVERY",
+              vehicle_id: t.vehicle_id,
+              plate_number: t.plate_number,
+              driver_name: t.driver_name,
+              driver_phone: t.driver_phone,
+              description: t.description || "Véhicule bloqué / Récupération terrain",
+              priority: t.priority || "Urgent",
+              status: t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "PENDING",
+              linked_ticket_id: t.id,
+              created_at: t.created_at,
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+
     const where: any = {};
 
     if (search) {
