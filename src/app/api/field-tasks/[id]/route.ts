@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * PATCH /api/field-tasks/[id]
@@ -124,6 +125,8 @@ export async function PATCH(
       }
     }
 
+    touchSyncState("tickets").catch(() => {});
+
     return NextResponse.json({ task });
   } catch (error) {
     console.error("PATCH /api/field-tasks/[id] error:", error);
@@ -141,6 +144,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     await prisma.fieldTask.delete({ where: { id } });
+    touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/field-tasks/[id] error:", error);

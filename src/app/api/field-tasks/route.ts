@@ -27,6 +27,65 @@ export async function GET(request: Request) {
     if (status) where.status = status;
     if (type) where.task_type = type;
 
+    // Auto-sync any open VEHICLE_RECOVERY tickets into FieldTasks so they always display on the Field page
+    try {
+      const openRecoveryTickets = await prisma.maintenanceTicket.findMany({
+        where: {
+          OR: [
+            { ticket_type: "VEHICLE_RECOVERY" },
+            { ticket_type: { contains: "Recovery" } },
+            { ticket_type: { contains: "Blocage" } },
+            { ticket_type: { contains: "Blocked" } },
+          ],
+          status: { notIn: ["RESOLVED", "CANCELLED"] },
+          is_archived: false,
+        },
+      });
+
+      if (openRecoveryTickets.length > 0) {
+        const existingTasks = await prisma.fieldTask.findMany({
+          where: {
+            task_type: "VEHICLE_RECOVERY",
+            OR: [
+              { linked_ticket_id: { in: openRecoveryTickets.map((t) => t.id) } },
+              { plate_number: { in: openRecoveryTickets.map((t) => t.plate_number) } },
+            ],
+          },
+        });
+
+        const linkedTicketIds = new Set(existingTasks.map((t) => t.linked_ticket_id).filter(Boolean));
+        const activePlates = new Set(
+          existingTasks
+            .filter((t) => t.status !== "COMPLETED" && t.status !== "FAILED")
+            .map((t) => t.plate_number?.trim().toLowerCase())
+            .filter(Boolean)
+        );
+
+        for (const t of openRecoveryTickets) {
+          const plateKey = t.plate_number.trim().toLowerCase();
+          if (!linkedTicketIds.has(t.id) && !activePlates.has(plateKey)) {
+            await prisma.fieldTask.create({
+              data: {
+                task_type: "VEHICLE_RECOVERY",
+                vehicle_id: t.vehicle_id,
+                plate_number: t.plate_number.trim(),
+                driver_name: t.driver_name ? t.driver_name.trim() : null,
+                driver_phone: t.driver_phone ? t.driver_phone.trim() : null,
+                description: t.description.trim(),
+                priority: t.priority || "Critical",
+                status: t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "PENDING",
+                linked_ticket_id: t.id,
+                created_at: t.created_at,
+              },
+            });
+            activePlates.add(plateKey);
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Auto-syncing recovery tickets to FieldTasks warning:", syncErr);
+    }
+
     const tasks = await prisma.fieldTask.findMany({
       where,
       orderBy: { created_at: "desc" },

@@ -188,20 +188,42 @@ export async function PATCH(
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("tickets").catch(() => {});
 
-    // When ticket transitions to resolved, auto-create a Field Task for the Field Supervisor
+    // When ticket transitions to resolved, auto-update or create Field Task for Field Supervisor
     if (updateData.status === "RESOLVED" && currentTicket.status !== "RESOLVED") {
-      await prisma.fieldTask.create({
-        data: {
-          task_type: "GARAGE_PICKUP",
-          vehicle_id: ticket.vehicle_id,
-          plate_number: ticket.plate_number,
-          driver_name: ticket.driver_name,
-          driver_phone: ticket.driver_phone,
-          description: `Garage pickup: ${ticket.ticket_type} completed for ${ticket.plate_number}. ${ticket.description}`,
-          priority: ticket.priority,
-          linked_ticket_id: ticket.id,
-        },
-      }).catch((e) => console.warn("Failed to create field task on ticket resolution:", e));
+      const isRecovery = 
+        ticket.ticket_type === "VEHICLE_RECOVERY" || 
+        ticket.ticket_type.includes("Recovery") || 
+        ticket.ticket_type.includes("Blocage") ||
+        ticket.ticket_type.includes("Blocked");
+
+      if (isRecovery) {
+        // Complete the linked recovery FieldTask
+        await prisma.fieldTask.updateMany({
+          where: {
+            OR: [
+              { linked_ticket_id: ticket.id },
+              { vehicle_id: ticket.vehicle_id, task_type: "VEHICLE_RECOVERY", status: { not: "COMPLETED" } }
+            ]
+          },
+          data: {
+            status: "COMPLETED",
+            completed_at: new Date(),
+          }
+        }).catch((e) => console.warn("Failed to mark recovery field task completed:", e));
+      } else {
+        await prisma.fieldTask.create({
+          data: {
+            task_type: "GARAGE_PICKUP",
+            vehicle_id: ticket.vehicle_id,
+            plate_number: ticket.plate_number,
+            driver_name: ticket.driver_name,
+            driver_phone: ticket.driver_phone,
+            description: `Garage pickup: ${ticket.ticket_type} completed for ${ticket.plate_number}. ${ticket.description}`,
+            priority: ticket.priority,
+            linked_ticket_id: ticket.id,
+          },
+        }).catch((e) => console.warn("Failed to create field task on ticket resolution:", e));
+      }
 
       // Calculate downtime and update vehicle
       const now = new Date();

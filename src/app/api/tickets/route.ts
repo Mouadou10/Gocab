@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 
 /**
  * GET /api/tickets
@@ -196,12 +197,38 @@ export async function POST(request: Request) {
       ticket_type.includes("Blocked");
 
     if (isRecoveryTicket) {
-      // Set vehicle status to Blocked if requested.
-      // Vehicle recovery FieldTask is only created manually by performance agent from collection page.
+      // Set vehicle status to Blocked
       await prisma.vehicle.update({
         where: { id: vehicle_id },
         data: { status: "Blocked" },
       }).catch((e) => console.warn("Failed to set vehicle to Blocked:", e));
+
+      // Auto-dispatch VEHICLE_RECOVERY FieldTask for Field Supervisors
+      try {
+        const fieldTask = await prisma.fieldTask.create({
+          data: {
+            task_type: "VEHICLE_RECOVERY",
+            vehicle_id: vehicle_id || null,
+            plate_number: plate_number ? plate_number.trim() : null,
+            driver_name: driver_name ? driver_name.trim() : null,
+            driver_phone: driver_phone ? driver_phone.trim() : null,
+            description: description.trim(),
+            priority: priority || "Critical",
+            status: "PENDING",
+            linked_ticket_id: ticket.id,
+          },
+        });
+
+        // Send instant Telegram notification to the Field Supervisor group (asynchronous)
+        sendFieldTaskTelegramAlert({
+          ...fieldTask,
+          triggered_by: "Support / Performance Ticket",
+        }).catch((err) =>
+          console.error("Non-blocking Telegram alert error:", err)
+        );
+      } catch (ftErr) {
+        console.warn("Failed to auto-create recovery FieldTask:", ftErr);
+      }
     } else if (update_vehicle_status) {
       let targetStatus = "Actif";
       if (ticket_type === "Accident") {
