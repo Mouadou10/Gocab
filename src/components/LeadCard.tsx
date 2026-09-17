@@ -137,30 +137,30 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
       </div>
 
       {/* Card Content — clickable to open modal */}
-      <div onClick={onClick} className="px-4 pb-3 space-y-2">
+      <div onClick={onClick} className="px-3.5 pb-2.5 pt-0.5 space-y-1.5">
         {/* Name + Phone */}
         <div>
-          <p className="font-bold text-slate-900 text-sm leading-snug group-hover:text-navy transition-colors">
+          <p className="font-bold text-slate-900 text-xs leading-snug group-hover:text-navy transition-colors truncate">
             {lead.raw_name}
           </p>
-          <p className="text-xs text-slate-500 font-mono mt-0.5 tracking-tight flex items-center gap-1.5">
+          <p className="text-[11px] text-slate-500 font-mono mt-0.5 tracking-tight flex items-center gap-1.5">
             <span>{lead.sanitized_phone}</span>
           </p>
         </div>
 
         {/* Status Badges */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1">
           {lead.city && (
-            <span className="inline-flex items-center gap-0.5 text-3xs font-bold px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
               📍 {lead.city}
             </span>
           )}
           {lead.brand_status && (
             <span
-              className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-lg border ${
+              className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
                 isTrainingFixed
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-slate-100 text-slate-700 border-slate-200/80"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
               }`}
             >
               {lead.brand_status}
@@ -168,7 +168,7 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
           )}
           {lead.training_status && (
             <span
-              className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-lg border ${
+              className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
                 isAccepted
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                   : "bg-blue-50 text-blue-700 border-blue-200"
@@ -185,7 +185,7 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
 
               if (lead.brand_status === "Training fixed" || lead.training_status === "Scheduled") {
                 return (
-                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-900 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-900 bg-teal-100/90 px-1.5 py-0.5 rounded-md border border-teal-200">
                     📅 {d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                   </span>
                 );
@@ -195,7 +195,7 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
                 const datePart = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
                 const timePart = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
                 return (
-                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-100/90 px-1.5 py-0.5 rounded-md border border-amber-200">
                     ⏰ {datePart} à {timePart}
                   </span>
                 );

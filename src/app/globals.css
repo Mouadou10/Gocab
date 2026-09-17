@@ -10,6 +10,20 @@
   /* Brand Colors from Logo */
   --color-navy: #35588F;
   --color-olive: #5D6B2D;
+
+  /* Custom micro font sizes for dense CRM data display */
+  --text-3xs: 9px;
+  --text-2xs: 10px;
+}
+
+.text-3xs {
+  font-size: 9px !important;
+  line-height: 13px !important;
+}
+
+.text-2xs {
+  font-size: 10px !important;
+  line-height: 14px !important;
 }
 
 :root {
