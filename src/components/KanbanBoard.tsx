@@ -1434,11 +1434,11 @@ export default function KanbanBoard() {
 
       {/* Leads/Training Toolbar */}
       {(activeTab === "leads" || activeTab === "training") && (
-        <div className="bg-white px-6 py-3 border-b border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4 text-xs">
+        <div className="bg-white/95 backdrop-blur-md px-6 py-2.5 border-b border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
             {/* Search Field (Name or Phone number) */}
             <div className="relative flex items-center">
-              <span className="absolute left-3 text-gray-400 text-xs">🔍</span>
+              <span className="absolute left-3 text-slate-400 text-xs">🔍</span>
               <input
                 type="text"
                 value={searchQuery}
@@ -1450,13 +1450,13 @@ export default function KanbanBoard() {
                     ? "بحث بالاسم أو الهاتف..."
                     : "Search by name or phone..."
                 }
-                className="pl-8 pr-7 py-1.5 border border-gray-300 rounded-xl text-xs text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy w-64 shadow-2xs font-medium"
+                className="pl-8 pr-7 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs text-slate-900 bg-slate-50/50 hover:bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy w-60 shadow-2xs font-semibold transition-all"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  className="absolute right-2.5 text-slate-400 hover:text-rose-600 text-xs font-bold"
                   title="Effacer la recherche"
                 >
                   ✕
@@ -1464,34 +1464,47 @@ export default function KanbanBoard() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-500">Filter City:</span>
+            {/* City Filter */}
+            <div className="relative flex items-center">
+              <span className="absolute left-2.5 text-slate-400 text-xs">📍</span>
               <input
                 type="text"
                 value={filterCity}
                 onChange={(e) => setFilterCity(e.target.value)}
-                placeholder="e.g. Casablanca"
-                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy w-32 bg-white"
+                placeholder="Ville (ex: Casablanca)"
+                className="pl-7 pr-6 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-slate-50/50 hover:bg-white outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy w-40 shadow-2xs transition-all"
               />
+              {filterCity && (
+                <button
+                  type="button"
+                  onClick={() => setFilterCity("")}
+                  className="absolute right-2 text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
+                  title="Effacer filtre ville"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-500">Has Note:</span>
+
+            {/* Has Note Filter */}
+            <div className="relative flex items-center">
+              <span className="absolute left-2.5 text-slate-400 text-xs">📝</span>
               <select
                 value={filterHasNote}
                 onChange={(e) => setFilterHasNote(e.target.value as "ALL" | "YES" | "NO")}
-                className="border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-navy focus:ring-1 focus:ring-navy cursor-pointer bg-white"
+                className="pl-7 pr-3 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/50 hover:bg-white outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer shadow-2xs transition-all"
               >
-                <option value="ALL">All</option>
-                <option value="YES">Yes</option>
-                <option value="NO">No</option>
+                <option value="ALL">Toutes les notes</option>
+                <option value="YES">Avec note</option>
+                <option value="NO">Sans note</option>
               </select>
             </div>
 
             {/* Training Date Filter for Leads & Training Tabs */}
-            <div className="flex items-center gap-1.5 bg-emerald-50/80 border border-emerald-200/80 p-1 rounded-xl shadow-2xs">
-              <span className="text-[11px] font-bold text-emerald-950 px-1.5 flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs">
+              <span className="text-3xs font-black text-slate-500 uppercase tracking-wider px-2 flex items-center gap-1">
                 <span>🗓️</span>
-                <span>Date Formation :</span>
+                <span>Formation :</span>
               </span>
               <button
                 type="button"
@@ -1499,7 +1512,7 @@ export default function KanbanBoard() {
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   trainingDateFilter === "ALL"
                     ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-emerald-900 hover:bg-emerald-100/70"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
                 }`}
               >
                 Toutes ({totalTrainingFixedCount})
@@ -1510,7 +1523,7 @@ export default function KanbanBoard() {
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   trainingDateFilter === "TODAY"
                     ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-emerald-900 hover:bg-emerald-100/70"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
                 }`}
               >
                 Aujourd&apos;hui
@@ -1521,12 +1534,12 @@ export default function KanbanBoard() {
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   trainingDateFilter === "TOMORROW"
                     ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-emerald-900 hover:bg-emerald-100/70"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
                 }`}
               >
                 Demain
               </button>
-              <div className="relative flex items-center pl-1 border-l border-emerald-200/80 gap-1">
+              <div className="relative flex items-center pl-1 border-l border-slate-300">
                 {trainingDateFilter.includes("..") ? (
                   <div className="flex items-center gap-1 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg text-xs font-semibold text-emerald-900 shadow-2xs">
                     <span>
@@ -1537,7 +1550,7 @@ export default function KanbanBoard() {
                     <button
                       type="button"
                       onClick={() => setTrainingDateFilter("ALL")}
-                      className="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold cursor-pointer"
+                      className="ml-1 text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
                       title="Réinitialiser"
                     >
                       ✕
@@ -1555,7 +1568,7 @@ export default function KanbanBoard() {
                           : ""
                       }
                       onChange={(e) => setTrainingDateFilter(e.target.value || "ALL")}
-                      className="bg-white border border-emerald-200 rounded-lg px-2 py-0.5 text-xs text-gray-800 font-semibold outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-2xs"
+                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2 py-0.5 text-xs text-slate-800 font-semibold outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-3xs"
                       title="Choisir une date de formation personnalisée"
                     />
                     {trainingDateFilter !== "ALL" &&
@@ -1564,7 +1577,7 @@ export default function KanbanBoard() {
                         <button
                           type="button"
                           onClick={() => setTrainingDateFilter("ALL")}
-                          className="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold p-0.5 cursor-pointer"
+                          className="ml-1 text-slate-400 hover:text-rose-600 text-xs font-bold p-0.5 cursor-pointer"
                           title="Réinitialiser"
                         >
                           ✕
@@ -1576,23 +1589,23 @@ export default function KanbanBoard() {
             </div>
           </div>
 
-          {searchQuery && (
-            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200/80 px-3 py-1 rounded-xl flex items-center gap-1.5 font-medium">
-              <span>🔎</span>
-              <span>
-                {userRole === "LEAD_ACQUISITION_JR" || trainingDateFilter === "TODAY"
-                  ? "Recherche (aujourd'hui) : "
-                  : "Recherche (toutes dates) : "}
-                <strong>&quot;{searchQuery}&quot;</strong>
-              </span>
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="ml-2 text-blue-500 hover:text-blue-800 underline font-semibold cursor-pointer"
-              >
-                Réinitialiser
-              </button>
-            </div>
+          {/* Active Filter Clear Button */}
+          {(searchQuery || filterCity || filterHasNote !== "ALL" || trainingDateFilter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setFilterCity("");
+                setFilterHasNote("ALL");
+                setTrainingDateFilter("ALL");
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+              <span>Réinitialiser filtres</span>
+            </button>
           )}
         </div>
       )}

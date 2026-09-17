@@ -114,9 +114,9 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
       ref={setNodeRef}
       style={style}
       className={`
-        group bg-white rounded-2xl shadow-sm border transition-all duration-300
-        hover:shadow-lg hover:scale-[1.02] cursor-pointer relative overflow-hidden
-        ${isAccepted ? "border-olive/50 ring-1 ring-olive/20" : "border-gray-200/60 hover:border-navy/40"}
+        group bg-white rounded-2xl shadow-xs border transition-all duration-200
+        hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer relative overflow-hidden
+        ${isAccepted ? "border-olive/50 ring-1 ring-olive/20" : "border-slate-200/80"}
         ${isDragging ? "opacity-50 shadow-2xl scale-105 rotate-2 z-50 ring-2 ring-navy" : ""}
       `}
     >
@@ -124,7 +124,7 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center justify-center py-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
+        className="flex items-center justify-center py-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
       >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="1.5" />
@@ -140,27 +140,27 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
       <div onClick={onClick} className="px-4 pb-3 space-y-2">
         {/* Name + Phone */}
         <div>
-          <p className="font-semibold text-gray-900 text-sm leading-tight">
+          <p className="font-bold text-slate-900 text-sm leading-snug group-hover:text-navy transition-colors">
             {lead.raw_name}
           </p>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {lead.sanitized_phone}
+          <p className="text-xs text-slate-500 font-mono mt-0.5 tracking-tight flex items-center gap-1.5">
+            <span>{lead.sanitized_phone}</span>
           </p>
         </div>
 
         {/* Status Badges */}
         <div className="flex flex-wrap gap-1.5">
           {lead.city && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+            <span className="inline-flex items-center gap-0.5 text-3xs font-bold px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
               📍 {lead.city}
             </span>
           )}
           {lead.brand_status && (
             <span
-              className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-lg border ${
                 isTrainingFixed
-                  ? "bg-olive/10 text-olive"
-                  : "bg-gray-100 text-gray-600"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-slate-100 text-slate-700 border-slate-200/80"
               }`}
             >
               {lead.brand_status}
@@ -168,10 +168,10 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
           )}
           {lead.training_status && (
             <span
-              className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-lg border ${
                 isAccepted
-                  ? "bg-olive/10 text-olive"
-                  : "bg-blue-50 text-blue-600"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-blue-50 text-blue-700 border-blue-200"
               }`}
             >
               {lead.training_status}

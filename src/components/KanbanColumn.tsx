@@ -7,6 +7,7 @@
  * @dnd-kit and renders a list of LeadCards.
  */
 
+import React, { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -120,6 +121,7 @@ export default function KanbanColumn({
   };
 
   const isNewLeadsColumn = columnId === "NEW_LEADS";
+  const [isGoalBannerExpanded, setIsGoalBannerExpanded] = useState(false);
 
   return (
     <div
@@ -133,7 +135,7 @@ export default function KanbanColumn({
     >
       {/* Column Header */}
       <div 
-        className="flex items-center gap-3 px-5 py-4 rounded-t-3xl bg-white/50 border-b border-gray-100 cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-2.5 px-4 py-3.5 rounded-t-3xl bg-white/70 backdrop-blur-sm border-b border-slate-100 cursor-grab active:cursor-grabbing"
         {...attributes}
         {...listeners}
       >
@@ -143,16 +145,16 @@ export default function KanbanColumn({
             COLUMN_ACCENTS[columnId] || "from-gray-400 to-gray-500"
           }`}
         />
-        <h3 className="text-xs font-bold text-gray-700 tracking-wide uppercase">
+        <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">
           {COLUMN_LABELS[columnId] || columnId}
         </h3>
         <span
-          className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+          className={`ml-auto text-3xs font-extrabold px-2 py-0.5 rounded-full font-mono shadow-3xs ${
             isNewLeadsColumn && isDailyGoalAchieved
-              ? "bg-emerald-100 text-emerald-800 font-black"
+              ? "bg-emerald-100 text-emerald-800 font-black border border-emerald-200"
               : isNewLeadsColumn
-              ? "bg-blue-100 text-blue-800"
-              : "bg-gray-150 text-gray-500"
+              ? "bg-blue-100 text-blue-800 border border-blue-200"
+              : "bg-slate-100 text-slate-600 border border-slate-200"
           }`}
         >
           {isNewLeadsColumn && isDailyGoalAchieved
@@ -166,25 +168,9 @@ export default function KanbanColumn({
       {/* Interactive Date Filter Strip for Training Fixed / Scheduled Column */}
       {(columnId === "Training fixed" || columnId === "Scheduled") && onTrainingDateFilterChange && (
         <div
-          className="px-3.5 py-2.5 bg-emerald-50/80 border-b border-emerald-100 flex flex-col gap-2 cursor-default"
+          className="px-3 py-2 bg-emerald-50/70 border-b border-emerald-100/80 flex flex-col gap-1.5 cursor-default"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between text-[11px] text-emerald-950 font-bold">
-            <span className="flex items-center gap-1">
-              <span>📅</span>
-              <span>Filtrer par date :</span>
-            </span>
-            {trainingDateFilter && trainingDateFilter !== "ALL" && (
-              <button
-                type="button"
-                onClick={() => onTrainingDateFilterChange("ALL")}
-                className="text-[10px] text-emerald-700 hover:text-emerald-950 underline font-semibold cursor-pointer"
-              >
-                Voir toutes ({totalTrainingFixedCount || safeLeads.length})
-              </button>
-            )}
-          </div>
-
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
               <input
@@ -198,7 +184,7 @@ export default function KanbanColumn({
                     : ""
                 }
                 onChange={(e) => onTrainingDateFilterChange(e.target.value || "ALL")}
-                className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-3xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-3xs"
               />
               {trainingDateFilter &&
                 trainingDateFilter !== "ALL" &&
@@ -207,7 +193,7 @@ export default function KanbanColumn({
                   <button
                     type="button"
                     onClick={() => onTrainingDateFilterChange("ALL")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 text-xs font-bold"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 text-xs font-bold"
                     title="Effacer filtre date"
                   >
                     ✕
@@ -218,20 +204,20 @@ export default function KanbanColumn({
             <button
               type="button"
               onClick={() => onTrainingDateFilterChange("TODAY")}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
+              className={`px-2 py-1 rounded-lg text-3xs font-bold transition-all cursor-pointer shrink-0 ${
                 trainingDateFilter === "TODAY"
                   ? "bg-emerald-600 text-white shadow-xs"
                   : "bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
               }`}
               title="Aujourd'hui"
             >
-              Aujourd&apos;hui
+              Auj.
             </button>
 
             <button
               type="button"
               onClick={() => onTrainingDateFilterChange("ALL")}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
+              className={`px-2 py-1 rounded-lg text-3xs font-bold transition-all cursor-pointer shrink-0 ${
                 trainingDateFilter === "ALL"
                   ? "bg-emerald-600 text-white shadow-xs"
                   : "bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
@@ -250,7 +236,7 @@ export default function KanbanColumn({
                   key={qd.date}
                   type="button"
                   onClick={() => onTrainingDateFilterChange(qd.date)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  className={`px-2 py-0.5 rounded-md text-3xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                     trainingDateFilter === qd.date
                       ? "bg-emerald-700 text-white shadow-2xs"
                       : "bg-emerald-100/90 text-emerald-900 hover:bg-emerald-200 border border-emerald-200/60"
@@ -266,41 +252,47 @@ export default function KanbanColumn({
 
       {/* Drop Zone + Card List */}
       <div className="flex-1 p-3 space-y-2.5 overflow-y-auto">
-        {/* Goal Achieved Top Banner for New Leads Column */}
+        {/* Goal Achieved Compact Victory Ribbon */}
         {isNewLeadsColumn && isDailyGoalAchieved && (
-          <div className="p-4 text-center bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-2.5 animate-fadeIn mb-3">
-            <div className="flex items-center justify-center gap-2 text-2xl animate-bounce">
-              <span>🎉</span>
-              <span>🏆</span>
-            </div>
-            <div>
-              <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">
-                Félicitations ! Objectif Atteint !
-              </h4>
-              <p className="text-3xs text-emerald-800 font-medium mt-0.5 leading-snug">
-                Vous avez atteint l&apos;objectif du jour de{" "}
-                <strong>{dailyTrainingTarget} formations fixées</strong> ! 🚀
-              </p>
-            </div>
-            <div className="bg-white/95 p-2.5 rounded-xl border border-emerald-200 w-full space-y-1 text-3xs font-bold text-emerald-900 shadow-2xs">
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1">🎯 Formations :</span>
-                <span className="text-emerald-700 font-black">
-                  {dailyTrainingFixedToday} / {dailyTrainingTarget} ✅
-                </span>
+          <div className="p-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/60 border border-emerald-300 rounded-2xl shadow-2xs mb-2 transition-all">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base leading-none">🏆</span>
+                <div className="truncate">
+                  <p className="text-3xs font-black uppercase text-emerald-950 tracking-wide">
+                    Objectif Atteint !
+                  </p>
+                  <p className="text-[11px] font-bold text-emerald-700 font-mono leading-tight">
+                    {dailyTrainingFixedToday} / {dailyTrainingTarget} fixées ✅
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1">📞 Appels :</span>
-                <span className="text-navy font-black">{callsDoneToday} appels</span>
+              <button
+                type="button"
+                onClick={() => setIsGoalBannerExpanded(!isGoalBannerExpanded)}
+                className="px-2 py-1 rounded-lg text-3xs font-bold text-emerald-800 bg-white/90 hover:bg-white border border-emerald-200 shadow-3xs transition-all cursor-pointer shrink-0"
+              >
+                {isGoalBannerExpanded ? "Réduire" : "Détails"}
+              </button>
+            </div>
+
+            {isGoalBannerExpanded && (
+              <div className="mt-2.5 pt-2 border-t border-emerald-200/70 space-y-1.5 animate-fadeIn">
+                <p className="text-3xs text-emerald-800 font-medium leading-snug">
+                  Bravo à l&apos;équipe pour avoir dépassé la cible du jour ! 🚀
+                </p>
+                <div className="bg-white/95 p-2 rounded-xl border border-emerald-200 space-y-1 text-3xs font-bold text-emerald-900 shadow-3xs">
+                  <div className="flex justify-between items-center">
+                    <span>🎯 Formations fixées :</span>
+                    <span className="text-emerald-700 font-mono font-black">{dailyTrainingFixedToday} / {dailyTrainingTarget}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>📞 Appels passés :</span>
+                    <span className="text-slate-800 font-mono font-black">{callsDoneToday} appels</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="text-xs flex items-center justify-center gap-1.5 pt-0.5">
-              <span>🥳</span>
-              <span>🌟</span>
-              <span>✨</span>
-              <span>🚗</span>
-              <span>💨</span>
-            </div>
+            )}
           </div>
         )}
 
