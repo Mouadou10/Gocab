@@ -142,15 +142,45 @@ export default function SupportTicketsView() {
     return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
   }
 
+  async function handleCancelMission(ticket: MaintenanceTicket) {
+    const confirmMsg = `⚠️ Annuler la mission de récupération pour le véhicule ${ticket.plate_number} ?\n\n• La tâche sera immédiatement retirée de la page Terrain.\n• Les agents de terrain recevront une notification Telegram d'annulation.\n• Le véhicule sera automatiquement débloqué (Statut: Actif).`;
+    if (!confirm(confirmMsg)) return;
+
+    const previousTickets = tickets;
+    setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
+
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success(`🚫 Mission annulée pour ${ticket.plate_number}. Agents terrain notifiés !`);
+        notifyMutation("tickets");
+      } else {
+        setTickets(previousTickets);
+        toast.error("Échec de l'annulation de la mission");
+      }
+    } catch (err) {
+      setTickets(previousTickets);
+      console.error("Failed to cancel mission:", err);
+      toast.error("Erreur lors de l'annulation de la mission");
+    }
+  }
+
   async function handleDeleteTicket(id: string) {
-    if (!confirm("Are you sure you want to delete this ticket?")) return;
+    const ticketToDelete = tickets.find((t) => t.id === id);
+    const isRecovery = ticketToDelete?.ticket_type === "VEHICLE_RECOVERY" || ticketToDelete?.ticket_type === "Vehicle Recovery";
+
+    const promptText = isRecovery
+      ? `⚠️ Annuler la mission et supprimer le ticket pour le véhicule ${ticketToDelete?.plate_number} ?\n\n• La tâche terrain sera retirée.\n• Les agents recevront une alerte Telegram d'annulation.\n• Le véhicule sera débloqué.`
+      : "Are you sure you want to delete this ticket?";
+
+    if (!confirm(promptText)) return;
     const previousTickets = tickets;
     // Optimistically remove immediately from UI
     setTickets((prev) => prev.filter((t) => t.id !== id));
     try {
       const res = await fetch(`/api/tickets/${id}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success("Ticket deleted");
+        toast.success(isRecovery ? `🚫 Mission annulée et ticket supprimé (${ticketToDelete?.plate_number})` : "Ticket deleted");
         notifyMutation("tickets");
       } else {
         setTickets(previousTickets);
@@ -716,6 +746,7 @@ export default function SupportTicketsView() {
                     setWaiverReason(t.waiver_reason || "");
                   }}
                   onDeleteClick={handleDeleteTicket}
+                  onCancelMissionClick={handleCancelMission}
                   onCancelWaiverClick={handleCancelWaiver}
                   onResolveClick={handleOpenResolutionModal}
                   onStatusChange={handleStatusChange}
@@ -736,6 +767,7 @@ export default function SupportTicketsView() {
                   isResolved={activeDragTicket.status === "RESOLVED"}
                   onWaiveClick={() => {}}
                   onDeleteClick={() => {}}
+                  onCancelMissionClick={() => {}}
                   onCancelWaiverClick={() => {}}
                 />
               </div>

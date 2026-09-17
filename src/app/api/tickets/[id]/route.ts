@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { sendFieldTaskCancelledTelegramAlert } from "@/lib/services/telegramService";
 
 /**
  * PATCH /api/tickets/[id]
@@ -242,21 +243,41 @@ export async function DELETE(
 
     const ticket = await prisma.maintenanceTicket.findUnique({ where: { id } });
     if (ticket) {
-      // 1. Delete any linked FieldTasks
+      const isRecovery =
+        ticket.ticket_type === "VEHICLE_RECOVERY" ||
+        ticket.ticket_type.includes("Recovery") ||
+        ticket.ticket_type.includes("Blocage");
+
+      // Send cancellation notice to Telegram field group
+      if (isRecovery) {
+        sendFieldTaskCancelledTelegramAlert({
+          plate_number: ticket.plate_number,
+          driver_name: ticket.driver_name,
+          reason: "Mission annulée depuis le tableau de bord Support.",
+        }).catch((e) => console.warn("Failed to send Telegram cancellation alert:", e));
+      }
+
+      // 1. Delete any linked FieldTasks immediately
       await prisma.fieldTask.deleteMany({
         where: {
           OR: [
             { linked_ticket_id: id },
-            { plate_number: ticket.plate_number, task_type: "VEHICLE_RECOVERY" }
-          ]
-        }
+            { plate_number: ticket.plate_number, task_type: "VEHICLE_RECOVERY" },
+          ],
+        },
       }).catch((e) => console.warn("Failed to delete linked field tasks on ticket delete:", e));
 
       // 2. If recovery ticket set vehicle to Blocked, restore vehicle to Actif
-      if (ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type.includes("Recovery") || ticket.ticket_type.includes("Blocage")) {
-        await prisma.vehicle.update({
-          where: { id: ticket.vehicle_id },
-          data: { status: "Actif" }
+      if (isRecovery) {
+        await prisma.vehicle.updateMany({
+          where: {
+            OR: [
+              ...(ticket.vehicle_id ? [{ id: ticket.vehicle_id }] : []),
+              ...(ticket.plate_number ? [{ plate_number: ticket.plate_number }] : []),
+            ],
+            status: "Blocked",
+          },
+          data: { status: "Actif" },
         }).catch(() => {});
       }
 

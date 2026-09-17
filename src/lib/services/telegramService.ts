@@ -117,3 +117,37 @@ export async function sendFieldTaskTelegramAlert(task: {
     console.error("Failed to send field task Telegram alert:", err);
   }
 }
+
+/**
+ * Sends a Telegram alert when a field task / vehicle recovery mission is cancelled
+ */
+export async function sendFieldTaskCancelledTelegramAlert(task: {
+  plate_number?: string | null;
+  driver_name?: string | null;
+  cancelled_by?: string | null;
+  reason?: string | null;
+}): Promise<void> {
+  try {
+    const config = await getTelegramConfig();
+    if (!config.isEnabled || !config.botToken || !config.chatId) {
+      return;
+    }
+
+    const message = [
+      `🚫 <b>MISSION ANNULÉE : RÉCUPÉRATION VÉHICULE</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🚗 <b>Véhicule :</b> <code>${task.plate_number || "Non assigné"}</code>`,
+      task.driver_name ? `👤 <b>Chauffeur :</b> <b>${task.driver_name}</b>` : null,
+      task.cancelled_by ? `👮 <b>Annulée par :</b> <b>${task.cancelled_by}</b>` : null,
+      task.reason ? `📝 <b>Motif :</b> <i>${task.reason}</i>` : `ℹ️ <i>La mission a été annulée depuis le support / terrain. Ne pas intervenir.</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🕒 <i>${new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</i>`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendTelegramMessage(message);
+  } catch (err) {
+    console.error("Failed to send field task cancelled Telegram alert:", err);
+  }
+}

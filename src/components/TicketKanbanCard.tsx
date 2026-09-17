@@ -9,6 +9,7 @@ interface TicketKanbanCardProps {
   downtimeStr: string;
   onWaiveClick: (ticket: MaintenanceTicket) => void;
   onDeleteClick: (id: string) => void;
+  onCancelMissionClick?: (ticket: MaintenanceTicket) => void;
   onCancelWaiverClick: (id: string) => void;
   onResolveClick?: (ticket: MaintenanceTicket) => void;
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
@@ -23,6 +24,7 @@ export default function TicketKanbanCard({
   downtimeStr,
   onWaiveClick,
   onDeleteClick,
+  onCancelMissionClick,
   onCancelWaiverClick,
   onResolveClick,
   onStatusChange,
@@ -50,6 +52,8 @@ export default function TicketKanbanCard({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const isRecovery = ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type === "Vehicle Recovery";
 
   return (
     <div
@@ -92,7 +96,7 @@ export default function TicketKanbanCard({
       {/* Type & Field Status */}
       <div className="flex flex-wrap items-center gap-2">
         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap ${
-          ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type === "Vehicle Recovery"
+          isRecovery
             ? "bg-red-50 text-red-700 border border-red-200"
             : "bg-navy/10 text-navy"
         }`}>
@@ -102,7 +106,7 @@ export default function TicketKanbanCard({
           {ticket.ticket_type === "Accident" && "💥 Accident"}
           {ticket.ticket_type === "Fourrière" && "🚔 Fourrière"}
           {ticket.ticket_type === "Police Immobilization" && "🛑 Immobilisation Police"}
-          {(ticket.ticket_type === "VEHICLE_RECOVERY" || ticket.ticket_type === "Vehicle Recovery") && "🚨 Vehicle Recovery"}
+          {isRecovery && "🚨 Vehicle Recovery"}
           {ticket.ticket_type === "Custom" && "📋 Custom (BC)"}
           {!["Vidange", "AdBleu", "Repair", "Accident", "Fourrière", "Police Immobilization", "VEHICLE_RECOVERY", "Vehicle Recovery", "Custom"].includes(ticket.ticket_type) && ticket.ticket_type}
         </span>
@@ -113,6 +117,38 @@ export default function TicketKanbanCard({
           </span>
         )}
       </div>
+
+      {/* Vehicle Recovery Active Mission Alert Banner */}
+      {isRecovery && (
+        <div className="bg-red-50/90 border border-red-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+            </span>
+            <span className="text-[11px] font-bold text-red-800 truncate">
+              Mission Terrain active
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (onCancelMissionClick) {
+                onCancelMissionClick(ticket);
+              } else {
+                onDeleteClick(ticket.id);
+              }
+            }}
+            className="px-2.5 py-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
+            title="Annuler la mission de récupération, notifier les agents terrain et débloquer le véhicule"
+          >
+            🚫 Cancel Mission
+          </button>
+        </div>
+      )}
+
 
       {/* Description */}
       <p className="text-xs text-gray-700 leading-relaxed bg-gray-50 p-2.5 rounded-lg border border-gray-100 line-clamp-3">
@@ -493,17 +529,36 @@ export default function TicketKanbanCard({
             </button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            onDeleteClick(ticket.id);
-          }}
-          className="text-xs text-gray-400 hover:text-red-600 transition-colors"
-        >
-          🗑️ Delete
-        </button>
+        {isRecovery ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (onCancelMissionClick) {
+                onCancelMissionClick(ticket);
+              } else {
+                onDeleteClick(ticket.id);
+              }
+            }}
+            className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors cursor-pointer bg-red-50 hover:bg-red-100 border border-red-200 rounded-md px-2 py-1"
+            title="Annuler la mission de récupération et débloquer le véhicule"
+          >
+            🚫 Cancel Mission
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDeleteClick(ticket.id);
+            }}
+            className="text-xs text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+          >
+            🗑️ Delete
+          </button>
+        )}
       </div>
     </div>
   );

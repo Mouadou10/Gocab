@@ -11,6 +11,7 @@ interface TicketKanbanColumnProps {
   getDowntimeDuration: (createdAt: string, resolvedAt: string | null, startedAt?: string | null, ticketType?: string) => string;
   onWaiveClick: (ticket: MaintenanceTicket) => void;
   onDeleteClick: (id: string) => void;
+  onCancelMissionClick?: (ticket: MaintenanceTicket) => void;
   onCancelWaiverClick: (id: string) => void;
   onResolveClick?: (ticket: MaintenanceTicket) => void;
   onStatusChange?: (ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) => void;
@@ -37,6 +38,7 @@ export default function TicketKanbanColumn({
   getDowntimeDuration,
   onWaiveClick,
   onDeleteClick,
+  onCancelMissionClick,
   onCancelWaiverClick,
   onResolveClick,
   onStatusChange,
@@ -81,6 +83,7 @@ export default function TicketKanbanColumn({
               isResolved={ticket.status === "RESOLVED"}
               onWaiveClick={onWaiveClick}
               onDeleteClick={onDeleteClick}
+              onCancelMissionClick={onCancelMissionClick}
               onCancelWaiverClick={onCancelWaiverClick}
               onResolveClick={onResolveClick}
               onStatusChange={onStatusChange}

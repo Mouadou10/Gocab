@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { touchSyncState } from "@/lib/sync";
 
@@ -17,7 +16,46 @@ export async function GET(request: Request) {
     const status = searchParams.get("status") || "";
     const type = searchParams.get("type") || "";
 
-    // Auto-sync any open recovery tickets from Support Kanban into FieldTask
+    // 1. Auto-clean orphaned tasks whose linked_ticket_id is no longer present in MaintenanceTicket
+    const tasksWithLinkedTickets = await prisma.fieldTask.findMany({
+      where: { linked_ticket_id: { not: null } },
+      select: { id: true, linked_ticket_id: true, vehicle_id: true, plate_number: true, task_type: true },
+    });
+
+    if (tasksWithLinkedTickets.length > 0) {
+      const allLinkedTicketIds = tasksWithLinkedTickets.map((t) => t.linked_ticket_id as string);
+      const existingTickets = await prisma.maintenanceTicket.findMany({
+        where: { id: { in: allLinkedTicketIds } },
+        select: { id: true },
+      });
+      const validTicketIds = new Set(existingTickets.map((t) => t.id));
+      const orphanedTasks = tasksWithLinkedTickets.filter((t) => !validTicketIds.has(t.linked_ticket_id!));
+
+      if (orphanedTasks.length > 0) {
+        const orphanIds = orphanedTasks.map((t) => t.id);
+        await prisma.fieldTask.deleteMany({
+          where: { id: { in: orphanIds } },
+        });
+
+        // Unblock vehicles if they were blocked by orphaned recovery tasks
+        for (const orphan of orphanedTasks) {
+          if (orphan.task_type === "VEHICLE_RECOVERY" && (orphan.vehicle_id || orphan.plate_number)) {
+            await prisma.vehicle.updateMany({
+              where: {
+                OR: [
+                  ...(orphan.vehicle_id ? [{ id: orphan.vehicle_id }] : []),
+                  ...(orphan.plate_number ? [{ plate_number: orphan.plate_number }] : []),
+                ],
+                status: "Blocked",
+              },
+              data: { status: "Actif" },
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+
+    // 2. Auto-sync any open recovery tickets from Support Kanban into FieldTask
     const openRecoveryTickets = await prisma.maintenanceTicket.findMany({
       where: {
         ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] },
