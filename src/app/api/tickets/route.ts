@@ -65,11 +65,15 @@ export async function GET(request: Request) {
     }
 
     const enrichedTickets = tickets.map((t) => {
-      if (t.ticket_type === "Accident" && accidentClaimsMap[t.vehicle_id]) {
+      if (t.ticket_type === "Accident") {
+        const claim = accidentClaimsMap[t.vehicle_id];
+        const claimStep = claim?.timeline_step || (t.status === "RESOLVED" ? "VEHICLE_BACK" : "NEW_ACCIDENT");
+        const effectiveStatus = (t.status === "RESOLVED" || claimStep === "VEHICLE_BACK") ? "RESOLVED" : t.status;
         return {
           ...t,
-          accident_claim_id: accidentClaimsMap[t.vehicle_id].id,
-          accident_step: accidentClaimsMap[t.vehicle_id].timeline_step,
+          status: effectiveStatus,
+          accident_claim_id: claim?.id || null,
+          accident_step: claimStep,
         };
       }
       return t;

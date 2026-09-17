@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, context: any) {
   const params = await context.params;
@@ -121,6 +124,21 @@ export async function PATCH(req: Request, context: any) {
           data: { status: hasDriver ? "Actif" : "Available" },
         });
       }
+
+      // Automatically sync and resolve any open Accident MaintenanceTicket for this vehicle
+      await prisma.maintenanceTicket.updateMany({
+        where: {
+          vehicle_id: updatedClaim.vehicle_id,
+          ticket_type: "Accident",
+          status: { not: "RESOLVED" },
+        },
+        data: {
+          status: "RESOLVED",
+          resolved_at: new Date(),
+          field_status: "READY_FOR_PICKUP",
+        },
+      }).catch(() => {});
+      touchSyncState("tickets").catch(() => {});
     }
 
     // When ticket is REOPENED from VEHICLE_BACK
@@ -135,6 +153,21 @@ export async function PATCH(req: Request, context: any) {
           data: { status: "Accident" },
         });
       }
+
+      // Reopen linked resolved MaintenanceTicket
+      await prisma.maintenanceTicket.updateMany({
+        where: {
+          vehicle_id: updatedClaim.vehicle_id,
+          ticket_type: "Accident",
+          status: "RESOLVED",
+        },
+        data: {
+          status: "IN_PROGRESS",
+          resolved_at: null,
+          field_status: null,
+        },
+      }).catch(() => {});
+      touchSyncState("tickets").catch(() => {});
     }
 
     return NextResponse.json({ success: true, claim: updatedClaim });

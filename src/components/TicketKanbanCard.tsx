@@ -382,12 +382,14 @@ export default function TicketKanbanCard({
 
           <select
             value={
-              ticket.accident_step ||
-              (ticket.status === "RESOLVED"
+              ticket.status === "RESOLVED"
                 ? "VEHICLE_BACK"
-                : ticket.status === "IN_PROGRESS"
-                ? "CAR_IN_GARAGE"
-                : "NEW_ACCIDENT")
+                : (ticket.accident_step === "VEHICLE_BACK"
+                    ? "VEHICLE_BACK"
+                    : ticket.accident_step ||
+                      (ticket.status === "IN_PROGRESS"
+                        ? "CAR_IN_GARAGE"
+                        : "NEW_ACCIDENT"))
             }
             onChange={(e) => {
               const selectedStep = e.target.value;
@@ -410,9 +412,27 @@ export default function TicketKanbanCard({
             <option value="READY_FOR_PICKUP">5. ⏳ Prêt pour Récupération (En cours)</option>
             <option value="VEHICLE_BACK">6. ✅ Véhicule Rétabli (Résolu)</option>
           </select>
-          <p className="text-[10px] text-gray-500 italic">
-            Changer le statut depuis l&apos;état initial passe automatiquement le véhicule &quot;En cours&quot;.
-          </p>
+          <div className="flex items-center justify-between pt-0.5">
+            <p className="text-[10px] text-gray-500 italic">
+              {ticket.status === "RESOLVED"
+                ? "Dossier clos & véhicule rétabli."
+                : "Sélectionner Résolu déplace le ticket directement."}
+            </p>
+            {ticket.status !== "RESOLVED" && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onStatusChange?.(ticket, "RESOLVED", "VEHICLE_BACK");
+                }}
+                className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded px-2 py-0.5 transition-colors cursor-pointer whitespace-nowrap"
+                title="Clôturer le dossier accident et déplacer dans Résolu"
+              >
+                ✅ Marquer Résolu
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         /* Regular Ticket Quick Status Buttons */

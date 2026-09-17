@@ -23,72 +23,53 @@ export async function PATCH(
 
     const updateData: any = {};
 
-    // 1. Accident Ticket Step Synchronization
-    if (body.accident_step !== undefined) {
-      // Look up and update the linked/active AccidentClaim
-      const claim = await prisma.accidentClaim.findFirst({
-        where: { vehicle_id: currentTicket.vehicle_id },
-        orderBy: { created_at: "desc" },
-      });
+    // 1. Status & Accident Ticket Step Synchronization
+    if (body.accident_step !== undefined || body.status !== undefined) {
+      let targetStatus = body.status;
+      let targetAccidentStep = body.accident_step;
 
-      if (claim) {
-        await prisma.accidentClaim.update({
-          where: { id: claim.id },
-          data: {
-            timeline_step: body.accident_step,
-            step_updated_at: new Date(),
-          },
-        });
-      }
-
-      // If changed from the initial one (NEW_ACCIDENT) to any repair step -> vehicle is IN_PROGRESS
-      if (body.accident_step === "VEHICLE_BACK") {
+      if (targetAccidentStep === "VEHICLE_BACK" || targetStatus === "RESOLVED") {
+        targetStatus = "RESOLVED";
+        targetAccidentStep = "VEHICLE_BACK";
         updateData.status = "RESOLVED";
         updateData.resolved_at = new Date();
         updateData.field_status = "READY_FOR_PICKUP";
-      } else if (body.accident_step === "NEW_ACCIDENT") {
+      } else if (targetAccidentStep === "NEW_ACCIDENT" || targetStatus === "OPEN") {
+        targetStatus = "OPEN";
+        targetAccidentStep = "NEW_ACCIDENT";
         updateData.status = "OPEN";
         updateData.resolved_at = null;
         updateData.field_status = null;
-      } else {
-        // Any intermediate step (CAR_IN_GARAGE, STARTING_REPAIR, INSURANCE_DOCS, READY_FOR_PICKUP) means IN_PROGRESS
+      } else if (targetAccidentStep || targetStatus === "IN_PROGRESS") {
+        targetStatus = "IN_PROGRESS";
+        if (!targetAccidentStep || targetAccidentStep === "NEW_ACCIDENT") {
+          targetAccidentStep = "CAR_IN_GARAGE";
+        }
         updateData.status = "IN_PROGRESS";
         updateData.resolved_at = null;
         updateData.field_status = null;
       }
-    } else if (body.status !== undefined) {
-      updateData.status = body.status;
-      if (body.status === "RESOLVED") {
-        updateData.resolved_at = new Date();
-        updateData.field_status = "READY_FOR_PICKUP";
-      } else if (body.status === "OPEN" || body.status === "IN_PROGRESS") {
-        updateData.resolved_at = null;
-        updateData.field_status = null;
-      }
 
-      // If this is an accident ticket, also sync the AccidentClaim step
-      if (currentTicket.ticket_type === "Accident") {
+      if (currentTicket.ticket_type === "Accident" && currentTicket.vehicle_id) {
         const claim = await prisma.accidentClaim.findFirst({
           where: { vehicle_id: currentTicket.vehicle_id },
           orderBy: { created_at: "desc" },
         });
 
-        if (claim) {
-          let targetStep = claim.timeline_step;
-          if (body.status === "IN_PROGRESS" && claim.timeline_step === "NEW_ACCIDENT") {
-            targetStep = "CAR_IN_GARAGE";
-          } else if (body.status === "RESOLVED" && claim.timeline_step !== "VEHICLE_BACK") {
-            targetStep = "VEHICLE_BACK";
-          } else if (body.status === "OPEN" && claim.timeline_step !== "NEW_ACCIDENT") {
-            targetStep = "NEW_ACCIDENT";
-          }
+        if (claim && targetAccidentStep && claim.timeline_step !== targetAccidentStep) {
+          await prisma.accidentClaim.update({
+            where: { id: claim.id },
+            data: { timeline_step: targetAccidentStep, step_updated_at: new Date() },
+          });
+        }
 
-          if (targetStep !== claim.timeline_step) {
-            await prisma.accidentClaim.update({
-              where: { id: claim.id },
-              data: { timeline_step: targetStep, step_updated_at: new Date() },
-            });
-          }
+        // When vehicle is restored on resolution, restore vehicle status
+        if (targetStatus === "RESOLVED") {
+          const v = await prisma.vehicle.findUnique({ where: { id: currentTicket.vehicle_id } });
+          await prisma.vehicle.update({
+            where: { id: currentTicket.vehicle_id },
+            data: { status: v?.assigned_driver_name ? "Actif" : "Available" },
+          }).catch(() => {});
         }
       }
     }

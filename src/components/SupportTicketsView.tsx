@@ -356,6 +356,21 @@ export default function SupportTicketsView() {
   }
 
   async function handleStatusChange(ticket: MaintenanceTicket, newStatus: string, accidentStep?: string) {
+    const previousTickets = tickets;
+    // Optimistically update the ticket status & accident_step in local state immediately!
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticket.id
+          ? {
+              ...t,
+              status: newStatus,
+              accident_step: accidentStep !== undefined ? accidentStep : (newStatus === "RESOLVED" ? "VEHICLE_BACK" : t.accident_step),
+              resolved_at: newStatus === "RESOLVED" ? new Date().toISOString() : null,
+            }
+          : t
+      )
+    );
+
     try {
       const payload: any = { status: newStatus };
       if (accidentStep) {
@@ -380,12 +395,14 @@ export default function SupportTicketsView() {
             ? (accidentStep ? `Étape enregistrée : ${accidentStep} (Passé En cours)` : "Ticket passé En cours")
             : "Ticket replacé en Ouvert"
         );
-        fetchTickets();
         notifyMutation("tickets");
+        fetchTickets();
       } else {
+        setTickets(previousTickets);
         toast.error("Échec de la mise à jour du statut");
       }
     } catch (err) {
+      setTickets(previousTickets);
       console.error("Failed to update status:", err);
       toast.error("Erreur réseau");
     }
