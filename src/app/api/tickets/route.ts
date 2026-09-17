@@ -120,9 +120,9 @@ export async function POST(request: Request) {
         description: description.trim(),
         priority: priority || "Normal",
         status: started_at ? "IN_PROGRESS" : "OPEN",
-        started_at: started_at ? new Date(started_at) : null,
+        started_at: started_at && !isNaN(new Date(started_at).getTime()) ? new Date(started_at) : null,
         sla_deadline: slaDeadline,
-        repair_cost: repair_cost !== undefined && repair_cost !== null ? Number(repair_cost) : null,
+        repair_cost: repair_cost !== undefined && repair_cost !== null && !isNaN(Number(repair_cost)) ? Number(repair_cost) : null,
         garage_name: garage_name ? String(garage_name).trim() : null,
         resolution_notes: resolution_notes ? String(resolution_notes) : null,
       },
@@ -238,10 +238,10 @@ export async function POST(request: Request) {
     touchSyncState("tickets").catch(() => {});
 
     return NextResponse.json({ ticket }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/tickets error:", error);
     return NextResponse.json(
-      { error: "Failed to create ticket" },
+      { error: error?.message || "Failed to create ticket" },
       { status: 500 }
     );
   }
