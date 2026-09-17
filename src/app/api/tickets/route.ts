@@ -67,8 +67,24 @@ export async function GET(request: Request) {
     const enrichedTickets = tickets.map((t) => {
       if (t.ticket_type === "Accident") {
         const claim = accidentClaimsMap[t.vehicle_id];
-        const claimStep = claim?.timeline_step || (t.status === "RESOLVED" ? "VEHICLE_BACK" : "NEW_ACCIDENT");
-        const effectiveStatus = (t.status === "RESOLVED" || claimStep === "VEHICLE_BACK") ? "RESOLVED" : t.status;
+        const claimStep =
+          claim?.timeline_step ||
+          (t.status === "RESOLVED"
+            ? "VEHICLE_BACK"
+            : t.status === "IN_PROGRESS"
+            ? "CAR_IN_GARAGE"
+            : "NEW_ACCIDENT");
+
+        let effectiveStatus = t.status;
+        if (claimStep === "VEHICLE_BACK" || t.status === "RESOLVED") {
+          effectiveStatus = "RESOLVED";
+        } else if (claimStep === "NEW_ACCIDENT") {
+          effectiveStatus = "OPEN";
+        } else {
+          // CAR_IN_GARAGE, STARTING_REPAIR, INSURANCE_DOCS, READY_FOR_PICKUP
+          effectiveStatus = "IN_PROGRESS";
+        }
+
         return {
           ...t,
           status: effectiveStatus,
