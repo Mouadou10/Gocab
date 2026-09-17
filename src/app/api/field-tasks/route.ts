@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { touchSyncState } from "@/lib/sync";
 

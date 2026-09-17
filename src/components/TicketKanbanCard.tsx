@@ -120,32 +120,49 @@ export default function TicketKanbanCard({
 
       {/* Vehicle Recovery Active Mission Alert Banner */}
       {isRecovery && (
-        <div className="bg-red-50/90 border border-red-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
-            </span>
-            <span className="text-[11px] font-bold text-red-800 truncate">
-              Mission Terrain active
-            </span>
+        <div className="bg-red-50/90 border border-red-200 rounded-xl p-3 flex flex-col gap-2 shadow-2xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+              </span>
+              <span className="text-[11px] font-bold text-red-800 truncate">
+                {ticket.status === "IN_PROGRESS" ? "⏳ Mission Terrain En Cours" : "🚨 Mission Terrain Déclarée"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (onCancelMissionClick) {
+                  onCancelMissionClick(ticket);
+                } else {
+                  onDeleteClick(ticket.id);
+                }
+              }}
+              className="text-[11px] font-bold text-red-700 hover:text-red-900 bg-white hover:bg-red-100 border border-red-200 rounded-md px-2 py-0.5 transition-all shadow-2xs cursor-pointer"
+              title="Annuler la mission de récupération, notifier les agents terrain et débloquer le véhicule"
+            >
+              🚫 Cancel Mission
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              if (onCancelMissionClick) {
-                onCancelMissionClick(ticket);
-              } else {
-                onDeleteClick(ticket.id);
-              }
-            }}
-            className="px-2.5 py-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
-            title="Annuler la mission de récupération, notifier les agents terrain et débloquer le véhicule"
-          >
-            🚫 Cancel Mission
-          </button>
+
+          {ticket.status === "OPEN" && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onStatusChange?.(ticket, "IN_PROGRESS");
+              }}
+              className="w-full py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.98] text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              title="Démarrer la mission terrain et passer le ticket En cours"
+            >
+              ▶ Démarrer la mission (Passer En cours)
+            </button>
+          )}
         </div>
       )}
 

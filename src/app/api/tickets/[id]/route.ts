@@ -170,6 +170,38 @@ export async function PATCH(
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("tickets").catch(() => {});
 
+    // When ticket transitions to IN_PROGRESS, auto-synchronize linked Field Task to IN_PROGRESS
+    if (updateData.status === "IN_PROGRESS" && currentTicket.status !== "IN_PROGRESS") {
+      await prisma.fieldTask.updateMany({
+        where: {
+          OR: [
+            { linked_ticket_id: ticket.id },
+            { plate_number: ticket.plate_number, task_type: "VEHICLE_RECOVERY" },
+          ],
+          status: "PENDING",
+        },
+        data: {
+          status: "IN_PROGRESS",
+        },
+      }).catch((e) => console.warn("Failed to set field task to IN_PROGRESS:", e));
+    }
+
+    // When ticket transitions back to OPEN, auto-synchronize linked Field Task to PENDING
+    if (updateData.status === "OPEN" && currentTicket.status !== "OPEN") {
+      await prisma.fieldTask.updateMany({
+        where: {
+          OR: [
+            { linked_ticket_id: ticket.id },
+            { plate_number: ticket.plate_number, task_type: "VEHICLE_RECOVERY" },
+          ],
+          status: "IN_PROGRESS",
+        },
+        data: {
+          status: "PENDING",
+        },
+      }).catch((e) => console.warn("Failed to set field task to PENDING:", e));
+    }
+
     // When ticket transitions to resolved, auto-update or create Field Task for Field Supervisor
     if (updateData.status === "RESOLVED" && currentTicket.status !== "RESOLVED") {
       const isRecovery = 

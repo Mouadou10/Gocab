@@ -289,8 +289,13 @@ export default function FieldSupervisorView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus, failure_reason: failReason }),
       });
-      toast.success("Task status updated");
+      toast.success(
+        newStatus === "IN_PROGRESS"
+          ? "▶ Mission démarrée ! Le ticket Support a été passé En cours."
+          : "Statut mis à jour"
+      );
       fetchTasks();
+      notifyMutation("tickets");
     } catch (err: any) {
       toast.error(err.message || "Failed to update task status");
       console.error("Failed to update task:", err);
@@ -362,29 +367,6 @@ export default function FieldSupervisorView() {
       setViewPlate(plateNumber);
     } catch (err) {
       console.error("Failed to fetch inspections:", err);
-    }
-  };
-
-  // Cancel mission (Recovery)
-  const handleCancelMission = async (task: FieldTask) => {
-    const confirmMsg = `⚠️ Annuler la mission de récupération pour le véhicule ${task.plate_number || ""} ?\n\n• Une notification Telegram d'annulation sera envoyée aux agents terrain.\n• Le véhicule sera automatiquement débloqué (Statut: Actif).\n• La tâche disparaîtra de la page terrain et du support.`;
-    if (!confirm(confirmMsg)) return;
-
-    const prevTasks = tasks;
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
-    try {
-      const res = await fetch(`/api/field-tasks/${task.id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success(`🚫 Mission annulée pour ${task.plate_number || "le véhicule"}. Notification Telegram envoyée.`);
-        notifyMutation("tickets");
-      } else {
-        setTasks(prevTasks);
-        toast.error("Échec de l'annulation de la mission");
-      }
-    } catch (err) {
-      setTasks(prevTasks);
-      console.error("Failed to cancel mission:", err);
-      toast.error("Erreur lors de l'annulation de la mission");
     }
   };
 
@@ -507,27 +489,74 @@ export default function FieldSupervisorView() {
         )}
 
         {!isCompleted && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {task.task_type === "VEHICLE_RECOVERY" ? (
-              <button 
-                onClick={() => handleOpenRecoveryModal(task)}
-                style={{ 
-                  padding: "6px 14px", 
-                  background: "#b91c1c", 
-                  color: "#fff", 
-                  border: "none", 
-                  borderRadius: 8, 
-                  fontSize: 12, 
-                  fontWeight: 700, 
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  boxShadow: "0 2px 4px rgba(185, 28, 28, 0.2)"
-                }}
-              >
-                ⚡ Récupérer (Checklist Handover)
-              </button>
+              <>
+                {task.status === "PENDING" && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleStatusUpdate(task, "IN_PROGRESS");
+                    }}
+                    style={{
+                      padding: "6px 14px",
+                      background: "#2563eb",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      boxShadow: "0 2px 4px rgba(37, 99, 235, 0.25)",
+                    }}
+                    title="Démarrer la mission de récupération et passer le ticket Support En cours"
+                  >
+                    ▶ Démarrer la mission
+                  </button>
+                )}
+                {task.status === "IN_PROGRESS" && (
+                  <span
+                    style={{
+                      padding: "5px 12px",
+                      background: "#fef3c7",
+                      color: "#92400e",
+                      border: "1px solid #fde68a",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                  >
+                    ⏳ Mission en cours
+                  </span>
+                )}
+                <button 
+                  onClick={() => handleOpenRecoveryModal(task)}
+                  style={{ 
+                    padding: "6px 14px", 
+                    background: "#b91c1c", 
+                    color: "#fff", 
+                    border: "none", 
+                    borderRadius: 8, 
+                    fontSize: 12, 
+                    fontWeight: 700, 
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    boxShadow: "0 2px 4px rgba(185, 28, 28, 0.2)"
+                  }}
+                >
+                  ⚡ Récupérer (Checklist Handover)
+                </button>
+              </>
             ) : (
               <>
                 {task.status === "PENDING" && (
@@ -560,49 +589,22 @@ export default function FieldSupervisorView() {
                     </button>
                   </>
                 )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleDeleteTask(task.id);
+                  }}
+                  style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  🗑
+                </button>
               </>
-            )}
-            {task.task_type === "VEHICLE_RECOVERY" ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  handleCancelMission(task);
-                }}
-                style={{
-                  padding: "6px 14px",
-                  background: "#fee2e2",
-                  color: "#991b1b",
-                  border: "1px solid #fca5a5",
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  transition: "all 0.15s ease",
-                }}
-                title="Annuler cette mission, notifier les agents sur Telegram et débloquer le véhicule"
-              >
-                🚫 Annuler Mission
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  handleDeleteTask(task.id);
-                }}
-                style={{ padding: "5px 12px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-              >
-                🗑
-              </button>
             )}
           </div>
         )}
+
       </div>
     );
   };

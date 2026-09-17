@@ -394,6 +394,7 @@ export default function SupportTicketsView() {
           ? {
               ...t,
               status: newStatus,
+              started_at: newStatus === "IN_PROGRESS" && !t.started_at ? new Date().toISOString() : t.started_at,
               accident_step: accidentStep !== undefined ? accidentStep : (newStatus === "RESOLVED" ? "VEHICLE_BACK" : t.accident_step),
               resolved_at: newStatus === "RESOLVED" ? new Date().toISOString() : null,
             }
@@ -403,6 +404,9 @@ export default function SupportTicketsView() {
 
     try {
       const payload: any = { status: newStatus };
+      if (newStatus === "IN_PROGRESS" && !ticket.started_at) {
+        payload.started_at = new Date().toISOString();
+      }
       if (accidentStep) {
         payload.accident_step = accidentStep;
       }

@@ -53,6 +53,44 @@ export async function PATCH(
       data: updateData,
     });
 
+    // When a task moves to IN_PROGRESS, update the linked Support / Maintenance ticket to IN_PROGRESS
+    if (body.status === "IN_PROGRESS") {
+      if (task.linked_ticket_id) {
+        await prisma.maintenanceTicket.update({
+          where: { id: task.linked_ticket_id },
+          data: {
+            status: "IN_PROGRESS",
+            started_at: new Date(),
+          },
+        }).catch((e) => console.warn("Failed to update linked ticket to IN_PROGRESS:", e));
+      } else if (task.task_type === "VEHICLE_RECOVERY" && task.plate_number) {
+        await prisma.maintenanceTicket.updateMany({
+          where: {
+            plate_number: task.plate_number,
+            ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] },
+            status: "OPEN",
+          },
+          data: {
+            status: "IN_PROGRESS",
+            started_at: new Date(),
+          },
+        }).catch(() => {});
+      }
+    }
+
+    // When a task moves back to PENDING, reset the linked Support / Maintenance ticket to OPEN
+    if (body.status === "PENDING") {
+      if (task.linked_ticket_id) {
+        await prisma.maintenanceTicket.update({
+          where: { id: task.linked_ticket_id },
+          data: {
+            status: "OPEN",
+            started_at: null,
+          },
+        }).catch(() => {});
+      }
+    }
+
     // When a GARAGE_PICKUP task is completed, restore vehicle to Actif
     if (body.status === "COMPLETED" && task.task_type === "GARAGE_PICKUP" && task.vehicle_id) {
       await prisma.vehicle.update({
