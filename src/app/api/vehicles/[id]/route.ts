@@ -349,22 +349,22 @@ export async function DELETE(
     const session = await requireAuth();
     const { id } = await params;
 
-    // Execute atomic batch update (unlinking driver and archiving vehicle)
-    await prisma.$transaction([
-      prisma.driverProfile.updateMany({
-        where: { assignedVehicleId: id },
-        data: { assignedVehicleId: null },
-      }),
-      prisma.vehicle.update({
-        where: { id },
-        data: { 
-          is_archived: true, 
-          assigned_driver_name: null,
-          assigned_driver_phone: null,
-          status: "Archived",
-        },
-      }),
-    ]);
+    // 1. Unlink any DriverProfile assigned to this vehicle
+    await prisma.driverProfile.updateMany({
+      where: { assignedVehicleId: id },
+      data: { assignedVehicleId: null },
+    });
+
+    // 2. Soft delete the vehicle itself
+    await prisma.vehicle.update({
+      where: { id },
+      data: { 
+        is_archived: true, 
+        assigned_driver_name: null,
+        assigned_driver_phone: null,
+        status: "Archived",
+      },
+    });
 
     // Log audit after transaction successfully commits
     try {
