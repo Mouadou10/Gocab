@@ -80,14 +80,76 @@ interface DailySummary {
   collectionPercentage?: number;
   criticalRedCount: number;
   hasMorningCsv?: boolean;
+  hasEveningCsv?: boolean;
+  isRange?: boolean;
+  daysCount?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 export default function FleetPerformanceView() {
   const { t, language } = useLanguage();
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [activePreset, setActivePreset] = useState<"today" | "yesterday" | "week" | "month" | "7d" | "custom">("today");
   const [drivers, setDrivers] = useState<DriverDailyItem[]>([]);
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isRangeMode = startDate !== endDate;
+
+  const setQuickPreset = (preset: "today" | "yesterday" | "week" | "month" | "7d") => {
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
+
+    if (preset === "today") {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      setActivePreset("today");
+    } else if (preset === "yesterday") {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      const yStr = y.toISOString().split("T")[0];
+      setStartDate(yStr);
+      setEndDate(yStr);
+      setActivePreset("yesterday");
+    } else if (preset === "week") {
+      const d = new Date(today);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      setStartDate(monday.toISOString().split("T")[0]);
+      setEndDate(todayStr);
+      setActivePreset("week");
+    } else if (preset === "7d") {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 6);
+      setStartDate(d.toISOString().split("T")[0]);
+      setEndDate(todayStr);
+      setActivePreset("7d");
+    } else if (preset === "month") {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(firstDay.toISOString().split("T")[0]);
+      setEndDate(todayStr);
+      setActivePreset("month");
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    if (val > endDate) {
+      setEndDate(val);
+    }
+    setActivePreset("custom");
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    if (val < startDate) {
+      setStartDate(val);
+    }
+    setActivePreset("custom");
+  };
 
   const { data: session } = useSession() || {};
   const currentUserName = session?.user?.name || "Fleet Performance Manager";
@@ -184,7 +246,7 @@ export default function FleetPerformanceView() {
   const fetchDriverCollections = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/collections/driver-daily?date=${selectedDate}`);
+      const res = await fetch(`/api/collections/driver-daily?startDate=${startDate}&endDate=${endDate}`);
       const data = await res.json();
 
       if (data.drivers) {
@@ -205,7 +267,7 @@ export default function FleetPerformanceView() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     fetchDriverCollections();
@@ -245,9 +307,11 @@ export default function FleetPerformanceView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           driverId: driver.id,
-          date: selectedDate,
+          date: endDate,
           clearedMAD: amount,
-          notes: `Encaissé via Fleet Perf (${selectedDate})`,
+          notes: isRangeMode
+            ? `Encaissé via Fleet Perf (Période ${startDate} au ${endDate})`
+            : `Encaissé via Fleet Perf (${endDate})`,
         }),
       });
 
@@ -304,13 +368,15 @@ export default function FleetPerformanceView() {
     return true;
   });
 
-  const selectedDateObj = new Date(`${selectedDate}T00:00:00.000Z`);
-  const dayName = selectedDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const startDateObj = new Date(`${startDate}T00:00:00.000Z`);
+  const endDateObj = new Date(`${endDate}T00:00:00.000Z`);
+  const dayName = startDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const daysCount = summary?.daysCount || Math.max(1, Math.round((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-fadeIn">
       {/* Top Header & Date Bar */}
-      <div className="bg-gradient-to-r from-navy via-[#1b3453] to-[#0d1e38] text-white p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-navy via-[#1b3453] to-[#0d1e38] text-white p-6 rounded-3xl shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="p-2 bg-gold/20 text-gold rounded-xl border border-gold/30">
@@ -325,49 +391,138 @@ export default function FleetPerformanceView() {
           </p>
         </div>
 
-        {/* Controls: Date, CSV Balance Upload & Export */}
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl border border-white/20">
-            <Calendar className="w-4 h-4 text-gold ml-2" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer pr-2"
-            />
-            <button
-              onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-              className="px-2.5 py-1 bg-white text-navy font-bold text-2xs rounded-xl hover:bg-gold transition-colors"
-            >
-              Aujourd'hui
-            </button>
+        {/* Controls: Date Range Selector, Presets, CSV Balance Upload & Export */}
+        <div className="flex flex-col items-start lg:items-end gap-2.5">
+          {/* Date Range Selector Pill */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-white/10 p-1.5 rounded-2xl border border-white/20 text-xs shadow-inner backdrop-blur-xs">
+            <div className="flex items-center gap-1.5 px-1.5">
+              <Calendar className="w-4 h-4 text-gold shrink-0" />
+              <span className="text-3xs font-bold text-white/70 uppercase tracking-wide">Du</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="bg-navy/80 text-white text-xs font-bold rounded-xl px-2 py-1 border border-white/25 focus:outline-none focus:ring-1 focus:ring-gold cursor-pointer"
+              />
+              <span className="text-3xs font-bold text-white/70 uppercase tracking-wide">Au</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="bg-navy/80 text-white text-xs font-bold rounded-xl px-2 py-1 border border-white/25 focus:outline-none focus:ring-1 focus:ring-gold cursor-pointer"
+              />
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div className="flex items-center gap-1 border-l border-white/20 pl-1.5 ml-0.5">
+              <button
+                type="button"
+                onClick={() => setQuickPreset("today")}
+                className={`px-2 py-1 font-bold text-2xs rounded-lg transition-all cursor-pointer ${
+                  activePreset === "today"
+                    ? "bg-gold text-navy shadow-xs font-black"
+                    : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+                title="Aujourd'hui"
+              >
+                Aujourd'hui
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickPreset("yesterday")}
+                className={`px-2 py-1 font-bold text-2xs rounded-lg transition-all cursor-pointer ${
+                  activePreset === "yesterday"
+                    ? "bg-gold text-navy shadow-xs font-black"
+                    : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+                title="Hier"
+              >
+                Hier
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickPreset("week")}
+                className={`px-2 py-1 font-bold text-2xs rounded-lg transition-all cursor-pointer ${
+                  activePreset === "week"
+                    ? "bg-gold text-navy shadow-xs font-black"
+                    : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+                title="Cette semaine (depuis lundi)"
+              >
+                Semaine
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickPreset("7d")}
+                className={`px-2 py-1 font-bold text-2xs rounded-lg transition-all cursor-pointer ${
+                  activePreset === "7d"
+                    ? "bg-gold text-navy shadow-xs font-black"
+                    : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+                title="7 derniers jours"
+              >
+                7j
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickPreset("month")}
+                className={`px-2 py-1 font-bold text-2xs rounded-lg transition-all cursor-pointer ${
+                  activePreset === "month"
+                    ? "bg-gold text-navy shadow-xs font-black"
+                    : "bg-white/15 text-white hover:bg-white/25"
+                }`}
+                title="Ce mois-ci"
+              >
+                Mois
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Range Info Badge & Action Buttons */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {isRangeMode ? (
+              <span className="text-2xs bg-gold/20 text-gold font-bold px-2.5 py-1 rounded-xl border border-gold/30 flex items-center gap-1 animate-fadeIn">
+                <span>🗓️ Période :</span>
+                <span className="font-extrabold">{daysCount} jours</span>
+                <span className="text-white/70">({startDate} → {endDate})</span>
+              </span>
+            ) : (
+              <span className="text-2xs bg-white/10 text-white/80 font-medium px-2.5 py-1 rounded-xl border border-white/15 flex items-center gap-1">
+                <span>📅 Jour :</span>
+                <span className="font-bold text-white capitalize">{dayName}</span>
+              </span>
+            )}
+
             <button
               onClick={() => setIsBalanceModalOpen(true)}
               className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-navy font-black text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-navy" />
-              Importer Soldes CSV (Matin / Soir)
+              Importer Soldes CSV
             </button>
             <button
               onClick={() => {
                 if (drivers.length === 0) return;
-                const headers = "Nom,Telephone,CIN,Vehicule,Jours Sans Paiement,Arrieres (MAD)\n";
-                const rows = drivers.map(d => 
-                  `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || 'Aucun'}",${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
-                ).join("\n");
+                const headers = "Nom,Telephone,CIN,Vehicule,Attendu (MAD),Encaisse (MAD),Jours Sans Paiement,Arrieres (MAD)\n";
+                const rows = drivers
+                  .map(
+                    (d) =>
+                      `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || "Aucun"}",${d.expectedTodayMAD},${d.clearedTodayMAD},${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
+                  )
+                  .join("\n");
                 const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.href = url;
-                link.download = `rapport_encaissements_${selectedDate}.csv`;
+                link.download = isRangeMode
+                  ? `rapport_encaissements_${startDate}_au_${endDate}.csv`
+                  : `rapport_encaissements_${startDate}.csv`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 toast.success("Export CSV réussi !");
               }}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl border border-emerald-400 transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl border border-emerald-400 transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               Export CSV
@@ -376,8 +531,8 @@ export default function FleetPerformanceView() {
         </div>
       </div>
 
-      {/* Notice banner when morning CSV is not yet imported */}
-      {!isLoading && summary && !summary.hasMorningCsv && (
+      {/* Notice banner when morning CSV is not yet imported (Only shown in single day mode) */}
+      {!isLoading && summary && !summary.hasMorningCsv && !isRangeMode && (
         <div className="bg-amber-50/90 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-2xs animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
@@ -407,22 +562,28 @@ export default function FleetPerformanceView() {
 
       {/* KPI Summary Cards Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Morning Target (100% Cash Collection Pool) */}
+        {/* Morning / Period Target (100% Cash Collection Pool) */}
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-gray-500 uppercase">Cible Matinale (100% CSV)</span>
+            <span className="text-2xs font-bold text-gray-500 uppercase">
+              {isRangeMode ? `Cible Période (${daysCount}j)` : "Cible Matinale (100% CSV)"}
+            </span>
             <span
               className={`text-3xs font-black px-2 py-0.5 rounded-full ${
-                summary?.hasMorningCsv ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-500"
+                isRangeMode || summary?.hasMorningCsv ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-500"
               }`}
             >
-              {summary?.hasMorningCsv ? "Base 100%" : "En attente CSV"}
+              {isRangeMode
+                ? `${daysCount} jours`
+                : summary?.hasMorningCsv
+                ? "Base 100%"
+                : "En attente CSV"}
             </span>
           </div>
           <p className="text-2xl font-black text-navy mt-1">
-            {summary?.hasMorningCsv ? (
+            {summary?.hasMorningCsv || (summary?.totalMorningTargetMAD || 0) > 0 || isRangeMode ? (
               <>
-                {(summary?.totalMorningTargetMAD || 0).toLocaleString()}{" "}
+                {(summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0).toLocaleString()}{" "}
                 <span className="text-xs font-normal text-gray-500">MAD</span>
               </>
             ) : (
@@ -430,32 +591,34 @@ export default function FleetPerformanceView() {
             )}
           </p>
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
-            <span className={summary?.hasMorningCsv ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
+            <span className={summary?.hasMorningCsv || isRangeMode ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
               🎯 Objectif 60% :
             </span>
-            <span className={summary?.hasMorningCsv ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
-              {summary?.hasMorningCsv
-                ? `${Math.round((summary?.totalMorningTargetMAD || 0) * 0.6).toLocaleString()} MAD`
+            <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
+              {summary?.hasMorningCsv || isRangeMode
+                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.6).toLocaleString()} MAD`
                 : "—"}
             </span>
           </div>
         </div>
 
-        {/* Collected Today with 60% Target Progress */}
+        {/* Collected Today / in Period with 60% Target Progress */}
         {(() => {
           const hasCsv = summary?.hasMorningCsv ?? false;
-          const morningTarget = hasCsv ? (summary?.totalMorningTargetMAD || 0) : 0;
+          const target = (summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0);
           const cleared = summary?.totalClearedTodayMAD || 0;
-          const pct = morningTarget > 0 ? (cleared / morningTarget) * 100 : 0;
-          const isTargetAchieved = pct >= 60 && hasCsv;
+          const pct = target > 0 ? (cleared / target) * 100 : 0;
+          const isTargetAchieved = pct >= 60;
 
           return (
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-2xs font-bold text-gray-500 uppercase">Encaissé Aujourd'hui</span>
+                <span className="text-2xs font-bold text-gray-500 uppercase">
+                  {isRangeMode ? `Encaissé Période (${daysCount}j)` : "Encaissé Aujourd'hui"}
+                </span>
                 <span
                   className={`text-3xs font-black px-2 py-0.5 rounded-full ${
-                    !hasCsv
+                    target === 0 && cleared === 0
                       ? "bg-gray-100 text-gray-400"
                       : isTargetAchieved
                       ? "bg-emerald-100 text-emerald-800 animate-pulse-subtle"
@@ -464,11 +627,11 @@ export default function FleetPerformanceView() {
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {hasCsv ? `${pct.toFixed(1)}% / 60%` : "0.0% / 60%"}
+                  {`${pct.toFixed(1)}% / 60%`}
                 </span>
               </div>
               <p className="text-2xl font-black text-emerald-600 mt-1">
-                {hasCsv || cleared > 0 ? (
+                {cleared > 0 || hasCsv || isRangeMode ? (
                   <>
                     {cleared.toLocaleString()} <span className="text-xs font-normal text-gray-500">MAD</span>
                   </>
@@ -488,17 +651,17 @@ export default function FleetPerformanceView() {
                       : "bg-blue-500"
                   }`}
                   style={{
-                    width: `${hasCsv ? Math.min(100, pct) : 0}%`,
+                    width: `${Math.min(100, pct)}%`,
                   }}
                 />
               </div>
               <p className="text-3xs text-gray-500 pt-0.5 flex items-center justify-between">
                 <span>
-                  {!hasCsv
+                  {!hasCsv && !isRangeMode && target === 0
                     ? "En attente du CSV matin pour fixer l'objectif"
                     : isTargetAchieved
                     ? "🎉 Objectif 60% Atteint !"
-                    : `Reste ${Math.max(0, Math.round(morningTarget * 0.6) - cleared).toLocaleString()} MAD pour 60%`}
+                    : `Reste ${Math.max(0, Math.round(target * 0.6) - cleared).toLocaleString()} MAD pour 60%`}
                 </span>
                 <span className="font-bold text-gray-400">Objectif: 60%</span>
               </p>
@@ -510,14 +673,14 @@ export default function FleetPerformanceView() {
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
-            {!summary?.hasMorningCsv && (
+            {!summary?.hasMorningCsv && !isRangeMode && (
               <span className="text-3xs font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                 En attente CSV
               </span>
             )}
           </div>
           <p className="text-2xl font-black text-amber-600 mt-1">
-            {summary?.hasMorningCsv ? (
+            {summary?.hasMorningCsv || isRangeMode ? (
               <>
                 {(summary?.remainingToCollectMAD || 0).toLocaleString()}{" "}
                 <span className="text-xs font-normal text-gray-500">MAD</span>
@@ -527,7 +690,9 @@ export default function FleetPerformanceView() {
             )}
           </p>
           <p className="text-2xs text-gray-500 mt-1 font-medium leading-tight">
-            {summary?.hasMorningCsv
+            {isRangeMode
+              ? `Sur la période : ${daysCount} jours sélectionné(s)`
+              : summary?.hasMorningCsv
               ? `Cumul total impayés flotte : ${(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD`
               : "En attente de l'import CSV du matin"}
           </p>
@@ -672,8 +837,12 @@ export default function FleetPerformanceView() {
               <tr>
                 <th className="py-4 px-6">Chauffeur & Contact</th>
                 <th className="py-4 px-4">Véhicule</th>
-                <th className="py-4 px-4 text-center">Attendu Aujourd'hui</th>
-                <th className="py-4 px-4 text-center">Montant Encaissé (MAD)</th>
+                <th className="py-4 px-4 text-center">
+                  {isRangeMode ? `Attendu Période (${daysCount}j)` : "Attendu Aujourd'hui"}
+                </th>
+                <th className="py-4 px-4 text-center">
+                  {isRangeMode ? "Total Encaissé Période (MAD)" : "Montant Encaissé (MAD)"}
+                </th>
                 <th className="py-4 px-4 text-center">Jours Sans Versement</th>
                 <th className="py-4 px-4 text-right">Total Impayés (Cumul)</th>
                 <th className="py-4 px-6 text-right">Actions</th>
@@ -757,58 +926,94 @@ export default function FleetPerformanceView() {
                         )}
                       </td>
 
-                      {/* Amount Paid Input Field */}
+                      {/* Amount Paid Input / Display Field */}
                       <td className="py-4 px-4 text-center">
-                        <div className="flex flex-col items-center justify-center gap-1">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <div className="relative w-28">
-                              <input
-                                type="number"
-                                min="0"
-                                step="50"
-                                value={currentInputValue}
-                                onChange={(e) =>
-                                  setPaymentInputs({
-                                    ...paymentInputs,
-                                    [driver.id]: parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                                className={`w-full px-2 py-1.5 text-center font-mono font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
-                                  driver.isPaidToday
-                                    ? "border-emerald-300 bg-emerald-50 text-emerald-900 focus:ring-emerald-200"
-                                    : "border-gray-200 bg-white text-navy focus:ring-navy/20"
-                                }`}
-                              />
-                              <span className="absolute right-2 top-2 text-3xs font-bold text-gray-400">DH</span>
-                            </div>
-
-                            {/* Quick autofill expected amount */}
-                            {driver.expectedTodayMAD > 0 && currentInputValue !== driver.expectedTodayMAD && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPaymentInputs({
-                                    ...paymentInputs,
-                                    [driver.id]: driver.expectedTodayMAD,
-                                  })
-                                }
-                                className="p-1.5 bg-gray-100 hover:bg-gray-200 text-navy rounded-lg text-2xs font-bold"
-                                title="Remplir montant attendu"
-                              >
-                                <Zap className="w-3 h-3 text-gold" />
-                              </button>
+                        {isRangeMode ? (
+                          <div className="flex flex-col items-center justify-center gap-1">
+                            <span
+                              className={`font-mono font-bold text-xs px-2.5 py-1 rounded-xl border ${
+                                driver.isPaidToday
+                                  ? "bg-emerald-50 text-emerald-900 border-emerald-300 font-black"
+                                  : driver.clearedTodayMAD > 0
+                                  ? "bg-amber-50 text-amber-900 border-amber-200 font-bold"
+                                  : "bg-gray-100 text-gray-500 border-gray-200"
+                              }`}
+                            >
+                              {driver.clearedTodayMAD.toLocaleString()} DH
+                            </span>
+                            {driver.expectedTodayMAD > 0 && (
+                              <span className="text-3xs text-gray-500 font-medium">
+                                {driver.clearedTodayMAD >= driver.expectedTodayMAD ? (
+                                  <span className="text-emerald-700 font-bold">✓ 100% encaissé</span>
+                                ) : driver.clearedTodayMAD > 0 ? (
+                                  <span>
+                                    {Math.round((driver.clearedTodayMAD / driver.expectedTodayMAD) * 100)}% encaissé
+                                  </span>
+                                ) : (
+                                  <span className="text-red-500">0% encaissé</span>
+                                )}
+                              </span>
+                            )}
+                            {(driver.morningBalance !== null || driver.eveningBalance !== null) && (
+                              <div className="text-3xs font-mono text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <span>Matin: {driver.morningBalance ?? "-"}</span>
+                                <span>➔</span>
+                                <span>Soir: {driver.eveningBalance ?? "-"}</span>
+                              </div>
                             )}
                           </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <div className="relative w-28">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="50"
+                                  value={currentInputValue}
+                                  onChange={(e) =>
+                                    setPaymentInputs({
+                                      ...paymentInputs,
+                                      [driver.id]: parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                  className={`w-full px-2 py-1.5 text-center font-mono font-bold text-xs rounded-xl border focus:outline-none focus:ring-2 ${
+                                    driver.isPaidToday
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-900 focus:ring-emerald-200"
+                                      : "border-gray-200 bg-white text-navy focus:ring-navy/20"
+                                  }`}
+                                />
+                                <span className="absolute right-2 top-2 text-3xs font-bold text-gray-400">DH</span>
+                              </div>
 
-                          {/* Balance Snapshot Info if imported via CSV */}
-                          {(driver.morningBalance !== null || driver.eveningBalance !== null) && (
-                            <div className="text-3xs font-mono text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
-                              <span>Matin: {driver.morningBalance ?? "-"}</span>
-                              <span>➔</span>
-                              <span>Soir: {driver.eveningBalance ?? "-"}</span>
+                              {/* Quick autofill expected amount */}
+                              {driver.expectedTodayMAD > 0 && currentInputValue !== driver.expectedTodayMAD && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaymentInputs({
+                                      ...paymentInputs,
+                                      [driver.id]: driver.expectedTodayMAD,
+                                    })
+                                  }
+                                  className="p-1.5 bg-gray-100 hover:bg-gray-200 text-navy rounded-lg text-2xs font-bold cursor-pointer"
+                                  title="Remplir montant attendu"
+                                >
+                                  <Zap className="w-3 h-3 text-gold" />
+                                </button>
+                              )}
                             </div>
-                          )}
-                        </div>
+
+                            {/* Balance Snapshot Info if imported via CSV */}
+                            {(driver.morningBalance !== null || driver.eveningBalance !== null) && (
+                              <div className="text-3xs font-mono text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <span>Matin: {driver.morningBalance ?? "-"}</span>
+                                <span>➔</span>
+                                <span>Soir: {driver.eveningBalance ?? "-"}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Consecutive Unpaid Days */}
@@ -947,7 +1152,7 @@ export default function FleetPerformanceView() {
       <BalanceReconciliationModal
         isOpen={isBalanceModalOpen}
         onClose={() => setIsBalanceModalOpen(false)}
-        selectedDate={selectedDate}
+        selectedDate={endDate}
         onSuccess={fetchDriverCollections}
       />
 

@@ -20,35 +20,56 @@ import { touchSyncState } from "@/lib/sync";
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const dateParam = searchParams.get("date") || new Date().toISOString().split("T")[0];
+    const dateParam = searchParams.get("date");
+    let startDateStr = searchParams.get("startDate") || dateParam || new Date().toISOString().split("T")[0];
+    let endDateStr = searchParams.get("endDate") || dateParam || startDateStr;
 
-    // Determine target date & day of week (0 = Sun, 1 = Mon, ..., 6 = Sat)
-    const targetDate = new Date(`${dateParam}T00:00:00.000Z`);
-    const dayOfWeek = targetDate.getUTCDay(); // 0 is Sunday, 1 is Monday...
+    // Ensure startDateStr <= endDateStr
+    if (startDateStr > endDateStr) {
+      const temp = startDateStr;
+      startDateStr = endDateStr;
+      endDateStr = temp;
+    }
 
-    // Start & End of that target day for ledger querying
-    const startOfDay = new Date(targetDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setUTCHours(23, 59, 59, 999);
+    const isRange = startDateStr !== endDateStr;
 
-    // Fetch all drivers with assigned vehicle and today's payment ledger
+    // Target boundaries for ledger querying
+    const startOfRange = new Date(`${startDateStr}T00:00:00.000Z`);
+    const endOfRange = new Date(`${endDateStr}T23:59:59.999Z`);
+
+    // Build list of calendar days in range for expected contract calculation
+    const daysInRange: { dateStr: string; dayOfWeek: number }[] = [];
+    const cur = new Date(startOfRange);
+    while (cur <= endOfRange) {
+      const y = cur.getUTCFullYear();
+      const m = String(cur.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(cur.getUTCDate()).padStart(2, "0");
+      daysInRange.push({
+        dateStr: `${y}-${m}-${d}`,
+        dayOfWeek: cur.getUTCDay(),
+      });
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    const daysCount = daysInRange.length;
+
+    // Fetch all drivers with assigned vehicle and payment ledger in date range
     const drivers = await prisma.driverProfile.findMany({
       include: {
         assignedVehicle: true,
         payments: {
           where: {
             paymentDate: {
-              gte: startOfDay,
-              lte: endOfDay,
+              gte: startOfRange,
+              lte: endOfRange,
             },
           },
+          orderBy: { paymentDate: "asc" },
         },
       },
       orderBy: { fullName: "asc" },
     });
 
-    // Check if morning or evening CSV was uploaded for this target date
+    // Check if morning or evening CSV was uploaded in this target date range
     const hasMorningCsv = drivers.some((d) =>
       d.payments.some((p) => p.morningBalance !== null && p.morningBalance !== undefined)
     );
@@ -66,35 +87,61 @@ export async function GET(request: NextRequest) {
       const contract = (driver.contractType || "DAILY").toUpperCase();
       let expectedTodayMAD = 0;
 
-      if (contract === "WEEKLY") {
-        // Weekly: 1,800 MAD charged every Monday (day 1)
-        if (dayOfWeek === 1) {
-          expectedTodayMAD = 1800;
+      if (!isRange) {
+        // Single day logic: 1800 on Monday for weekly, 300 on Mon-Sat for daily
+        const dayOfWeek = startOfRange.getUTCDay();
+        if (contract === "WEEKLY") {
+          if (dayOfWeek === 1) {
+            expectedTodayMAD = 1800;
+          }
+        } else {
+          if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+            expectedTodayMAD = 300;
+          }
         }
       } else {
-        // Daily: 300 MAD per day Monday (1) to Saturday (6). Sunday (0) off.
-        if (dayOfWeek >= 1 && dayOfWeek <= 6) {
-          expectedTodayMAD = 300;
+        // Range logic: sum across days in range
+        if (contract === "WEEKLY") {
+          const mondayCount = daysInRange.filter((d) => d.dayOfWeek === 1).length;
+          expectedTodayMAD = Math.max(
+            mondayCount * 1800,
+            mondayCount === 0 && daysCount >= 7 ? 1800 : 0
+          );
+        } else {
+          const workingDays = daysInRange.filter((d) => d.dayOfWeek >= 1 && d.dayOfWeek <= 6).length;
+          expectedTodayMAD = workingDays * 300;
         }
       }
 
-      // Check if payment was logged today
-      const todayPayment = driver.payments[0];
-      const clearedTodayMAD = todayPayment ? todayPayment.clearedMAD : 0;
-      const isPaidToday = todayPayment ? todayPayment.clearedMAD >= expectedTodayMAD : false;
+      // Check payments in range
+      const clearedTodayMAD = driver.payments.reduce((sum, p) => sum + (p.clearedMAD || 0), 0);
+      const isPaidToday = expectedTodayMAD > 0 ? clearedTodayMAD >= expectedTodayMAD : clearedTodayMAD > 0;
 
       // Negative morning balance in CSV represents the driver debt / collection target
       let morningDebt = 0;
-      if (hasMorningCsv && todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
-        morningDebt = Math.abs(Math.min(0, todayPayment.morningBalance));
+      if (hasMorningCsv) {
+        if (!isRange) {
+          const todayPayment = driver.payments[0];
+          if (todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
+            morningDebt = Math.abs(Math.min(0, todayPayment.morningBalance));
+          }
+        } else {
+          const firstWithMorning = driver.payments.find(
+            (p) => p.morningBalance !== null && p.morningBalance !== undefined
+          );
+          if (firstWithMorning && firstWithMorning.morningBalance !== null) {
+            morningDebt = Math.abs(Math.min(0, firstWithMorning.morningBalance));
+          }
+        }
       }
 
       // Current arrears: reflects latest balance (evening if uploaded, morning if uploaded, else driver profile)
       let currentArrears = driver.currentArrearsMAD;
-      if (todayPayment?.eveningBalance !== null && todayPayment?.eveningBalance !== undefined) {
-        currentArrears = Math.abs(Math.min(0, todayPayment.eveningBalance));
-      } else if (hasMorningCsv && todayPayment?.morningBalance !== null && todayPayment?.morningBalance !== undefined) {
-        currentArrears = morningDebt;
+      const latestPayment = driver.payments[driver.payments.length - 1];
+      if (latestPayment?.eveningBalance !== null && latestPayment?.eveningBalance !== undefined) {
+        currentArrears = Math.abs(Math.min(0, latestPayment.eveningBalance));
+      } else if (hasMorningCsv && latestPayment?.morningBalance !== null && latestPayment?.morningBalance !== undefined) {
+        currentArrears = Math.abs(Math.min(0, latestPayment.morningBalance));
       }
 
       totalMorningTargetMAD += morningDebt;
@@ -116,6 +163,9 @@ export async function GET(request: NextRequest) {
         if (isCriticalRed) criticalRedCount++;
       }
 
+      const firstPayment = driver.payments[0];
+      const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
+
       return {
         id: driver.id,
         fullName: driver.fullName,
@@ -136,31 +186,37 @@ export async function GET(request: NextRequest) {
         expectedTodayMAD,
         clearedTodayMAD,
         isPaidToday,
-        morningBalance: todayPayment?.morningBalance ?? null,
-        eveningBalance: todayPayment?.eveningBalance ?? null,
-        calculatedDelta: todayPayment?.calculatedDelta ?? null,
-        paymentNote: todayPayment?.notes || null,
-        paymentLedgerId: todayPayment?.id || null,
+        morningBalance: firstPayment?.morningBalance ?? null,
+        eveningBalance: latestPayment?.eveningBalance ?? null,
+        calculatedDelta: driver.payments.length > 1 ? totalDelta : (firstPayment?.calculatedDelta ?? null),
+        paymentNote: latestPayment?.notes || null,
+        paymentLedgerId: latestPayment?.id || null,
       };
     });
 
-    // When hasMorningCsv is true, morning target is the sum of negative morning balances from CSV
-    const effectiveMorningTargetMAD = hasMorningCsv ? totalMorningTargetMAD : 0;
-    const remainingToCollectMAD = hasMorningCsv ? Math.max(0, effectiveMorningTargetMAD - totalClearedTodayMAD) : 0;
-    const target60PercentMAD = hasMorningCsv ? Math.round(effectiveMorningTargetMAD * 0.6) : 0;
-    const collectionPercentage = hasMorningCsv && effectiveMorningTargetMAD > 0
-      ? (totalClearedTodayMAD / effectiveMorningTargetMAD) * 100
-      : 0;
+    // When hasMorningCsv is true and morning debt exists, use it; otherwise use expected contract sum
+    const effectiveTargetMAD =
+      hasMorningCsv && totalMorningTargetMAD > 0
+        ? totalMorningTargetMAD
+        : totalExpectedContractMAD;
+    const remainingToCollectMAD = Math.max(0, effectiveTargetMAD - totalClearedTodayMAD);
+    const target60PercentMAD = Math.round(effectiveTargetMAD * 0.6);
+    const collectionPercentage =
+      effectiveTargetMAD > 0 ? (totalClearedTodayMAD / effectiveTargetMAD) * 100 : 0;
 
     return NextResponse.json({
-      date: dateParam,
-      dayOfWeek,
+      date: startDateStr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      isRange,
+      daysCount,
+      dayOfWeek: startOfRange.getUTCDay(),
       hasMorningCsv,
       hasEveningCsv,
       summary: {
         totalDrivers: drivers.length,
-        totalExpectedTodayMAD: effectiveMorningTargetMAD,
-        totalMorningTargetMAD: effectiveMorningTargetMAD,
+        totalExpectedTodayMAD: effectiveTargetMAD,
+        totalMorningTargetMAD: effectiveTargetMAD,
         totalClearedTodayMAD,
         remainingToCollectMAD,
         totalArrearsAllMAD,
@@ -169,6 +225,10 @@ export async function GET(request: NextRequest) {
         criticalRedCount,
         hasMorningCsv,
         hasEveningCsv,
+        isRange,
+        daysCount,
+        startDate: startDateStr,
+        endDate: endDateStr,
       },
       drivers: driverList,
     });
