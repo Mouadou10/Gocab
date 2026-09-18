@@ -32,6 +32,14 @@ export default function BonDeCommandeModal({
   const [bcNumber, setBcNumber] = useState<string>(initialData?.bc_number || "");
   const [date, setDate] = useState<string>(initialData?.date || getFormattedToday());
   const [supplierName, setSupplierName] = useState<string>(initialData?.supplier_name || "Hard Auto Services");
+
+  // Issuer details (GoCab Rent defaults, fully editable & saved)
+  const [issuerName, setIssuerName] = useState<string>(initialData?.issuer_name || "GoCab Rent");
+  const [issuerAddress, setIssuerAddress] = useState<string>(initialData?.issuer_address || "84 Rue Ibnou Mounir, Centre Andalucia");
+  const [issuerCity, setIssuerCity] = useState<string>(initialData?.issuer_city || "Maarif – Casablanca");
+  const [issuerLegal, setIssuerLegal] = useState<string>(initialData?.issuer_legal || "RC : 707687 / Patente : 35707832 / IF : 70997186");
+  const [issuerPhone, setIssuerPhone] = useState<string>(initialData?.issuer_phone || "0662 70 91 79");
+  const [isSavingIssuer, setIsSavingIssuer] = useState<boolean>(false);
   
   // Vehicle details
   const [vehicleMakeModel, setVehicleMakeModel] = useState<string>(initialData?.vehicle_make_model || "");
@@ -56,10 +64,60 @@ export default function BonDeCommandeModal({
   const [customDesignation, setCustomDesignation] = useState<string>("");
   const [customPriceTTC, setCustomPriceTTC] = useState<string>("");
 
+  // Load saved default issuer from localStorage or /api/settings if not supplied in initialData
+  useEffect(() => {
+    if (initialData?.issuer_name) return;
+
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("gocab_bc_issuer_settings");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed.issuer_name) setIssuerName(parsed.issuer_name);
+          if (parsed.issuer_address) setIssuerAddress(parsed.issuer_address);
+          if (parsed.issuer_city) setIssuerCity(parsed.issuer_city);
+          if (parsed.issuer_legal) setIssuerLegal(parsed.issuer_legal);
+          if (parsed.issuer_phone) setIssuerPhone(parsed.issuer_phone);
+          return;
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    async function fetchDefaultIssuer() {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.settings?.bc_default_issuer) {
+            const parsed = JSON.parse(json.settings.bc_default_issuer);
+            if (parsed.issuer_name) setIssuerName(parsed.issuer_name);
+            if (parsed.issuer_address) setIssuerAddress(parsed.issuer_address);
+            if (parsed.issuer_city) setIssuerCity(parsed.issuer_city);
+            if (parsed.issuer_legal) setIssuerLegal(parsed.issuer_legal);
+            if (parsed.issuer_phone) setIssuerPhone(parsed.issuer_phone);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("gocab_bc_issuer_settings", JSON.stringify(parsed));
+            }
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    fetchDefaultIssuer();
+  }, [initialData?.issuer_name]);
+
   useEffect(() => {
     if (initialData) {
       if (initialData.bc_number !== undefined) setBcNumber(initialData.bc_number || "");
       if (initialData.date) setDate(initialData.date);
+      if (initialData.issuer_name) setIssuerName(initialData.issuer_name);
+      if (initialData.issuer_address) setIssuerAddress(initialData.issuer_address);
+      if (initialData.issuer_city) setIssuerCity(initialData.issuer_city);
+      if (initialData.issuer_legal) setIssuerLegal(initialData.issuer_legal);
+      if (initialData.issuer_phone) setIssuerPhone(initialData.issuer_phone);
       if (initialData.supplier_name) setSupplierName(initialData.supplier_name);
       if (initialData.vehicle_make_model) setVehicleMakeModel(initialData.vehicle_make_model);
       if (initialData.vehicle_plate) setVehiclePlate(initialData.vehicle_plate);
@@ -147,14 +205,54 @@ export default function BonDeCommandeModal({
     setItems(updated);
   };
 
+  const persistIssuerSettings = async (customIssuer?: {
+    issuer_name: string;
+    issuer_address: string;
+    issuer_city: string;
+    issuer_legal: string;
+    issuer_phone: string;
+  }) => {
+    const issuerToSave = customIssuer || {
+      issuer_name: issuerName.trim() || "GoCab Rent",
+      issuer_address: issuerAddress.trim() || "84 Rue Ibnou Mounir, Centre Andalucia",
+      issuer_city: issuerCity.trim() || "Maarif – Casablanca",
+      issuer_legal: issuerLegal.trim() || "RC : 707687 / Patente : 35707832 / IF : 70997186",
+      issuer_phone: issuerPhone.trim() || "0662 70 91 79",
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("gocab_bc_issuer_settings", JSON.stringify(issuerToSave));
+      } catch (e) {}
+    }
+
+    try {
+      setIsSavingIssuer(true);
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "bc_default_issuer",
+          value: JSON.stringify(issuerToSave),
+        }),
+      });
+      toast.success("Coordonnées de l'émetteur enregistrées par défaut !");
+    } catch (err) {
+      console.error("Error saving default issuer:", err);
+    } finally {
+      setIsSavingIssuer(false);
+    }
+  };
+
   const getCurrentData = (): BonDeCommandeData => {
     return {
       bc_number: bcNumber.trim(),
       date,
-      issuer_name: "GoCab Rent",
-      issuer_address: "84 Rue Ibnou Mounir, Centre Andalucia, Maarif – Casablanca",
-      issuer_legal: "RC : 707687 / Patente : 35707832 / IF : 70997186",
-      issuer_phone: "0662 70 91 79",
+      issuer_name: issuerName.trim() || "GoCab Rent",
+      issuer_address: issuerAddress.trim() || "84 Rue Ibnou Mounir, Centre Andalucia",
+      issuer_city: issuerCity.trim() || "Maarif – Casablanca",
+      issuer_legal: issuerLegal.trim() || "RC : 707687 / Patente : 35707832 / IF : 70997186",
+      issuer_phone: issuerPhone.trim() || "0662 70 91 79",
       supplier_name: supplierName.trim() || "Hard Auto Services",
       vehicle_make_model: vehicleMakeModel.trim(),
       vehicle_plate: vehiclePlate.trim(),
@@ -177,6 +275,29 @@ export default function BonDeCommandeModal({
   const handleValidateAndSave = () => {
     const data = getCurrentData();
     setIsValidated(true);
+
+    // Auto-save modified emitter settings for future documents
+    if (typeof window !== "undefined") {
+      try {
+        const issuerSettings = {
+          issuer_name: data.issuer_name,
+          issuer_address: data.issuer_address,
+          issuer_city: data.issuer_city || "",
+          issuer_legal: data.issuer_legal,
+          issuer_phone: data.issuer_phone,
+        };
+        localStorage.setItem("gocab_bc_issuer_settings", JSON.stringify(issuerSettings));
+        fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key: "bc_default_issuer",
+            value: JSON.stringify(issuerSettings),
+          }),
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
     if (onSave) {
       onSave(data);
     }
@@ -427,14 +548,73 @@ export default function BonDeCommandeModal({
               {/* ÉMETTEUR & FOURNISSEUR */}
               <div className="grid grid-cols-2 gap-6 py-4 border-b border-gray-300 text-xs">
                 <div>
-                  <h3 className="font-black text-gray-900 uppercase tracking-wider mb-1.5">
-                    ÉMETTEUR
-                  </h3>
-                  <p className="font-bold text-gray-900">GoCab Rent</p>
-                  <p className="text-gray-600">84 Rue Ibnou Mounir, Centre Andalucia</p>
-                  <p className="text-gray-600">Maarif – Casablanca</p>
-                  <p className="text-gray-600 mt-1">RC : 707687 / Patente : 35707832 / IF : 70997186</p>
-                  <p className="text-gray-600">Tél. : 0662 70 91 79</p>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h3 className="font-black text-gray-900 uppercase tracking-wider">
+                      ÉMETTEUR
+                    </h3>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => persistIssuerSettings()}
+                        disabled={isSavingIssuer}
+                        className="no-print text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline disabled:opacity-50 cursor-pointer"
+                        title="Enregistrer ces coordonnées d'émetteur comme valeurs par défaut pour les prochains BC"
+                      >
+                        {isSavingIssuer ? "Enregistrement..." : "Enregistrer par défaut"}
+                      </button>
+                    )}
+                  </div>
+
+                  {!readOnly ? (
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        value={issuerName}
+                        onChange={(e) => setIssuerName(e.target.value)}
+                        placeholder="Société émettrice"
+                        className="font-bold text-gray-900 border border-gray-300 rounded px-2 py-0.5 text-xs w-full focus:ring-1 focus:ring-navy outline-none bg-white print:border-none print:bg-transparent print:p-0 print:font-bold"
+                      />
+                      <input
+                        type="text"
+                        value={issuerAddress}
+                        onChange={(e) => setIssuerAddress(e.target.value)}
+                        placeholder="Adresse (ex: 84 Rue Ibnou Mounir, Centre Andalucia)"
+                        className="text-gray-600 border border-gray-300 rounded px-2 py-0.5 text-xs w-full focus:ring-1 focus:ring-navy outline-none bg-white print:border-none print:bg-transparent print:p-0"
+                      />
+                      <input
+                        type="text"
+                        value={issuerCity}
+                        onChange={(e) => setIssuerCity(e.target.value)}
+                        placeholder="Ville (ex: Maarif – Casablanca)"
+                        className="text-gray-600 border border-gray-300 rounded px-2 py-0.5 text-xs w-full focus:ring-1 focus:ring-navy outline-none bg-white print:border-none print:bg-transparent print:p-0"
+                      />
+                      <input
+                        type="text"
+                        value={issuerLegal}
+                        onChange={(e) => setIssuerLegal(e.target.value)}
+                        placeholder="RC / Patente / IF"
+                        className="text-gray-600 border border-gray-300 rounded px-2 py-0.5 text-[11px] w-full focus:ring-1 focus:ring-navy outline-none bg-white print:border-none print:bg-transparent print:p-0"
+                      />
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-600 font-medium shrink-0">Tél. :</span>
+                        <input
+                          type="text"
+                          value={issuerPhone}
+                          onChange={(e) => setIssuerPhone(e.target.value)}
+                          placeholder="0662 70 91 79"
+                          className="text-gray-600 border border-gray-300 rounded px-2 py-0.5 text-xs w-full focus:ring-1 focus:ring-navy outline-none bg-white print:border-none print:bg-transparent print:p-0"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="font-bold text-gray-900">{issuerName}</p>
+                      <p className="text-gray-600">{issuerAddress}</p>
+                      {issuerCity && <p className="text-gray-600">{issuerCity}</p>}
+                      <p className="text-gray-600 mt-1">{issuerLegal}</p>
+                      <p className="text-gray-600">Tél. : {issuerPhone}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div>

@@ -21,6 +21,13 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   telegram_bot_token: "",
   telegram_chat_id: "",
   telegram_notifications_enabled: "true",
+  bc_default_issuer: JSON.stringify({
+    issuer_name: "GoCab Rent",
+    issuer_address: "84 Rue Ibnou Mounir, Centre Andalucia",
+    issuer_city: "Maarif – Casablanca",
+    issuer_legal: "RC : 707687 / Patente : 35707832 / IF : 70997186",
+    issuer_phone: "0662 70 91 79",
+  }),
   role_tab_permissions: JSON.stringify({
     LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
     FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],

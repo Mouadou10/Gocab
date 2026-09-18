@@ -26,7 +26,8 @@ export interface BonDeCommandeData {
   bc_number: string; // Reference, e.g. "T000000/15/09/2026"
   date: string; // e.g. "16-09-2026"
   issuer_name: string; // "GoCab Rent"
-  issuer_address: string; // "84 Rue Ibnou Mounir, Centre Andalucia, Maarif – Casablanca"
+  issuer_address: string; // "84 Rue Ibnou Mounir, Centre Andalucia"
+  issuer_city?: string; // "Maarif – Casablanca"
   issuer_legal: string; // "RC : 707687 / Patente : 35707832 / IF : 70997186"
   issuer_phone: string; // "0662 70 91 79"
   supplier_name: string; // "Hard Auto Services"
@@ -50,6 +51,24 @@ export interface BonDeCommandeData {
 /** Predefined catalog items based on GoCab price tables */
 export const CATALOG_ITEMS: CatalogItem[] = [
   // Photo 1: Prestations d'entretien & mécaniques
+  {
+    id: "vidange_castrol_5w30_pack",
+    category: "Entretien",
+    designation: "Vidange Castrol 5W30 ECT 5L (480dhs TTC) + Filtre à Huile (50Dhs TTC)",
+    price_ttc: 530,
+  },
+  {
+    id: "vidange_castrol_5w30_simple",
+    category: "Entretien",
+    designation: "Vidange Castrol 5W30 ECT 5L",
+    price_ttc: 480,
+  },
+  {
+    id: "filtre_a_huile",
+    category: "Entretien",
+    designation: "Filtre à Huile",
+    price_ttc: 50,
+  },
   { id: "vidange_simple", category: "Entretien", designation: "Vidange simple", price_ttc: 510 },
   { id: "vidange_complete", category: "Entretien", designation: "Vidange complète", price_ttc: 960 },
   { id: "adblue", category: "Entretien", designation: "AdBlue", price_ttc: 95 },
@@ -311,11 +330,11 @@ export function generateBonDeCommandePrintHtml(data: BonDeCommandeData): string 
     <div class="parties-grid">
       <div>
         <div class="section-title">ÉMETTEUR</div>
-        <div style="font-weight: 700;">GoCab Rent</div>
-        <div style="color: #4b5563;">84 Rue Ibnou Mounir, Centre Andalucia</div>
-        <div style="color: #4b5563;">Maarif – Casablanca</div>
-        <div style="color: #4b5563; margin-top: 3px;">RC : 707687 / Patente : 35707832 / IF : 70997186</div>
-        <div style="color: #4b5563;">Tél. : 0662 70 91 79</div>
+        <div style="font-weight: 700;">${data.issuer_name || "GoCab Rent"}</div>
+        <div style="color: #4b5563;">${data.issuer_address || "84 Rue Ibnou Mounir, Centre Andalucia"}</div>
+        ${data.issuer_city ? `<div style="color: #4b5563;">${data.issuer_city}</div>` : `<div style="color: #4b5563;">Maarif – Casablanca</div>`}
+        <div style="color: #4b5563; margin-top: 3px;">${data.issuer_legal || "RC : 707687 / Patente : 35707832 / IF : 70997186"}</div>
+        <div style="color: #4b5563;">Tél. : ${data.issuer_phone || "0662 70 91 79"}</div>
       </div>
       <div>
         <div class="section-title">FOURNISSEUR</div>

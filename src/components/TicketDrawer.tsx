@@ -683,7 +683,7 @@ export default function TicketDrawer({
               vehicle_vin: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.vin || "",
               items:
                 ticketType === "Vidange"
-                  ? [{ id: "vidange_1", designation: "Vidange complète", quantity: 1, unit_price_ttc: 960, total_ttc: 960 }]
+                  ? [{ id: "vidange_1", designation: "Vidange Castrol 5W30 ECT 5L (480dhs TTC) + Filtre à Huile (50Dhs TTC)", quantity: 1, unit_price_ttc: 530, total_ttc: 530 }]
                   : ticketType === "AdBleu"
                   ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
                   : [],
