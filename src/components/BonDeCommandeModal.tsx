@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   CATALOG_ITEMS,
   BonDeCommandeData,
@@ -64,7 +64,9 @@ export default function BonDeCommandeModal({
   const [customDesignation, setCustomDesignation] = useState<string>("");
   const [customPriceTTC, setCustomPriceTTC] = useState<string>("");
 
-  // Load saved default issuer from localStorage or /api/settings if not supplied in initialData
+  const prevIsOpenRef = useRef<boolean>(isOpen);
+
+  // Load saved default issuer from localStorage or /api/settings if not supplied in initialData (once on mount)
   useEffect(() => {
     if (initialData?.issuer_name) return;
 
@@ -73,11 +75,11 @@ export default function BonDeCommandeModal({
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          if (parsed.issuer_name) setIssuerName(parsed.issuer_name);
-          if (parsed.issuer_address) setIssuerAddress(parsed.issuer_address);
-          if (parsed.issuer_city) setIssuerCity(parsed.issuer_city);
-          if (parsed.issuer_legal) setIssuerLegal(parsed.issuer_legal);
-          if (parsed.issuer_phone) setIssuerPhone(parsed.issuer_phone);
+          if (parsed.issuer_name) setIssuerName((prev) => (prev === "GoCab Rent" ? parsed.issuer_name : prev));
+          if (parsed.issuer_address) setIssuerAddress((prev) => (prev === "84 Rue Ibnou Mounir, Centre Andalucia" ? parsed.issuer_address : prev));
+          if (parsed.issuer_city) setIssuerCity((prev) => (prev === "Maarif – Casablanca" ? parsed.issuer_city : prev));
+          if (parsed.issuer_legal) setIssuerLegal((prev) => (prev === "RC : 707687 / Patente : 35707832 / IF : 70997186" ? parsed.issuer_legal : prev));
+          if (parsed.issuer_phone) setIssuerPhone((prev) => (prev === "0662 70 91 79" ? parsed.issuer_phone : prev));
           return;
         } catch (e) {
           // ignore
@@ -92,11 +94,11 @@ export default function BonDeCommandeModal({
           const json = await res.json();
           if (json.settings?.bc_default_issuer) {
             const parsed = JSON.parse(json.settings.bc_default_issuer);
-            if (parsed.issuer_name) setIssuerName(parsed.issuer_name);
-            if (parsed.issuer_address) setIssuerAddress(parsed.issuer_address);
-            if (parsed.issuer_city) setIssuerCity(parsed.issuer_city);
-            if (parsed.issuer_legal) setIssuerLegal(parsed.issuer_legal);
-            if (parsed.issuer_phone) setIssuerPhone(parsed.issuer_phone);
+            if (parsed.issuer_name) setIssuerName((prev) => (prev === "GoCab Rent" ? parsed.issuer_name : prev));
+            if (parsed.issuer_address) setIssuerAddress((prev) => (prev === "84 Rue Ibnou Mounir, Centre Andalucia" ? parsed.issuer_address : prev));
+            if (parsed.issuer_city) setIssuerCity((prev) => (prev === "Maarif – Casablanca" ? parsed.issuer_city : prev));
+            if (parsed.issuer_legal) setIssuerLegal((prev) => (prev === "RC : 707687 / Patente : 35707832 / IF : 70997186" ? parsed.issuer_legal : prev));
+            if (parsed.issuer_phone) setIssuerPhone((prev) => (prev === "0662 70 91 79" ? parsed.issuer_phone : prev));
             if (typeof window !== "undefined") {
               localStorage.setItem("gocab_bc_issuer_settings", JSON.stringify(parsed));
             }
@@ -107,10 +109,11 @@ export default function BonDeCommandeModal({
       }
     }
     fetchDefaultIssuer();
-  }, [initialData?.issuer_name]);
+  }, []);
 
+  // Synchronize from initialData ONLY when modal transitions from closed to open (never while actively editing)
   useEffect(() => {
-    if (initialData) {
+    if (!prevIsOpenRef.current && isOpen && initialData) {
       if (initialData.bc_number !== undefined) setBcNumber(initialData.bc_number || "");
       if (initialData.date) setDate(initialData.date);
       if (initialData.issuer_name) setIssuerName(initialData.issuer_name);
@@ -130,7 +133,8 @@ export default function BonDeCommandeModal({
       if (initialData.validator_role) setValidatorRole(initialData.validator_role);
       if (initialData.validated !== undefined) setIsValidated(initialData.validated);
     }
-  }, [initialData]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -931,6 +931,7 @@ export default function VehicleDrawer({
         {/* Bon De Commande Modal (View / Print) */}
         {selectedBc && (
           <BonDeCommandeModal
+            key={selectedBc.bc_number || "view-bc"}
             isOpen={isBcModalOpen}
             onClose={() => {
               setIsBcModalOpen(false);
@@ -944,6 +945,7 @@ export default function VehicleDrawer({
         {/* New Bon De Commande Modal (Create & Save directly for this Vehicle) */}
         {isNewBcModalOpen && (
           <BonDeCommandeModal
+            key={vehicle?.id ? `${vehicle.id}-new-bc` : "new-bc"}
             isOpen={isNewBcModalOpen}
             onClose={() => setIsNewBcModalOpen(false)}
             onSave={handleCreateBcSave}

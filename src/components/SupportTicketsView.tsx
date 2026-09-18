@@ -372,18 +372,43 @@ export default function SupportTicketsView() {
   async function handleSaveBc(savedBc: BonDeCommandeData) {
     if (!bcTicket) return;
     try {
+      let existingNotesObj: any = {};
+      if (bcTicket.resolution_notes) {
+        try {
+          existingNotesObj = JSON.parse(bcTicket.resolution_notes);
+        } catch {
+          existingNotesObj = { text: bcTicket.resolution_notes };
+        }
+      }
+      existingNotesObj.bon_de_commande = savedBc;
+      const updatedNotesStr = JSON.stringify(existingNotesObj);
+
+      // Optimistically update tickets in local state immediately
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === bcTicket.id
+            ? {
+                ...t,
+                repair_cost: savedBc.total_ttc,
+                garage_name: savedBc.supplier_name,
+                resolution_notes: updatedNotesStr,
+              }
+            : t
+        )
+      );
+
       const res = await fetch(`/api/tickets/${bcTicket.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repair_cost: savedBc.total_ttc,
           garage_name: savedBc.supplier_name,
-          resolution_notes: JSON.stringify({ bon_de_commande: savedBc }),
+          resolution_notes: updatedNotesStr,
         }),
       });
 
       if (res.ok) {
-        toast.success("Bon de Commande validé et enregistré !");
+        toast.success(`Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""} validé et enregistré !`);
         setBcTicket(null);
         setBcInitialData(null);
         fetchTickets();
@@ -1168,6 +1193,7 @@ export default function SupportTicketsView() {
       {/* Bon de Commande Modal for viewing, editing, or printing */}
       {bcTicket && bcInitialData && (
         <BonDeCommandeModal
+          key={bcTicket.id}
           isOpen={Boolean(bcTicket)}
           onClose={() => {
             setBcTicket(null);

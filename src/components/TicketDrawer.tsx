@@ -9,7 +9,7 @@
  * - Option to auto-update vehicle status (e.g. to "In garage" or "Accident")
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Car, X, Check, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 import { Vehicle } from "./VehicleDrawer";
@@ -138,6 +138,32 @@ export default function TicketDrawer({
     }
   }
 
+  // Stable memoized default initialData for Bon de Commande so parent re-renders don't create fresh objects
+  const defaultBcInitialData = useMemo(() => {
+    if (bonDeCommandeData) return bonDeCommandeData;
+    const vObj = vehicles.find((v) => v.id === selectedVehicleId) || vehicle;
+    return {
+      bc_number: "",
+      date: getFormattedToday(),
+      supplier_name: "Hard Auto Services",
+      vehicle_make_model: vObj?.make_model || "",
+      vehicle_plate: plateNumber || vObj?.plate_number || "",
+      vehicle_mileage: vObj?.current_mileage ? `${vObj.current_mileage.toLocaleString()} Km` : "",
+      vehicle_vin: vObj?.vin || "",
+      items:
+        ticketType === "Vidange"
+          ? [{ id: "vidange_1", designation: "Vidange Castrol 5W30 ECT 5L (480dhs TTC) + Filtre à Huile (50Dhs TTC)", quantity: 1, unit_price_ttc: 530, total_ttc: 530 }]
+          : ticketType === "AdBleu"
+          ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
+          : [],
+      execution_delay: getFormattedToday(),
+      observations: "N/A",
+      validator_name: "Hamza RASSID",
+      validator_role: "Gérant",
+      validated: false,
+    };
+  }, [bonDeCommandeData, isBcModalOpen, vehicles, selectedVehicleId, vehicle, plateNumber, ticketType]);
+
   const handleBcSave = async (savedBc: BonDeCommandeData) => {
     setBonDeCommandeData(savedBc);
 
@@ -154,17 +180,33 @@ export default function TicketDrawer({
       if (match) {
         vId = match.id;
         plate = match.plate_number;
+        setSelectedVehicleId(match.id);
+        setPlateNumber(match.plate_number);
+        if (match.assigned_driver_name) setDriverName(match.assigned_driver_name);
+        if (match.assigned_driver_phone) setDriverPhone(match.assigned_driver_phone);
+      } else {
+        setPlateNumber(plate);
       }
     }
 
+    const summaryItems = (savedBc.items || []).map((i) => `${i.designation} (${i.quantity})`).join(", ");
+    if (!description.trim()) {
+      setDescription(
+        `[Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""}] ${summaryItems || "Prestation"} · Total: ${savedBc.total_ttc} MAD TTC`
+      );
+    }
+
+    // If vehicle is not yet selected, attach BC to current ticket form draft and notify
     if (!vId || !plate) {
-      toast.error("Veuillez sélectionner un véhicule avant de valider le Bon de Commande.");
+      setIsBcModalOpen(false);
+      toast.success(
+        `Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""} validé et attaché ! Sélectionnez le véhicule pour finaliser le ticket.`
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const summaryItems = (savedBc.items || []).map((i) => `${i.designation} (${i.quantity})`).join(", ");
       const ticketDesc = description.trim() && !description.startsWith("[Bon de Commande")
         ? description
         : `[Bon de Commande ${savedBc.bc_number ? "N° " + savedBc.bc_number : ""}] ${summaryItems || "Prestation"} · Total: ${savedBc.total_ttc} MAD TTC`;
@@ -200,6 +242,7 @@ export default function TicketDrawer({
     } catch (err: any) {
       toast.error(err.message || "Erreur lors de la création du ticket");
       console.error("handleBcSave error:", err);
+      setIsBcModalOpen(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -667,33 +710,11 @@ export default function TicketDrawer({
       {/* Interactive Bon de Commande Modal */}
       {isBcModalOpen && (
         <BonDeCommandeModal
+          key={bonDeCommandeData?.bc_number || "bc-modal"}
           isOpen={isBcModalOpen}
           onClose={() => setIsBcModalOpen(false)}
           onSave={handleBcSave}
-          initialData={
-            bonDeCommandeData || {
-              bc_number: "",
-              date: getFormattedToday(),
-              supplier_name: "Hard Auto Services",
-              vehicle_make_model: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.make_model || "",
-              vehicle_plate: plateNumber || (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.plate_number || "",
-              vehicle_mileage: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.current_mileage
-                ? `${(vehicles.find((v) => v.id === selectedVehicleId) || vehicle)!.current_mileage.toLocaleString()} Km`
-                : "",
-              vehicle_vin: (vehicles.find((v) => v.id === selectedVehicleId) || vehicle)?.vin || "",
-              items:
-                ticketType === "Vidange"
-                  ? [{ id: "vidange_1", designation: "Vidange Castrol 5W30 ECT 5L (480dhs TTC) + Filtre à Huile (50Dhs TTC)", quantity: 1, unit_price_ttc: 530, total_ttc: 530 }]
-                  : ticketType === "AdBleu"
-                  ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
-                  : [],
-              execution_delay: getFormattedToday(),
-              observations: "N/A",
-              validator_name: "Hamza RASSID",
-              validator_role: "Gérant",
-              validated: false,
-            }
-          }
+          initialData={defaultBcInitialData}
         />
       )}
     </div>
