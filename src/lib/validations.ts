@@ -35,6 +35,10 @@ export const LeadCreateSchema = z.object({
 });
 
 export const LeadUpdateSchema = z.object({
+  raw_name: z.string().trim().min(2, "Le nom doit comporter au moins 2 caractères").optional(),
+  name: z.string().trim().min(2).optional(),
+  sanitized_phone: z.string().optional(),
+  phone: z.string().optional(),
   board_column: z.string().optional(),
   brand_status: z.string().optional().nullable(),
   training_status: z.string().optional().nullable(),

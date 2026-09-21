@@ -45,14 +45,14 @@ const TRAINING_STATUSES = [
 ] as const;
 
 const LEADS_STATUSES = [
-  { key: "NEW_LEADS", label: "New Lead (Nouveau)" },
-  { key: "Not Interested", label: "Not Interested (Non intéressé)" },
-  { key: "No response 1", label: "No response 1 (Injoignable 1)" },
-  { key: "No response 2", label: "No response 2 (Injoignable 2)" },
-  { key: "To Recall", label: "To Recall (À rappeler)" },
-  { key: "Wrong Number", label: "Wrong Number (Faux numéro)" },
-  { key: "Already Client", label: "Already Client (Déjà client)" },
-  { key: "Training fixed", label: "Training Fixed (Formation fixée)" },
+  { key: "NEW_LEADS", label: "✨ New Lead (Nouveau)" },
+  { key: "Not interested", label: "🚫 Not interested (Non intéressé)" },
+  { key: "No response 1", label: "📞 No response 1 (Injoignable 1)" },
+  { key: "To Recall", label: "⏰ To Recall (À rappeler)" },
+  { key: "Wrong number", label: "❌ Wrong number (Faux numéro)" },
+  { key: "No response 2", label: "📵 No response 2 (Injoignable 2)" },
+  { key: "Already a client", label: "🤝 Already a client (Déjà client)" },
+  { key: "Training fixed", label: "📅 Training fixed (Formation fixée)" },
 ] as const;
 
 interface AddLeadModalProps {
@@ -82,6 +82,8 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
   const [trainingStatus, setTrainingStatus] = useState<string>("Scheduled");
   const [leadStatus, setLeadStatus] = useState<string>("NEW_LEADS");
   const [trainingDate, setTrainingDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [recallDate, setRecallDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [recallTime, setRecallTime] = useState<string>("10:00");
   const [preorderAmount, setPreorderAmount] = useState<string>("");
 
   // KYC Checklist
@@ -151,6 +153,15 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
         targetBrandStatus = "Training fixed";
         targetTrainingStatus = "Scheduled";
         targetReminderDate = trainingDate ? `${trainingDate}T12:00:00.000Z` : null;
+      } else if (leadStatus === "To Recall") {
+        targetBoardColumn = "BRAND_PRE_FILTER";
+        targetBrandStatus = "To Recall";
+        const effectiveRecallDate = recallDate || new Date().toISOString().split("T")[0];
+        if (recallTime) {
+          targetReminderDate = new Date(`${effectiveRecallDate}T${recallTime}:00`).toISOString();
+        } else {
+          targetReminderDate = new Date(`${effectiveRecallDate}T23:59:59.999`).toISOString();
+        }
       } else {
         targetBoardColumn = "BRAND_PRE_FILTER";
         targetBrandStatus = leadStatus;
@@ -420,6 +431,36 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
                     onChange={(e) => setTrainingDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
                   />
+                </div>
+              )}
+
+              {leadStatus === "To Recall" && (
+                <div className="animate-fadeIn pt-1 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-2xs font-bold text-navy mb-1 flex items-center gap-1">
+                      <span>📅</span>
+                      <span>Date du rappel *</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={recallDate}
+                      onChange={(e) => setRecallDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-2xs font-bold text-navy mb-1 flex items-center gap-1">
+                      <span>⏰</span>
+                      <span>Heure du rappel</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={recallTime}
+                      onChange={(e) => setRecallTime(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
+                    />
+                  </div>
                 </div>
               )}
             </div>

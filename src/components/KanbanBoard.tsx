@@ -789,6 +789,13 @@ export default function KanbanBoard() {
     notifyMutation("leads");
   }
 
+  /** After drawer deletion, remove the lead from state and notify live sessions. */
+  function handleLeadDelete(deletedLeadId: string) {
+    setLeads((prev) => prev.filter((l) => l.id !== deletedLeadId));
+    setSelectedLead(null);
+    notifyMutation("leads");
+  }
+
   /** Bring selected status column to 2nd position (right after NEW_LEADS) */
   function handleBringColumnToSecond(columnKey: string) {
     if (activeTab === "leads") {
@@ -1703,6 +1710,7 @@ export default function KanbanBoard() {
           boardType={activeTab === "leads" ? "leads" : "training"}
           onClose={() => setSelectedLead(null)}
           onUpdate={handleLeadUpdate}
+          onDelete={handleLeadDelete}
           whatsappTemplate={whatsappTemplate}
           whatsappMissingDocsTemplate={whatsappMissingDocsTemplate}
           onOpenWhatsAppChat={(phone) => {

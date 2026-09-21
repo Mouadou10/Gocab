@@ -97,6 +97,7 @@ interface LeadDrawerProps {
   boardType: "leads" | "training";
   onClose: () => void;
   onUpdate: (updatedLead: Lead) => void;
+  onDelete?: (leadId: string) => void;
   whatsappTemplate?: string;
   whatsappMissingDocsTemplate?: string;
   onOpenWhatsAppChat?: (phone: string, name: string) => void;
@@ -107,11 +108,22 @@ export default function LeadDrawer({
   boardType,
   onClose,
   onUpdate,
+  onDelete,
   whatsappTemplate,
   whatsappMissingDocsTemplate,
   onOpenWhatsAppChat,
 }: LeadDrawerProps) {
   const { data: session } = useSession() || {};
+  const [rawName, setRawName] = useState(lead.raw_name || "");
+  const [phone, setPhone] = useState(lead.sanitized_phone || "");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    setRawName(lead.raw_name || "");
+    setPhone(lead.sanitized_phone || "");
+  }, [lead]);
+
   const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
   const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
   const [city, setCity] = useState(lead.city || "");
@@ -458,10 +470,22 @@ export default function LeadDrawer({
 
   async function handleSave() {
     setValidationError("");
+
+    if (!rawName.trim()) {
+      setValidationError("Le nom complet du prospect est obligatoire.");
+      return;
+    }
+    if (!phone.trim()) {
+      setValidationError("Le numéro de téléphone est obligatoire.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const payload: Record<string, any> = {
+        raw_name: rawName.trim(),
+        sanitized_phone: phone.trim(),
         city: city || null,
         notes: notes || null,
       };
@@ -487,7 +511,7 @@ export default function LeadDrawer({
 
             // Auto-trigger WhatsApp confirmation message if not already sent in drawer
             if (!waSentSuccessAt) {
-              const waUrl = generateWhatsAppWebURL(lead.sanitized_phone, waMessageText);
+              const waUrl = generateWhatsAppWebURL(phone.trim() || lead.sanitized_phone, waMessageText);
               window.open(waUrl, "_blank");
             }
           }
@@ -547,7 +571,7 @@ export default function LeadDrawer({
 
           // Auto-trigger WhatsApp thank-you message if not already sent
           if (!waSentSuccessAt) {
-            const waUrl = generateThankYouURL(lead.sanitized_phone);
+            const waUrl = generateThankYouURL(phone.trim() || lead.sanitized_phone);
             window.open(waUrl, "_blank");
           }
 
@@ -579,21 +603,42 @@ export default function LeadDrawer({
 
       if (res.ok) {
         const data = await res.json();
-        toast.success("Lead updated successfully");
+        toast.success("Lead mis à jour avec succès");
         // Refresh activity log before closing so it's ready next open
         fetchActivityLog();
         onUpdate(data.lead);
         handleClose();
-      } else if (res.status === 422) {
-        toast.error("Validation failed");
       } else {
-        toast.error("Failed to update lead");
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "Échec de la mise à jour du prospect");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to save updates");
       console.error("Failed to save updates:", err);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteLead() {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Prospect supprimé avec succès");
+        onDelete?.(lead.id);
+        handleClose();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Impossible de supprimer le prospect");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la suppression");
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   }
 
@@ -621,17 +666,17 @@ export default function LeadDrawer({
         {/* Header */}
         <div className="bg-navy px-6 py-4 flex items-center justify-between text-white">
           <div>
-            <h3 className="text-base font-bold tracking-tight">{lead.raw_name}</h3>
+            <h3 className="text-base font-bold tracking-tight">{rawName || lead.raw_name}</h3>
             <div className="flex items-center gap-2 mt-1">
               <a
-                href={`tel:${lead.sanitized_phone}`}
+                href={`tel:${phone || lead.sanitized_phone}`}
                 onClick={() => {
                   fetch(`/api/leads/${lead.id}/activity`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       action: "CALL_INITIATED",
-                      detail: `Appel téléphonique lancé vers ${formatDisplayPhone(lead.sanitized_phone)}`,
+                      detail: `Appel téléphonique lancé vers ${formatDisplayPhone(phone || lead.sanitized_phone)}`,
                       agent: session?.user?.name || session?.user?.email || "Agent",
                     }),
                   }).then(() => fetchActivityLog()).catch(() => {});
@@ -640,7 +685,7 @@ export default function LeadDrawer({
                 title="Cliquer pour lancer l'appel"
               >
                 <span>📞</span>
-                <span>{formatDisplayPhone(lead.sanitized_phone)}</span>
+                <span>{formatDisplayPhone(phone || lead.sanitized_phone)}</span>
               </a>
               <button
                 type="button"
@@ -664,6 +709,51 @@ export default function LeadDrawer({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Contact Information (Editable Name & Phone) */}
+          <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <span>👤</span>
+                <span>Informations du Contact</span>
+              </h4>
+              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                ✏️ Modifiable
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nom & Prénom *
+                </label>
+                <input
+                  type="text"
+                  value={rawName}
+                  onChange={(e) => setRawName(e.target.value)}
+                  placeholder="Ex: Mohammed Alami"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy transition-all font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Numéro de Téléphone *</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Format: +212 ou 06/07</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs text-slate-400">📞</span>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Ex: 06 12 34 56 78 ou +212612345678"
+                    className="w-full border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy transition-all font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Metadata Card */}
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 text-xs text-gray-600 space-y-2">
             <p><span className="font-semibold text-gray-800">Source:</span> {lead.campaign_source}</p>
@@ -1447,28 +1537,105 @@ export default function LeadDrawer({
             </div>
           )}
           
-          <div className="flex justify-end gap-3">
+          <div className="flex items-center justify-between gap-3">
             <button
-              onClick={handleClose}
-              className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Supprimer définitivement ce prospect"
             >
-              Cancel
+              <span>🗑️</span>
+              <span>Supprimer</span>
             </button>
-            <button
-              onClick={handleSave}
-              disabled={
-                isSubmitting ||
-                (boardType === "leads" && !brandStatus) ||
-                (boardType === "training" && !trainingStatus) ||
-                (showDatePicker && !trainingDate)
-              }
-              className="px-5 py-2.5 bg-navy hover:bg-navy/95 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
-            >
-              {isSubmitting ? "Saving..." : "Save Changes"}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors font-medium cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={
+                  isSubmitting ||
+                  (boardType === "leads" && !brandStatus) ||
+                  (boardType === "training" && !trainingStatus) ||
+                  (showDatePicker && !trainingDate)
+                }
+                className="px-5 py-2 bg-navy hover:bg-navy/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors shadow-xs cursor-pointer flex items-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Enregistrement...</span>
+                  </>
+                ) : (
+                  <span>Enregistrer</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-rose-100 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-2xl mx-auto">
+              🗑️
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900">
+                Supprimer ce prospect ?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Êtes-vous sûr de vouloir supprimer définitivement le prospect{" "}
+                <span className="font-bold text-slate-800">{rawName || lead.raw_name}</span>{" "}
+                (<span className="font-mono">{formatDisplayPhone(phone || lead.sanitized_phone)}</span>) ?
+              </p>
+              <p className="text-2xs text-rose-600 font-medium">
+                ⚠️ Cette action est irréversible et supprimera également tout l&apos;historique associé.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteLead}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Suppression...</span>
+                  </>
+                ) : (
+                  <span>Oui, Supprimer</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

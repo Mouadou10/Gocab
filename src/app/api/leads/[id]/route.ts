@@ -12,6 +12,7 @@ import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { LeadUpdateSchema } from "@/lib/validations";
 import { touchSyncState } from "@/lib/sync";
 import { logManyLeadActivities } from "@/lib/activity-log";
+import { invalidateLeadsCache } from "@/app/api/leads/route";
 
 export async function PATCH(
   request: NextRequest,
@@ -33,6 +34,8 @@ export async function PATCH(
 
     // Build the update payload from provided fields
     const updateData: {
+      raw_name?: string;
+      sanitized_phone?: string;
       board_column?: string;
       brand_status?: string | null;
       training_status?: string | null;
@@ -48,6 +51,20 @@ export async function PATCH(
       notes?: string | null;
       handled_by?: string | null;
     } = {};
+
+    if (body.raw_name || body.name) {
+      updateData.raw_name = (body.raw_name || body.name)!.trim();
+    }
+    if (body.sanitized_phone || body.phone) {
+      const rawPhone = (body.sanitized_phone || body.phone)!;
+      let cleaned = rawPhone.replace(/[\s\-\.\(\)]/g, "");
+      if (cleaned.startsWith("+")) cleaned = cleaned.slice(1);
+      if (cleaned.startsWith("212")) cleaned = cleaned.slice(3);
+      cleaned = cleaned.replace(/^0+/, "");
+      if (cleaned.length >= 8) {
+        updateData.sanitized_phone = `+212${cleaned}`;
+      }
+    }
 
     if (body.board_column !== undefined) {
       updateData.board_column = body.board_column as string;
@@ -105,6 +122,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
+    // Check if phone number is being changed to one that already belongs to another lead
+    if (updateData.sanitized_phone && updateData.sanitized_phone !== existingLead.sanitized_phone) {
+      const existingWithPhone = await prisma.lead.findFirst({
+        where: {
+          sanitized_phone: updateData.sanitized_phone,
+          id: { not: id },
+        },
+      });
+      if (existingWithPhone) {
+        return NextResponse.json(
+          { error: `Ce numéro de téléphone est déjà utilisé par un autre prospect (${existingWithPhone.raw_name})` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Check if status or column actually changed compared to current database record
     const isColumnChanged = body.board_column !== undefined && body.board_column !== existingLead.board_column;
     const isBrandStatusChanged = body.brand_status !== undefined && body.brand_status !== existingLead.brand_status;
@@ -137,7 +170,8 @@ export async function PATCH(
       data: updateData,
     });
 
-    // Touch sync state so all open sessions refresh immediately
+    // Invalidate leads cache & touch sync state so all open sessions refresh immediately
+    invalidateLeadsCache();
     touchSyncState("leads").catch(() => {});
 
     // ── Activity Log — record what the agent just did ────────────────────────
@@ -147,6 +181,26 @@ export async function PATCH(
       session?.user?.email ||
       "Agent";
     const logEntries: { lead_id: string; agent: string; action: string; detail: string }[] = [];
+
+    const isNameChanged = Boolean(updateData.raw_name && updateData.raw_name !== existingLead.raw_name);
+    const isPhoneChanged = Boolean(updateData.sanitized_phone && updateData.sanitized_phone !== existingLead.sanitized_phone);
+
+    if (isNameChanged) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "NAME_UPDATED",
+        detail: `Nom modifié : ${existingLead.raw_name} → ${updateData.raw_name}`,
+      });
+    }
+    if (isPhoneChanged) {
+      logEntries.push({
+        lead_id: id,
+        agent: agentName,
+        action: "PHONE_UPDATED",
+        detail: `Téléphone modifié : ${existingLead.sanitized_phone} → ${updateData.sanitized_phone}`,
+      });
+    }
 
     if (isBrandStatusChanged) {
       logEntries.push({
@@ -362,3 +416,53 @@ export async function PATCH(
     }
   }
 }
+
+/**
+ * Lead Delete API Route — DELETE /api/leads/[id]
+ *
+ * Permanently removes a lead and associated activity logs.
+ * Triggers live sync update across all open dashboards.
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth();
+    const { id } = await params;
+
+    const existingLead = await prisma.lead.findUnique({
+      where: { id },
+    });
+    if (!existingLead) {
+      return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
+    }
+
+    // Delete associated activity logs first to maintain clean database
+    await prisma.leadActivityLog.deleteMany({
+      where: { lead_id: id },
+    });
+
+    // Delete the lead
+    await prisma.lead.delete({
+      where: { id },
+    });
+
+    // Invalidate memory cache and trigger live sync
+    invalidateLeadsCache();
+    touchSyncState("leads").catch(() => {});
+
+    return NextResponse.json({ success: true, deletedLeadId: id });
+  } catch (error) {
+    console.error("Error deleting lead:", error);
+    try {
+      return handleAuthError(error);
+    } catch {
+      return NextResponse.json(
+        { error: "Impossible de supprimer le prospect" },
+        { status: 500 }
+      );
+    }
+  }
+}
+
