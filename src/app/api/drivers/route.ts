@@ -7,6 +7,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
+// Server-side cache for unfiltered GET /api/drivers
+let driverCache: { data: any; timestamp: number } | null = null;
+
+export function invalidateDriverCache() {
+  driverCache = null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,6 +23,20 @@ export async function GET(request: NextRequest) {
     const currentVehicleId = searchParams.get("current_vehicle_id");
     const query = searchParams.get("q")?.trim();
     const stage = searchParams.get("stage")?.trim();
+
+    const isSimpleFetch = !unassignedOnly && !currentVehicleId && !query && !stage;
+
+    // Return from in-memory server cache if fresh (5s TTL)
+    if (isSimpleFetch && driverCache && Date.now() - driverCache.timestamp < 5000) {
+      return NextResponse.json(
+        { drivers: driverCache.data },
+        {
+          headers: {
+            "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+          },
+        }
+      );
+    }
 
     const where: any = {};
 
@@ -43,12 +66,30 @@ export async function GET(request: NextRequest) {
     const drivers = await prisma.driverProfile.findMany({
       where,
       include: {
-        assignedVehicle: true,
+        assignedVehicle: {
+          select: {
+            id: true,
+            plate_number: true,
+            make_model: true,
+            status: true,
+          },
+        },
       },
       orderBy: { fullName: "asc" }
     });
 
-    return NextResponse.json({ drivers });
+    if (isSimpleFetch) {
+      driverCache = { data: drivers, timestamp: Date.now() };
+    }
+
+    return NextResponse.json(
+      { drivers },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("GET /api/drivers error:", error);
     return NextResponse.json({ error: error?.message || "Failed to fetch drivers" }, { status: 500 });
@@ -147,6 +188,8 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    invalidateDriverCache();
 
     return NextResponse.json({ driver }, { status: 201 });
   } catch (error: any) {

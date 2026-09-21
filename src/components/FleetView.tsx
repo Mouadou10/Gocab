@@ -130,9 +130,12 @@ function MoroccanPlateBadge({ plate }: { plate: string | null | undefined }) {
   );
 }
 
+// Module-level in-memory cache for instant 0ms tab switching
+let globalCachedVehicles: Vehicle[] | null = null;
+
 export default function FleetView() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => globalCachedVehicles || []);
+  const [isLoading, setIsLoading] = useState(!globalCachedVehicles || globalCachedVehicles.length === 0);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedHub, setSelectedHub] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -178,7 +181,9 @@ export default function FleetView() {
   }
 
   const fetchVehicles = useCallback(async () => {
-    setIsLoading(true);
+    if (!globalCachedVehicles || globalCachedVehicles.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.set("search", searchTerm);
@@ -187,7 +192,12 @@ export default function FleetView() {
 
       const res = await fetch(`/api/vehicles?${params.toString()}`);
       const data = await res.json();
-      setVehicles(data.vehicles || []);
+      if (data.vehicles) {
+        if (!searchTerm && !selectedHub && !selectedStatus) {
+          globalCachedVehicles = data.vehicles;
+        }
+        setVehicles(data.vehicles);
+      }
     } catch (err) {
       console.error("Failed to fetch vehicles:", err);
     } finally {

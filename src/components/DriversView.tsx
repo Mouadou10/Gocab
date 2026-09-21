@@ -60,9 +60,12 @@ interface DriverProfile {
   assignedVehicle?: Vehicle | null;
 }
 
+// Module-level in-memory cache for instant 0ms tab switching
+let globalCachedDrivers: DriverProfile[] | null = null;
+
 export default function DriversView() {
-  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [drivers, setDrivers] = useState<DriverProfile[]>(() => globalCachedDrivers || []);
+  const [isLoading, setIsLoading] = useState(!globalCachedDrivers || globalCachedDrivers.length === 0);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAssignment, setFilterAssignment] = useState<"ALL" | "ASSIGNED" | "UNASSIGNED">("ALL");
   const [filterStage, setFilterStage] = useState<string>("ALL");
@@ -74,23 +77,31 @@ export default function DriversView() {
   const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
-  const fetchDrivers = async () => {
+  const fetchDrivers = async (silentParam: boolean | unknown = false) => {
+    const silent = typeof silentParam === "boolean" ? silentParam : false;
     try {
-      setIsLoading(true);
+      if (!silent && (!globalCachedDrivers || globalCachedDrivers.length === 0)) {
+        setIsLoading(true);
+      }
       const res = await fetch("/api/drivers");
       const data = await res.json();
       if (data.drivers) {
+        globalCachedDrivers = data.drivers;
         setDrivers(data.drivers);
       }
     } catch (err) {
-      toast.error("Erreur de chargement des chauffeurs");
+      if (!globalCachedDrivers) {
+        toast.error("Erreur de chargement des chauffeurs");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDrivers();
+    // If we already have drivers in memory, load them instantly and refresh silently in the background
+    const hasCache = Boolean(globalCachedDrivers && globalCachedDrivers.length > 0);
+    fetchDrivers(hasCache);
   }, []);
 
   // Filtered drivers list

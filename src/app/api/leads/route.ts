@@ -11,18 +11,38 @@ import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
+let leadsCache: { leads: any[]; timestamp: number } | null = null;
+
+export function invalidateLeadsCache() {
+  leadsCache = null;
+}
+
 /**
  * GET /api/leads
  * Returns all leads ordered by creation date.
  */
 export async function GET() {
   try {
+    // Return cached leads if fresh (5s TTL)
+    if (leadsCache && Date.now() - leadsCache.timestamp < 5000) {
+      return NextResponse.json(
+        { leads: leadsCache.leads },
+        {
+          headers: {
+            "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+          },
+        }
+      );
+    }
+
     const leads = await prisma.lead.findMany({
       orderBy: [
         { updated_at: "desc" },
         { created_at: "desc" },
       ],
     });
+
+    leadsCache = { leads, timestamp: Date.now() };
 
     // Auto-transition 'To Recall' in background without blocking the read query
     const now = new Date();
@@ -40,7 +60,14 @@ export async function GET() {
       },
     }).catch(() => {});
 
-    return NextResponse.json({ leads });
+    return NextResponse.json(
+      { leads },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error fetching leads:", error);
     return NextResponse.json(
@@ -157,6 +184,7 @@ export async function POST(request: Request) {
     });
 
     // Touch sync state so all open sessions refresh immediately
+    invalidateLeadsCache();
     touchSyncState("leads").catch(() => {});
 
     return NextResponse.json({ lead }, { status: 201 });
