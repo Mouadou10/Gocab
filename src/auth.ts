@@ -45,96 +45,81 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const CORE_TEAM_ACCOUNTS: Record<
           string,
-          { name: string; fullName: string; role: string; fallbackId: string }
+          { id: string; name: string; fullName: string; role: string }
         > = {
           "mouad.koudia@gocab.io": {
+            id: "333ebbf9-a0a0-4bc8-8419-19b0209491bf",
             name: "Mouad Koudia",
             fullName: "Mouad Koudia",
             role: "OPS_MANAGER",
-            fallbackId: "ops-manager-master-id",
           },
           "kaoutar.ouardi@gocab.io": {
+            id: "b9cf7f9b-758d-456c-a70e-6eae055a7231",
             name: "Kaoutar Ouardi",
             fullName: "Kaoutar Ouardi",
             role: "LEAD_ACQUISITION_JR",
-            fallbackId: "agent-kaoutar-ouardi-id",
           },
           "salma.abouri@gocab.io": {
+            id: "b9a4fa95-ea52-45e7-9a11-0b38aabbe3b0",
             name: "Salma Abouri",
             fullName: "Salma Abouri",
             role: "FLEET_PERF_MANAGER",
-            fallbackId: "agent-salma-abouri-id",
+          },
+          "hamza.rassid@gocab.io": {
+            id: "f34384d2-df95-48fc-9224-ff7ef093ef4d",
+            name: "Hamza Rassid",
+            fullName: "Hamza Rassid",
+            role: "FIELD_SUPERVISOR",
+          },
+          "ayoub.rassid@gocab.io": {
+            id: "204e3a14-d944-4bd2-8766-17df10e9775e",
+            name: "Ayoub Rassid",
+            fullName: "Ayoub Rassid",
+            role: "FIELD_SUPERVISOR",
+          },
+          "ayoub.gsaib@gocab.io": {
+            id: "4002369c-0e84-49dc-9db7-ce6c11a27956",
+            name: "Ayoub Gsaib",
+            fullName: "Ayoub Gsaib",
+            role: "LEAD_ACQUISITION_JR",
+          },
+          "mohamed.aziz@gocab.io": {
+            id: "70dfbcfe-cb1c-4d4a-aece-6c1af1c3d69a",
+            name: "Mohamed Aziz",
+            fullName: "Mohamed Aziz",
+            role: "FLEET_PERF_MANAGER",
+          },
+          "nour.abouri@gocab.io": {
+            id: "fe2ec083-3d9f-40b4-ae05-b9989ff81d2b",
+            name: "Nour Abouri",
+            fullName: "Nour Abouri",
+            role: "BRAND_MANAGER",
+          },
+          "kurbankerimov@gocab.io": {
+            id: "d338716b-21ad-4efa-9ea3-729ce18761f8",
+            name: "Kurban Kerimov",
+            fullName: "Kurban Kerimov",
+            role: "OPS_MANAGER",
           },
         };
 
         const masterPassword = process.env.SEED_ADMIN_PASSWORD || "Moulana@pc1995";
         const defaultTeamPassword = process.env.DEFAULT_TEAM_PASSWORD || "GoCab2024!";
 
-        // 1. Direct bootstrap & team authentication for core accounts
+        // 1. Instant authentication for core team accounts with team or master credentials
         if (CORE_TEAM_ACCOUNTS[email]) {
           const isMasterPass = inputPassword === masterPassword;
           const isDefaultPass = inputPassword === defaultTeamPassword;
 
           if (isMasterPass || isDefaultPass) {
             const teamMeta = CORE_TEAM_ACCOUNTS[email];
-            try {
-              let user = await prisma.user.findFirst({ where: { email } });
-              if (!user) {
-                // Check if an existing user was under an older email format
-                const firstName = teamMeta.name.split(" ")[0];
-                const altMatch = await prisma.user.findFirst({
-                  where: {
-                    OR: [
-                      { fullName: { contains: firstName } },
-                      { name: { contains: firstName } },
-                    ],
-                  },
-                });
-
-                if (altMatch) {
-                  user = await prisma.user.update({
-                    where: { id: altMatch.id },
-                    data: {
-                      email,
-                      name: teamMeta.name,
-                      fullName: teamMeta.fullName,
-                      role: altMatch.role || teamMeta.role,
-                      isActive: true,
-                    },
-                  });
-                } else {
-                  const passwordHash = await bcrypt.hash(inputPassword, 12);
-                  user = await prisma.user.create({
-                    data: {
-                      email,
-                      name: teamMeta.name,
-                      fullName: teamMeta.fullName,
-                      passwordHash,
-                      role: teamMeta.role,
-                      region: "CASABLANCA",
-                      isActive: true,
-                      mustChangePassword: false,
-                    },
-                  });
-                }
-              }
-              return {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                mustChangePassword: false,
-              };
-            } catch (err: any) {
-              console.warn("DB bootstrap warning on login:", err?.message);
-              return {
-                id: teamMeta.fallbackId,
-                name: teamMeta.name,
-                email,
-                role: teamMeta.role,
-                mustChangePassword: false,
-              };
-            }
+            return {
+              id: teamMeta.id,
+              name: teamMeta.name,
+              email,
+              role: teamMeta.role,
+              mustChangePassword: false,
+            };
           }
         }
 

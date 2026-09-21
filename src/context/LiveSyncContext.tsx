@@ -24,8 +24,8 @@ interface LiveSyncContextValue {
 const LiveSyncContext = createContext<LiveSyncContextValue | null>(null);
 
 const BROADCAST_CHANNEL_NAME = "gocab_live_sync_channel";
-const ACTIVE_POLL_INTERVAL_MS = 4000; // 4s when tab is active
-const BACKGROUND_POLL_INTERVAL_MS = 20000; // 20s when backgrounded
+const ACTIVE_POLL_INTERVAL_MS = 8000; // 8s when tab is active (with BroadcastChannel for instant local cross-tab sync)
+const BACKGROUND_POLL_INTERVAL_MS = 30000; // 30s when backgrounded
 
 export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);

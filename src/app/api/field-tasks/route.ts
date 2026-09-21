@@ -6,17 +6,15 @@ import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/field-tasks
- * Fetches all field supervisor tasks, filterable by status, type, or vehicle.
- */
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search") || "";
-    const status = searchParams.get("status") || "";
-    const type = searchParams.get("type") || "";
+let lastSyncTimestamp = 0;
 
+async function syncRecoveryTasksAndOrphans() {
+  const now = Date.now();
+  // Throttle to avoid redundant sequential Turso roundtrips
+  if (now - lastSyncTimestamp < 30_000) return;
+  lastSyncTimestamp = now;
+
+  try {
     // 1. Auto-clean orphaned tasks whose linked_ticket_id is no longer present in MaintenanceTicket
     const tasksWithLinkedTickets = await prisma.fieldTask.findMany({
       where: { linked_ticket_id: { not: null } },
@@ -93,6 +91,24 @@ export async function GET(request: Request) {
         }
       }
     }
+  } catch (err: any) {
+    console.warn("FieldTask background sync error:", err?.message || err);
+  }
+}
+
+/**
+ * GET /api/field-tasks
+ * Fetches all field supervisor tasks, filterable by status, type, or vehicle.
+ */
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "";
+    const type = searchParams.get("type") || "";
+
+    // Run background sync non-blocking so GET responds immediately
+    void syncRecoveryTasksAndOrphans();
 
     const where: any = {};
 

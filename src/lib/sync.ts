@@ -26,6 +26,7 @@ const SERVER_VERSION =
 
 const globalForSync = globalThis as unknown as {
   syncCache?: SyncState;
+  syncCacheExpiresAt?: number;
 };
 
 const SYNC_SETTING_KEY = "data_sync_state";
@@ -34,6 +35,11 @@ const SYNC_SETTING_KEY = "data_sync_state";
  * Retrieves the current synchronization timestamps for all monitored entities.
  */
 export async function getSyncState(): Promise<SyncState> {
+  const now = Date.now();
+  if (globalForSync.syncCache && globalForSync.syncCacheExpiresAt && globalForSync.syncCacheExpiresAt > now) {
+    return globalForSync.syncCache;
+  }
+
   const fallback: SyncState = globalForSync.syncCache || {
     leads: SERVER_START_TIME,
     tickets: SERVER_START_TIME,
@@ -65,6 +71,8 @@ export async function getSyncState(): Promise<SyncState> {
         updatedAt: Number(parsed.updatedAt) || Date.now(),
       };
       globalForSync.syncCache = state;
+      // Cache in memory for 3 seconds to avoid spamming Turso on rapid client polling
+      globalForSync.syncCacheExpiresAt = Date.now() + 3000;
       return state;
     }
   } catch (err) {

@@ -20,8 +20,22 @@ export async function GET(request: Request) {
           { technical_inspection_expiry: { not: null } },
         ],
       },
-      include: {
-        driverProfile: true,
+      select: {
+        id: true,
+        plate_number: true,
+        make_model: true,
+        vin: true,
+        assigned_driver_name: true,
+        assigned_driver_phone: true,
+        autorisation_expiry_date: true,
+        insurance_expiry_date: true,
+        vignette_expiry_date: true,
+        technical_inspection_expiry: true,
+        driverProfile: {
+          select: {
+            cinNumber: true,
+          },
+        },
       },
     });
 
@@ -77,11 +91,16 @@ export async function GET(request: Request) {
     // Sort vehicles: most overdue first (lowest days_left)
     dueVehiclesWithDocs.sort((a, b) => a.mostUrgent.days_left - b.mostUrgent.days_left);
 
-    // 3. Fetch latest inspection for these due vehicles
+    // 3. Fetch latest inspection for these due vehicles (selected fields only)
     const vehicleIds = dueVehiclesWithDocs.map((item) => item.vehicle.id);
     const previousInspections = await prisma.vehicleInspection.findMany({
       where: {
         vehicle_id: { in: vehicleIds },
+      },
+      select: {
+        vehicle_id: true,
+        health_score: true,
+        inspection_date: true,
       },
       orderBy: { inspection_date: "desc" },
     });
