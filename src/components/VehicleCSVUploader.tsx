@@ -82,10 +82,18 @@ export default function VehicleCSVUploader({
         body: formData,
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        if (res.status === 504) {
+          throw new Error("Délai d'attente serveur dépassé (timeout 504). L'importation prend trop de temps.");
+        }
+        throw new Error(`Erreur serveur (${res.status} ${res.statusText})`);
+      }
 
       if (!res.ok) {
-        toast.error(data.error || "Échec de l'importation");
+        toast.error(data?.error || "Échec de l'importation", { duration: 7000 });
         return;
       }
 
@@ -97,7 +105,7 @@ export default function VehicleCSVUploader({
       toast.success(msg, { duration: 5000 });
       onUploadSuccess();
     } catch (err: any) {
-      toast.error("Erreur réseau lors du téléversement");
+      toast.error(err?.message || "Erreur réseau lors du téléversement", { duration: 6000 });
     } finally {
       setIsUploading(false);
     }

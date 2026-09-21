@@ -3,12 +3,17 @@
  *
  * Ingests vehicle fleet spreadsheets (supports GoCab standard columns & external exports).
  * Extracts: Plate Number, Brand, Model, Year, VIN, Status, Insurance Policy, City/Hub, Manager, Driver.
- * Performs intelligent 2-way auto-matching with Driver profiles.
+ * Performs intelligent 2-way auto-matching with Driver profiles, Support tickets, and Accident claims.
+ * Highly optimized with pre-fetched in-memory indexing and chunked concurrent writes to prevent timeouts.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 import Papa from "papaparse";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Allow up to 60s execution on Vercel for bulk imports
 
 function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
   if (!rawStatus) return hasDriver ? "Actif" : "Available";
@@ -24,7 +29,7 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "impounded";
   }
 
-  // 3. Maintenance & Accident (maintenance status is Accident status in the CRM per user specifications)
+  // 3. Maintenance & Accident
   if (s.includes("accident") || s.includes("maintenance") || s.includes("garage") || s.includes("repair") || s.includes("panne")) {
     return "Accident";
   }
@@ -61,21 +66,78 @@ function normalizePlate(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function cleanPlateInput(raw: string): string {
+  if (!raw) return "";
+  let clean = raw.trim();
+  if (clean.includes("/")) clean = clean.split("/")[0].trim();
+  if (clean.includes(",")) clean = clean.split(",")[0].trim();
+  return clean.replace(/\s+/g, "").toUpperCase();
+}
+
+const PLATE_ALIASES = [
+  "plate number",
+  "plate",
+  "immatriculation",
+  "matricule",
+  "registration number",
+  "registration nu",
+  "registration",
+  "old number",
+  "immat",
+  "vehicles",
+  "vehicle",
+  "vehicule",
+  "vehicules",
+  "voiture",
+  "voitures",
+  "car",
+  "cars",
+  "auto",
+  "plaque",
+  "plaque d'immatriculation",
+  "n° immatriculation",
+  "numéro immatriculation",
+  "matricule véhicule",
+  "matricule voiture",
+  "code véhicule",
+  "license plate",
+  "plaque immat",
+  "matricule auto",
+];
+
+const DRIVER_ALIASES = [
+  "driver",
+  "driver name",
+  "conducteur",
+  "chauffeur",
+  "assigned driver",
+  "nom chauffeur",
+  "nom",
+  "full name",
+  "fullname",
+  "nom complet",
+  "name",
+  "nom du chauffeur",
+  "conducteur assigné",
+];
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No CSV file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Aucun fichier CSV fourni." }, { status: 400 });
     }
 
-    const csvText = await file.text();
+    let csvText = await file.text();
+    // Strip BOM if present
+    csvText = csvText.replace(/^\uFEFF/, "");
 
     const { data, errors } = Papa.parse<Record<string, string>>(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim().toLowerCase(),
+      transformHeader: (h: string) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""),
     });
 
     if (errors.length > 0) {
@@ -83,10 +145,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data || data.length === 0) {
-      return NextResponse.json({ error: "Empty CSV file" }, { status: 400 });
+      return NextResponse.json({ error: "Le fichier CSV est vide." }, { status: 400 });
     }
 
-    // Helper to find column by multiple possible aliases
+    // Helper to find column by multiple aliases
     const getField = (row: Record<string, string>, aliases: string[]): string | undefined => {
       for (const alias of aliases) {
         const val = row[alias.toLowerCase()];
@@ -94,6 +156,50 @@ export async function POST(request: NextRequest) {
       }
       return undefined;
     };
+
+    // 1. Pre-fetch all existing vehicles in 1 query
+    const allExistingVehicles = await prisma.vehicle.findMany();
+    const vehicleByPlate = new Map<string, typeof allExistingVehicles[0]>();
+    const vehicleByNorm = new Map<string, typeof allExistingVehicles[0]>();
+
+    for (const v of allExistingVehicles) {
+      if (v.plate_number) {
+        vehicleByPlate.set(v.plate_number.toUpperCase().trim(), v);
+        vehicleByNorm.set(normalizePlate(v.plate_number), v);
+      }
+    }
+
+    // 2. Pre-fetch all existing drivers in 1 query
+    const allDrivers = await prisma.driverProfile.findMany();
+    const driverByName = new Map<string, typeof allDrivers[0]>();
+    for (const d of allDrivers) {
+      const clean = d.fullName.toLowerCase().replace(/\s+/g, " ").trim();
+      driverByName.set(clean, d);
+    }
+
+    // 3. Pre-fetch all open maintenance tickets in 1 query
+    const allOpenTickets = await prisma.maintenanceTicket.findMany({
+      where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+    });
+    const openTicketsByVehicleId = new Map<string, typeof allOpenTickets>();
+    for (const t of allOpenTickets) {
+      if (t.vehicle_id) {
+        const list = openTicketsByVehicleId.get(t.vehicle_id) || [];
+        list.push(t);
+        openTicketsByVehicleId.set(t.vehicle_id, list);
+      }
+    }
+
+    // 4. Pre-fetch all active accident claims in 1 query
+    const allActiveClaims = await prisma.accidentClaim.findMany({
+      where: { timeline_step: { not: "VEHICLE_BACK" } },
+    });
+    const activeClaimsByVehicleId = new Map<string, typeof allActiveClaims[0]>();
+    for (const c of allActiveClaims) {
+      if (c.vehicle_id) {
+        activeClaimsByVehicleId.set(c.vehicle_id, c);
+      }
+    }
 
     let total_rows = 0;
     let inserted = 0;
@@ -104,64 +210,62 @@ export async function POST(request: NextRequest) {
     let tickets_updated = 0;
     let tickets_resolved = 0;
 
-    // Fetch all existing drivers for fuzzy name matching
-    const allDrivers = await prisma.driverProfile.findMany();
+    // Filter valid rows and parse them
+    interface ParsedRow {
+      plate_number: string;
+      normPlate: string;
+      make_model: string;
+      year: number;
+      vin: string | null;
+      driverName: string | null;
+      status: string;
+      insurancePolicy: string | null;
+      isInsuranceActive: boolean;
+      hub_city: string;
+      manager: string | null;
+      downtimeDays: number;
+      notes: string | null;
+    }
 
-    const findDriverByName = (driverName: string) => {
-      if (!driverName) return null;
-      const cleanTarget = driverName.toLowerCase().replace(/\s+/g, " ").trim();
-      for (const d of allDrivers) {
-        const cleanD = d.fullName.toLowerCase().replace(/\s+/g, " ").trim();
-        if (cleanD === cleanTarget) return d;
-      }
-      return null;
-    };
+    const validRows: ParsedRow[] = [];
 
     for (const row of data) {
       total_rows++;
-
-      // Plate number priority: Plate Number -> Registration Number -> Old Number
-      const rawPlate = getField(row, [
-        "plate number", "plate", "immatriculation", "matricule", "registration number", "registration nu", "old number", "immat"
-      ]);
-
+      const rawPlate = getField(row, PLATE_ALIASES);
       if (!rawPlate) {
         skipped_invalid++;
         continue;
       }
 
-      const plate_number = rawPlate.replace(/\s+/g, "").toUpperCase();
+      const plate_number = cleanPlateInput(rawPlate);
+      const normPlate = normalizePlate(plate_number);
 
-      // Brand & Model
+      if (!plate_number || normPlate.length < 3) {
+        skipped_invalid++;
+        continue;
+      }
+
       const brand = getField(row, ["brand", "marque", "make"]) || "DACIA";
       const model = getField(row, ["model", "modèle", "modele"]) || "SANDERO";
       const make_model = `${brand} ${model}`.trim();
 
-      // Year
       const rawYear = getField(row, ["year", "annee", "année"]);
       const year = rawYear && !isNaN(Number(rawYear)) ? Number(rawYear) : 2026;
 
-      // VIN
       const vin = getField(row, ["vin code", "vin", "chassis", "numéro de châssis"]) || null;
+      const driverName = getField(row, DRIVER_ALIASES) || null;
 
-      // Driver
-      const driverName = getField(row, ["driver", "conducteur", "chauffeur", "assigned driver", "nom chauffeur"]) || null;
-
-      // Status
       const rawStatus = getField(row, ["status", "statut", "etat", "état"]);
       const status = mapStatus(rawStatus, Boolean(driverName));
 
-      // Insurance
       const insuranceType = getField(row, ["insurance type", "type assurance", "assurance"]);
       const insurancePolicy = getField(row, ["insurance policy number", "insurance polic", "insurance policy", "police assurance", "policy number", "numéro police"]) || null;
       const isInsuranceActive = Boolean(insuranceType || insurancePolicy);
 
-      // Hub City & Supervisor
       const managerGroup = getField(row, ["manager group", "groupe manager", "city", "ville", "hub"]);
-      const manager = getField(row, ["manager", "superviseur", "supervisor"]);
-      const hub_city = extractCity(managerGroup, manager);
+      const manager = getField(row, ["manager", "superviseur", "supervisor"]) || null;
+      const hub_city = extractCity(managerGroup, manager || undefined);
 
-      // Duration Status (e.g. "120 days", "9 days")
       const rawDuration = getField(row, ["duration status", "duration", "duree statut", "durée"]);
       let downtimeDays = 0;
       if (rawDuration) {
@@ -169,7 +273,6 @@ export async function POST(request: NextRequest) {
         if (match) downtimeDays = parseInt(match[0], 10);
       }
 
-      // Extra notes & attributes from spreadsheet
       const color = getField(row, ["color", "couleur"]);
       const oldNumber = getField(row, ["old number", "ancien matricule"]);
       const regNu = getField(row, ["registration nu", "registration number", "numéro enregistrement"]);
@@ -184,286 +287,323 @@ export async function POST(request: NextRequest) {
       if (externalYang) notesArray.push(`Ext: ${externalYang}`);
       const notes = notesArray.length > 0 ? notesArray.join(" · ") : null;
 
-      // Check if vehicle already exists (by exact plate or normalized plate)
-      const existing = await prisma.vehicle.findUnique({
-        where: { plate_number },
+      validRows.push({
+        plate_number,
+        normPlate,
+        make_model,
+        year,
+        vin,
+        driverName,
+        status,
+        insurancePolicy,
+        isInsuranceActive,
+        hub_city,
+        manager,
+        downtimeDays,
+        notes,
       });
-
-      let vehicleId = existing?.id;
-
-      if (!existing) {
-        const newVehicle = await prisma.vehicle.create({
-          data: {
-            plate_number,
-            make_model,
-            year,
-            vin,
-            hub_city,
-            status,
-            total_downtime_days: downtimeDays,
-            insurance_policy_number: insurancePolicy,
-            isInsuranceActive,
-            assigned_driver_name: driverName,
-            assigned_supervisor: manager || null,
-            notes,
-            current_mileage: 0,
-          },
-        });
-        vehicleId = newVehicle.id;
-        inserted++;
-      } else {
-        // Update existing vehicle
-        const updatedVehicle = await prisma.vehicle.update({
-          where: { id: existing.id },
-          data: {
-            make_model,
-            year,
-            vin: vin || existing.vin,
-            hub_city,
-            status,
-            total_downtime_days: downtimeDays || existing.total_downtime_days,
-            insurance_policy_number: insurancePolicy || existing.insurance_policy_number,
-            isInsuranceActive: isInsuranceActive || existing.isInsuranceActive,
-            assigned_driver_name: driverName || existing.assigned_driver_name,
-            assigned_supervisor: manager || existing.assigned_supervisor,
-            notes: notes || existing.notes,
-          },
-        });
-        vehicleId = updatedVehicle.id;
-        updated++;
-      }
-
-      // Auto-match DriverProfile by name or create placeholder
-      let matchedDriver: any = null;
-      if (driverName && vehicleId) {
-        try {
-          matchedDriver = findDriverByName(driverName);
-
-          if (matchedDriver) {
-            await prisma.driverProfile.update({
-              where: { id: matchedDriver.id },
-              data: { assignedVehicleId: vehicleId },
-            });
-            linked_drivers++;
-          } else {
-            // Create initial driver profile linked to this vehicle
-            const newDriver = await prisma.driverProfile.create({
-              data: {
-                fullName: driverName,
-                phoneSanitized: `+212600${Math.floor(100000 + Math.random() * 900000)}`,
-                cinNumber: `CIN-${plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
-                age: 30,
-                licenseSeniority: 4,
-                contractType: "STANDARD",
-                isKycVerified: true,
-                defaultStage: "NOMINAL",
-                currentArrearsMAD: 0.0,
-                monthlyTripCount: 0,
-                assignedVehicleId: vehicleId,
-              },
-            });
-            matchedDriver = newDriver;
-            allDrivers.push(newDriver);
-            linked_drivers++;
-          }
-        } catch (driverErr: any) {
-          console.warn("Driver auto-link warning on vehicle upload:", driverErr?.message);
-        }
-      }
-
-      // Automatically manage Maintenance, Fourrière & Police Tickets based on vehicle status
-      if (vehicleId) {
-        try {
-          const statusStartDate = new Date(Date.now() - (downtimeDays || 0) * 24 * 60 * 60 * 1000);
-          const startDateFormatted = statusStartDate.toLocaleDateString("fr-FR");
-
-          if (status === "impounded") {
-            // 1. Fourrière Municipale
-            const existingTicket = await prisma.maintenanceTicket.findFirst({
-              where: {
-                vehicle_id: vehicleId,
-                status: { in: ["OPEN", "IN_PROGRESS"] },
-                ticket_type: { in: ["Fourrière", "impounded", "Fourriere"] },
-              },
-            });
-
-            const priority = downtimeDays >= 7 ? "Critical" : "Urgent";
-            const desc = `🚨 Véhicule en fourrière depuis ${downtimeDays} jours (depuis le ${startDateFormatted}). Suivi sortie de fourrière & frais journaliers.`;
-
-            if (existingTicket) {
-              await prisma.maintenanceTicket.update({
-                where: { id: existingTicket.id },
-                data: {
-                  description: desc,
-                  priority,
-                  driver_name: driverName || existingTicket.driver_name,
-                  driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                },
-              });
-              tickets_updated++;
-            } else {
-              await prisma.maintenanceTicket.create({
-                data: {
-                  vehicle_id: vehicleId,
-                  plate_number,
-                  driver_name: driverName || null,
-                  driver_phone: matchedDriver?.phoneSanitized || null,
-                  ticket_type: "Fourrière",
-                  priority,
-                  status: "OPEN",
-                  description: desc,
-                  created_at: statusStartDate, // Start elapsed downtime counter from the real day it was impounded till today
-                  sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                },
-              });
-              tickets_created++;
-            }
-          } else if (status === "police_immobilization") {
-            // 2. Immobilisation Police / Sabot
-            const existingTicket = await prisma.maintenanceTicket.findFirst({
-              where: {
-                vehicle_id: vehicleId,
-                status: { in: ["OPEN", "IN_PROGRESS"] },
-                ticket_type: { in: ["Police Immobilization", "police_immobilization", "Sabot"] },
-              },
-            });
-
-            const priority = downtimeDays >= 7 ? "Critical" : "Urgent";
-            const desc = `🚔 Immobilisation Police / Sabot depuis ${downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative et mainlevée.`;
-
-            if (existingTicket) {
-              await prisma.maintenanceTicket.update({
-                where: { id: existingTicket.id },
-                data: {
-                  description: desc,
-                  priority,
-                  driver_name: driverName || existingTicket.driver_name,
-                  driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                },
-              });
-              tickets_updated++;
-            } else {
-              await prisma.maintenanceTicket.create({
-                data: {
-                  vehicle_id: vehicleId,
-                  plate_number,
-                  driver_name: driverName || null,
-                  driver_phone: matchedDriver?.phoneSanitized || null,
-                  ticket_type: "Police Immobilization",
-                  priority,
-                  status: "OPEN",
-                  description: desc,
-                  created_at: statusStartDate,
-                  sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                },
-              });
-              tickets_created++;
-            }
-          } else if (status === "Accident" || status === "In garage") {
-            // 3. Maintenance / Accident: create BOTH Support Ticket (MaintenanceTicket) AND Assurance Ticket (AccidentClaim)
-            const priority = downtimeDays >= 7 ? "Critical" : "Urgent";
-            const desc = `💥 Véhicule en maintenance / accident signalé via import CSV (${downtimeDays > 0 ? `${downtimeDays} jours d'immobilisation` : "En cours"}).`;
-
-            // A. Create or update Support Ticket (Driver Support Kanban)
-            const existingTicket = await prisma.maintenanceTicket.findFirst({
-              where: {
-                vehicle_id: vehicleId,
-                status: { in: ["OPEN", "IN_PROGRESS"] },
-              },
-            });
-
-            if (!existingTicket) {
-              await prisma.maintenanceTicket.create({
-                data: {
-                  vehicle_id: vehicleId,
-                  plate_number,
-                  driver_name: driverName || matchedDriver?.fullName || null,
-                  driver_phone: matchedDriver?.phoneSanitized || null,
-                  ticket_type: "Accident",
-                  priority,
-                  status: "IN_PROGRESS",
-                  started_at: statusStartDate,
-                  description: desc,
-                  created_at: statusStartDate,
-                  sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                },
-              });
-              tickets_created++;
-            }
-
-            // B. Create or update Assurance Ticket (Insurance & Accidents Claim)
-            const existingClaim = await prisma.accidentClaim.findFirst({
-              where: {
-                vehicle_id: vehicleId,
-                timeline_step: { not: "VEHICLE_BACK" },
-              },
-            });
-
-            if (!existingClaim) {
-              await prisma.accidentClaim.create({
-                data: {
-                  vehicle_id: vehicleId,
-                  driver_id: matchedDriver?.id || null,
-                  driver_name: driverName || matchedDriver?.fullName || null,
-                  driver_phone: matchedDriver?.phoneSanitized || null,
-                  severity: "HARD",
-                  fault: null,
-                  timeline_step: "CAR_IN_GARAGE",
-                  step_updated_at: statusStartDate,
-                  created_at: statusStartDate,
-                  comments: JSON.stringify([
-                    {
-                      id: crypto.randomUUID(),
-                      timeline_step: "CAR_IN_GARAGE",
-                      comment: `Dossier créé automatiquement via import Flotte CSV (${downtimeDays > 0 ? `${downtimeDays} jours d'immobilisation` : "En cours"}).`,
-                      author: "Import Flotte",
-                      created_at: statusStartDate.toISOString(),
-                    },
-                  ]),
-                },
-              });
-            }
-          } else if (status === "Actif" || status === "Available") {
-            // 4. Vehicle is back on the road -> auto-resolve open downtime tickets & assurance claims!
-            const openTickets = await prisma.maintenanceTicket.findMany({
-              where: {
-                vehicle_id: vehicleId,
-                status: { in: ["OPEN", "IN_PROGRESS"] },
-                ticket_type: { in: ["Fourrière", "impounded", "Police Immobilization", "police_immobilization", "Repair", "Accident"] },
-              },
-            });
-
-            if (openTickets.length > 0) {
-              await prisma.maintenanceTicket.updateMany({
-                where: {
-                  id: { in: openTickets.map((t) => t.id) },
-                },
-                data: {
-                  status: "RESOLVED",
-                  resolved_at: new Date(),
-                  resolution_notes: `Résolu automatiquement via import CSV Flotte : Véhicule remis en statut "${status}" le ${new Date().toLocaleDateString("fr-FR")}.`,
-                },
-              });
-              tickets_resolved += openTickets.length;
-            }
-
-            // Auto-resolve active accident claims in Assurance
-            await prisma.accidentClaim.updateMany({
-              where: {
-                vehicle_id: vehicleId,
-                timeline_step: { not: "VEHICLE_BACK" },
-              },
-              data: {
-                timeline_step: "VEHICLE_BACK",
-                step_updated_at: new Date(),
-              },
-            });
-          }
-        } catch (ticketErr: any) {
-          console.warn("Ticket auto-management warning:", ticketErr?.message);
-        }
-      }
     }
+
+    if (total_rows > 0 && validRows.length === 0) {
+      const detectedColumns = Object.keys(data[0] || {}).join(", ");
+      return NextResponse.json(
+        {
+          error: `Aucune colonne d'immatriculation reconnue sur ${total_rows} lignes. Colonnes détectées dans le fichier: [${detectedColumns}]. Vérifiez que le fichier contient une colonne comme "Plate Number", "Immatriculation", "Matricule", ou "Vehicles".`,
+          summary: {
+            total_rows,
+            inserted: 0,
+            updated: 0,
+            skipped_invalid: total_rows,
+            linked_drivers: 0,
+            tickets_created: 0,
+            tickets_updated: 0,
+            tickets_resolved: 0,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // Process valid rows in concurrent batches of 8 for optimal network throughput to Turso
+    const BATCH_SIZE = 8;
+    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+      const chunk = validRows.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(
+        chunk.map(async (item) => {
+          try {
+            const existing = vehicleByPlate.get(item.plate_number) || vehicleByNorm.get(item.normPlate);
+            let vehicleId: string;
+
+            if (!existing) {
+              const newVehicle = await prisma.vehicle.create({
+                data: {
+                  plate_number: item.plate_number,
+                  make_model: item.make_model,
+                  year: item.year,
+                  vin: item.vin,
+                  hub_city: item.hub_city,
+                  status: item.status,
+                  total_downtime_days: item.downtimeDays,
+                  insurance_policy_number: item.insurancePolicy,
+                  isInsuranceActive: item.isInsuranceActive,
+                  assigned_driver_name: item.driverName,
+                  assigned_supervisor: item.manager,
+                  notes: item.notes,
+                  current_mileage: 0,
+                },
+              });
+              vehicleId = newVehicle.id;
+              vehicleByPlate.set(item.plate_number, newVehicle);
+              vehicleByNorm.set(item.normPlate, newVehicle);
+              inserted++;
+            } else {
+              const updatedVehicle = await prisma.vehicle.update({
+                where: { id: existing.id },
+                data: {
+                  make_model: item.make_model,
+                  year: item.year,
+                  vin: item.vin || existing.vin,
+                  hub_city: item.hub_city,
+                  status: item.status,
+                  total_downtime_days: item.downtimeDays || existing.total_downtime_days,
+                  insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
+                  isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
+                  assigned_driver_name: item.driverName || existing.assigned_driver_name,
+                  assigned_supervisor: item.manager || existing.assigned_supervisor,
+                  notes: item.notes || existing.notes,
+                },
+              });
+              vehicleId = updatedVehicle.id;
+              updated++;
+            }
+
+            // Driver profile auto-link
+            let matchedDriver: any = null;
+            if (item.driverName && vehicleId) {
+              const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
+              matchedDriver = driverByName.get(cleanTarget);
+
+              if (matchedDriver) {
+                if (matchedDriver.assignedVehicleId !== vehicleId) {
+                  await prisma.driverProfile.update({
+                    where: { id: matchedDriver.id },
+                    data: { assignedVehicleId: vehicleId },
+                  }).catch(() => {});
+                  matchedDriver.assignedVehicleId = vehicleId;
+                }
+                linked_drivers++;
+              } else {
+                try {
+                  const newDriver = await prisma.driverProfile.create({
+                    data: {
+                      fullName: item.driverName,
+                      phoneSanitized: `+212600${Math.floor(100000 + Math.random() * 900000)}`,
+                      cinNumber: `CIN-${item.plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
+                      age: 30,
+                      licenseSeniority: 4,
+                      contractType: "STANDARD",
+                      isKycVerified: true,
+                      defaultStage: "NOMINAL",
+                      currentArrearsMAD: 0.0,
+                      monthlyTripCount: 0,
+                      assignedVehicleId: vehicleId,
+                    },
+                  });
+                  matchedDriver = newDriver;
+                  driverByName.set(cleanTarget, newDriver);
+                  linked_drivers++;
+                } catch (e) {
+                  // Ignore duplicate key if concurrently inserted
+                }
+              }
+            }
+
+            // Status-driven Ticket & Claim synchronization
+            const statusStartDate = new Date(Date.now() - (item.downtimeDays || 0) * 24 * 60 * 60 * 1000);
+            const startDateFormatted = statusStartDate.toLocaleDateString("fr-FR");
+
+            if (item.status === "impounded") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const existingTicket = openTickets.find((t) =>
+                ["Fourrière", "impounded", "Fourriere"].includes(t.ticket_type)
+              );
+
+              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+              const desc = `🚨 Véhicule en fourrière depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Suivi sortie de fourrière & frais journaliers.`;
+
+              if (existingTicket) {
+                await prisma.maintenanceTicket.update({
+                  where: { id: existingTicket.id },
+                  data: {
+                    description: desc,
+                    priority,
+                    driver_name: item.driverName || existingTicket.driver_name,
+                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+                  },
+                }).catch(() => {});
+                tickets_updated++;
+              } else {
+                const newTicket = await prisma.maintenanceTicket.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    plate_number: item.plate_number,
+                    driver_name: item.driverName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    ticket_type: "Fourrière",
+                    priority,
+                    status: "OPEN",
+                    description: desc,
+                    created_at: statusStartDate,
+                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                }).catch(() => null);
+
+                if (newTicket) {
+                  openTickets.push(newTicket);
+                  openTicketsByVehicleId.set(vehicleId, openTickets);
+                  tickets_created++;
+                }
+              }
+            } else if (item.status === "police_immobilization") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const existingTicket = openTickets.find((t) =>
+                ["Police Immobilization", "police_immobilization", "Sabot"].includes(t.ticket_type)
+              );
+
+              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+              const desc = `🚔 Immobilisation Police / Sabot depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative et mainlevée.`;
+
+              if (existingTicket) {
+                await prisma.maintenanceTicket.update({
+                  where: { id: existingTicket.id },
+                  data: {
+                    description: desc,
+                    priority,
+                    driver_name: item.driverName || existingTicket.driver_name,
+                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+                  },
+                }).catch(() => {});
+                tickets_updated++;
+              } else {
+                const newTicket = await prisma.maintenanceTicket.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    plate_number: item.plate_number,
+                    driver_name: item.driverName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    ticket_type: "Police Immobilization",
+                    priority,
+                    status: "OPEN",
+                    description: desc,
+                    created_at: statusStartDate,
+                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                }).catch(() => null);
+
+                if (newTicket) {
+                  openTickets.push(newTicket);
+                  openTicketsByVehicleId.set(vehicleId, openTickets);
+                  tickets_created++;
+                }
+              }
+            } else if (item.status === "Accident" || item.status === "In garage") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const existingTicket = openTickets[0];
+              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+              const desc = `💥 Véhicule en maintenance / accident signalé via import CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`;
+
+              if (!existingTicket) {
+                const newTicket = await prisma.maintenanceTicket.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    plate_number: item.plate_number,
+                    driver_name: item.driverName || matchedDriver?.fullName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    ticket_type: "Accident",
+                    priority,
+                    status: "IN_PROGRESS",
+                    started_at: statusStartDate,
+                    description: desc,
+                    created_at: statusStartDate,
+                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                }).catch(() => null);
+
+                if (newTicket) {
+                  openTickets.push(newTicket);
+                  openTicketsByVehicleId.set(vehicleId, openTickets);
+                  tickets_created++;
+                }
+              }
+
+              const existingClaim = activeClaimsByVehicleId.get(vehicleId);
+              if (!existingClaim) {
+                const newClaim = await prisma.accidentClaim.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    driver_id: matchedDriver?.id || null,
+                    driver_name: item.driverName || matchedDriver?.fullName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    severity: "HARD",
+                    fault: null,
+                    timeline_step: "CAR_IN_GARAGE",
+                    step_updated_at: statusStartDate,
+                    created_at: statusStartDate,
+                    comments: JSON.stringify([
+                      {
+                        id: crypto.randomUUID(),
+                        timeline_step: "CAR_IN_GARAGE",
+                        comment: `Dossier créé automatiquement via import Flotte CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`,
+                        author: "Import Flotte",
+                        created_at: statusStartDate.toISOString(),
+                      },
+                    ]),
+                  },
+                }).catch(() => null);
+
+                if (newClaim) {
+                  activeClaimsByVehicleId.set(vehicleId, newClaim);
+                }
+              }
+            } else if (item.status === "Actif" || item.status === "Available") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              if (openTickets.length > 0) {
+                await prisma.maintenanceTicket.updateMany({
+                  where: { id: { in: openTickets.map((t) => t.id) } },
+                  data: {
+                    status: "RESOLVED",
+                    resolved_at: new Date(),
+                    resolution_notes: `Résolu automatiquement via import CSV Flotte : Véhicule remis en statut "${item.status}" le ${new Date().toLocaleDateString("fr-FR")}.`,
+                  },
+                }).catch(() => {});
+                tickets_resolved += openTickets.length;
+                openTicketsByVehicleId.delete(vehicleId);
+              }
+
+              if (activeClaimsByVehicleId.has(vehicleId)) {
+                await prisma.accidentClaim.updateMany({
+                  where: {
+                    vehicle_id: vehicleId,
+                    timeline_step: { not: "VEHICLE_BACK" },
+                  },
+                  data: {
+                    timeline_step: "VEHICLE_BACK",
+                    step_updated_at: new Date(),
+                  },
+                }).catch(() => {});
+                activeClaimsByVehicleId.delete(vehicleId);
+              }
+            }
+          } catch (rowErr: any) {
+            console.warn(`Error processing vehicle row ${item.plate_number}:`, rowErr?.message || rowErr);
+          }
+        })
+      );
+    }
+
+    // Trigger sync state update
+    void touchSyncState("all");
 
     return NextResponse.json({
       success: true,
@@ -481,7 +621,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("POST /api/upload-vehicles error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to process vehicle CSV upload" },
+      { error: error?.message || "Échec du traitement du fichier CSV de la flotte." },
       { status: 500 }
     );
   }
