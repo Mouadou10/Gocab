@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
+  CATALOG_ITEMS,
   BonDeCommandeData,
   BonDeCommandeItem,
   calculateBonDeCommandeTotals,
   getFormattedToday,
+  CatalogItem,
   printBonDeCommande,
 } from "@/lib/bonDeCommandeCatalog";
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
-import { Printer, Check, Plus, Trash2, X } from "lucide-react";
+import { Printer, Check, Plus, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface BonDeCommandeModalProps {
@@ -64,6 +66,11 @@ export default function BonDeCommandeModal({
   const [validatorName, setValidatorName] = useState<string>(initialData?.validator_name || "Hamza RASSID");
   const [validatorRole, setValidatorRole] = useState<string>(initialData?.validator_role || "Gérant");
   const [isValidated, setIsValidated] = useState<boolean>(initialData?.validated || false);
+
+  // UI state
+  const [showCatalogTray, setShowCatalogTray] = useState<boolean>(!readOnly);
+  const [customDesignation, setCustomDesignation] = useState<string>("");
+  const [customPriceTTC, setCustomPriceTTC] = useState<string>("");
 
   const prevIsOpenRef = useRef<boolean>(isOpen);
 
@@ -177,6 +184,54 @@ export default function BonDeCommandeModal({
   if (!isOpen) return null;
 
   const totals = calculateBonDeCommandeTotals(items);
+
+  // Add from catalog
+  const handleAddCatalogItem = (catItem: CatalogItem) => {
+    const existingIndex = items.findIndex((i) => i.designation === catItem.designation);
+    if (existingIndex >= 0) {
+      const updated = [...items];
+      const newQty = updated[existingIndex].quantity + 1;
+      updated[existingIndex].quantity = newQty;
+      updated[existingIndex].total_ttc = Math.round(newQty * updated[existingIndex].unit_price_ttc * 100) / 100;
+      setItems(updated);
+      toast.success(`Quantité augmentée pour "${catItem.designation}"`);
+    } else {
+      const newItem: BonDeCommandeItem = {
+        id: "item_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+        designation: catItem.designation,
+        quantity: catItem.default_qty || 1,
+        unit_price_ttc: catItem.price_ttc,
+        total_ttc: catItem.price_ttc,
+      };
+      setItems([...items, newItem]);
+      toast.success(`"${catItem.designation}" ajouté au Bon de Commande`);
+    }
+  };
+
+  // Add custom line from tray
+  const handleAddCustomItem = () => {
+    if (!customDesignation.trim()) {
+      toast.error("Veuillez saisir une désignation.");
+      return;
+    }
+    const priceNum = parseFloat(customPriceTTC);
+    if (isNaN(priceNum) || priceNum < 0) {
+      toast.error("Veuillez saisir un tarif valide en TTC.");
+      return;
+    }
+    const newItem: BonDeCommandeItem = {
+      id: "item_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+      designation: customDesignation.trim(),
+      quantity: 1,
+      unit_price_ttc: priceNum,
+      total_ttc: priceNum,
+      is_custom: true,
+    };
+    setItems([...items, newItem]);
+    setCustomDesignation("");
+    setCustomPriceTTC("");
+    toast.success(`Ligne personnalisée ajoutée`);
+  };
 
   // Line item management
   const handleAddNewRow = () => {
@@ -384,6 +439,140 @@ export default function BonDeCommandeModal({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 print:p-0 print:overflow-visible">
+          {/* Catalog & Quick Picker Tray (Screen only) */}
+          {!readOnly && (
+            <div className="no-print bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-navy flex items-center gap-1.5">
+                    <span>🏷️</span> Catalogue Tarifs & Prestations
+                  </span>
+                  <span className="text-3xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">
+                    Cliquez pour ajouter directement
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCatalogTray(!showCatalogTray)}
+                  className="text-xs text-gray-500 hover:text-navy font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  {showCatalogTray ? (
+                    <>
+                      <span>Masquer</span>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Afficher</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {showCatalogTray && (
+                <div className="space-y-3 pt-1 border-t border-gray-100 animate-fadeIn">
+                  {/* Category groups */}
+                  <div>
+                    <span className="text-3xs font-black uppercase text-gray-400 tracking-wider">
+                      Entretien courant (TTC)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {CATALOG_ITEMS.filter((i) => i.category === "Entretien").map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleAddCatalogItem(item)}
+                          className="px-2.5 py-1.5 bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer group"
+                        >
+                          <span>{item.designation}</span>
+                          <span className="font-mono font-bold bg-white px-1.5 py-0.2 rounded text-blue-700 border border-blue-200 text-3xs">
+                            {item.price_ttc} DH
+                          </span>
+                          <Plus className="w-3 h-3 text-blue-500 group-hover:scale-125 transition-transform" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-3xs font-black uppercase text-gray-400 tracking-wider">
+                      Freinage & Batterie (TTC)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {CATALOG_ITEMS.filter((i) => i.category === "Freinage & Batterie").map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleAddCatalogItem(item)}
+                          className="px-2.5 py-1.5 bg-amber-50/80 hover:bg-amber-100 text-amber-950 border border-amber-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer group"
+                        >
+                          <span>{item.designation}</span>
+                          <span className="font-mono font-bold bg-white px-1.5 py-0.2 rounded text-amber-800 border border-amber-200 text-3xs">
+                            {item.price_ttc} DH
+                          </span>
+                          <Plus className="w-3 h-3 text-amber-600 group-hover:scale-125 transition-transform" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-3xs font-black uppercase text-gray-400 tracking-wider">
+                      Pneumatiques (TTC standard)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {CATALOG_ITEMS.filter((i) => i.category === "Pneumatiques").map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleAddCatalogItem(item)}
+                          className="px-2.5 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-950 border border-emerald-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer group"
+                        >
+                          <span>{item.designation}</span>
+                          <span className="font-mono font-bold bg-white px-1.5 py-0.2 rounded text-emerald-800 border border-emerald-200 text-3xs">
+                            {item.price_ttc} DH
+                          </span>
+                          <Plus className="w-3 h-3 text-emerald-600 group-hover:scale-125 transition-transform" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Add custom service */}
+                  <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-600">Autre prestation :</span>
+                    <input
+                      type="text"
+                      placeholder="Ex: Remplacement filtre à air..."
+                      value={customDesignation}
+                      onChange={(e) => setCustomDesignation(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-800 focus:ring-1 focus:ring-navy outline-none flex-1 min-w-[180px] bg-white"
+                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        placeholder="Prix TTC"
+                        value={customPriceTTC}
+                        onChange={(e) => setCustomPriceTTC(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-800 w-24 focus:ring-1 focus:ring-navy outline-none bg-white font-mono"
+                      />
+                      <span className="text-xs text-gray-500 font-semibold">DH</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddCustomItem}
+                      className="px-3 py-1 bg-navy hover:bg-navy/90 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Ajouter</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ========================================================= */}
           {/* THE OFFICIAL BON DE COMMANDE SHEET (Exact Template Match)  */}
           {/* ========================================================= */}

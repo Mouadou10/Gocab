@@ -52,18 +52,6 @@ export interface BonDeCommandeData {
 export const CATALOG_ITEMS: CatalogItem[] = [
   // Photo 1: Prestations d'entretien & mécaniques
   {
-    id: "vidange_castrol_5w30_pack",
-    category: "Entretien",
-    designation: "Vidange Castrol 5W30 ECT 5L (480dhs TTC) + Filtre à Huile (50Dhs TTC)",
-    price_ttc: 530,
-  },
-  {
-    id: "vidange_castrol_5w30_simple",
-    category: "Entretien",
-    designation: "Vidange Castrol 5W30 ECT 5L",
-    price_ttc: 480,
-  },
-  {
     id: "filtre_a_huile",
     category: "Entretien",
     designation: "Filtre à Huile",
