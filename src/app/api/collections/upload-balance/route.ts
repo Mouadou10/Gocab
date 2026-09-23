@@ -157,6 +157,15 @@ export async function POST(request: NextRequest) {
     for (const v of allVehicles) {
       const pNorm = normalizePlate(v.plate_number);
       if (pNorm) plateMap.set(pNorm, v);
+      if (v.notes) {
+        const match = v.notes.match(/Ancien\s*N°?:\s*([A-Za-z0-9-]+)/i);
+        if (match && match[1]) {
+          const oldNorm = normalizePlate(match[1]);
+          if (oldNorm && !plateMap.has(oldNorm)) {
+            plateMap.set(oldNorm, v);
+          }
+        }
+      }
     }
 
     // Detect column headers dynamically from the CSV
@@ -237,6 +246,13 @@ export async function POST(request: NextRequest) {
         const normPlate = normalizePlate(rawPlate);
         if (normPlate) {
           vehicle = plateMap.get(normPlate);
+          if (!vehicle && rawPhone) {
+            const pNorm = normalizePhone(rawPhone);
+            const d = pNorm ? phoneMap.get(pNorm) : undefined;
+            if (d?.assignedVehicleId) {
+              vehicle = allVehicles.find((av) => av.id === d.assignedVehicleId) || null;
+            }
+          }
           if (!vehicle) {
             try {
               vehicle = await prisma.vehicle.create({

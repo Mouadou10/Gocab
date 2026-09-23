@@ -16,6 +16,7 @@ interface VehicleUploadSummary {
   inserted: number;
   updated: number;
   skipped_invalid: number;
+  archived_orphans?: number;
   linked_drivers?: number;
   tickets_created?: number;
   tickets_updated?: number;
@@ -99,6 +100,9 @@ export default function VehicleCSVUploader({
 
       setSummary(data.summary);
       let msg = `${data.summary.inserted} véhicules ajoutés, ${data.summary.updated} mis à jour`;
+      if (data.summary.archived_orphans > 0) {
+        msg += ` · 📦 ${data.summary.archived_orphans} doublons/absents archivés`;
+      }
       if (data.summary.tickets_created > 0 || data.summary.tickets_resolved > 0) {
         msg += ` · 🎫 ${data.summary.tickets_created || 0} tickets créés, ${data.summary.tickets_resolved || 0} résolus`;
       }
@@ -224,6 +228,12 @@ export default function VehicleCSVUploader({
                   <p className="text-emerald-800 font-semibold">Tickets Remis en Service</p>
                   <p className="text-base font-bold text-emerald-900">✓ {summary.tickets_resolved || 0} résolus</p>
                 </div>
+                {(summary.archived_orphans || 0) > 0 && (
+                  <div className="p-3 bg-slate-100 rounded-xl border border-slate-200 col-span-2">
+                    <p className="text-slate-600 font-semibold">Doublons / Véhicules absents archivés</p>
+                    <p className="text-base font-bold text-slate-800">📦 {summary.archived_orphans} archivés pour conformité CSV</p>
+                  </div>
+                )}
               </div>
               {summary.skipped_invalid > 0 && (
                 <p className="text-xs text-amber-700 flex items-center gap-1.5 mt-2">

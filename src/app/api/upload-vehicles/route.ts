@@ -161,11 +161,25 @@ export async function POST(request: NextRequest) {
     const allExistingVehicles = await prisma.vehicle.findMany();
     const vehicleByPlate = new Map<string, typeof allExistingVehicles[0]>();
     const vehicleByNorm = new Map<string, typeof allExistingVehicles[0]>();
+    const vehicleByVin = new Map<string, typeof allExistingVehicles[0]>();
+    const vehicleByOldPlate = new Map<string, typeof allExistingVehicles[0]>();
 
     for (const v of allExistingVehicles) {
       if (v.plate_number) {
         vehicleByPlate.set(v.plate_number.toUpperCase().trim(), v);
         vehicleByNorm.set(normalizePlate(v.plate_number), v);
+      }
+      if (v.vin) {
+        vehicleByVin.set(v.vin.toUpperCase().trim(), v);
+      }
+      if (v.notes) {
+        const match = v.notes.match(/Ancien\s*N°?:\s*([A-Za-z0-9-]+)/i);
+        if (match && match[1]) {
+          const oldClean = cleanPlateInput(match[1]);
+          const oldNorm = normalizePlate(match[1]);
+          if (oldClean) vehicleByOldPlate.set(oldClean, v);
+          if (oldNorm) vehicleByOldPlate.set(oldNorm, v);
+        }
       }
     }
 
@@ -209,6 +223,8 @@ export async function POST(request: NextRequest) {
     let tickets_created = 0;
     let tickets_updated = 0;
     let tickets_resolved = 0;
+    let archived_orphans = 0;
+    const processedVehicleIds = new Set<string>();
 
     // Filter valid rows and parse them
     interface ParsedRow {
@@ -217,6 +233,8 @@ export async function POST(request: NextRequest) {
       make_model: string;
       year: number;
       vin: string | null;
+      oldNumber: string | null;
+      regNu: string | null;
       driverName: string | null;
       status: string;
       insurancePolicy: string | null;
@@ -293,6 +311,8 @@ export async function POST(request: NextRequest) {
         make_model,
         year,
         vin,
+        oldNumber: oldNumber || null,
+        regNu: regNu || null,
         driverName,
         status,
         insurancePolicy,
@@ -332,7 +352,32 @@ export async function POST(request: NextRequest) {
       await Promise.all(
         chunk.map(async (item) => {
           try {
-            const existing = vehicleByPlate.get(item.plate_number) || vehicleByNorm.get(item.normPlate);
+            let existing = vehicleByPlate.get(item.plate_number) || vehicleByNorm.get(item.normPlate);
+
+            // 1. Try matching by VIN (handles license plate transitions like WW -> permanent)
+            if (!existing && item.vin) {
+              const cleanVin = item.vin.toUpperCase().trim();
+              existing = vehicleByVin.get(cleanVin);
+            }
+
+            // 2. Try matching by Old Number
+            if (!existing && item.oldNumber) {
+              const cleanOld = cleanPlateInput(item.oldNumber);
+              const normOld = normalizePlate(item.oldNumber);
+              existing =
+                vehicleByPlate.get(cleanOld) ||
+                vehicleByNorm.get(normOld) ||
+                vehicleByOldPlate.get(cleanOld) ||
+                vehicleByOldPlate.get(normOld);
+            }
+
+            // 3. Try matching by Registration Number
+            if (!existing && item.regNu) {
+              const cleanReg = cleanPlateInput(item.regNu);
+              const normReg = normalizePlate(item.regNu);
+              existing = vehicleByPlate.get(cleanReg) || vehicleByNorm.get(normReg);
+            }
+
             let vehicleId: string;
 
             if (!existing) {
@@ -356,27 +401,50 @@ export async function POST(request: NextRequest) {
               vehicleId = newVehicle.id;
               vehicleByPlate.set(item.plate_number, newVehicle);
               vehicleByNorm.set(item.normPlate, newVehicle);
+              if (newVehicle.vin) vehicleByVin.set(newVehicle.vin.toUpperCase().trim(), newVehicle);
               inserted++;
             } else {
+              let notesToSave = item.notes || existing.notes;
+              const previousPlate = existing.plate_number;
+              if (previousPlate !== item.plate_number) {
+                const transitionNote = `Ancien N°: ${previousPlate}`;
+                if (!notesToSave || !notesToSave.includes(previousPlate)) {
+                  notesToSave = notesToSave ? `${notesToSave} · ${transitionNote}` : transitionNote;
+                }
+
+                // Update any maintenance tickets still under previous plate
+                await prisma.maintenanceTicket.updateMany({
+                  where: { vehicle_id: existing.id },
+                  data: { plate_number: item.plate_number },
+                }).catch(() => {});
+              }
+
               const updatedVehicle = await prisma.vehicle.update({
                 where: { id: existing.id },
                 data: {
+                  plate_number: item.plate_number,
                   make_model: item.make_model,
                   year: item.year,
                   vin: item.vin || existing.vin,
                   hub_city: item.hub_city,
                   status: item.status,
+                  is_archived: false,
                   total_downtime_days: item.downtimeDays || existing.total_downtime_days,
                   insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
                   isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
                   assigned_driver_name: item.driverName || existing.assigned_driver_name,
                   assigned_supervisor: item.manager || existing.assigned_supervisor,
-                  notes: item.notes || existing.notes,
+                  notes: notesToSave,
                 },
               });
               vehicleId = updatedVehicle.id;
+              vehicleByPlate.set(item.plate_number, updatedVehicle);
+              vehicleByNorm.set(item.normPlate, updatedVehicle);
+              if (updatedVehicle.vin) vehicleByVin.set(updatedVehicle.vin.toUpperCase().trim(), updatedVehicle);
               updated++;
             }
+
+            processedVehicleIds.add(vehicleId);
 
             // Driver profile auto-link
             let matchedDriver: any = null;
@@ -602,8 +670,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reconcile fleet against CSV (Single Source of Truth)
+    // Archive any vehicles in DB not present in the CSV so ghost/duplicate records are removed
+    const ghostVehicles = allExistingVehicles.filter(
+      (v) => !processedVehicleIds.has(v.id) && !v.is_archived && v.plate_number !== "TEST"
+    );
+
+    if (ghostVehicles.length > 0) {
+      await prisma.vehicle.updateMany({
+        where: { id: { in: ghostVehicles.map((v) => v.id) } },
+        data: {
+          is_archived: true,
+          status: "Archived",
+          notes: "Archivé automatiquement : absent du fichier CSV de la flotte synchronisé.",
+        },
+      });
+      archived_orphans = ghostVehicles.length;
+    }
+
     // Trigger sync state update
     void touchSyncState("all");
+    void touchSyncState("vehicles");
 
     return NextResponse.json({
       success: true,
@@ -611,6 +698,7 @@ export async function POST(request: NextRequest) {
         total_rows,
         inserted,
         updated,
+        archived_orphans,
         skipped_invalid,
         linked_drivers,
         tickets_created,
