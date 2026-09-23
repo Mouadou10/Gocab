@@ -34,6 +34,7 @@ import {
   CheckCircle2,
   Flame,
   Check,
+  Archive,
 } from "lucide-react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
@@ -58,6 +59,7 @@ export default function SupportTicketsView() {
   const [selectedType, setSelectedType] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
   const [showBreachedOnly, setShowBreachedOnly] = useState(false);
+  const [showArchivedResolved, setShowArchivedResolved] = useState(false);
   
   // DND State
   const [activeDragTicket, setActiveDragTicket] = useState<MaintenanceTicket | null>(null);
@@ -283,7 +285,7 @@ export default function SupportTicketsView() {
       });
 
       if (res.ok) {
-        toast.success("Ticket resolved successfully");
+        toast.success("Ticket résolu et archivé dans l'historique");
         setResolvingTicket(null);
         fetchTickets();
         notifyMutation("tickets");
@@ -461,7 +463,7 @@ export default function SupportTicketsView() {
       if (res.ok) {
         toast.success(
           newStatus === "RESOLVED"
-            ? "Ticket résolu avec succès"
+            ? "Ticket résolu et archivé dans l'historique"
             : newStatus === "IN_PROGRESS"
             ? (accidentStep ? `Étape enregistrée : ${accidentStep} (Passé En cours)` : "Ticket passé En cours")
             : "Ticket replacé en Ouvert"
@@ -517,7 +519,7 @@ export default function SupportTicketsView() {
       });
 
       if (res.ok) {
-        toast.success(`✅ Opération terminée & Ticket résolu automatiquement (${ticket.plate_number})`);
+        toast.success(`✅ Opération terminée & Ticket résolu et archivé (${ticket.plate_number})`);
         fetchTickets();
         notifyMutation("tickets");
       } else {
@@ -622,8 +624,8 @@ export default function SupportTicketsView() {
       if (res.ok) {
         toast.success(
           targetStatus === "RESOLVED"
-            ? "Ticket marked as resolved"
-            : `Ticket moved to ${targetStatus === "IN_PROGRESS" ? "In Progress" : "Open"}`
+            ? "Ticket résolu et archivé dans l'historique"
+            : `Ticket déplacé vers ${targetStatus === "IN_PROGRESS" ? "En cours" : "Ouvert"}`
         );
         fetchTickets();
         notifyMutation("tickets");
@@ -639,6 +641,12 @@ export default function SupportTicketsView() {
   };
 
   function getTicketsByStatus(status: string) {
+    if (status === "RESOLVED") {
+      const isSearching = Boolean(searchTerm.trim());
+      if (!isSearching && !showArchivedResolved) {
+        return [];
+      }
+    }
     let filtered = tickets.filter((t) => t.status === status);
     if (selectedPriority) {
       filtered = filtered.filter(
@@ -677,7 +685,7 @@ export default function SupportTicketsView() {
   const slaTarget = 95;
 
   const hasActiveFilters = Boolean(
-    searchTerm || selectedType || selectedPriority || showBreachedOnly
+    searchTerm || selectedType || selectedPriority || showBreachedOnly || showArchivedResolved
   );
 
   const clearFilters = () => {
@@ -685,6 +693,7 @@ export default function SupportTicketsView() {
     setSelectedType("");
     setSelectedPriority("");
     setShowBreachedOnly(false);
+    setShowArchivedResolved(false);
   };
 
   return (
@@ -780,6 +789,28 @@ export default function SupportTicketsView() {
                 }`}
               >
                 {breachedCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowArchivedResolved((v) => !v)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              showArchivedResolved
+                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                : "bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Voir archivés</span>
+            {resolvedCount > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  showArchivedResolved ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-800"
+                }`}
+              >
+                {resolvedCount}
               </span>
             )}
           </button>
@@ -960,6 +991,10 @@ export default function SupportTicketsView() {
                   key={col}
                   columnId={col}
                   tickets={getTicketsByStatus(col)}
+                  isSearching={Boolean(searchTerm.trim())}
+                  showArchived={showArchivedResolved}
+                  totalArchivedCount={resolvedCount}
+                  onToggleShowArchived={() => setShowArchivedResolved((v) => !v)}
                   getDowntimeDuration={getDowntimeDuration}
                   onWaiveClick={(t) => {
                     setWaiverTicket(t);

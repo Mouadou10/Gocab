@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search") || "";
+    const search = (searchParams.get("search") || "").trim();
     const status = searchParams.get("status") || "";
     const type = searchParams.get("type") || "";
 
@@ -24,6 +24,8 @@ export async function GET(request: Request) {
         { driver_name: { contains: search } },
         { driver_phone: { contains: search } },
         { description: { contains: search } },
+        { garage_name: { contains: search } },
+        { resolution_notes: { contains: search } },
       ];
     }
 

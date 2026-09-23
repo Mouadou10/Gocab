@@ -33,12 +33,14 @@ export async function PATCH(
         targetStatus = "RESOLVED";
         targetAccidentStep = "VEHICLE_BACK";
         updateData.status = "RESOLVED";
+        updateData.is_archived = true;
         updateData.resolved_at = new Date();
         updateData.field_status = "READY_FOR_PICKUP";
       } else if (targetAccidentStep === "NEW_ACCIDENT" || targetStatus === "OPEN") {
         targetStatus = "OPEN";
         targetAccidentStep = "NEW_ACCIDENT";
         updateData.status = "OPEN";
+        updateData.is_archived = false;
         updateData.resolved_at = null;
         updateData.field_status = null;
       } else if (targetAccidentStep || targetStatus === "IN_PROGRESS") {
@@ -47,6 +49,7 @@ export async function PATCH(
           targetAccidentStep = "CAR_IN_GARAGE";
         }
         updateData.status = "IN_PROGRESS";
+        updateData.is_archived = false;
         updateData.resolved_at = null;
         updateData.field_status = null;
       }
@@ -97,6 +100,7 @@ export async function PATCH(
     if (body.repair_cost !== undefined) updateData.repair_cost = body.repair_cost !== null ? Number(body.repair_cost) : null;
     if (body.garage_name !== undefined) updateData.garage_name = body.garage_name;
     if (body.resolution_notes !== undefined) updateData.resolution_notes = body.resolution_notes;
+    if (body.is_archived !== undefined) updateData.is_archived = Boolean(body.is_archived);
 
     const ticket = await prisma.maintenanceTicket.update({
       where: { id },
