@@ -452,17 +452,52 @@ export async function POST(request: NextRequest) {
               const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
               matchedDriver = driverByName.get(cleanTarget);
 
+              // Fallback word matching
+              if (!matchedDriver) {
+                const words = cleanTarget.split(" ").filter((w: string) => w.length >= 3);
+                if (words.length >= 2) {
+                  for (const [key, d] of driverByName.entries()) {
+                    if (words.every((w: string) => key.includes(w))) {
+                      matchedDriver = d;
+                      break;
+                    }
+                  }
+                }
+              }
+
               if (matchedDriver) {
                 if (matchedDriver.assignedVehicleId !== vehicleId) {
+                  // Release this vehicle from ANY other driver first to prevent unique constraint violation
+                  await prisma.driverProfile.updateMany({
+                    where: { assignedVehicleId: vehicleId, id: { not: matchedDriver.id } },
+                    data: { assignedVehicleId: null },
+                  });
+                  for (const d of allDrivers) {
+                    if (d.assignedVehicleId === vehicleId && d.id !== matchedDriver.id) {
+                      d.assignedVehicleId = null;
+                    }
+                  }
+
                   await prisma.driverProfile.update({
                     where: { id: matchedDriver.id },
                     data: { assignedVehicleId: vehicleId },
-                  }).catch(() => {});
+                  });
                   matchedDriver.assignedVehicleId = vehicleId;
                 }
                 linked_drivers++;
               } else {
                 try {
+                  // Release this vehicle from ANY other driver first
+                  await prisma.driverProfile.updateMany({
+                    where: { assignedVehicleId: vehicleId },
+                    data: { assignedVehicleId: null },
+                  });
+                  for (const d of allDrivers) {
+                    if (d.assignedVehicleId === vehicleId) {
+                      d.assignedVehicleId = null;
+                    }
+                  }
+
                   const newDriver = await prisma.driverProfile.create({
                     data: {
                       fullName: item.driverName,
@@ -480,6 +515,7 @@ export async function POST(request: NextRequest) {
                   });
                   matchedDriver = newDriver;
                   driverByName.set(cleanTarget, newDriver);
+                  allDrivers.push(newDriver as any);
                   linked_drivers++;
                 } catch (e) {
                   // Ignore duplicate key if concurrently inserted
@@ -690,7 +726,6 @@ export async function POST(request: NextRequest) {
 
     // Trigger sync state update
     void touchSyncState("all");
-    void touchSyncState("vehicles");
 
     return NextResponse.json({
       success: true,

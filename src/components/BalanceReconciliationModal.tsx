@@ -47,6 +47,12 @@ interface ReconciliationSummary {
   paidCount: number;
   partialCount: number;
   unpaidCount: number;
+  vehiclesReassignedCount?: number;
+  reassignedVehicles?: {
+    plate: string;
+    previousDriver: string;
+    newDriver: string;
+  }[];
 }
 
 interface BalanceReconciliationModalProps {
@@ -373,6 +379,22 @@ export default function BalanceReconciliationModal({
                   </div>
                 )}
               </div>
+
+              {/* Reassigned Vehicles Resume */}
+              {summary.reassignedVehicles && summary.reassignedVehicles.length > 0 && (
+                <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 text-xs text-blue-900 space-y-1.5">
+                  <p className="font-bold flex items-center gap-1.5 text-blue-950">
+                    <span>🔄</span> {summary.reassignedVehicles.length} Véhicule(s) synchronisé(s) et réassigné(s) selon le CSV :
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-2xs">
+                    {summary.reassignedVehicles.map((r: any, idx: number) => (
+                      <span key={idx} className="bg-white/90 border border-blue-200 px-2.5 py-1 rounded-xl shadow-2xs">
+                        <strong className="text-navy font-mono">{r.plate}</strong> : <span className="line-through text-gray-500">{r.previousDriver}</span> ➔ <strong className="text-emerald-700">{r.newDriver}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Navigation Tabs between Matched & Unmatched */}
               <div className="flex items-center justify-between gap-4 pt-2">

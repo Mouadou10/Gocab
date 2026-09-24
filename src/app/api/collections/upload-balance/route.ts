@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
 
     const matchedDriversList: any[] = [];
     const unmatchedRows: any[] = [];
+    const reassignedVehicles: { plate: string; previousDriver: string; newDriver: string }[] = [];
     const processedDriverIds = new Set<string>();
     let totalCollectedToday = 0;
     let paidCount = 0;
@@ -293,10 +294,6 @@ export async function POST(request: NextRequest) {
         driver = cinMap.get(rawCin.toUpperCase().trim());
       }
 
-      if (!driver && vehicle?.id) {
-        driver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
-      }
-
       if (!driver && rawName) {
         const nNorm = normalizeName(rawName);
         driver = nameMap.get(nNorm);
@@ -314,6 +311,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // ONLY if driver is still not found AND rawName is absent/empty in CSV row,
+      // fallback to the vehicle's current assigned driver
+      if (!driver && !rawName && vehicle?.id) {
+        driver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
+      }
+
       // If driver is not found in DB, auto-enroll driver from CSV (SSOT)
       if (!driver) {
         const pDigits = normalizePhone(rawPhone);
@@ -325,6 +328,20 @@ export async function POST(request: NextRequest) {
           : `CIN-${Math.floor(100000 + Math.random() * 900000)}`;
 
         try {
+          // If vehicle is being linked to this new driver, safely unassign any prior driver
+          if (vehicle?.id) {
+            await prisma.driverProfile.updateMany({
+              where: { assignedVehicleId: vehicle.id },
+              data: { assignedVehicleId: null },
+            });
+            for (const d of allDrivers) {
+              if (d.assignedVehicleId === vehicle.id) {
+                d.assignedVehicleId = null;
+                (d as any).assignedVehicle = null;
+              }
+            }
+          }
+
           const newDriver = await prisma.driverProfile.create({
             data: {
               fullName: rawName || `Chauffeur ${rawPlate || "CSV"}`,
@@ -349,6 +366,16 @@ export async function POST(request: NextRequest) {
           if (rawName) nameMap.set(normalizeName(rawName), newDriver as any);
           cinMap.set(cinFormatted, newDriver as any);
           newDriversCreated++;
+
+          if (vehicle?.id && newDriver) {
+            await prisma.vehicle.update({
+              where: { id: vehicle.id },
+              data: {
+                assigned_driver_name: newDriver.fullName,
+                assigned_driver_phone: newDriver.phoneSanitized,
+              },
+            }).catch(() => {});
+          }
         } catch (err) {
           console.warn("Auto-create driver failed from CSV row:", err);
         }
@@ -368,11 +395,48 @@ export async function POST(request: NextRequest) {
 
       // Link vehicle if not yet linked
       if (vehicle && driver.assignedVehicleId !== vehicle.id) {
+        // Release vehicle from any other driver currently assigned to it
+        await prisma.driverProfile.updateMany({
+          where: { assignedVehicleId: vehicle.id, id: { not: driver.id } },
+          data: { assignedVehicleId: null },
+        });
+        for (const d of allDrivers) {
+          if (d.assignedVehicleId === vehicle.id && d.id !== driver.id) {
+            reassignedVehicles.push({
+              plate: vehicle.plate_number,
+              previousDriver: d.fullName,
+              newDriver: driver.fullName,
+            });
+            d.assignedVehicleId = null;
+            (d as any).assignedVehicle = null;
+          }
+        }
+
         await prisma.driverProfile.update({
           where: { id: driver.id },
           data: { assignedVehicleId: vehicle.id },
-        }).catch(() => {});
+        });
+        driver.assignedVehicleId = vehicle.id;
         (driver as any).assignedVehicle = vehicle;
+
+        await prisma.vehicle.update({
+          where: { id: vehicle.id },
+          data: {
+            assigned_driver_name: driver.fullName,
+            assigned_driver_phone: driver.phoneSanitized || null,
+          },
+        }).catch(() => {});
+      } else if (vehicle && driver.assignedVehicleId === vehicle.id) {
+        // Keep vehicle assigned driver metadata strictly in sync
+        if (vehicle.assigned_driver_name !== driver.fullName) {
+          await prisma.vehicle.update({
+            where: { id: vehicle.id },
+            data: {
+              assigned_driver_name: driver.fullName,
+              assigned_driver_phone: driver.phoneSanitized || null,
+            },
+          }).catch(() => {});
+        }
       }
 
       // Contract detection & expected amount
@@ -620,6 +684,8 @@ export async function POST(request: NextRequest) {
         totalCollectedTodayMAD: totalCollectedToday,
         newDriversCreated,
         newVehiclesCreated,
+        vehiclesReassignedCount: reassignedVehicles.length,
+        reassignedVehicles,
         paidCount,
         partialCount,
         unpaidCount,

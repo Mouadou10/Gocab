@@ -53,21 +53,48 @@ export async function GET(request: NextRequest) {
     const daysCount = daysInRange.length;
 
     // Fetch all drivers with assigned vehicle and payment ledger in date range
-    const drivers = await prisma.driverProfile.findMany({
-      include: {
-        assignedVehicle: true,
-        payments: {
-          where: {
-            paymentDate: {
-              gte: startOfRange,
-              lte: endOfRange,
+    const [drivers, allVehicles] = await Promise.all([
+      prisma.driverProfile.findMany({
+        include: {
+          assignedVehicle: true,
+          payments: {
+            where: {
+              paymentDate: {
+                gte: startOfRange,
+                lte: endOfRange,
+              },
             },
+            orderBy: { paymentDate: "asc" },
           },
-          orderBy: { paymentDate: "asc" },
         },
-      },
-      orderBy: { fullName: "asc" },
-    });
+        orderBy: { fullName: "asc" },
+      }),
+      prisma.vehicle.findMany({
+        where: { is_archived: false },
+        select: {
+          id: true,
+          plate_number: true,
+          make_model: true,
+          status: true,
+          assigned_driver_name: true,
+          assigned_driver_phone: true,
+        },
+      }),
+    ]);
+
+    // Build fallback lookup maps for vehicles by driver phone and name
+    const vehicleByDriverPhone = new Map<string, typeof allVehicles[0]>();
+    const vehicleByDriverName = new Map<string, typeof allVehicles[0]>();
+    for (const v of allVehicles) {
+      if (v.assigned_driver_phone) {
+        const cleanP = v.assigned_driver_phone.replace(/\D/g, "").slice(-9);
+        if (cleanP) vehicleByDriverPhone.set(cleanP, v);
+      }
+      if (v.assigned_driver_name) {
+        const cleanN = v.assigned_driver_name.toLowerCase().replace(/\s+/g, " ").trim();
+        if (cleanN) vehicleByDriverName.set(cleanN, v);
+      }
+    }
 
     // Check if morning or evening CSV was uploaded in this target date range
     const hasMorningCsv = drivers.some((d) =>
@@ -166,20 +193,44 @@ export async function GET(request: NextRequest) {
       const firstPayment = driver.payments[0];
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
 
+      let resolvedVehicle = driver.assignedVehicle
+        ? {
+            id: driver.assignedVehicle.id,
+            plate_number: driver.assignedVehicle.plate_number,
+            make_model: driver.assignedVehicle.make_model,
+            status: driver.assignedVehicle.status,
+          }
+        : null;
+
+      if (!resolvedVehicle) {
+        const cleanP = driver.phoneSanitized?.replace(/\D/g, "").slice(-9);
+        let fbV = cleanP ? vehicleByDriverPhone.get(cleanP) : null;
+        if (!fbV && driver.fullName) {
+          const cleanN = driver.fullName.toLowerCase().replace(/\s+/g, " ").trim();
+          fbV = vehicleByDriverName.get(cleanN) || null;
+        }
+        if (fbV) {
+          resolvedVehicle = {
+            id: fbV.id,
+            plate_number: fbV.plate_number,
+            make_model: fbV.make_model,
+            status: fbV.status,
+          };
+          // Self-heal in background
+          prisma.driverProfile.updateMany({
+            where: { id: driver.id, assignedVehicleId: null },
+            data: { assignedVehicleId: fbV.id },
+          }).catch(() => {});
+        }
+      }
+
       return {
         id: driver.id,
         fullName: driver.fullName,
         phoneSanitized: driver.phoneSanitized,
         cinNumber: driver.cinNumber,
         contractType: contract,
-        vehicle: driver.assignedVehicle
-          ? {
-              id: driver.assignedVehicle.id,
-              plate_number: driver.assignedVehicle.plate_number,
-              make_model: driver.assignedVehicle.make_model,
-              status: driver.assignedVehicle.status,
-            }
-          : null,
+        vehicle: resolvedVehicle,
         currentArrearsMAD: currentArrears,
         consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
         isCriticalRed,

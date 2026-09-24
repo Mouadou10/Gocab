@@ -188,14 +188,13 @@ export async function POST(request: NextRequest) {
         assignedVehicleId = matchedVehicle.id;
       }
 
-      // Check if driver already exists by phone, CIN, Name, or previous vehicle link
+      // Check if driver already exists strictly by identity (phone, CIN, or Name)
       const existing = await prisma.driverProfile.findFirst({
         where: {
           OR: [
             rawPhone ? { phoneSanitized } : null,
             rawCin ? { cinNumber } : null,
             { fullName },
-            assignedVehicleId ? { assignedVehicleId } : null,
           ].filter(Boolean) as any,
         },
       });
@@ -203,6 +202,14 @@ export async function POST(request: NextRequest) {
       let driverRecord;
 
       if (!existing) {
+        // Release vehicle from any prior driver before assigning to new driver
+        if (assignedVehicleId) {
+          await prisma.driverProfile.updateMany({
+            where: { assignedVehicleId },
+            data: { assignedVehicleId: null },
+          });
+        }
+
         driverRecord = await prisma.driverProfile.create({
           data: {
             fullName,
@@ -236,6 +243,14 @@ export async function POST(request: NextRequest) {
       } else {
         // Update existing driver profile with real contact info, while preserving or updating vehicle
         const finalVehicleId = assignedVehicleId || existing.assignedVehicleId;
+
+        // If assigning a vehicle, ensure no other driver is currently holding it
+        if (finalVehicleId) {
+          await prisma.driverProfile.updateMany({
+            where: { assignedVehicleId: finalVehicleId, id: { not: existing.id } },
+            data: { assignedVehicleId: null },
+          });
+        }
 
         driverRecord = await prisma.driverProfile.update({
           where: { id: existing.id },
