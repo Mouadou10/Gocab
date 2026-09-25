@@ -195,16 +195,10 @@ export default function FleetPerformanceView() {
     fetchActiveRecoveryTasks();
   }, [fetchActiveRecoveryTasks]);
 
-  // Trigger call & create Vehicle Recovery task for Field Supervisors
+  // Trigger call & create Vehicle Recovery task on Ticket Page, Vehicle Recovery Page, and Telegram
   async function handleCallAndCreateRecovery(driver: DriverDailyItem) {
     setTriggeringRecoveryId(driver.id);
 
-    // 1. Immediately trigger the phone call
-    if (driver.phoneSanitized) {
-      window.open(`tel:${driver.phoneSanitized}`, "_self");
-    }
-
-    // 2. Create the Vehicle Recovery task on the Field Supervisor page
     try {
       const daysUnpaid = driver.consecutiveUnpaidDays || Math.ceil(driver.currentArrearsMAD / 300) || 1;
       const res = await fetch("/api/field-tasks", {
@@ -224,13 +218,23 @@ export default function FleetPerformanceView() {
       });
 
       if (res.ok) {
-        toast.success(`🚨 Ticket de récupération créé sur la page Terrain pour ${driver.fullName} !`);
+        toast.success(
+          `🚨 Ticket créé sur la page Tickets + Récupération Véhicule + Notification Telegram envoyée pour ${driver.fullName} !`
+        );
         setActiveRecoveryDriverIds((prev) => ({
           ...prev,
           [driver.id]: true,
           [driver.phoneSanitized.replace(/\D/g, "")]: true,
           ...(driver.vehicle?.plate_number ? { [driver.vehicle.plate_number.replace(/\s+/g, "")]: true } : {}),
         }));
+        // Update driver's vehicle status locally to Blocked
+        setDrivers((prev) =>
+          prev.map((d) =>
+            d.id === driver.id && d.vehicle
+              ? { ...d, vehicle: { ...d.vehicle, status: "Blocked" } }
+              : d
+          )
+        );
       } else {
         const errData = await res.json();
         toast.error(errData.error || "Échec de création du ticket");
@@ -240,6 +244,14 @@ export default function FleetPerformanceView() {
       toast.error("Erreur lors de la création du ticket de récupération");
     } finally {
       setTriggeringRecoveryId(null);
+      if (driver.phoneSanitized) {
+        const a = document.createElement("a");
+        a.href = `tel:${driver.phoneSanitized}`;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     }
   }
 

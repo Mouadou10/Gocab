@@ -91,6 +91,41 @@ async function syncRecoveryTasksAndOrphans() {
         }
       }
     }
+
+    // 3. Bi-directional sync: Auto-create MaintenanceTicket on the Ticket page for any active VEHICLE_RECOVERY FieldTask missing linked_ticket_id
+    const unlinkedRecoveryTasks = await prisma.fieldTask.findMany({
+      where: {
+        task_type: "VEHICLE_RECOVERY",
+        status: { in: ["PENDING", "IN_PROGRESS"] },
+        linked_ticket_id: null,
+      },
+    });
+
+    for (const ft of unlinkedRecoveryTasks) {
+      const slaDeadline = new Date(new Date(ft.created_at).getTime() + 24 * 60 * 60 * 1000);
+      const createdTicket = await prisma.maintenanceTicket.create({
+        data: {
+          vehicle_id: ft.vehicle_id || "UNASSIGNED",
+          plate_number: ft.plate_number || "Véhicule non assigné",
+          driver_name: ft.driver_name,
+          driver_phone: ft.driver_phone,
+          ticket_type: "VEHICLE_RECOVERY",
+          description: ft.description || "Véhicule bloqué / Récupération terrain",
+          priority: ft.priority || "Critical",
+          status: ft.status === "IN_PROGRESS" ? "IN_PROGRESS" : "OPEN",
+          sla_deadline: slaDeadline,
+          is_archived: false,
+          created_at: ft.created_at,
+        },
+      }).catch(() => null);
+
+      if (createdTicket) {
+        await prisma.fieldTask.update({
+          where: { id: ft.id },
+          data: { linked_ticket_id: createdTicket.id },
+        }).catch(() => {});
+      }
+    }
   } catch (err: any) {
     console.warn("FieldTask background sync error:", err?.message || err);
   }
@@ -138,6 +173,8 @@ export async function GET(request: Request) {
 /**
  * POST /api/field-tasks
  * Creates a new field task (vehicle recovery, monthly checkup, garage pickup).
+ * When task_type is VEHICLE_RECOVERY, also creates the linked MaintenanceTicket on the Ticket page,
+ * updates the vehicle status to Blocked, and dispatches the Telegram alert.
  */
 export async function POST(request: Request) {
   try {
@@ -161,19 +198,148 @@ export async function POST(request: Request) {
       );
     }
 
-    const task = await prisma.fieldTask.create({
-      data: {
-        task_type: task_type.trim(),
-        vehicle_id: vehicle_id || null,
-        plate_number: plate_number ? plate_number.trim() : null,
-        driver_name: driver_name ? driver_name.trim() : null,
-        driver_phone: driver_phone ? driver_phone.trim() : null,
-        description: description.trim(),
-        priority: priority || "Normal",
-        linked_ticket_id: linked_ticket_id || null,
-        due_date: due_date ? new Date(due_date) : null,
-      },
-    });
+    const cleanType = task_type.trim();
+    const cleanDesc = description.trim();
+    const cleanDriverName = driver_name ? driver_name.trim() : null;
+    const cleanDriverPhone = driver_phone ? driver_phone.trim() : null;
+    let resolvedVehicleId: string | null = vehicle_id || null;
+    let resolvedPlate: string | null = plate_number ? plate_number.trim() : null;
+    let finalLinkedTicketId: string | null = linked_ticket_id || null;
+
+    // Resolve vehicle if VEHICLE_RECOVERY
+    if (cleanType === "VEHICLE_RECOVERY") {
+      const matchedVehicle = await prisma.vehicle.findFirst({
+        where: {
+          OR: [
+            ...(resolvedVehicleId ? [{ id: resolvedVehicleId }] : []),
+            ...(resolvedPlate && resolvedPlate !== "Véhicule non assigné"
+              ? [{ plate_number: resolvedPlate }]
+              : []),
+            ...(cleanDriverPhone ? [{ assigned_driver_phone: cleanDriverPhone }] : []),
+            ...(cleanDriverName ? [{ assigned_driver_name: cleanDriverName }] : []),
+          ],
+        },
+      }).catch(() => null);
+
+      if (matchedVehicle) {
+        resolvedVehicleId = matchedVehicle.id;
+        resolvedPlate = matchedVehicle.plate_number;
+
+        // Block vehicle in fleet
+        await prisma.vehicle.update({
+          where: { id: matchedVehicle.id },
+          data: { status: "Blocked" },
+        }).catch(() => {});
+      }
+
+      // Create or find the corresponding MaintenanceTicket on the Ticket Page (Support & Maintenance Kanban)
+      if (!finalLinkedTicketId) {
+        const existingOpenTicket = await prisma.maintenanceTicket.findFirst({
+          where: {
+            ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] },
+            status: { in: ["OPEN", "IN_PROGRESS"] },
+            OR: [
+              ...(resolvedVehicleId ? [{ vehicle_id: resolvedVehicleId }] : []),
+              ...(resolvedPlate && resolvedPlate !== "Véhicule non assigné"
+                ? [{ plate_number: resolvedPlate }]
+                : []),
+              ...(cleanDriverPhone ? [{ driver_phone: cleanDriverPhone }] : []),
+            ],
+          },
+        }).catch(() => null);
+
+        if (existingOpenTicket) {
+          finalLinkedTicketId = existingOpenTicket.id;
+          await prisma.maintenanceTicket.update({
+            where: { id: existingOpenTicket.id },
+            data: {
+              description: cleanDesc,
+              priority: priority || "Critical",
+              is_archived: false,
+            },
+          }).catch(() => {});
+        } else {
+          const slaDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const createdTicket = await prisma.maintenanceTicket.create({
+            data: {
+              vehicle_id: resolvedVehicleId || "UNASSIGNED",
+              plate_number: resolvedPlate || "Véhicule non assigné",
+              driver_name: cleanDriverName,
+              driver_phone: cleanDriverPhone,
+              ticket_type: "VEHICLE_RECOVERY",
+              description: cleanDesc,
+              priority: priority || "Critical",
+              status: "OPEN",
+              sla_deadline: slaDeadline,
+              is_archived: false,
+            },
+          });
+          finalLinkedTicketId = createdTicket.id;
+        }
+      }
+    }
+
+    // Create or update the FieldTask on the Vehicle Recovery Page (Field Supervisor)
+    let task;
+    if (cleanType === "VEHICLE_RECOVERY") {
+      const existingPendingTask = await prisma.fieldTask.findFirst({
+        where: {
+          task_type: "VEHICLE_RECOVERY",
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+          OR: [
+            ...(finalLinkedTicketId ? [{ linked_ticket_id: finalLinkedTicketId }] : []),
+            ...(resolvedVehicleId ? [{ vehicle_id: resolvedVehicleId }] : []),
+            ...(resolvedPlate && resolvedPlate !== "Véhicule non assigné"
+              ? [{ plate_number: resolvedPlate }]
+              : []),
+            ...(cleanDriverPhone ? [{ driver_phone: cleanDriverPhone }] : []),
+          ],
+        },
+      }).catch(() => null);
+
+      if (existingPendingTask) {
+        task = await prisma.fieldTask.update({
+          where: { id: existingPendingTask.id },
+          data: {
+            vehicle_id: resolvedVehicleId || existingPendingTask.vehicle_id,
+            plate_number: resolvedPlate || existingPendingTask.plate_number,
+            driver_name: cleanDriverName || existingPendingTask.driver_name,
+            driver_phone: cleanDriverPhone || existingPendingTask.driver_phone,
+            description: cleanDesc,
+            priority: priority || "Critical",
+            linked_ticket_id: finalLinkedTicketId || existingPendingTask.linked_ticket_id,
+          },
+        });
+      } else {
+        task = await prisma.fieldTask.create({
+          data: {
+            task_type: cleanType,
+            vehicle_id: resolvedVehicleId,
+            plate_number: resolvedPlate,
+            driver_name: cleanDriverName,
+            driver_phone: cleanDriverPhone,
+            description: cleanDesc,
+            priority: priority || "Critical",
+            linked_ticket_id: finalLinkedTicketId,
+            due_date: due_date ? new Date(due_date) : null,
+          },
+        });
+      }
+    } else {
+      task = await prisma.fieldTask.create({
+        data: {
+          task_type: cleanType,
+          vehicle_id: resolvedVehicleId,
+          plate_number: resolvedPlate,
+          driver_name: cleanDriverName,
+          driver_phone: cleanDriverPhone,
+          description: cleanDesc,
+          priority: priority || "Normal",
+          linked_ticket_id: finalLinkedTicketId,
+          due_date: due_date ? new Date(due_date) : null,
+        },
+      });
+    }
 
     const session = await auth();
     const triggered_by = body.triggered_by || session?.user?.name || "Fleet Performance Manager";
@@ -186,7 +352,11 @@ export async function POST(request: Request) {
       console.error("Non-blocking Telegram alert error:", err)
     );
 
-    return NextResponse.json({ task }, { status: 201 });
+    // Touch sync state so Ticket page and Field Recovery page immediately refresh
+    void touchSyncState("tickets");
+    void touchSyncState("all");
+
+    return NextResponse.json({ task, ticket_id: finalLinkedTicketId }, { status: 201 });
   } catch (error) {
     console.error("POST /api/field-tasks error:", error);
     return NextResponse.json({ error: "Failed to create field task" }, { status: 500 });
