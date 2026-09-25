@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
-import Papa from "papaparse";
+import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s execution on Vercel for bulk imports
@@ -127,25 +127,20 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "Aucun fichier CSV fourni." }, { status: 400 });
+      return NextResponse.json({ error: "Aucun fichier CSV ou Excel fourni." }, { status: 400 });
     }
 
-    let csvText = await file.text();
-    // Strip BOM if present
-    csvText = csvText.replace(/^\uFEFF/, "");
-
-    const { data, errors } = Papa.parse<Record<string, string>>(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""),
+    const { rows: rawRows } = await parseSpreadsheetFile(file);
+    const data = rawRows.map((row) => {
+      const normalized: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        normalized[k.trim().toLowerCase().replace(/^["']|["']$/g, "")] = v;
+      }
+      return normalized;
     });
 
-    if (errors.length > 0) {
-      console.warn("CSV parse warnings:", errors);
-    }
-
     if (!data || data.length === 0) {
-      return NextResponse.json({ error: "Le fichier CSV est vide." }, { status: 400 });
+      return NextResponse.json({ error: "Le fichier est vide ou illisible." }, { status: 400 });
     }
 
     // Helper to find column by multiple aliases

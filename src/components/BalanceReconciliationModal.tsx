@@ -85,17 +85,25 @@ export default function BalanceReconciliationModal({
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.name.endsWith(".csv") || droppedFile.type.includes("csv")) {
+      const lower = droppedFile.name.toLowerCase();
+      if (
+        lower.endsWith(".csv") ||
+        lower.endsWith(".xlsx") ||
+        lower.endsWith(".xls") ||
+        droppedFile.type.includes("csv") ||
+        droppedFile.type.includes("spreadsheet") ||
+        droppedFile.type.includes("excel")
+      ) {
         setFile(droppedFile);
       } else {
-        toast.error("Veuillez sélectionner un fichier CSV (.csv).");
+        toast.error("Veuillez sélectionner un fichier CSV (.csv) ou Excel (.xlsx, .xls).");
       }
     }
   }
 
   async function handleProcessCSV() {
     if (!file) {
-      toast.error("Veuillez sélectionner un fichier CSV.");
+      toast.error("Veuillez sélectionner un fichier CSV ou Excel (.xlsx).");
       return;
     }
 
@@ -159,7 +167,7 @@ export default function BalanceReconciliationModal({
               <FileSpreadsheet className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Import & Rapprochement des Soldes CSV</h2>
+              <h2 className="text-lg font-bold">Import & Rapprochement des Soldes (CSV / XLSX)</h2>
               <p className="text-xs text-white/70">
                 Mise à jour des soldes de départ et calcul automatique des encaissements de la journée
               </p>
@@ -264,7 +272,7 @@ export default function BalanceReconciliationModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
               className="hidden"
             />
@@ -290,10 +298,10 @@ export default function BalanceReconciliationModal({
             ) : (
               <div className="space-y-1">
                 <p className="text-sm font-bold text-gray-700">
-                  Glissez-déposez le fichier CSV ou cliquez pour parcourir
+                  Glissez-déposez le fichier CSV ou Excel (.xlsx) ou cliquez pour parcourir
                 </p>
                 <p className="text-xs text-gray-400">
-                  Prend en charge les exports Yassir / GoCab contenant les colonnes <code>Name</code>, <code>Phone Number</code> et <code>Balance</code>.
+                  Prend en charge les fichiers <code>.xlsx</code>, <code>.xls</code> et <code>.csv</code> contenant les colonnes <code>Name</code>, <code>Phone Number</code> et <code>Balance</code>.
                 </p>
               </div>
             )}

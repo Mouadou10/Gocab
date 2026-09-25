@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
-import Papa from "papaparse";
+import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 
 /**
  * Normalizes phone numbers to comparable digits-only format.
@@ -67,22 +67,12 @@ export async function POST(request: NextRequest) {
     const dateParam = (formData.get("date") as string) || new Date().toISOString().split("T")[0];
 
     if (!file) {
-      return NextResponse.json({ error: "Veuillez fournir un fichier CSV." }, { status: 400 });
+      return NextResponse.json({ error: "Veuillez fournir un fichier CSV ou Excel (.xlsx)." }, { status: 400 });
     }
 
-    const text = await file.text();
-    const parsed = Papa.parse<Record<string, string>>(text, {
-      header: true,
-      skipEmptyLines: true,
-    });
-
-    if (parsed.errors.length > 0 && parsed.data.length === 0) {
-      return NextResponse.json({ error: "Erreur de lecture du fichier CSV." }, { status: 400 });
-    }
-
-    const rows = parsed.data;
+    const { rows } = await parseSpreadsheetFile(file);
     if (rows.length === 0) {
-      return NextResponse.json({ error: "Le fichier CSV est vide." }, { status: 400 });
+      return NextResponse.json({ error: "Le fichier est vide ou illisible." }, { status: 400 });
     }
 
     // Determine target business date

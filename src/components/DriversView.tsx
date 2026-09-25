@@ -159,7 +159,7 @@ export default function DriversView() {
             className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-semibold border border-white/20 transition-colors shadow-2xs"
           >
             <Upload className="w-4 h-4 text-gold" />
-            <span>Importer CSV</span>
+            <span>Importer CSV / Excel</span>
           </button>
 
           <button

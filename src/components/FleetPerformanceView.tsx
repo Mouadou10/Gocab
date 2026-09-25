@@ -498,7 +498,7 @@ export default function FleetPerformanceView() {
               className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-navy font-black text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-navy" />
-              Importer Soldes CSV
+              Importer Soldes (CSV / Excel)
             </button>
             <button
               onClick={() => {
@@ -540,13 +540,13 @@ export default function FleetPerformanceView() {
             </div>
             <div>
               <p className="font-bold text-xs flex items-center gap-1.5">
-                <span>☀️ Cible Matinale en attente d'import CSV</span>
+                <span>☀️ Cible Matinale en attente d'import CSV / Excel</span>
                 <span className="text-3xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-black uppercase">
                   Chaque Matin
                 </span>
               </p>
               <p className="text-2xs text-amber-700 mt-0.5">
-                Cette section reste vide chaque matin jusqu'à ce que l'agent importe le fichier CSV des soldes.
+                Cette section reste vide chaque matin jusqu'à ce que l'agent importe le fichier CSV ou Excel (.xlsx) des soldes.
               </p>
             </div>
           </div>
@@ -555,7 +555,7 @@ export default function FleetPerformanceView() {
             className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-navy font-black text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 shadow-sm whitespace-nowrap cursor-pointer shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4 text-navy" />
-            Importer Soldes CSV (Matin)
+            Importer Soldes CSV / Excel (Matin)
           </button>
         </div>
       )}

@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { matchHeaders, getField, resolveLeadStatus } from "@/lib/csv-header-matcher";
 import { touchSyncState } from "@/lib/sync";
-import Papa from "papaparse";
+import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 
 /** Strip spaces, dashes, and leading zeros, then prepend +212. */
 function sanitizePhone(raw: string): string {
@@ -48,27 +48,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Read the file content as text
-    const csvText = await file.text();
+    // Parse CSV or Excel (XLSX / XLS)
+    const { rows: data } = await parseSpreadsheetFile(file);
 
-    // Parse CSV with PapaParse
-    const { data, errors, meta } = Papa.parse<Record<string, string>>(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim(),
-    });
-
-    if (errors.length > 0) {
-      console.error("CSV parse errors:", errors);
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { error: "Le fichier est vide ou illisible." },
+        { status: 400 }
+      );
     }
 
-    // Fuzzy-match CSV headers to canonical fields (name & phone required, city & status optional)
-    const { mapping, unmapped } = matchHeaders(meta.fields || []);
+    const detectedHeaders = Object.keys(data[0] || {});
+
+    // Fuzzy-match headers to canonical fields (name & phone required, city & status optional)
+    const { mapping, unmapped } = matchHeaders(detectedHeaders);
 
     if (!mapping.name || !mapping.phone) {
       return NextResponse.json(
         {
-          error: `Required columns missing. Found headers: [${(meta.fields || []).join(", ")}]. A 'Lead Name' column and a 'Phone Number' column are required. 'City' and 'Status' are optional.`,
+          error: `Required columns missing. Found headers: [${detectedHeaders.join(", ")}]. A 'Lead Name' column and a 'Phone Number' column are required. 'City' and 'Status' are optional.`,
           detected: mapping,
           unmapped,
         },
@@ -77,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract campaign source from the filename
-    const campaignSource = file.name.replace(/\.csv$/i, "") || "unknown";
+    const campaignSource = file.name.replace(/\.(csv|xlsx|xls|ods)$/i, "") || "unknown";
 
     // Build candidates using fuzzy-matched headers
     const candidates = data

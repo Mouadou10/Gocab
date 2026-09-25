@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import Papa from "papaparse";
+import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 
 /** Standard Moroccan phone sanitization (+212XXXXXXXXX) */
 function sanitizePhone(raw: string): string {
@@ -35,23 +35,20 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No CSV file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Aucun fichier CSV ou Excel fourni" }, { status: 400 });
     }
 
-    const csvText = await file.text();
-
-    const { data, errors } = Papa.parse<Record<string, string>>(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim().toLowerCase(),
+    const { rows: rawRows } = await parseSpreadsheetFile(file);
+    const data = rawRows.map((row) => {
+      const normalized: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        normalized[k.trim().toLowerCase().replace(/^["']|["']$/g, "")] = v;
+      }
+      return normalized;
     });
 
-    if (errors.length > 0) {
-      console.warn("CSV parse warnings:", errors);
-    }
-
     if (!data || data.length === 0) {
-      return NextResponse.json({ error: "Empty CSV file" }, { status: 400 });
+      return NextResponse.json({ error: "Le fichier est vide ou illisible" }, { status: 400 });
     }
 
     // Helper to find column by multiple possible aliases

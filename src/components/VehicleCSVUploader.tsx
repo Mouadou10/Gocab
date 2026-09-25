@@ -131,7 +131,7 @@ export default function VehicleCSVUploader({
               <Car className="w-5 h-5 text-gold" />
             </div>
             <div>
-              <h3 className="font-bold text-lg">Importer la Flotte de Véhicules (CSV)</h3>
+              <h3 className="font-bold text-lg">Importer la Flotte de Véhicules (CSV / XLSX)</h3>
               <p className="text-xs text-white/70">Extrait les matricules, marques, statuts, assurances et chauffeurs</p>
             </div>
           </div>
@@ -163,6 +163,14 @@ export default function VehicleCSVUploader({
           {/* File Picker Zone */}
           {!summary ? (
             <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files?.[0]) {
+                  setSelectedFile(e.dataTransfer.files[0]);
+                  setSummary(null);
+                }
+              }}
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
                 selectedFile
@@ -173,7 +181,7 @@ export default function VehicleCSVUploader({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -190,9 +198,9 @@ export default function VehicleCSVUploader({
               ) : (
                 <div>
                   <p className="font-semibold text-gray-700 text-sm">
-                    Cliquez ou glissez votre fichier CSV de véhicules
+                    Cliquez ou glissez votre fichier CSV ou Excel (.xlsx)
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">Fichiers .CSV uniquement (export Excel ou Google Sheets)</p>
+                  <p className="text-xs text-gray-400 mt-1">Formats pris en charge : .XLSX, .XLS et .CSV</p>
                 </div>
               )}
             </div>
