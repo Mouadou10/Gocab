@@ -750,7 +750,7 @@ export default function FleetView() {
               placeholder="Rechercher par immatriculation, marque, modèle, VIN..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             {searchTerm && (

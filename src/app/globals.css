@@ -26,9 +26,24 @@
   line-height: 14px !important;
 }
 
+html {
+  color-scheme: light;
+}
+
 :root {
   --background: #f4f6fb; /* Softer, slightly blueish gray for premium feel */
   --foreground: #0f172a; /* Slate 900 for high contrast text */
+  color-scheme: light;
+}
+
+/* Default form controls to high contrast dark text & light browser scheme */
+input, select, textarea {
+  color: #0f172a;
+  color-scheme: light;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8;
 }
 
 .dark {

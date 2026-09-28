@@ -730,7 +730,7 @@ export default function SupportTicketsView() {
               placeholder="Rechercher immatriculation, chauffeur..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             {searchTerm && (
@@ -1090,7 +1090,7 @@ export default function SupportTicketsView() {
                   required
                   value={waivedDays}
                   onChange={(e) => setWaivedDays(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
                 />
               </div>
 
@@ -1103,7 +1103,7 @@ export default function SupportTicketsView() {
                   placeholder="ex: Délai excessif de réparation au garage"
                   value={waiverReason}
                   onChange={(e) => setWaiverReason(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
@@ -1169,7 +1169,7 @@ export default function SupportTicketsView() {
                   placeholder="ex: Garage Auto Plus"
                   value={garageName}
                   onChange={(e) => setGarageName(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
@@ -1184,7 +1184,7 @@ export default function SupportTicketsView() {
                   min="0"
                   value={repairCost}
                   onChange={(e) => setRepairCost(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
                 />
               </div>
 

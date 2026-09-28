@@ -434,7 +434,7 @@ export default function WhatsAppCrmView() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Rechercher nom, tél, matricule..."
-              className="w-full pl-8 pr-7 py-1.5 bg-gray-100/80 hover:bg-gray-100 focus:bg-white text-xs rounded-xl border border-transparent focus:border-emerald-500 focus:outline-none transition-all"
+              className="w-full pl-8 pr-7 py-1.5 bg-gray-100/80 hover:bg-gray-100 focus:bg-white text-xs text-slate-900 placeholder:text-gray-400 rounded-xl border border-transparent focus:border-emerald-500 focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
