@@ -164,6 +164,10 @@ export async function POST(request: Request) {
       repair_cost,
       garage_name,
       resolution_notes,
+      assigned_to,
+      scheduled_date,
+      scheduled_time,
+      duration_hours,
     } = body;
 
     if (!vehicle_id || !plate_number || !ticket_type || !description) {
@@ -280,6 +284,10 @@ export async function POST(request: Request) {
             priority: priority || "Critical",
             status: "PENDING",
             linked_ticket_id: ticket.id,
+            assigned_to: assigned_to ? assigned_to.trim() : null,
+            scheduled_date: scheduled_date ? scheduled_date.trim() : null,
+            scheduled_time: scheduled_time ? scheduled_time.trim() : null,
+            duration_hours: duration_hours ? Number(duration_hours) : 1.0,
           },
         });
 

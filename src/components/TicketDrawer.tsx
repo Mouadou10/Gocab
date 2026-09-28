@@ -87,6 +87,12 @@ export default function TicketDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
+  // Field supervisor assignment & workload check state
+  const [fieldSupervisors, setFieldSupervisors] = useState<any[]>([]);
+  const [selectedFieldSupervisor, setSelectedFieldSupervisor] = useState<string>("");
+  const [scheduledDate, setScheduledDate] = useState<string>("");
+  const [scheduledTime, setScheduledTime] = useState<string>("");
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -115,6 +121,21 @@ export default function TicketDrawer({
       }
     }
     loadVehicles();
+  }, []);
+
+  // Fetch field supervisors and their availability workloads
+  useEffect(() => {
+    async function loadSupervisors() {
+      try {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const res = await fetch(`/api/field-supervisors?date=${todayStr}`);
+        const data = await res.json();
+        setFieldSupervisors(data.supervisors || []);
+      } catch (err) {
+        console.error("Failed to load field supervisors:", err);
+      }
+    }
+    loadSupervisors();
   }, []);
 
   function handleVehicleSelect(vId: string) {
@@ -227,6 +248,10 @@ export default function TicketDrawer({
           repair_cost: savedBc.total_ttc,
           garage_name: savedBc.supplier_name,
           resolution_notes: JSON.stringify({ bon_de_commande: savedBc }),
+          assigned_to: selectedFieldSupervisor ? (fieldSupervisors.find(s => s.id === selectedFieldSupervisor || s.name === selectedFieldSupervisor)?.name || selectedFieldSupervisor) : null,
+          scheduled_date: scheduledDate || null,
+          scheduled_time: scheduledTime || null,
+          duration_hours: 1.0,
         }),
       });
 
@@ -265,6 +290,10 @@ export default function TicketDrawer({
     setIsSubmitting(true);
 
     try {
+      const selectedSupObj = fieldSupervisors.find(
+        (s) => s.id === selectedFieldSupervisor || s.name === selectedFieldSupervisor
+      );
+
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -281,6 +310,10 @@ export default function TicketDrawer({
           repair_cost: bonDeCommandeData ? bonDeCommandeData.total_ttc : null,
           garage_name: bonDeCommandeData ? bonDeCommandeData.supplier_name : null,
           resolution_notes: bonDeCommandeData ? JSON.stringify({ bon_de_commande: bonDeCommandeData }) : null,
+          assigned_to: selectedSupObj ? selectedSupObj.name : null,
+          scheduled_date: scheduledDate || null,
+          scheduled_time: scheduledTime || null,
+          duration_hours: 1.0,
         }),
       });
 
@@ -599,6 +632,125 @@ export default function TicketDrawer({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Field Supervisor Assignment & Availability Section for Vehicle Recovery */}
+          {ticketType === "VEHICLE_RECOVERY" && (
+            <div className="bg-red-50/70 border border-red-200 rounded-2xl p-4 space-y-3 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-red-600 text-white rounded-md text-xs">🛡️</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-red-950">
+                      Superviseur Terrain (Optionnel)
+                    </h4>
+                    <p className="text-3xs text-red-700">
+                      Assignation directe ou placement dans la file d&apos;attente
+                    </p>
+                  </div>
+                </div>
+                {scheduledDate && scheduledTime && (
+                  <span className="px-2 py-0.5 rounded-full text-3xs font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    📅 {scheduledDate} à {scheduledTime}
+                  </span>
+                )}
+              </div>
+
+              {/* Agent Selector Dropdown */}
+              <div>
+                <select
+                  value={selectedFieldSupervisor}
+                  onChange={(e) => {
+                    setSelectedFieldSupervisor(e.target.value);
+                    setScheduledDate("");
+                    setScheduledTime("");
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-red-200 bg-white rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-400 font-medium cursor-pointer"
+                >
+                  <option value="">
+                    📋 Non assigné (Placer dans la file d&apos;attente terrain)
+                  </option>
+                  {fieldSupervisors.map((sup) => {
+                    const isFull = sup.is_full || (sup.total_scheduled_hours || 0) >= 8;
+                    return (
+                      <option key={sup.id} value={sup.id}>
+                        {sup.name} {isFull ? "🔴 (Complet 8h)" : `🟢 (${sup.available_hours || 8}h libres)`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Busy Alert & Suggestions when selected agent is full */}
+              {(() => {
+                if (!selectedFieldSupervisor) return null;
+                const chosenSup = fieldSupervisors.find(
+                  (s) => s.id === selectedFieldSupervisor || s.name === selectedFieldSupervisor
+                );
+                if (!chosenSup) return null;
+
+                const isFull = chosenSup.is_full || (chosenSup.total_scheduled_hours || 0) >= 8;
+                if (!isFull) {
+                  return (
+                    <div className="text-3xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-1.5 font-medium">
+                      <span>🟢</span>
+                      <span>
+                        <strong>{chosenSup.name}</strong> a {chosenSup.available_hours || 8}h disponibles aujourd&apos;hui.
+                      </span>
+                    </div>
+                  );
+                }
+
+                // If agent is full, find an alternative supervisor who has available hours
+                const alternativeSup = fieldSupervisors.find(
+                  (s) => s.id !== chosenSup.id && !s.is_full && (s.total_scheduled_hours || 0) < 8
+                );
+
+                return (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900 space-y-2 animate-fadeIn">
+                    <div className="flex items-center gap-2 font-bold text-amber-950 text-xs">
+                      <span className="text-base">⚠️</span>
+                      <span>{chosenSup.name} est complet aujourd&apos;hui (8h occupées)</span>
+                    </div>
+                    <p className="text-3xs text-amber-800 leading-relaxed">
+                      Cet agent a déjà rempli ses créneaux de travail pour aujourd&apos;hui. Par défaut, le ticket sera créé sans bloquer, mais vous pouvez reporter le créneau ou choisir un collègue disponible :
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {chosenSup.suggested_date && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScheduledDate(chosenSup.suggested_date);
+                            setScheduledTime(chosenSup.suggested_time || "09:00");
+                            toast.success(`Créneau fixé pour demain (${chosenSup.suggested_date} à ${chosenSup.suggested_time || "09:00"})`);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-3xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1 ${
+                            scheduledDate === chosenSup.suggested_date
+                              ? "bg-emerald-600 text-white"
+                              : "bg-amber-600 hover:bg-amber-700 text-white"
+                          }`}
+                        >
+                          <span>📅 Reporter à demain ({chosenSup.suggested_date} à {chosenSup.suggested_time || "09:00"})</span>
+                        </button>
+                      )}
+
+                      {alternativeSup && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFieldSupervisor(alternativeSup.id);
+                            toast.success(`Assigné à ${alternativeSup.name} (${alternativeSup.available_hours || 8}h libres aujourd'hui)`);
+                          }}
+                          className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-3xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                        >
+                          <span>👤 Confier à {alternativeSup.name} ({alternativeSup.available_hours || 8}h libres)</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

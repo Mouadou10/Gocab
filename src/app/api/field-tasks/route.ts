@@ -155,6 +155,9 @@ export async function GET(request: Request) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
     const type = searchParams.get("type") || "";
+    const date = searchParams.get("date") || "";
+    const assignedTo = searchParams.get("assigned_to") || "";
+    const unscheduled = searchParams.get("unscheduled") === "true";
 
     // Run background sync non-blocking so GET responds immediately
     void syncRecoveryTasksAndOrphans();
@@ -171,10 +174,21 @@ export async function GET(request: Request) {
 
     if (status) where.status = status;
     if (type) where.task_type = type;
+    if (date) where.scheduled_date = date;
+    if (assignedTo) where.assigned_to = assignedTo;
+    if (unscheduled) {
+      where.OR = [
+        { scheduled_date: null },
+        { scheduled_date: "" },
+      ];
+    }
 
     const tasks = await prisma.fieldTask.findMany({
       where,
-      orderBy: { created_at: "desc" },
+      orderBy: [
+        { scheduled_time: "asc" },
+        { created_at: "desc" },
+      ],
     });
 
     return NextResponse.json({ tasks });
@@ -203,6 +217,10 @@ export async function POST(request: Request) {
       priority,
       linked_ticket_id,
       due_date,
+      assigned_to,
+      scheduled_date,
+      scheduled_time,
+      duration_hours,
     } = body;
 
     if (!task_type || !description) {
@@ -322,6 +340,10 @@ export async function POST(request: Request) {
             description: cleanDesc,
             priority: priority || "Critical",
             linked_ticket_id: finalLinkedTicketId || existingPendingTask.linked_ticket_id,
+            assigned_to: assigned_to ? assigned_to.trim() : existingPendingTask.assigned_to,
+            scheduled_date: scheduled_date ? scheduled_date.trim() : existingPendingTask.scheduled_date,
+            scheduled_time: scheduled_time ? scheduled_time.trim() : existingPendingTask.scheduled_time,
+            duration_hours: duration_hours ? Number(duration_hours) : existingPendingTask.duration_hours,
           },
         });
       } else {
@@ -336,6 +358,10 @@ export async function POST(request: Request) {
             priority: priority || "Critical",
             linked_ticket_id: finalLinkedTicketId,
             due_date: due_date ? new Date(due_date) : null,
+            assigned_to: assigned_to ? assigned_to.trim() : null,
+            scheduled_date: scheduled_date ? scheduled_date.trim() : null,
+            scheduled_time: scheduled_time ? scheduled_time.trim() : null,
+            duration_hours: duration_hours ? Number(duration_hours) : 1.0,
           },
         });
       }
@@ -351,6 +377,10 @@ export async function POST(request: Request) {
           priority: priority || "Normal",
           linked_ticket_id: finalLinkedTicketId,
           due_date: due_date ? new Date(due_date) : null,
+          assigned_to: assigned_to ? assigned_to.trim() : null,
+          scheduled_date: scheduled_date ? scheduled_date.trim() : null,
+          scheduled_time: scheduled_time ? scheduled_time.trim() : null,
+          duration_hours: duration_hours ? Number(duration_hours) : 1.0,
         },
       });
     }

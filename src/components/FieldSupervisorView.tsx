@@ -18,6 +18,7 @@ import { useLiveSync } from "@/context/LiveSyncContext";
 import CarModel3D from "./CarModel3D";
 import FieldMobileQuickActions from "./FieldMobileQuickActions";
 import AttestationModal, { AttestationData } from "./AttestationModal";
+import FieldDailySchedule from "./FieldDailySchedule";
 import {
   Phone,
   MessageCircle,
@@ -48,7 +49,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-interface FieldTask {
+export interface FieldTask {
   id: string;
   task_type: string;
   vehicle_id: string | null;
@@ -69,6 +70,9 @@ interface FieldTask {
   recovery_duration_hours?: number | null;
   recovery_notes?: string | null;
   created_at: string;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  duration_hours?: number | null;
 }
 
 interface CheckupDue {
@@ -168,7 +172,7 @@ const ARABIC_LETTER_MAP: Record<string, string> = {
  * Moroccan License Plate formatter
  * Authentic Moroccan plate badge [ 21527 | ي | 6 ] or [ WW | 964987 ]
  */
-function MoroccanPlateBadge({ plate }: { plate: string | null | undefined }) {
+export function MoroccanPlateBadge({ plate }: { plate: string | null | undefined }) {
   if (!plate) return <span className="text-gray-400 italic text-xs font-mono">Sans matricule</span>;
   const clean = plate.trim();
 
@@ -215,6 +219,9 @@ function MoroccanPlateBadge({ plate }: { plate: string | null | undefined }) {
 export default function FieldSupervisorView() {
   const [tasks, setTasks] = useState<FieldTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Main view mode: Daily Task Manager / Schedule Planner vs Traditional Task Queue
+  const [mainViewMode, setMainViewMode] = useState<"SCHEDULE" | "QUEUE">("SCHEDULE");
 
   // Tabs: ALL, VEHICLE_RECOVERY, GARAGE_PICKUP, MONTHLY_CHECKUP, COMPLETED
   const [activeTab, setActiveTab] = useState<"ALL" | "VEHICLE_RECOVERY" | "GARAGE_PICKUP" | "MONTHLY_CHECKUP" | "COMPLETED">("ALL");
@@ -1337,7 +1344,76 @@ export default function FieldSupervisorView() {
         </button>
       </div>
 
-      {/* KPI Metrics Row (Clickable Quick Filters) */}
+      {/* High-level View Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setMainViewMode("SCHEDULE")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              mainViewMode === "SCHEDULE"
+                ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-xs"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>📅 Planning Quotidien (Daily Task Manager)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainViewMode("QUEUE")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              mainViewMode === "QUEUE"
+                ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <span>📋 File des Interventions</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-3xs font-mono font-bold ${
+                mainViewMode === "QUEUE"
+                  ? "bg-navy/10 text-navy dark:bg-white/10 dark:text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              {totalActiveTasks}
+            </span>
+          </button>
+        </div>
+
+        <div className="text-3xs text-slate-500 pr-2 hidden sm:block">
+          ⚡ Gestion des créneaux horaires & affectations des superviseurs terrain (08:00 - 18:00)
+        </div>
+      </div>
+
+      {mainViewMode === "SCHEDULE" ? (
+        <FieldDailySchedule
+          tasks={tasks}
+          onTaskUpdated={fetchTasks}
+          onOpenRecoveryModal={handleOpenRecoveryModal}
+          onOpenInspectionModal={(vehicleId, plate) => {
+            const found = checkupsDue.find((c) => c.vehicle_id === vehicleId || c.plate_number === plate);
+            if (found) {
+              setInspectionVehicle(found);
+              setInspectorName("");
+            } else {
+              setInspectionVehicle({
+                vehicle_id: vehicleId,
+                plate_number: plate,
+                make_model: "Véhicule",
+                assigned_driver_name: null,
+                assigned_driver_phone: null,
+                previous_health_score: null,
+                previous_inspection_date: null,
+              });
+              setInspectorName("");
+            }
+          }}
+        />
+      ) : (
+        <>
+          {/* KPI Metrics Row (Clickable Quick Filters) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: Récupérations (Recovery) */}
         <button
@@ -1673,6 +1749,8 @@ export default function FieldSupervisorView() {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* 1. Create Task Modal */}

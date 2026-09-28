@@ -71,6 +71,9 @@ async function syncSchema() {
       "ALTER TABLE MaintenanceTicket ADD COLUMN started_at DATETIME",
       "ALTER TABLE DriverProfile ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE VehicleExpense ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
+      "ALTER TABLE FieldTask ADD COLUMN scheduled_date TEXT",
+      "ALTER TABLE FieldTask ADD COLUMN scheduled_time TEXT",
+      "ALTER TABLE FieldTask ADD COLUMN duration_hours REAL DEFAULT 1.0",
     ];
 
     for (const migration of migrations) {

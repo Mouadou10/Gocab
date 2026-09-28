@@ -186,6 +186,11 @@ model FieldTask {
   recovery_duration_hours Float?    // Hours elapsed from blocked to recovered
   recovery_notes          String?
 
+  // Daily Schedule & Slot Planning
+  scheduled_date          String?   // YYYY-MM-DD
+  scheduled_time          String?   // e.g. "09:00", "14:30"
+  duration_hours          Float?    @default(1.0) // default 1h, adjustable
+
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 

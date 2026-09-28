@@ -32,6 +32,9 @@ export async function PATCH(
     if (body.description !== undefined) updateData.description = body.description.trim();
     if (body.due_date !== undefined) updateData.due_date = body.due_date ? new Date(body.due_date) : null;
     if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to ? body.assigned_to.trim() : null;
+    if (body.scheduled_date !== undefined) updateData.scheduled_date = body.scheduled_date ? body.scheduled_date.trim() : null;
+    if (body.scheduled_time !== undefined) updateData.scheduled_time = body.scheduled_time ? body.scheduled_time.trim() : null;
+    if (body.duration_hours !== undefined) updateData.duration_hours = body.duration_hours !== null ? Number(body.duration_hours) : 1.0;
     if (body.failure_reason !== undefined) updateData.failure_reason = body.failure_reason ? body.failure_reason.trim() : null;
 
     // Recovery Handover Checklist Fields
