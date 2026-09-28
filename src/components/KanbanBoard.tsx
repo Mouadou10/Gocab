@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
+import toast from "react-hot-toast";
 import {
   DndContext,
   DragEndEvent,
@@ -299,6 +300,94 @@ export default function KanbanBoard() {
   // Drawer state
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
+
+  // Multi-selection state for bulk status actions
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [bulkDate, setBulkDate] = useState<string>("");
+  const [isUpdatingBulkStatus, setIsUpdatingBulkStatus] = useState<boolean>(false);
+
+  // Clear selection on tab change
+  useEffect(() => {
+    setSelectedLeadIds([]);
+    setBulkStatus("");
+    setBulkDate("");
+  }, [activeTab]);
+
+  const handleToggleSelectLead = useCallback((leadId: string) => {
+    setSelectedLeadIds((prev) =>
+      prev.includes(leadId) ? prev.filter((id) => id !== leadId) : [...prev, leadId]
+    );
+  }, []);
+
+  const handleToggleSelectColumn = useCallback((columnLeadIds: string[]) => {
+    setSelectedLeadIds((prev) => {
+      const allInCol = columnLeadIds.length > 0 && columnLeadIds.every((id) => prev.includes(id));
+      if (allInCol) {
+        return prev.filter((id) => !columnLeadIds.includes(id));
+      } else {
+        const set = new Set([...prev, ...columnLeadIds]);
+        return Array.from(set);
+      }
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedLeadIds([]);
+    setBulkStatus("");
+    setBulkDate("");
+  }, []);
+
+  const handleApplyBulkStatus = async () => {
+    if (selectedLeadIds.length === 0 || !bulkStatus) {
+      toast.error("Veuillez sélectionner au moins un lead et un statut.");
+      return;
+    }
+    setIsUpdatingBulkStatus(true);
+    try {
+      const res = await fetch("/api/leads/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadIds: selectedLeadIds,
+          targetStatus: bulkStatus,
+          reminderDate: bulkDate || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Échec de la mise à jour groupée");
+      }
+
+      const updatePatch = data.updateData || {};
+      setLeads((prev) =>
+        prev.map((l) =>
+          selectedLeadIds.includes(l.id)
+            ? {
+                ...l,
+                ...updatePatch,
+                reminder_date: bulkDate
+                  ? new Date(bulkDate).toISOString()
+                  : updatePatch.reminder_date !== undefined
+                  ? updatePatch.reminder_date
+                  : l.reminder_date,
+              }
+            : l
+        )
+      );
+
+      toast.success(`✅ Statut mis à jour pour ${selectedLeadIds.length} lead(s) !`);
+      setSelectedLeadIds([]);
+      setBulkStatus("");
+      setBulkDate("");
+      notifyMutation("leads");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la mise à jour groupée");
+      console.error("Bulk status update error:", err);
+    } finally {
+      setIsUpdatingBulkStatus(false);
+    }
+  };
 
   // Configure drag sensors
   const sensors = useSensors(
@@ -1674,6 +1763,9 @@ export default function KanbanBoard() {
                       leads={getLeadsByColumn(col)}
                       onCardClick={handleCardClick}
                       onLeadUpdate={handleLeadUpdate}
+                      selectedLeadIds={selectedLeadIds}
+                      onToggleSelectLead={handleToggleSelectLead}
+                      onToggleSelectColumn={handleToggleSelectColumn}
                       isDailyGoalAchieved={col === "NEW_LEADS" && isDailyTrainingGoalAchieved}
                       totalNewLeadsCount={col === "NEW_LEADS" ? totalNewLeadsInDB : undefined}
                       dailyTrainingFixedToday={trainingFixedToday}
@@ -1700,6 +1792,102 @@ export default function KanbanBoard() {
               ) : null}
             </DragOverlay>
           </DndContext>
+        )}
+
+        {/* Floating Bulk Action Bar for Multi-Selected Leads */}
+        {selectedLeadIds.length > 0 && (activeTab === "leads" || activeTab === "training") && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-3xl px-4 animate-slideUp">
+            <div className="bg-slate-950/95 dark:bg-slate-900/95 backdrop-blur-md text-white border border-slate-700/80 rounded-2xl shadow-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 ring-1 ring-white/10">
+              {/* Count & Info */}
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-sm border border-blue-500/30">
+                  {selectedLeadIds.length}
+                </span>
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {selectedLeadIds.length} lead{selectedLeadIds.length > 1 ? "s" : ""} sélectionné{selectedLeadIds.length > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-3xs text-slate-400">
+                    Déplacer vers un nouveau statut
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Picker & Optional Date */}
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value)}
+                  className="bg-slate-800 text-white border border-slate-600 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- Choisir le statut --</option>
+
+                  {/* Training statuses */}
+                  <optgroup label="📅 Formation (Training)">
+                    <option value="Scheduled">Scheduled (Programmé)</option>
+                    <option value="Attended">Attended (Présent)</option>
+                    <option value="Attended and not interested">Attended & Not Interested</option>
+                    <option value="Pending">Pending (En attente)</option>
+                    <option value="Assign vehicle">Assign Vehicle (Affectation)</option>
+                    <option value="Not attended">Not Attended (Absent)</option>
+                    <option value="No response">No Response (Pas de réponse)</option>
+                    <option value="Refused the offer">Refused the offer</option>
+                    <option value="Preorder">Preorder (Précommande)</option>
+                  </optgroup>
+
+                  {/* Brand / Lead statuses */}
+                  <optgroup label="📋 Prospection (Leads)">
+                    <option value="NEW_LEADS">NEW_LEADS (Nouveau)</option>
+                    <option value="Training fixed">Training fixed (Formation fixée)</option>
+                    <option value="To Recall">To Recall (À rappeler)</option>
+                    <option value="Not interested">Not interested</option>
+                    <option value="No response 1">No response 1</option>
+                    <option value="No response 2">No response 2</option>
+                    <option value="Wrong number">Wrong number</option>
+                    <option value="Already a client">Already a client</option>
+                  </optgroup>
+                </select>
+
+                {/* Date picker (if Scheduled, Training fixed, or To Recall) */}
+                {(bulkStatus === "Scheduled" || bulkStatus === "Training fixed" || bulkStatus === "To Recall") && (
+                  <input
+                    type="date"
+                    value={bulkDate}
+                    onChange={(e) => setBulkDate(e.target.value)}
+                    className="bg-slate-800 text-white border border-slate-600 rounded-xl px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    title="Date de formation ou de rappel (optionnel)"
+                  />
+                )}
+
+                {/* Apply button */}
+                <button
+                  type="button"
+                  onClick={handleApplyBulkStatus}
+                  disabled={!bulkStatus || isUpdatingBulkStatus}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isUpdatingBulkStatus ? (
+                    <span>Mise à jour...</span>
+                  ) : (
+                    <>
+                      <span>Appliquer</span>
+                      <span className="text-3xs font-mono font-normal">({selectedLeadIds.length})</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Cancel / Deselect button */}
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer text-xs"
+                  title="Désélectionner tout"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
 

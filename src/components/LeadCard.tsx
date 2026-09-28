@@ -43,9 +43,17 @@ interface LeadCardProps {
   lead: Lead;
   onClick: () => void;
   onLeadUpdate?: (lead: Lead) => void;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps) {
+export default function LeadCard({
+  lead,
+  onClick,
+  onLeadUpdate,
+  isSelected = false,
+  onToggleSelect,
+}: LeadCardProps) {
   const {
     attributes,
     listeners,
@@ -116,24 +124,51 @@ export default function LeadCard({ lead, onClick, onLeadUpdate }: LeadCardProps)
       className={`
         group bg-white rounded-2xl shadow-xs border transition-all duration-200
         hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer relative overflow-hidden
-        ${isAccepted ? "border-olive/50 ring-1 ring-olive/20" : "border-slate-200/80"}
+        ${
+          isSelected
+            ? "border-blue-400 bg-blue-50/25 ring-2 ring-blue-500 shadow-sm"
+            : isAccepted
+            ? "border-olive/50 ring-1 ring-olive/20"
+            : "border-slate-200/80"
+        }
         ${isDragging ? "opacity-50 shadow-2xl scale-105 rotate-2 z-50 ring-2 ring-navy" : ""}
       `}
     >
-      {/* Drag Handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="flex items-center justify-center py-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="9" cy="6" r="1.5" />
-          <circle cx="15" cy="6" r="1.5" />
-          <circle cx="9" cy="12" r="1.5" />
-          <circle cx="15" cy="12" r="1.5" />
-          <circle cx="9" cy="18" r="1.5" />
-          <circle cx="15" cy="18" r="1.5" />
-        </svg>
+      {/* Top Bar: Checkbox + Drag Handle */}
+      <div className="flex items-center justify-between px-3 pt-2 pb-0.5">
+        <label
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          className="flex items-center gap-1.5 cursor-pointer z-10 p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+          title={isSelected ? "Désélectionner ce lead" : "Sélectionner ce lead"}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(isSelected)}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.();
+            }}
+            className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer transition-all"
+          />
+        </label>
+
+        {/* Drag Handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex items-center justify-center p-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.5" />
+            <circle cx="15" cy="6" r="1.5" />
+            <circle cx="9" cy="12" r="1.5" />
+            <circle cx="15" cy="12" r="1.5" />
+            <circle cx="9" cy="18" r="1.5" />
+            <circle cx="15" cy="18" r="1.5" />
+          </svg>
+        </div>
       </div>
 
       {/* Card Content — clickable to open modal */}

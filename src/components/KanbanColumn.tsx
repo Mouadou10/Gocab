@@ -91,6 +91,9 @@ interface KanbanColumnProps {
   onTrainingDateFilterChange?: (date: string) => void;
   availableTrainingDates?: { date: string; label: string; count: number }[];
   totalTrainingFixedCount?: number;
+  selectedLeadIds?: string[];
+  onToggleSelectLead?: (leadId: string) => void;
+  onToggleSelectColumn?: (columnLeadIds: string[]) => void;
 }
 
 export default function KanbanColumn({
@@ -108,8 +111,16 @@ export default function KanbanColumn({
   onTrainingDateFilterChange,
   availableTrainingDates,
   totalTrainingFixedCount,
+  selectedLeadIds = [],
+  onToggleSelectLead,
+  onToggleSelectColumn,
 }: KanbanColumnProps) {
   const safeLeads = Array.isArray(leads) ? leads : [];
+  const columnLeadIds = safeLeads.map((l) => l.id);
+  const allColumnSelected =
+    columnLeadIds.length > 0 && columnLeadIds.every((id) => selectedLeadIds.includes(id));
+  const someColumnSelected = columnLeadIds.some((id) => selectedLeadIds.includes(id));
+
   const { setNodeRef, isOver, attributes, listeners, transform, transition } = useSortable({
     id: columnId,
     data: { type: "Column", columnId },
@@ -135,21 +146,45 @@ export default function KanbanColumn({
     >
       {/* Column Header */}
       <div 
-        className="flex items-center gap-2.5 px-4 py-3.5 rounded-t-3xl bg-white/70 backdrop-blur-sm border-b border-slate-100 cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-2 px-3.5 py-3.5 rounded-t-3xl bg-white/70 backdrop-blur-sm border-b border-slate-100 cursor-grab active:cursor-grabbing"
         {...attributes}
         {...listeners}
       >
+        {/* Column Select All Checkbox */}
+        {safeLeads.length > 0 && onToggleSelectColumn && (
+          <label
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="flex items-center cursor-pointer p-0.5 rounded hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors"
+            title={
+              allColumnSelected
+                ? "Désélectionner toute la colonne"
+                : `Sélectionner tous les leads (${safeLeads.length})`
+            }
+          >
+            <input
+              type="checkbox"
+              checked={allColumnSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someColumnSelected && !allColumnSelected;
+              }}
+              onChange={() => onToggleSelectColumn(columnLeadIds)}
+              className="w-3.5 h-3.5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+          </label>
+        )}
+
         {/* Accent dot */}
         <div
           className={`w-2.5 h-2.5 rounded-full bg-gradient-to-br ${
             COLUMN_ACCENTS[columnId] || "from-gray-400 to-gray-500"
           }`}
         />
-        <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">
+        <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase truncate">
           {COLUMN_LABELS[columnId] || columnId}
         </h3>
         <span
-          className={`ml-auto text-3xs font-extrabold px-2 py-0.5 rounded-full font-mono shadow-3xs ${
+          className={`ml-auto text-3xs font-extrabold px-2 py-0.5 rounded-full font-mono shadow-3xs shrink-0 ${
             isNewLeadsColumn && isDailyGoalAchieved
               ? "bg-emerald-100 text-emerald-800 font-black border border-emerald-200"
               : isNewLeadsColumn
@@ -307,6 +342,8 @@ export default function KanbanColumn({
               lead={lead}
               onClick={() => onCardClick(lead)}
               onLeadUpdate={onLeadUpdate}
+              isSelected={Boolean(selectedLeadIds?.includes(lead.id))}
+              onToggleSelect={() => onToggleSelectLead?.(lead.id)}
             />
           ))}
         </SortableContext>
