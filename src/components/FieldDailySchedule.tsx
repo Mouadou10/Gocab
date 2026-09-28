@@ -115,6 +115,9 @@ export default function FieldDailySchedule({
   // Pool search filter
   const [poolSearch, setPoolSearch] = useState("");
 
+  // In-card delete confirmation state (task ID being confirmed for deletion)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+
   // 1. Fetch supervisors and their workloads whenever selectedDate changes
   const fetchSupervisors = useCallback(async () => {
     setIsLoadingSupervisors(true);
@@ -300,6 +303,25 @@ export default function FieldDailySchedule({
       }
     } catch {
       toast.error("Erreur réseau");
+    }
+  };
+
+  // Delete task completely (cancels linked maintenance ticket and unblocks vehicle)
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/field-tasks/${taskId}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Mission et ticket supprimés avec succès");
+        setDeletingTaskId(null);
+        onTaskUpdated();
+        fetchSupervisors();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Échec de la suppression");
+      }
+    } catch (err) {
+      console.error("Failed to delete field task:", err);
+      toast.error("Erreur réseau lors de la suppression");
     }
   };
 
@@ -758,6 +780,38 @@ export default function FieldDailySchedule({
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>
                       )}
+
+                      {/* Delete button or confirmation */}
+                      {!isCompleted && (
+                        deletingTaskId === task.id ? (
+                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/60 p-1 rounded-lg border border-red-200 dark:border-red-900/60 animate-fadeIn">
+                            <span className="text-3xs font-bold text-red-700 dark:text-red-300 px-0.5">Supprimer ?</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="text-2xs bg-red-600 text-white font-bold px-1.5 py-0.5 rounded hover:bg-red-700 cursor-pointer"
+                            >
+                              Oui
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTaskId(null)}
+                              className="text-2xs bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-medium px-1 py-0.5 rounded hover:bg-gray-300 cursor-pointer"
+                            >
+                              Non
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTaskId(task.id)}
+                            className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                            title="Supprimer définitivement la mission"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )
+                      )}
                     </div>
                   </div>
                 );
@@ -886,17 +940,49 @@ export default function FieldDailySchedule({
                     >
                       <div className="flex items-center justify-between gap-1.5">
                         <MoroccanPlateBadge plate={t.plate_number} />
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            isRec
-                              ? "bg-red-100 text-red-700"
-                              : t.task_type === "GARAGE_PICKUP"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {isRec ? "🚨 Récupération" : t.task_type === "GARAGE_PICKUP" ? "🔧 Retrait Garage" : "Contrôle"}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                              isRec
+                                ? "bg-red-100 text-red-700"
+                                : t.task_type === "GARAGE_PICKUP"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
+                            {isRec ? "🚨 Récupération" : t.task_type === "GARAGE_PICKUP" ? "🔧 Retrait Garage" : "Contrôle"}
+                          </span>
+
+                          {/* Delete button or confirmation */}
+                          {deletingTaskId === t.id ? (
+                            <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/60 p-1 rounded-lg border border-red-200 dark:border-red-900/60 animate-fadeIn">
+                              <span className="text-3xs font-bold text-red-700 dark:text-red-300 px-0.5">Supprimer ?</span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTask(t.id)}
+                                className="text-2xs bg-red-600 text-white font-bold px-1.5 py-0.5 rounded hover:bg-red-700 cursor-pointer"
+                              >
+                                Oui
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingTaskId(null)}
+                                className="text-2xs bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-medium px-1 py-0.5 rounded hover:bg-gray-300 cursor-pointer"
+                              >
+                                Non
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTaskId(t.id)}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                              title="Supprimer la mission"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {t.driver_name && (
@@ -982,8 +1068,7 @@ export default function FieldDailySchedule({
                 poolTasks.map((pt) => (
                   <div
                     key={pt.id}
-                    onClick={() => handleAssignTaskToSlot(pt.id, assigningSlotTime, 1.0)}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-all flex items-center justify-between gap-3 group"
                   >
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -995,12 +1080,44 @@ export default function FieldDailySchedule({
                       <p className="text-3xs text-slate-500 line-clamp-1 italic">{pt.description}</p>
                     </div>
 
-                    <button
-                      type="button"
-                      className="px-2.5 py-1 bg-blue-600 text-white text-2xs font-bold rounded-lg shadow-2xs group-hover:scale-105 transition-transform shrink-0"
-                    >
-                      Affecter (1h)
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {deletingTaskId === pt.id ? (
+                        <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/60 p-1 rounded-lg border border-red-200 dark:border-red-900/60 animate-fadeIn">
+                          <span className="text-3xs font-bold text-red-700 dark:text-red-300 px-0.5">Supprimer ?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTask(pt.id)}
+                            className="text-2xs bg-red-600 text-white font-bold px-1.5 py-0.5 rounded hover:bg-red-700 cursor-pointer"
+                          >
+                            Oui
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTaskId(null)}
+                            className="text-2xs bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-medium px-1 py-0.5 rounded hover:bg-gray-300 cursor-pointer"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingTaskId(pt.id)}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Supprimer la mission"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleAssignTaskToSlot(pt.id, assigningSlotTime, 1.0)}
+                        className="px-2.5 py-1 bg-blue-600 text-white text-2xs font-bold rounded-lg shadow-2xs group-hover:scale-105 transition-transform shrink-0 cursor-pointer"
+                      >
+                        Affecter (1h)
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
