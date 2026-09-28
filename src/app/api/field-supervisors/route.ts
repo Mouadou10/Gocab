@@ -60,14 +60,6 @@ export async function GET(request: Request) {
           role: "FIELD_SUPERVISOR",
           region: "CASABLANCA",
         },
-        {
-          id: "mohamed-abed",
-          name: "Mohamed Abed",
-          fullName: "Mohamed Abed",
-          email: "mohamed.abed@gocab.io",
-          role: "FIELD_SUPERVISOR",
-          region: "CASABLANCA",
-        },
       ];
     }
 
