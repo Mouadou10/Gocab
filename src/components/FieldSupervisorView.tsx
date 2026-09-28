@@ -12,7 +12,7 @@
  * month-over-month health score comparison.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import CarModel3D from "./CarModel3D";
@@ -240,6 +240,60 @@ export default function FieldSupervisorView() {
   const [newPriority, setNewPriority] = useState("Urgent");
   const [newAssignedTo, setNewAssignedTo] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
+
+  // Vehicles list for immat autocomplete and driver autofill
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [isNewPlateDropdownOpen, setIsNewPlateDropdownOpen] = useState(false);
+  const newPlateDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load vehicles list for instant search
+  useEffect(() => {
+    async function loadVehicles() {
+      try {
+        const res = await fetch("/api/vehicles");
+        const data = await res.json();
+        setVehicles(data.vehicles || []);
+      } catch (err) {
+        console.error("Failed to load vehicles list in supervisor view:", err);
+      }
+    }
+    loadVehicles();
+  }, []);
+
+  // Click outside to dismiss plate autocomplete dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (newPlateDropdownRef.current && !newPlateDropdownRef.current.contains(event.target as Node)) {
+        setIsNewPlateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filter vehicle suggestions based on immat search
+  const newPlateSuggestions = useMemo(() => {
+    const q = newPlate.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!q) {
+      return vehicles.slice(0, 6);
+    }
+    return vehicles
+      .filter((v) => {
+        const pClean = (v.plate_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const dName = (v.assigned_driver_name || v.driverProfile?.fullName || "").toLowerCase();
+        const model = (v.make_model || "").toLowerCase();
+        return pClean.includes(q) || dName.includes(newPlate.toLowerCase()) || model.includes(newPlate.toLowerCase());
+      })
+      .slice(0, 8);
+  }, [vehicles, newPlate]);
+
+  // Handle vehicle suggestion selection
+  const handleSelectNewPlateSuggestion = (v: any) => {
+    setNewPlate(v.plate_number || "");
+    const dName = v.assigned_driver_name || v.driverProfile?.fullName || "";
+    if (dName) setNewDriver(dName);
+    setIsNewPlateDropdownOpen(false);
+  };
 
   // Checkups due state
   const [checkupsDue, setCheckupsDue] = useState<CheckupDue[]>([]);
@@ -1777,14 +1831,65 @@ export default function FieldSupervisorView() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Matricule</label>
+                <div ref={newPlateDropdownRef} className="relative">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1 flex items-center justify-between">
+                    <span>Matricule *</span>
+                    {vehicles.length > 0 && (
+                      <span className="text-3xs font-medium text-slate-400">
+                        {vehicles.length} véhicules
+                      </span>
+                    )}
+                  </label>
                   <input
                     value={newPlate}
-                    onChange={(e) => setNewPlate(e.target.value)}
-                    placeholder="ex: 21527-Y-6"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                    onFocus={() => setIsNewPlateDropdownOpen(true)}
+                    onChange={(e) => {
+                      setNewPlate(e.target.value);
+                      setIsNewPlateDropdownOpen(true);
+                    }}
+                    placeholder="Tapez l'immat (ex: 21527-Y-6 ou WW...)"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono uppercase outline-none focus:ring-2 focus:ring-purple-500"
                   />
+                  {/* Suggestions Popover */}
+                  {isNewPlateDropdownOpen && newPlateSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-56 overflow-y-auto z-50 py-1 divide-y divide-slate-100 dark:divide-slate-700/60 animate-fadeIn">
+                      <div className="px-3 py-1 bg-slate-50 dark:bg-slate-900/60 text-3xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                        <span>Véhicules suggérés</span>
+                        <span>{newPlateSuggestions.length} trouvés</span>
+                      </div>
+                      {newPlateSuggestions.map((v) => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectNewPlateSuggestion(v);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-purple-50/80 dark:hover:bg-slate-700/70 transition-colors flex items-center justify-between gap-2 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-xs text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-900/60 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                              🚗 {v.plate_number}
+                            </span>
+                            <span className="text-2xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                              {v.make_model}
+                            </span>
+                          </div>
+                          {(v.assigned_driver_name || v.driverProfile?.fullName) ? (
+                            <div className="text-right shrink-0">
+                              <span className="text-3xs text-slate-600 dark:text-slate-300 font-semibold block">
+                                👤 {v.assigned_driver_name || v.driverProfile?.fullName}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-3xs text-amber-600 dark:text-amber-400 font-medium shrink-0">
+                              Sans chauffeur
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Nom Chauffeur</label>

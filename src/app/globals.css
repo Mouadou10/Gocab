@@ -50,9 +50,48 @@ input::placeholder, textarea::placeholder {
   color: #94a3b8;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 .dark {
   --background: #0b1120; /* Deep blue/slate for premium dark mode */
   --foreground: #f8fafc; /* Slate 50 */
+  color-scheme: dark;
+}
+
+/* Form controls in dark mode - high contrast visible text */
+.dark input,
+.dark textarea {
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+
+.dark select {
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.dark option {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+/* Chrome/Edge autofill fix in dark mode */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc !important;
+  -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 body {

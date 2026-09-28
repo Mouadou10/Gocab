@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Calendar,
   Clock,
@@ -117,6 +117,62 @@ export default function FieldDailySchedule({
 
   // In-card delete confirmation state (task ID being confirmed for deletion)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+
+  // Vehicle suggestion & autocomplete state
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [isPlateDropdownOpen, setIsPlateDropdownOpen] = useState(false);
+  const plateDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load vehicles list for instant search
+  useEffect(() => {
+    async function loadVehicles() {
+      try {
+        const res = await fetch("/api/vehicles");
+        const data = await res.json();
+        setVehicles(data.vehicles || []);
+      } catch (err) {
+        console.error("Failed to load vehicles list:", err);
+      }
+    }
+    loadVehicles();
+  }, []);
+
+  // Click outside to dismiss plate autocomplete dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (plateDropdownRef.current && !plateDropdownRef.current.contains(event.target as Node)) {
+        setIsPlateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filter vehicle suggestions based on immat search
+  const plateSuggestions = useMemo(() => {
+    const q = createPlate.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!q) {
+      return vehicles.slice(0, 6);
+    }
+    return vehicles
+      .filter((v) => {
+        const pClean = (v.plate_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const dName = (v.assigned_driver_name || v.driverProfile?.fullName || "").toLowerCase();
+        const model = (v.make_model || "").toLowerCase();
+        return pClean.includes(q) || dName.includes(createPlate.toLowerCase()) || model.includes(createPlate.toLowerCase());
+      })
+      .slice(0, 8);
+  }, [vehicles, createPlate]);
+
+  // Handle vehicle suggestion selection
+  const handleSelectVehicleSuggestion = (v: any) => {
+    setCreatePlate(v.plate_number || "");
+    const dName = v.assigned_driver_name || v.driverProfile?.fullName || "";
+    const dPhone = v.assigned_driver_phone || v.driverProfile?.phoneSanitized || "";
+    if (dName) setCreateDriver(dName);
+    if (dPhone) setCreatePhone(dPhone);
+    setIsPlateDropdownOpen(false);
+  };
 
   // 1. Fetch supervisors and their workloads whenever selectedDate changes
   const fetchSupervisors = useCallback(async () => {
@@ -912,7 +968,7 @@ export default function FieldDailySchedule({
                   placeholder="Filtrer immat, chauffeur..."
                   value={poolSearch}
                   onChange={(e) => setPoolSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             )}
@@ -1216,8 +1272,8 @@ export default function FieldDailySchedule({
                       onClick={() => setCreateTaskType(t.id)}
                       className={`p-2 rounded-xl border font-bold text-left transition-all ${
                         createTaskType === t.id
-                          ? "border-blue-600 bg-blue-50 text-blue-700"
-                          : "border-slate-200 hover:border-slate-300 text-slate-700"
+                          ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+                          : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                       }`}
                     >
                       {t.label}
@@ -1228,17 +1284,73 @@ export default function FieldDailySchedule({
 
               {/* Vehicle Plate & Priority */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Immatriculation (Matricule)
+                <div ref={plateDropdownRef} className="relative">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Immatriculation (Matricule) *</span>
+                    {vehicles.length > 0 && (
+                      <span className="text-3xs font-medium text-slate-400">
+                        {vehicles.length} véhicules en flotte
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
-                    placeholder="ex: 21527-Y-6 ou WW..."
+                    required
+                    placeholder="Tapez l'immat (ex: 21527-Y-6 ou WW...)"
                     value={createPlate}
-                    onChange={(e) => setCreatePlate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-900 font-mono uppercase"
+                    onFocus={() => setIsPlateDropdownOpen(true)}
+                    onChange={(e) => {
+                      setCreatePlate(e.target.value);
+                      setIsPlateDropdownOpen(true);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                   />
+
+                  {/* Suggestions Popover */}
+                  {isPlateDropdownOpen && plateSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-56 overflow-y-auto z-50 py-1 divide-y divide-slate-100 dark:divide-slate-700/60 animate-fadeIn">
+                      <div className="px-3 py-1 bg-slate-50 dark:bg-slate-900/60 text-3xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                        <span>Véhicules suggérés</span>
+                        <span>{plateSuggestions.length} trouvés</span>
+                      </div>
+                      {plateSuggestions.map((v) => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectVehicleSuggestion(v);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50/80 dark:hover:bg-slate-700/70 transition-colors flex items-center justify-between gap-2 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900/60 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              🚗 {v.plate_number}
+                            </span>
+                            <span className="text-2xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                              {v.make_model}
+                            </span>
+                          </div>
+                          {(v.assigned_driver_name || v.driverProfile?.fullName) ? (
+                            <div className="text-right shrink-0">
+                              <span className="text-3xs text-slate-600 dark:text-slate-300 font-semibold block">
+                                👤 {v.assigned_driver_name || v.driverProfile?.fullName}
+                              </span>
+                              {(v.assigned_driver_phone || v.driverProfile?.phoneSanitized) && (
+                                <span className="text-3xs text-slate-400 font-mono block">
+                                  {v.assigned_driver_phone || v.driverProfile?.phoneSanitized}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-3xs text-amber-600 dark:text-amber-400 font-medium shrink-0">
+                              Sans chauffeur
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1247,7 +1359,7 @@ export default function FieldDailySchedule({
                   <select
                     value={createPriority}
                     onChange={(e) => setCreatePriority(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-900 font-bold"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Normal">Normal</option>
                     <option value="Urgent">Urgent</option>
@@ -1267,7 +1379,7 @@ export default function FieldDailySchedule({
                     placeholder="Nom complet..."
                     value={createDriver}
                     onChange={(e) => setCreateDriver(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-900"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -1279,7 +1391,7 @@ export default function FieldDailySchedule({
                     placeholder="06... / +212..."
                     value={createPhone}
                     onChange={(e) => setCreatePhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-900 font-mono"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -1295,7 +1407,7 @@ export default function FieldDailySchedule({
                   placeholder="Motif de l'intervention, adresse du garage ou localisation terrain..."
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-900 resize-none"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
