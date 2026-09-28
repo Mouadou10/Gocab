@@ -548,7 +548,7 @@ export default function VehicleDrawer({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy/30 focus:outline-none"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
               >
                 {!VEHICLE_STATUSES.includes(status as any) && status && (
                   <option value={status}>{status}</option>
@@ -569,7 +569,7 @@ export default function VehicleDrawer({
                 <select
                   value={assignedDriverId}
                   onChange={(e) => setAssignedDriverId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy/30 focus:outline-none"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
                 >
                   <option value="">-- Unassigned --</option>
                   {availableDrivers.map((d: any) => (

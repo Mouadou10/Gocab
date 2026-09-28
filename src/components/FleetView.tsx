@@ -438,11 +438,11 @@ export default function FleetView() {
         return "bg-rose-100 text-rose-900 border-rose-200 font-bold";
       case "police_immobilization":
       case "impounded by police":
-        return "bg-slate-900 text-white border-slate-900 font-bold";
+        return "bg-purple-100 text-purple-900 border-purple-300 font-bold";
       case "Blocked":
-        return "bg-red-900 text-white border-red-800 font-bold";
+        return "bg-red-100 text-red-900 border-red-300 font-bold";
       default:
-        return "bg-slate-100 text-slate-800 border-slate-200";
+        return "bg-slate-100 text-slate-800 border-slate-200 font-bold";
     }
   }
 

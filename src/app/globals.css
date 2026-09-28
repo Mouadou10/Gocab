@@ -37,8 +37,12 @@ html {
 }
 
 /* Default form controls to high contrast dark text & light browser scheme */
-input, select, textarea {
+input, textarea {
   color: #0f172a;
+  color-scheme: light;
+}
+
+select {
   color-scheme: light;
 }
 
