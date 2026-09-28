@@ -121,11 +121,13 @@ export default function FieldDailySchedule({
     try {
       const res = await fetch(`/api/field-supervisors?date=${selectedDate}`);
       const data = await res.json();
-      const sups: FieldSupervisorInfo[] = data.supervisors || [];
+      const sups: FieldSupervisorInfo[] = (data.supervisors || []).filter(
+        (s: FieldSupervisorInfo) => s.role === "FIELD_SUPERVISOR" || s.role === "SENIOR_FIELD_SUPERVISOR"
+      );
       setSupervisors(sups);
 
-      // Default select first supervisor if none selected or invalid
-      if (!selectedAgentId && sups.length > 0) {
+      // Default select first supervisor if none selected or if currently selected is not in the list
+      if ((!selectedAgentId || !sups.some((s) => s.id === selectedAgentId)) && sups.length > 0) {
         setSelectedAgentId(sups[0].id);
       }
     } catch (err) {

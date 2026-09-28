@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 // Standard working hours slots (08:00 - 18:00)
-export const WORKING_HOURS = [
+const WORKING_HOURS = [
   "08:00",
   "09:00",
   "10:00",
@@ -24,10 +24,10 @@ export async function GET(request: Request) {
     const todayStr = new Date().toISOString().split("T")[0];
     const date = searchParams.get("date") || todayStr;
 
-    // 1. Fetch all Field Supervisors and Ops Managers
+    // 1. Fetch only Field Supervisors (exclude Ops Managers, Admins, etc.)
     let supervisors = await prisma.user.findMany({
       where: {
-        role: { in: ["FIELD_SUPERVISOR", "SENIOR_FIELD_SUPERVISOR", "OPS_MANAGER"] },
+        role: { in: ["FIELD_SUPERVISOR", "SENIOR_FIELD_SUPERVISOR"] },
         isActive: true,
       },
       select: {

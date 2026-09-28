@@ -130,7 +130,10 @@ export default function TicketDrawer({
         const todayStr = new Date().toISOString().split("T")[0];
         const res = await fetch(`/api/field-supervisors?date=${todayStr}`);
         const data = await res.json();
-        setFieldSupervisors(data.supervisors || []);
+        const sups = (data.supervisors || []).filter(
+          (s: any) => s.role === "FIELD_SUPERVISOR" || s.role === "SENIOR_FIELD_SUPERVISOR"
+        );
+        setFieldSupervisors(sups);
       } catch (err) {
         console.error("Failed to load field supervisors:", err);
       }
