@@ -538,20 +538,37 @@ export default function FieldSupervisorView() {
     return `https://wa.me/${full}`;
   };
 
-  // KPI Calculations across all tasks
-  const pendingRecoveries = tasks.filter((t) => t.task_type === "VEHICLE_RECOVERY" && t.status !== "COMPLETED").length;
-  const pendingPickups = tasks.filter((t) => t.task_type === "GARAGE_PICKUP" && t.status !== "COMPLETED").length;
+  // Helper: Only accident-related garage pickups appear in the field supervisor queue.
+  // Routine maintenance like Vidange or AdBlue does not require a field pickup.
+  const isAccidentPickup = (task: FieldTask) => {
+    if (task.task_type !== "GARAGE_PICKUP") return true;
+    const desc = (task.description || "").toLowerCase();
+    // Exclude vidange, adblue, and routine maintenance
+    if (desc.includes("vidange") || desc.includes("adbleu") || desc.includes("adblue") || desc.includes("bon de commande")) {
+      return false;
+    }
+    // Linked tickets must be accident-related
+    if (task.linked_ticket_id) {
+      return desc.includes("accident") || desc.includes("claim") || desc.includes("sinistre");
+    }
+    return true;
+  };
+
+  // KPI Calculations across all valid tasks
+  const validTasks = useMemo(() => tasks.filter(isAccidentPickup), [tasks]);
+  const pendingRecoveries = validTasks.filter((t) => t.task_type === "VEHICLE_RECOVERY" && t.status !== "COMPLETED").length;
+  const pendingPickups = validTasks.filter((t) => t.task_type === "GARAGE_PICKUP" && t.status !== "COMPLETED").length;
   const checkupsDueCount = checkupsDue.length;
-  const completedTodayCount = tasks.filter(
+  const completedTodayCount = validTasks.filter(
     (t) => t.status === "COMPLETED" && t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()
   ).length;
 
-  const totalActiveTasks = tasks.filter((t) => t.status !== "COMPLETED").length;
-  const totalCompletedTasks = tasks.filter((t) => t.status === "COMPLETED").length;
+  const totalActiveTasks = validTasks.filter((t) => t.status !== "COMPLETED").length;
+  const totalCompletedTasks = validTasks.filter((t) => t.status === "COMPLETED").length;
 
   // Filter Tasks List based on search, status, priority, and active tab
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return validTasks.filter((task) => {
       // Tab filter
       if (activeTab === "VEHICLE_RECOVERY" && task.task_type !== "VEHICLE_RECOVERY") return false;
       if (activeTab === "GARAGE_PICKUP" && task.task_type !== "GARAGE_PICKUP") return false;
@@ -577,7 +594,7 @@ export default function FieldSupervisorView() {
 
       return true;
     });
-  }, [tasks, activeTab, filterStatus, filterPriority, searchTerm]);
+  }, [validTasks, activeTab, filterStatus, filterPriority, searchTerm]);
 
   // Group filtered tasks by type
   const recoveryTasks = filteredTasks.filter((t) => t.task_type === "VEHICLE_RECOVERY");
@@ -1370,7 +1387,7 @@ export default function FieldSupervisorView() {
             {pendingPickups}
           </div>
           <div className="text-3xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Véhicules prêts après réparation
+            Véhicules accidentés prêts après réparation
           </div>
         </button>
 

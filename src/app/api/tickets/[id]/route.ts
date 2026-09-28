@@ -228,7 +228,9 @@ export async function PATCH(
             completed_at: new Date(),
           }
         }).catch((e) => console.warn("Failed to mark recovery field task completed:", e));
-      } else {
+      } else if (ticket.ticket_type === "Accident" || ticket.ticket_type.toLowerCase().includes("accident")) {
+        // ONLY accident tickets require a Field Supervisor garage pickup to recover the vehicle.
+        // Routine maintenance like Vidange or AdBlue does NOT need a field pickup.
         await prisma.fieldTask.create({
           data: {
             task_type: "GARAGE_PICKUP",
@@ -236,7 +238,7 @@ export async function PATCH(
             plate_number: ticket.plate_number,
             driver_name: ticket.driver_name,
             driver_phone: ticket.driver_phone,
-            description: `Garage pickup: ${ticket.ticket_type} completed for ${ticket.plate_number}. ${ticket.description}`,
+            description: `Garage pickup (Accident): ${ticket.plate_number}. ${ticket.description}`,
             priority: ticket.priority,
             linked_ticket_id: ticket.id,
           },

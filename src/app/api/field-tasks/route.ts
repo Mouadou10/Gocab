@@ -54,6 +54,20 @@ async function syncRecoveryTasksAndOrphans() {
       }
     }
 
+    // Auto-clean any legacy or accidental GARAGE_PICKUP tasks generated from non-accident tickets (Vidange, AdBleu, etc.)
+    await prisma.fieldTask.deleteMany({
+      where: {
+        task_type: "GARAGE_PICKUP",
+        OR: [
+          { description: { contains: "Vidange" } },
+          { description: { contains: "vidange" } },
+          { description: { contains: "AdBleu" } },
+          { description: { contains: "adblue" } },
+          { description: { contains: "Bon de Commande" } },
+        ],
+      },
+    }).catch(() => {});
+
     // 2. Auto-sync any open recovery tickets from Support Kanban into FieldTask
     const openRecoveryTickets = await prisma.maintenanceTicket.findMany({
       where: {
