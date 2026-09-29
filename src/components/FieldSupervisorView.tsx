@@ -2155,6 +2155,7 @@ export default function FieldSupervisorView() {
                             type="button"
                             onClick={() => {
                               setAttestationData({
+                                vehicleId: insp.vehicle_id,
                                 fullName: insp.vehicle?.assigned_driver_name || "",
                                 cin: insp.vehicle?.driver_cin || "",
                                 brand: insp.vehicle?.make_model || "",
@@ -2449,6 +2450,9 @@ export default function FieldSupervisorView() {
           data={attestationData}
           isOpen={showAttestationModal}
           onClose={() => setShowAttestationModal(false)}
+          onSaveSuccess={() => {
+            fetchDueCheckups();
+          }}
         />
       )}
     </div>

@@ -59,8 +59,8 @@ export async function GET(request: Request) {
           const diffMs = expDay.getTime() - today.getTime();
           const daysLeft = Math.round(diffMs / (1000 * 3600 * 24));
 
-          // Condition: 3 days or fewer remaining (daysLeft <= 3), or already expired (daysLeft < 0)
-          if (daysLeft <= 3) {
+          // Condition: 5 days or fewer remaining (daysLeft <= 5), or already expired (daysLeft < 0)
+          if (daysLeft <= 5) {
             urgentDocs.push({
               name: doc.name,
               date: exp,

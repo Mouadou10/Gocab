@@ -170,6 +170,7 @@ export default function FleetView() {
     }).format(new Date());
 
     setAttestationVehicleData({
+      vehicleId: vehicle.id,
       fullName: vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || "",
       cin: vehicle.driverProfile?.cinNumber || "",
       brand: vehicle.make_model,
@@ -262,17 +263,17 @@ export default function FleetView() {
     setTimeout(() => setCopiedPlate(null), 2000);
   }
 
-  // Calculate Expiration Alerts
+  // Calculate Expiration & 1-Month Ending Alerts (5-day warning threshold)
   const now = new Date();
-  const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const fiveDaysFromNow = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
 
   const expiredItems = useMemo(() => {
-    const list: { vehicle: Vehicle; type: string; date: string; daysExpired: number }[] = [];
+    const list: { vehicle: Vehicle; type: string; date: string; daysExpired: number; isExpired: boolean }[] = [];
     vehicles.forEach((v) => {
       const checks = [
         { name: "Assurance", dateStr: v.insurance_expiry_date },
         { name: "Vignette", dateStr: v.vignette_expiry_date },
-        { name: "Autorisation", dateStr: v.autorisation_expiry_date },
+        { name: "Autorisation (1 mois)", dateStr: v.autorisation_expiry_date },
         { name: "Visite Tech", dateStr: v.technical_inspection_expiry },
       ];
 
@@ -280,14 +281,25 @@ export default function FleetView() {
         if (chk.dateStr) {
           try {
             const d = new Date(chk.dateStr);
-            if (!isNaN(d.getTime()) && d < now) {
-              const diffDays = Math.ceil((now.getTime() - d.getTime()) / (1000 * 3600 * 24));
-              list.push({
-                vehicle: v,
-                type: chk.name,
-                date: d.toLocaleDateString(),
-                daysExpired: diffDays,
-              });
+            if (!isNaN(d.getTime())) {
+              const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24));
+              if (d < now) {
+                list.push({
+                  vehicle: v,
+                  type: chk.name,
+                  date: d.toLocaleDateString(),
+                  daysExpired: Math.abs(diffDays),
+                  isExpired: true,
+                });
+              } else if (diffDays <= 5) {
+                list.push({
+                  vehicle: v,
+                  type: chk.name,
+                  date: d.toLocaleDateString(),
+                  daysExpired: diffDays,
+                  isExpired: false,
+                });
+              }
             }
           } catch {}
         }
@@ -368,7 +380,7 @@ export default function FleetView() {
           </span>
         );
       }
-      if (d <= threeDaysFromNow) {
+      if (d <= fiveDaysFromNow) {
         const days = Math.max(0, Math.ceil((d.getTime() - now.getTime()) / (1000 * 3600 * 24)));
         return (
           <span
@@ -654,11 +666,11 @@ export default function FleetView() {
                 <h3 className="text-xs font-black text-rose-950 flex items-center gap-2">
                   <span>Centre de Vigilance Réglementaire :</span>
                   <span className="bg-rose-200/80 text-rose-900 px-2 py-0.2 rounded-md font-mono text-[11px]">
-                    {expiredItems.length} documents expirés
+                    {expiredItems.length} alertes (expirés & fin de mois)
                   </span>
                 </h3>
                 <p className="text-[11px] text-rose-800/80 mt-0.5">
-                  Autorisations de circulation, visites techniques ou assurances échues nécessitant un renouvellement.
+                  Attestations de location (1 mois), autorisations, visites techniques ou assurances échues ou arrivant à terme sous 5 jours.
                 </p>
               </div>
             </div>
@@ -693,14 +705,20 @@ export default function FleetView() {
                     setEditingVehicle(item.vehicle);
                     setIsDrawerOpen(true);
                   }}
-                  className="bg-white hover:bg-rose-50/50 border border-rose-200/90 p-2 rounded-xl flex items-center justify-between text-xs font-mono shadow-2xs cursor-pointer transition-colors"
+                  className={`p-2 rounded-xl flex items-center justify-between text-xs font-mono shadow-2xs cursor-pointer transition-colors border ${
+                    item.isExpired
+                      ? "bg-white hover:bg-rose-50/50 border-rose-200/90"
+                      : "bg-amber-50/80 hover:bg-amber-100/60 border-amber-200"
+                  }`}
                 >
                   <div className="flex items-center gap-2 truncate">
                     <MoroccanPlateBadge plate={item.vehicle.plate_number} />
-                    <span className="text-rose-700 font-bold text-[11px] truncate">{item.type}</span>
+                    <span className={`font-bold text-[11px] truncate ${item.isExpired ? "text-rose-700" : "text-amber-800"}`}>
+                      {item.type}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-rose-500 font-semibold shrink-0">
-                    +{item.daysExpired}j
+                  <span className={`text-[10px] font-semibold shrink-0 ${item.isExpired ? "text-rose-500" : "text-amber-700 font-bold"}`}>
+                    {item.isExpired ? `+${item.daysExpired}j` : `⚠️ dans ${item.daysExpired}j`}
                   </span>
                 </div>
               ))}
@@ -1103,6 +1121,9 @@ export default function FleetView() {
           onClose={() => {
             setIsAttestationModalOpen(false);
             setAttestationVehicleData(null);
+          }}
+          onSaveSuccess={() => {
+            fetchVehicles();
           }}
         />
       )}

@@ -251,6 +251,7 @@ export default function VehicleDrawer({
     }).format(new Date());
 
     setAttestationData({
+      vehicleId: vehicle?.id,
       fullName: assignedDriverName || vehicle?.driverProfile?.fullName || "",
       cin: vehicle?.driverProfile?.cinNumber || "",
       brand: makeModel || vehicle?.make_model || "",
@@ -885,7 +886,10 @@ export default function VehicleDrawer({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setAttestationData(att.attestationData);
+                                  setAttestationData({
+                                    ...att.attestationData,
+                                    vehicleId: vehicle?.id,
+                                  });
                                   setIsAttestationOpen(true);
                                 }}
                                 className="px-2 py-1 bg-white hover:bg-emerald-700 hover:text-white text-emerald-800 font-semibold rounded-md border border-emerald-200 text-[10px] transition-colors flex items-center gap-1"
@@ -924,6 +928,9 @@ export default function VehicleDrawer({
             onClose={() => {
               setIsAttestationOpen(false);
               setAttestationData(null);
+            }}
+            onSaveSuccess={() => {
+              onSaveSuccess();
             }}
           />
         )}

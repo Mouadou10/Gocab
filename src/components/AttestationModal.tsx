@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { printAttestation } from "@/lib/attestationPrint";
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
+import { calculateOneMonthPeriod } from "@/lib/attestationDate";
+import toast from "react-hot-toast";
 
 export interface AttestationData {
+  vehicleId?: string;
   fullName: string;
   cin: string;
   brand: string;
@@ -18,9 +21,10 @@ interface AttestationModalProps {
   data: AttestationData;
   isOpen: boolean;
   onClose: () => void;
+  onSaveSuccess?: (info: any) => void;
 }
 
-export default function AttestationModal({ data, isOpen, onClose }: AttestationModalProps) {
+export default function AttestationModal({ data, isOpen, onClose, onSaveSuccess }: AttestationModalProps) {
   // Allow user to fine-tune or fill missing variables before printing
   const [fullName, setFullName] = useState(data.fullName || "");
   const [cin, setCin] = useState(data.cin || "");
@@ -29,6 +33,8 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
   const [chassisNumber, setChassisNumber] = useState(data.chassisNumber || "");
   const [date, setDate] = useState(data.date || "");
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasSaved, setHasSaved] = useState(false);
 
   // Sync state if props change
   React.useEffect(() => {
@@ -38,9 +44,56 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
     setImmat(data.immat || "");
     setChassisNumber(data.chassisNumber || "");
     setDate(data.date || "");
+    setHasSaved(false);
   }, [data]);
 
+  // Live 1-month period calculation based on attestation date as Day 1
+  const periodInfo = useMemo(() => {
+    try {
+      return calculateOneMonthPeriod(date);
+    } catch {
+      return null;
+    }
+  }, [date]);
+
   if (!isOpen) return null;
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/attestations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicleId: data.vehicleId,
+          immat,
+          fullName,
+          cin,
+          brand,
+          chassisNumber,
+          date,
+          inspectionId: data.inspectionId,
+        }),
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        setHasSaved(true);
+        toast.success(
+          `Attestation enregistrée ! Période de 1 mois active jusqu'au ${result.formattedExpiryDate}. Alerte programmée pour la fin de mois.`,
+          { duration: 5500 }
+        );
+        onSaveSuccess?.(result);
+      } else {
+        toast.error(result.error || "Erreur lors de l'enregistrement");
+      }
+    } catch (err: any) {
+      console.error("Save attestation error:", err);
+      toast.error("Erreur de connexion lors de l'enregistrement");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handlePrint = () => {
     printAttestation({
@@ -64,11 +117,28 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
             <div className="flex items-center gap-2 sm:gap-3">
               <span className="text-xl sm:text-2xl">📄</span>
               <div>
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                  Attestation de Location de Voiture
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Attestation de Location de Voiture</span>
+                  {periodInfo && (
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        periodInfo.isExpired
+                          ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700"
+                          : periodInfo.isEndingSoon
+                          ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 animate-pulse"
+                          : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                      }`}
+                    >
+                      {periodInfo.isExpired
+                        ? `🚨 Expiré (${Math.abs(periodInfo.daysLeft)}j)`
+                        : periodInfo.isEndingSoon
+                        ? `⚠️ Échéance (${periodInfo.daysLeft}j)`
+                        : `✓ 1 Mois (${periodInfo.daysLeft}j restants)`}
+                    </span>
+                  )}
                 </h2>
                 <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
-                  Annexe 3 de la Convention — Prête à l&apos;impression A4
+                  Annexe 3 de la Convention — Durée 1 Mois renouvelable
                 </p>
               </div>
             </div>
@@ -86,14 +156,42 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
             <button
               type="button"
               onClick={() => setIsEditing(!isEditing)}
-              className="flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors flex items-center justify-center gap-1.5"
+              className="flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>{isEditing ? "👁️ Rendu" : "✏️ Modifier"}</span>
             </button>
             <button
               type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className={`flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                hasSaved
+                  ? "bg-blue-700 hover:bg-blue-600 text-white"
+                  : "bg-blue-600 hover:bg-blue-500 text-white"
+              }`}
+              title="Enregistrer la date comme premier jour de la période de 1 mois et calculer l'échéance"
+            >
+              {isSaving ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Enregistrement...</span>
+                </>
+              ) : hasSaved ? (
+                <>
+                  <span>✓</span>
+                  <span>Enregistré</span>
+                </>
+              ) : (
+                <>
+                  <span>💾</span>
+                  <span>Enregistrer (1 Mois)</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
-              className="flex-1 sm:flex-initial px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              className="flex-1 sm:flex-initial px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>🖨️ Imprimer</span>
             </button>
@@ -174,6 +272,84 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
                   className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white"
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 1-Month Period & Next Ending Month Warning Banner (Non-printable) */}
+        {periodInfo && (
+          <div className="no-print mx-4 sm:mx-6 mt-4 p-3.5 sm:p-4 rounded-xl border transition-all duration-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="text-2xl sm:text-3xl shrink-0">
+                {periodInfo.isExpired ? "🚨" : periodInfo.isEndingSoon ? "⚠️" : "🗓️"}
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                    Période Contractuelle de 1 Mois
+                  </h3>
+                  {periodInfo.isExpired ? (
+                    <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded bg-rose-600 text-white animate-pulse">
+                      Expirée ({Math.abs(periodInfo.daysLeft)}j de dépassement)
+                    </span>
+                  ) : periodInfo.isEndingSoon ? (
+                    <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded bg-amber-500 text-white animate-pulse">
+                      Alerte Fin de Mois ({periodInfo.daysLeft} jour{periodInfo.daysLeft > 1 ? "s" : ""} restant{periodInfo.daysLeft > 1 ? "s" : ""})
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-600 text-white">
+                      Conforme ({periodInfo.daysLeft} jours restants)
+                    </span>
+                  )}
+                  {hasSaved && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
+                      ✓ Période Enregistrée
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>
+                    <strong>Jour 1 (Début) :</strong> {periodInfo.formattedStartDate}
+                  </span>
+                  <span>→</span>
+                  <span>
+                    <strong>Échéance (Fin du mois) :</strong> {periodInfo.formattedExpiryDate}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  L&apos;enregistrement prend cette date comme premier jour, fixe l&apos;échéance à +1 mois et active les alertes de fin de mois.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg shadow transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                  hasSaved
+                    ? "bg-blue-700 text-white hover:bg-blue-600"
+                    : "bg-blue-600 hover:bg-blue-500 text-white"
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Enregistrement...</span>
+                  </>
+                ) : hasSaved ? (
+                  <>
+                    <span>✓</span>
+                    <span>Période Enregistrée</span>
+                  </>
+                ) : (
+                  <>
+                    <span>💾</span>
+                    <span>Enregistrer (1 Mois)</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -289,17 +465,47 @@ export default function AttestationModal({ data, isOpen, onClose }: AttestationM
         </div>
 
         {/* Modal Bottom Bar (Hidden on Print) */}
-        <div className="no-print bg-slate-50 dark:bg-slate-800 px-6 py-3.5 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs text-slate-500">
-          <div>
-            Format A4 optimisé pour impression directe ou exportation PDF.
+        <div className="no-print bg-slate-50 dark:bg-slate-800 px-6 py-3.5 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>
+              La date d&apos;attestation sert de <strong>Jour 1</strong> pour le calcul du mois. L&apos;avertissement d&apos;échéance est automatiquement synchronisé.
+            </span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
             >
               Fermer
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className={`px-4 py-2 font-bold rounded-lg shadow transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                hasSaved
+                  ? "bg-blue-700 hover:bg-blue-600 text-white"
+                  : "bg-blue-600 hover:bg-blue-500 text-white"
+              }`}
+            >
+              {isSaving ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Enregistrement...</span>
+                </>
+              ) : hasSaved ? (
+                <>
+                  <span>✓</span>
+                  <span>Période Enregistrée</span>
+                </>
+              ) : (
+                <>
+                  <span>💾</span>
+                  <span>Enregistrer (1 Mois)</span>
+                </>
+              )}
             </button>
             <button
               type="button"

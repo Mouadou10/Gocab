@@ -152,6 +152,7 @@ export async function POST(request: Request) {
     }).format(new Date());
 
     const attestationData = {
+      vehicleId: vehicle?.id,
       fullName: vehicle?.assigned_driver_name || vehicle?.driverProfile?.fullName || "",
       cin: vehicle?.driverProfile?.cinNumber || "",
       brand: vehicle?.make_model || "",
