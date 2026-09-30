@@ -57,7 +57,7 @@ export const CATALOG_ITEMS: CatalogItem[] = [
     designation: "Filtre à Huile",
     price_ttc: 50,
   },
-  { id: "vidange_simple", category: "Entretien", designation: "Vidange simple", price_ttc: 510 },
+  { id: "vidange_simple", category: "Entretien", designation: "Vidange simple", price_ttc: 530 },
   { id: "vidange_complete", category: "Entretien", designation: "Vidange complète", price_ttc: 960 },
   { id: "adblue", category: "Entretien", designation: "AdBlue", price_ttc: 95 },
   { id: "antigel", category: "Entretien", designation: "Antigel", price_ttc: 20 },

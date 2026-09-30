@@ -209,7 +209,7 @@ export default function TicketDrawer({
       vehicle_vin: vObj?.vin || "",
       items:
         ticketType === "Vidange"
-          ? [{ id: "vidange_1", designation: "Vidange simple", quantity: 1, unit_price_ttc: 510, total_ttc: 510 }]
+          ? [{ id: "vidange_1", designation: "Vidange simple", quantity: 1, unit_price_ttc: 530, total_ttc: 530 }]
           : ticketType === "AdBleu"
           ? [{ id: "adblue_1", designation: "AdBlue", quantity: 1, unit_price_ttc: 95, total_ttc: 95 }]
           : [],
@@ -726,7 +726,7 @@ export default function TicketDrawer({
                     <div className="p-2.5 bg-white rounded-xl border border-amber-100 flex items-center justify-between shadow-2xs">
                       <div>
                         <span className="text-xs font-bold text-gray-800 block">Vidange Simple</span>
-                        <span className="text-3xs text-gray-500">Huile + Filtre (510 DH)</span>
+                        <span className="text-3xs text-gray-500">Huile + Filtre (530 DH)</span>
                       </div>
                       <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
                         {vidangeStats.simpleCount}

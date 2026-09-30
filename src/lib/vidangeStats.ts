@@ -112,7 +112,7 @@ export function extractVidangeStatsFromTickets(tickets: any[]): VidangeStats {
         status: t.status,
         is_solved: isSolved,
         type: typeStr,
-        cost: t.repair_cost || (typeStr === "Vidange Complète" ? 960 : 510),
+        cost: t.repair_cost || (typeStr === "Vidange Complète" ? 960 : 530),
         garage: t.garage_name || parsedBc?.supplier_name || "Hard Auto Services",
         bc_number: parsedBc?.bc_number || null,
         description: t.description || "",
