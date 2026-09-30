@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { useLiveSync } from "@/context/LiveSyncContext";
@@ -109,6 +109,18 @@ export default function SharedVehicleHubView() {
 
   // Vehicle Autocomplete Dropdown State
   const [isPlateDropdownOpen, setIsPlateDropdownOpen] = useState(false);
+  const plateDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to dismiss plate autocomplete dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (plateDropdownRef.current && !plateDropdownRef.current.contains(event.target as Node)) {
+        setIsPlateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Solve Modal State
   const [solvingIssue, setSolvingIssue] = useState<VehicleIssueItem | null>(null);
@@ -893,7 +905,10 @@ export default function SharedVehicleHubView() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setIsPlateDropdownOpen(false);
+                }}
                 className="text-white/80 hover:text-white text-xl p-1 cursor-pointer"
               >
                 ✕
@@ -902,7 +917,7 @@ export default function SharedVehicleHubView() {
 
             <form onSubmit={handleCreateSubmit} className="p-5 sm:p-6 space-y-4 text-xs">
               {/* Vehicle Plate with Dropdown Autocomplete */}
-              <div className="relative">
+              <div ref={plateDropdownRef} className="relative">
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Immatriculation (Matricule Véhicule) *
                 </label>
@@ -912,6 +927,9 @@ export default function SharedVehicleHubView() {
                   placeholder="Tapez le matricule (ex: 21527-Y-6 ou WW...)"
                   value={newPlate}
                   onFocus={() => setIsPlateDropdownOpen(true)}
+                  onBlur={() => {
+                    setTimeout(() => setIsPlateDropdownOpen(false), 200);
+                  }}
                   onChange={(e) => {
                     setNewPlate(e.target.value);
                     setIsPlateDropdownOpen(true);
@@ -954,6 +972,7 @@ export default function SharedVehicleHubView() {
                     type="text"
                     placeholder="Nom complet"
                     value={newDriverName}
+                    onFocus={() => setIsPlateDropdownOpen(false)}
                     onChange={(e) => setNewDriverName(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
                   />
@@ -966,6 +985,7 @@ export default function SharedVehicleHubView() {
                     type="text"
                     placeholder="06XXXXXXXX"
                     value={newDriverPhone}
+                    onFocus={() => setIsPlateDropdownOpen(false)}
                     onChange={(e) => setNewDriverPhone(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
                   />
@@ -980,6 +1000,7 @@ export default function SharedVehicleHubView() {
                   </label>
                   <select
                     value={newCategory}
+                    onFocus={() => setIsPlateDropdownOpen(false)}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
                   >
@@ -995,6 +1016,7 @@ export default function SharedVehicleHubView() {
                   </label>
                   <select
                     value={newPriority}
+                    onFocus={() => setIsPlateDropdownOpen(false)}
                     onChange={(e) => setNewPriority(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
                   >
@@ -1015,6 +1037,7 @@ export default function SharedVehicleHubView() {
                   required
                   placeholder="Ex: Voyant moteur allumé sur autoroute / Bruit frein avant droit"
                   value={newTitle}
+                  onFocus={() => setIsPlateDropdownOpen(false)}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                 />
@@ -1030,6 +1053,7 @@ export default function SharedVehicleHubView() {
                   required
                   placeholder="Expliquez ce qui s'est passé, les symptômes constatés, les démarches déjà entreprises, la localisation..."
                   value={newDescription}
+                  onFocus={() => setIsPlateDropdownOpen(false)}
                   onChange={(e) => setNewDescription(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
@@ -1058,7 +1082,10 @@ export default function SharedVehicleHubView() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setIsPlateDropdownOpen(false);
+                  }}
                   className="px-4 py-2 text-slate-600 hover:text-slate-800 font-bold cursor-pointer"
                 >
                   Annuler
