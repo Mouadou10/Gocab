@@ -55,6 +55,9 @@ export interface Vehicle {
   technical_inspection_expiry: string | null;
   assigned_driver_name: string | null;
   assigned_driver_phone: string | null;
+  historical_driver_name?: string | null;
+  historical_driver_phone?: string | null;
+  is_current_working_car?: boolean;
   driverProfile?: { id: string; fullName: string; phoneSanitized: string; cinNumber?: string | null } | null;
   total_expenses_mad?: number;
   notes: string | null;
@@ -583,6 +586,14 @@ export default function VehicleDrawer({
                     <option value="" disabled>Legacy: {assignedDriverName}</option>
                   )}
                 </select>
+                {vehicle?.historical_driver_name && !assignedDriverId && !assignedDriverName && (
+                  <div className="mt-2 p-2 bg-amber-50/90 border border-amber-200/90 rounded-xl text-3xs sm:text-xs text-amber-900 flex items-center gap-1.5">
+                    <span>🕒</span>
+                    <span>
+                      Dernier conducteur historique : <strong>{vehicle.historical_driver_name}</strong> (Ce véhicule n&apos;est plus son véhicule actuel).
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

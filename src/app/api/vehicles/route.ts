@@ -21,6 +21,8 @@ export async function GET(request: Request) {
         { plate_number: { contains: search } },
         { make_model: { contains: search } },
         { vin: { contains: search } },
+        { assigned_driver_name: { contains: search } },
+        { historical_driver_name: { contains: search } },
       ];
     }
 
@@ -48,11 +50,26 @@ export async function GET(request: Request) {
 
     const enrichedVehicles = vehicles.map((v: any) => {
       const totalExpenseMad = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount_mad || 0), 0);
+      const isWorkingCar = Boolean(
+        v.assigned_driver_name &&
+        ((v.status || "").toLowerCase().includes("actif") ||
+         (v.status || "").toLowerCase().includes("service") ||
+         v.driverProfile)
+      );
       return {
         ...v,
+        is_current_working_car: isWorkingCar,
         total_expenses_mad: totalExpenseMad,
       };
     });
+
+    if (search) {
+      enrichedVehicles.sort((a: any, b: any) => {
+        if (a.is_current_working_car && !b.is_current_working_car) return -1;
+        if (!a.is_current_working_car && b.is_current_working_car) return 1;
+        return 0;
+      });
+    }
 
     return NextResponse.json({ vehicles: enrichedVehicles });
   } catch (error) {

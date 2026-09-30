@@ -63,8 +63,10 @@ model Vehicle {
   autorisation_expiry_date    DateTime? // Autorisation de Circulation Expiration
   technical_inspection_expiry DateTime? // Visite Technique Expiration
   
-  assigned_driver_name        String?   // Driver name if assigned
-  assigned_driver_phone       String?   // Driver phone if assigned
+  assigned_driver_name        String?   // Driver name if currently assigned
+  assigned_driver_phone       String?   // Driver phone if currently assigned
+  historical_driver_name      String?   // Former/historical driver name
+  historical_driver_phone     String?   // Former/historical driver phone
   
   // Staff Assignment â€” each supervisor handles ~150 vehicles
   assigned_supervisor         String?   // Field Supervisor name responsible for this vehicle

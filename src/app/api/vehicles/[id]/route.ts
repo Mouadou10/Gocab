@@ -4,6 +4,7 @@ import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { processVehicleSideEffects } from "@/lib/services/vehicleService";
 import { logAudit } from "@/lib/services/auditLogger";
 import { extractVidangeStatsFromTickets } from "@/lib/vidangeStats";
+import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
 
 /**
  * GET /api/vehicles/[id]
@@ -212,28 +213,51 @@ export async function PATCH(
     if (body.assigned_driver_phone !== undefined) updateData.assigned_driver_phone = body.assigned_driver_phone;
     if (body.notes !== undefined) updateData.notes = body.notes;
 
+    if (body.historical_driver_name !== undefined) updateData.historical_driver_name = body.historical_driver_name;
+    if (body.historical_driver_phone !== undefined) updateData.historical_driver_phone = body.historical_driver_phone;
+
     if (body.assigned_driver_id !== undefined) {
       if (body.assigned_driver_id) {
-        // Link the driver profile to this vehicle
-        await prisma.driverProfile.update({
-          where: { id: body.assigned_driver_id },
-          data: { assignedVehicleId: id }
-        });
-        
-        // Fetch driver info to update denormalized fields on vehicle
+        // Fetch driver info
         const driver = await prisma.driverProfile.findUnique({ where: { id: body.assigned_driver_id } });
         if (driver) {
+          // If driver previously had another vehicle, move that former vehicle to history
+          if (driver.assignedVehicleId && driver.assignedVehicleId !== id) {
+            await prisma.vehicle.update({
+              where: { id: driver.assignedVehicleId },
+              data: {
+                assigned_driver_name: null,
+                assigned_driver_phone: null,
+                historical_driver_name: driver.fullName,
+                historical_driver_phone: driver.phoneSanitized,
+                status: "Available",
+              },
+            }).catch(() => {});
+          }
+
+          // Link the driver profile to this vehicle
+          await prisma.driverProfile.update({
+            where: { id: body.assigned_driver_id },
+            data: { assignedVehicleId: id },
+          });
+
           updateData.assigned_driver_name = driver.fullName;
           updateData.assigned_driver_phone = driver.phoneSanitized;
+          updateData.historical_driver_name = null;
         }
       } else {
-        // Unlink the driver
-        const currentDriver = await prisma.driverProfile.findUnique({ where: { assignedVehicleId: id }});
+        // Unlink the driver and record as historical
+        const currentDriver = await prisma.driverProfile.findUnique({ where: { assignedVehicleId: id } });
         if (currentDriver) {
-           await prisma.driverProfile.update({
-             where: { id: currentDriver.id },
-             data: { assignedVehicleId: null }
-           });
+          await prisma.driverProfile.update({
+            where: { id: currentDriver.id },
+            data: { assignedVehicleId: null },
+          });
+          updateData.historical_driver_name = currentDriver.fullName;
+          updateData.historical_driver_phone = currentDriver.phoneSanitized;
+        } else if (prevVehicle?.assigned_driver_name) {
+          updateData.historical_driver_name = prevVehicle.assigned_driver_name;
+          updateData.historical_driver_phone = prevVehicle.assigned_driver_phone;
         }
         updateData.assigned_driver_name = null;
         updateData.assigned_driver_phone = null;
@@ -244,6 +268,10 @@ export async function PATCH(
       where: { id },
       data: updateData,
     });
+
+    if (body.assigned_driver_id !== undefined || body.assigned_driver_name !== undefined) {
+      await reconcileDriverVehicleAssignments().catch(() => {});
+    }
 
     const userId = session?.user?.name || session?.user?.email || session?.user?.id || "agent";
     

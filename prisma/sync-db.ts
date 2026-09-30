@@ -74,6 +74,8 @@ async function syncSchema() {
       "ALTER TABLE FieldTask ADD COLUMN scheduled_date TEXT",
       "ALTER TABLE FieldTask ADD COLUMN scheduled_time TEXT",
       "ALTER TABLE FieldTask ADD COLUMN duration_hours REAL DEFAULT 1.0",
+      "ALTER TABLE Vehicle ADD COLUMN historical_driver_name TEXT",
+      "ALTER TABLE Vehicle ADD COLUMN historical_driver_phone TEXT",
     ];
 
     for (const migration of migrations) {

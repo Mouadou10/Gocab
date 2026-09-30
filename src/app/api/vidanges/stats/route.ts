@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractVidangeStatsFromTickets } from "@/lib/vidangeStats";
+import { getDriverCurrentWorkingCar } from "@/lib/services/driverVehicleReconciliation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +11,16 @@ export const dynamic = "force-dynamic";
  * Query params:
  * - vehicleId or vehicle_id: string
  * - plate or plate_number: string
+ * - driver or driverName: string (auto-resolves driver's current working car)
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const vehicleId = searchParams.get("vehicleId") || searchParams.get("vehicle_id") || "";
     const plate = searchParams.get("plate") || searchParams.get("plate_number") || "";
+    const driver = searchParams.get("driver") || searchParams.get("driverName") || "";
 
-    if (!vehicleId && !plate) {
+    if (!vehicleId && !plate && !driver) {
       // Return stats map for all vehicles that have tickets
       const allTickets = await prisma.maintenanceTicket.findMany({
         where: {
@@ -66,6 +69,18 @@ export async function GET(request: Request) {
         },
         select: { id: true, plate_number: true, make_model: true, current_mileage: true },
       });
+    }
+
+    if (!vehicle && driver) {
+      const workingCar = await getDriverCurrentWorkingCar(driver);
+      if (workingCar) {
+        vehicle = {
+          id: workingCar.id,
+          plate_number: workingCar.plate_number,
+          make_model: workingCar.make_model,
+          current_mileage: workingCar.current_mileage,
+        };
+      }
     }
 
     const whereConditions: any[] = [];

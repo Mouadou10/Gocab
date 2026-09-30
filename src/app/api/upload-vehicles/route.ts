@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
+import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s execution on Vercel for bulk imports
@@ -462,6 +463,19 @@ export async function POST(request: NextRequest) {
 
               if (matchedDriver) {
                 if (matchedDriver.assignedVehicleId !== vehicleId) {
+                  // Release driver's former vehicle to history
+                  if (matchedDriver.assignedVehicleId) {
+                    await prisma.vehicle.update({
+                      where: { id: matchedDriver.assignedVehicleId },
+                      data: {
+                        assigned_driver_name: null,
+                        assigned_driver_phone: null,
+                        historical_driver_name: matchedDriver.fullName,
+                        historical_driver_phone: matchedDriver.phoneSanitized,
+                      },
+                    }).catch(() => {});
+                  }
+
                   // Release this vehicle from ANY other driver first to prevent unique constraint violation
                   await prisma.driverProfile.updateMany({
                     where: { assignedVehicleId: vehicleId, id: { not: matchedDriver.id } },
@@ -718,6 +732,11 @@ export async function POST(request: NextRequest) {
       });
       archived_orphans = ghostVehicles.length;
     }
+
+    // Run driver-vehicle reconciliation to guarantee 1 driver = 1 working car
+    await reconcileDriverVehicleAssignments().catch((err) => {
+      console.error("Post-upload vehicle reconciliation error:", err);
+    });
 
     // Trigger sync state update
     void touchSyncState("all");

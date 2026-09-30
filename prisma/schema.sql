@@ -181,6 +181,8 @@ CREATE TABLE "Vehicle" (
     "technical_inspection_expiry" DATETIME,
     "assigned_driver_name" TEXT,
     "assigned_driver_phone" TEXT,
+    "historical_driver_name" TEXT,
+    "historical_driver_phone" TEXT,
     "assigned_supervisor" TEXT,
     "assigned_collector" TEXT,
     "notes" TEXT,

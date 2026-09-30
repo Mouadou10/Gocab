@@ -506,8 +506,30 @@ export default function TicketDrawer({
                           v.plate_number.toLowerCase().includes(q) ||
                           v.make_model.toLowerCase().includes(q) ||
                           (v.hub_city && v.hub_city.toLowerCase().includes(q)) ||
-                          (v.assigned_driver_name && v.assigned_driver_name.toLowerCase().includes(q))
+                          (v.assigned_driver_name && v.assigned_driver_name.toLowerCase().includes(q)) ||
+                          (v.historical_driver_name && v.historical_driver_name.toLowerCase().includes(q))
                         );
+                      });
+
+                      // Sort: current working cars first, then active vehicles, then historical
+                      filtered.sort((a, b) => {
+                        const aIsWorking = Boolean(
+                          a.is_current_working_car ||
+                          (a.assigned_driver_name && (a.status || "").toLowerCase().includes("actif"))
+                        );
+                        const bIsWorking = Boolean(
+                          b.is_current_working_car ||
+                          (b.assigned_driver_name && (b.status || "").toLowerCase().includes("actif"))
+                        );
+                        if (aIsWorking && !bIsWorking) return -1;
+                        if (!aIsWorking && bIsWorking) return 1;
+
+                        const aIsActif = (a.status || "").toLowerCase().includes("actif");
+                        const bIsActif = (b.status || "").toLowerCase().includes("actif");
+                        if (aIsActif && !bIsActif) return -1;
+                        if (!aIsActif && bIsActif) return 1;
+
+                        return 0;
                       });
 
                       if (filtered.length === 0) {
@@ -518,36 +540,70 @@ export default function TicketDrawer({
                         );
                       }
 
-                      return filtered.map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => {
-                            handleVehicleSelect(v.id);
-                            setIsDropdownOpen(false);
-                            setVehicleSearch("");
-                          }}
-                          className="w-full p-2.5 text-left hover:bg-blue-50/70 transition-colors flex items-center justify-between cursor-pointer group"
-                        >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-xs bg-navy/5 group-hover:bg-navy/10 text-navy px-2 py-0.5 rounded-md border border-navy/10">
-                                {v.plate_number}
-                              </span>
-                              <span className="text-xs font-semibold text-gray-800">
-                                {v.make_model}
-                              </span>
+                      return filtered.map((v) => {
+                        const isWorkingCar = Boolean(
+                          v.is_current_working_car ||
+                          (v.assigned_driver_name && (
+                            (v.status || "").toLowerCase().includes("actif") ||
+                            (v.status || "").toLowerCase().includes("service")
+                          ))
+                        );
+                        const isHistorical = Boolean(!v.assigned_driver_name && v.historical_driver_name);
+
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              handleVehicleSelect(v.id);
+                              setIsDropdownOpen(false);
+                              setVehicleSearch("");
+                            }}
+                            className={`w-full p-2.5 text-left transition-colors flex items-center justify-between cursor-pointer group ${
+                              isHistorical
+                                ? "bg-amber-50/40 hover:bg-amber-100/60 border-l-4 border-amber-400"
+                                : isWorkingCar
+                                ? "hover:bg-blue-50/70 border-l-4 border-emerald-500"
+                                : "hover:bg-blue-50/70 border-l-4 border-transparent"
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-bold text-xs bg-navy/5 group-hover:bg-navy/10 text-navy px-2 py-0.5 rounded-md border border-navy/10">
+                                  {v.plate_number}
+                                </span>
+                                <span className="text-xs font-semibold text-gray-800">
+                                  {v.make_model}
+                                </span>
+                                {isWorkingCar && (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                    🚗 Véhicule Actuel
+                                  </span>
+                                )}
+                                {isHistorical && (
+                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-1.5 py-0.5 rounded">
+                                    ⚠️ Historique
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-3xs text-gray-500">
+                                📍 {v.hub_city || "Casablanca"}
+                                {v.assigned_driver_name && ` · 👤 ${v.assigned_driver_name} (Actuel)`}
+                                {isHistorical && ` · 🕒 Ancien conducteur : ${v.historical_driver_name}`}
+                              </p>
                             </div>
-                            <p className="text-3xs text-gray-500">
-                              📍 {v.hub_city || "Casablanca"}
-                              {v.assigned_driver_name && ` · 👤 ${v.assigned_driver_name}`}
-                            </p>
-                          </div>
-                          <span className="text-3xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                            {v.status}
-                          </span>
-                        </button>
-                      ));
+                            <span className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                              isHistorical
+                                ? "bg-amber-100 text-amber-800"
+                                : (v.status || "").toLowerCase().includes("actif")
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-gray-100 text-gray-600"
+                            }`}>
+                              {v.status}
+                            </span>
+                          </button>
+                        );
+                      });
                     })()}
                   </div>
                 )}
@@ -583,6 +639,41 @@ export default function TicketDrawer({
               />
             </div>
           </div>
+
+          {/* Working Car Suggestion Pill if driver has an active working car not currently selected */}
+          {(() => {
+            if (!driverName || driverName.trim().length < 3) return null;
+            const qDriver = driverName.trim().toLowerCase();
+            const workingCar = vehicles.find(
+              (v) =>
+                v.id !== selectedVehicleId &&
+                v.assigned_driver_name &&
+                v.assigned_driver_name.toLowerCase().includes(qDriver) &&
+                ((v.status || "").toLowerCase().includes("actif") || (v.status || "").toLowerCase().includes("service"))
+            );
+            if (!workingCar) return null;
+            return (
+              <div className="p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center justify-between gap-2 text-xs animate-fadeIn">
+                <div className="flex items-center gap-2 text-emerald-950">
+                  <span className="p-1 bg-emerald-500 text-white rounded-lg text-xs">🚗</span>
+                  <span className="text-3xs sm:text-xs">
+                    Véhicule actuel en service de <strong>{driverName}</strong> :{" "}
+                    <span className="font-mono font-bold text-emerald-900 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+                      {workingCar.plate_number}
+                    </span>{" "}
+                    ({workingCar.make_model})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleVehicleSelect(workingCar.id)}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-3xs shrink-0 transition-colors shadow-2xs"
+                >
+                  Sélectionner ce véhicule
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Ticket Type */}
           <div>

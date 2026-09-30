@@ -946,6 +946,17 @@ export default function FleetView() {
                             <span>👤</span>
                             <span className="truncate max-w-[150px]">{v.assigned_driver_name}</span>
                           </div>
+                        ) : v.historical_driver_name ? (
+                          <div className="mt-1 space-y-0.5">
+                            <div className="text-[10px] text-slate-400 italic">Non assigné</div>
+                            <div
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50/90 border border-amber-200/90 text-[10px] text-amber-800 font-medium max-w-[170px] truncate"
+                              title={`Ancien conducteur historique : ${v.historical_driver_name}`}
+                            >
+                              <span className="text-[9px]">🕒</span>
+                              <span className="truncate">Hist: {v.historical_driver_name}</span>
+                            </div>
+                          </div>
                         ) : (
                           <div className="text-[10px] text-slate-400 italic mt-0.5">Non assigné</div>
                         )}

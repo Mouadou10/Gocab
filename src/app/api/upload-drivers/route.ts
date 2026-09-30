@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
+import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
 
 /** Standard Moroccan phone sanitization (+212XXXXXXXXX) */
 function sanitizePhone(raw: string): string {
@@ -241,6 +242,19 @@ export async function POST(request: NextRequest) {
         // Update existing driver profile with real contact info, while preserving or updating vehicle
         const finalVehicleId = assignedVehicleId || existing.assignedVehicleId;
 
+        // If assigning a new vehicle, move driver's previous vehicle to history
+        if (assignedVehicleId && existing.assignedVehicleId && existing.assignedVehicleId !== assignedVehicleId) {
+          await prisma.vehicle.update({
+            where: { id: existing.assignedVehicleId },
+            data: {
+              assigned_driver_name: null,
+              assigned_driver_phone: null,
+              historical_driver_name: existing.fullName,
+              historical_driver_phone: existing.phoneSanitized,
+            },
+          }).catch(() => {});
+        }
+
         // If assigning a vehicle, ensure no other driver is currently holding it
         if (finalVehicleId) {
           await prisma.driverProfile.updateMany({
@@ -344,8 +358,13 @@ export async function POST(request: NextRequest) {
       },
       data: {
         is_archived: true,
-        assignedVehicleId: null
-      }
+        assignedVehicleId: null,
+      },
+    });
+
+    // Reconcile all assignments to guarantee 1 driver = 1 working car
+    await reconcileDriverVehicleAssignments().catch((err) => {
+      console.error("Post-upload driver reconciliation error:", err);
     });
 
     return NextResponse.json({
