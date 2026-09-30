@@ -13,6 +13,7 @@ import {
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
 import { Printer, Check, Plus, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
+import { VidangeStats } from "@/lib/vidangeStats";
 
 interface BonDeCommandeModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface BonDeCommandeModalProps {
   onSave?: (data: BonDeCommandeData) => void;
   initialData?: Partial<BonDeCommandeData> | null;
   readOnly?: boolean;
+  vidangeStats?: VidangeStats | null;
 }
 
 export default function BonDeCommandeModal({
@@ -28,6 +30,7 @@ export default function BonDeCommandeModal({
   onSave,
   initialData,
   readOnly = false,
+  vidangeStats,
 }: BonDeCommandeModalProps) {
   const [bcNumber, setBcNumber] = useState<string>(() => {
     if (initialData?.bc_number && initialData.bc_number.trim() !== "") {
@@ -72,7 +75,39 @@ export default function BonDeCommandeModal({
   const [customDesignation, setCustomDesignation] = useState<string>("");
   const [customPriceTTC, setCustomPriceTTC] = useState<string>("");
 
+  // Solved vidange stats for the current vehicle
+  const [internalVidangeStats, setInternalVidangeStats] = useState<VidangeStats | null>(vidangeStats || null);
+
   const prevIsOpenRef = useRef<boolean>(isOpen);
+
+  // Sync or fetch vidange stats whenever plate changes or modal opens
+  useEffect(() => {
+    if (vidangeStats) {
+      setInternalVidangeStats(vidangeStats);
+      return;
+    }
+    const plate = (vehiclePlate || initialData?.vehicle_plate || "").trim();
+    if (!plate || !isOpen) return;
+
+    let isMounted = true;
+    async function loadStats() {
+      try {
+        const res = await fetch(`/api/vidanges/stats?plate=${encodeURIComponent(plate)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setInternalVidangeStats(data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load vidange stats in BC modal:", err);
+      }
+    }
+    loadStats();
+    return () => {
+      isMounted = false;
+    };
+  }, [vidangeStats, vehiclePlate, initialData?.vehicle_plate, isOpen]);
 
   // Load saved default issuer from localStorage or /api/settings if not supplied in initialData (once on mount)
   useEffect(() => {
@@ -472,6 +507,37 @@ export default function BonDeCommandeModal({
 
               {showCatalogTray && (
                 <div className="space-y-3 pt-1 border-t border-gray-100 animate-fadeIn">
+                  {/* Solved Vidanges Guidance Banner */}
+                  {internalVidangeStats && (
+                    <div className="p-2.5 bg-gradient-to-r from-amber-50 to-orange-50/70 border border-amber-200/90 rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 bg-amber-500 text-white rounded-lg text-xs">🛢️</span>
+                        <div>
+                          <span className="text-xs font-bold text-amber-950">
+                            Historique Vidanges de ce véhicule ({vehiclePlate || "Véhicule"}) :
+                          </span>{" "}
+                          <span className="text-xs font-black text-amber-900 font-mono">
+                            {internalVidangeStats.total} au total (Tickets Résolus)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 text-[11px]">
+                          {internalVidangeStats.simpleCount} Simple
+                        </span>
+                        <span className="text-gray-300">·</span>
+                        <span className="px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold border border-indigo-200 text-[11px]">
+                          {internalVidangeStats.completeCount} Complète
+                        </span>
+                        {internalVidangeStats.lastVidangeDate && (
+                          <span className="text-3xs text-amber-700 ml-1">
+                            (Dernière : {new Date(internalVidangeStats.lastVidangeDate).toLocaleDateString("fr-FR")})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Category groups */}
                   <div>
                     <span className="text-3xs font-black uppercase text-gray-400 tracking-wider">
@@ -787,6 +853,37 @@ export default function BonDeCommandeModal({
                     )}
                   </div>
                 </div>
+
+                {/* Solved Vidanges Counter Capsule on Document Sheet */}
+                {internalVidangeStats && (
+                  <div className="mt-3 p-2.5 bg-gradient-to-r from-amber-50 to-orange-50/70 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs no-print">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🛢️</span>
+                      <div>
+                        <span className="font-bold text-gray-900">
+                          Suivi des Vidanges Réalisées (Tickets Résolus) :
+                        </span>{" "}
+                        <span className="font-mono font-black text-amber-950">
+                          {internalVidangeStats.total} au total
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold text-[11px] border border-emerald-200">
+                        {internalVidangeStats.simpleCount} Vidange Simple
+                      </span>
+                      <span className="text-gray-300">·</span>
+                      <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[11px] border border-indigo-200">
+                        {internalVidangeStats.completeCount} Vidange Complète
+                      </span>
+                      {internalVidangeStats.lastVidangeDate && (
+                        <span className="text-[10px] text-gray-500 italic ml-1">
+                          (Dernière : {new Date(internalVidangeStats.lastVidangeDate).toLocaleDateString("fr-FR")})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* DÉTAIL DE LA COMMANDE TABLE */}

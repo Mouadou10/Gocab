@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { processVehicleSideEffects } from "@/lib/services/vehicleService";
 import { logAudit } from "@/lib/services/auditLogger";
+import { extractVidangeStatsFromTickets } from "@/lib/vidangeStats";
 
 /**
  * GET /api/vehicles/[id]
@@ -37,82 +38,29 @@ export async function GET(
       orderBy: { created_at: "desc" },
     });
 
-    // Parse vidanges and bons de commande
-    const vidanges: any[] = [];
-    let simpleCount = 0;
-    let completeCount = 0;
+    // Parse bons de commande
     const bonsDeCommande: any[] = [];
-
     for (const t of tickets) {
-      let parsedBc: any = null;
       if (t.resolution_notes) {
         try {
           const parsed = JSON.parse(t.resolution_notes);
           if (parsed && parsed.bon_de_commande) {
-            parsedBc = parsed.bon_de_commande;
             bonsDeCommande.push({
               ticket_id: t.id,
               ticket_type: t.ticket_type,
               status: t.status,
               created_at: t.created_at,
-              bc: parsedBc,
+              bc: parsed.bon_de_commande,
             });
           }
         } catch {
           // not JSON
         }
       }
-
-      // Check if ticket is a Vidange or has vidange items in its BC
-      const isVidangeTicket = t.ticket_type === "Vidange";
-      let hasVidangeBcItem = false;
-      let vidangeItemType: "Vidange Complète" | "Vidange Simple" | null = null;
-
-      if (parsedBc && Array.isArray(parsedBc.items)) {
-        for (const item of parsedBc.items) {
-          const des = (item.designation || "").toLowerCase();
-          if (des.includes("vidange")) {
-            hasVidangeBcItem = true;
-            if (des.includes("complète") || des.includes("complete")) {
-              vidangeItemType = "Vidange Complète";
-            } else {
-              vidangeItemType = "Vidange Simple";
-            }
-          }
-        }
-      }
-
-      if (isVidangeTicket || hasVidangeBcItem) {
-        let typeStr: "Vidange Complète" | "Vidange Simple" = "Vidange Simple";
-        if (vidangeItemType) {
-          typeStr = vidangeItemType;
-        } else {
-          const desc = (t.description || "").toLowerCase();
-          if (desc.includes("complète") || desc.includes("complete") || (t.repair_cost && t.repair_cost >= 900)) {
-            typeStr = "Vidange Complète";
-          }
-        }
-
-        if (typeStr === "Vidange Complète") {
-          completeCount++;
-        } else {
-          simpleCount++;
-        }
-
-        vidanges.push({
-          ticket_id: t.id,
-          date: t.created_at,
-          resolved_at: t.resolved_at,
-          status: t.status,
-          type: typeStr,
-          cost: t.repair_cost || (typeStr === "Vidange Complète" ? 960 : 510),
-          garage: t.garage_name || parsedBc?.supplier_name || "Hard Auto Services",
-          bc_number: parsedBc?.bc_number || null,
-          bc_data: parsedBc,
-          description: t.description,
-        });
-      }
     }
+
+    // Extract solved vidange statistics and full history
+    const vidangeStats = extractVidangeStatsFromTickets(tickets);
 
     // Fetch inspections / attestations for this vehicle
     const inspections = await prisma.vehicleInspection.findMany({
@@ -193,12 +141,7 @@ export async function GET(
 
     return NextResponse.json({
       vehicle,
-      vidangeStats: {
-        total: vidanges.length,
-        simpleCount,
-        completeCount,
-        history: vidanges,
-      },
+      vidangeStats,
       bonsDeCommande,
       attestations,
       financialSummary: {

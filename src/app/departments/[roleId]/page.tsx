@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 
 const ROLE_MAPPING: Record<string, string> = {
   "brand-manager": "BRAND_MANAGER",
@@ -80,8 +80,9 @@ const REGIONS = [
   { id: "AGADIR_HUB", label: "Agadir Hub" }
 ];
 
-export default function DepartmentDashboardPage({ params }: { params: { roleId: string } }) {
-  const dbRole = ROLE_MAPPING[params.roleId] || "BRAND_MANAGER";
+export default function DepartmentDashboardPage({ params }: { params: Promise<{ roleId: string }> }) {
+  const resolvedParams = use(params);
+  const dbRole = ROLE_MAPPING[resolvedParams.roleId] || "BRAND_MANAGER";
   const metrics = METRICS[dbRole] || [];
 
   const [objectives, setObjectives] = useState<any[]>([]);
@@ -191,7 +192,7 @@ export default function DepartmentDashboardPage({ params }: { params: { roleId: 
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
         <div>
           <h1 className="text-3xl font-bold text-[#2C4E8C] capitalize">
-            {params.roleId.replace(/-/g, ' ')} Dashboard
+            {resolvedParams.roleId.replace(/-/g, ' ')} Dashboard
           </h1>
           <p className="text-gray-500 mt-2">Manage objectives and track KPI performance.</p>
         </div>

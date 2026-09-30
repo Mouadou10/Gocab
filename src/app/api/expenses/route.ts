@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
-export const EXPENSE_CATEGORIES = [
+const EXPENSE_CATEGORIES = [
   { key: "REPAIR", label: "🔧 Réparation / Garage", group: "Maintenance & Réparations" },
   { key: "POLICE", label: "🚔 Fourrière / Amende Police", group: "Incidents & Infractions" },
   { key: "MAINTENANCE", label: "🛢️ Entretien Régulier (Vidange/Filtres)", group: "Maintenance & Réparations" },

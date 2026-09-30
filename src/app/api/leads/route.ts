@@ -8,14 +8,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
 
 export const dynamic = "force-dynamic";
-
-let leadsCache: { leads: any[]; timestamp: number } | null = null;
-
-export function invalidateLeadsCache() {
-  leadsCache = null;
-}
 
 /**
  * GET /api/leads
@@ -24,9 +19,10 @@ export function invalidateLeadsCache() {
 export async function GET() {
   try {
     // Return cached leads if fresh (5s TTL)
-    if (leadsCache && Date.now() - leadsCache.timestamp < 5000) {
+    const cached = getCachedLeads();
+    if (cached) {
       return NextResponse.json(
-        { leads: leadsCache.leads },
+        { leads: cached },
         {
           headers: {
             "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
@@ -42,7 +38,7 @@ export async function GET() {
       ],
     });
 
-    leadsCache = { leads, timestamp: Date.now() };
+    setCachedLeads(leads);
 
     // Auto-transition 'To Recall' in background without blocking the read query
     const now = new Date();

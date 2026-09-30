@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Server-side cache for unfiltered GET /api/drivers
 let driverCache: { data: any; timestamp: number } | null = null;
 
-export function invalidateDriverCache() {
+function invalidateDriverCache() {
   driverCache = null;
 }
 

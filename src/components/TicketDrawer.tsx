@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import { Vehicle } from "./VehicleDrawer";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
+import { VidangeStats } from "@/lib/vidangeStats";
 
 export interface MaintenanceTicket {
   id: string;
@@ -93,6 +94,9 @@ export default function TicketDrawer({
   const [scheduledDate, setScheduledDate] = useState<string>("");
   const [scheduledTime, setScheduledTime] = useState<string>("");
 
+  // Solved vidange statistics for currently selected vehicle
+  const [vidangeStats, setVidangeStats] = useState<VidangeStats | null>(null);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -140,6 +144,35 @@ export default function TicketDrawer({
     }
     loadSupervisors();
   }, []);
+
+  // Fetch solved vidange statistics for selected vehicle
+  useEffect(() => {
+    let isMounted = true;
+    async function loadVidangeStats() {
+      if (!selectedVehicleId && !plateNumber) {
+        setVidangeStats(null);
+        return;
+      }
+      try {
+        const query = selectedVehicleId
+          ? `vehicleId=${encodeURIComponent(selectedVehicleId)}`
+          : `plate=${encodeURIComponent(plateNumber)}`;
+        const res = await fetch(`/api/vidanges/stats?${query}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setVidangeStats(data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch vidange stats:", err);
+      }
+    }
+    loadVidangeStats();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedVehicleId, plateNumber]);
 
   function handleVehicleSelect(vId: string) {
     setSelectedVehicleId(vId);
@@ -574,6 +607,75 @@ export default function TicketDrawer({
             </div>
           </div>
 
+          {/* Suivi des Vidanges Réalisées pour le véhicule sélectionné */}
+          {ticketType === "Vidange" && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-200/90 rounded-2xl p-3.5 space-y-2.5 shadow-2xs animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-amber-500 text-white rounded-lg text-xs">🛢️</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-950">
+                      Suivi des Vidanges Réalisées (Tickets Résolus)
+                    </h4>
+                    <p className="text-3xs text-amber-800">
+                      Véhicule : <strong className="font-mono">{plateNumber || "Non sélectionné"}</strong>
+                    </p>
+                  </div>
+                </div>
+                {vidangeStats && (
+                  <span className="text-xs font-black font-mono px-2.5 py-0.5 rounded-full bg-amber-200/90 text-amber-900 border border-amber-300">
+                    {vidangeStats.total} au total
+                  </span>
+                )}
+              </div>
+
+              {vidangeStats ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <div className="p-2.5 bg-white rounded-xl border border-amber-100 flex items-center justify-between shadow-2xs">
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Vidange Simple</span>
+                        <span className="text-3xs text-gray-500">Huile + Filtre (510 DH)</span>
+                      </div>
+                      <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {vidangeStats.simpleCount}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-amber-100 flex items-center justify-between shadow-2xs">
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Vidange Complète</span>
+                        <span className="text-3xs text-gray-500">Tous filtres (960 DH)</span>
+                      </div>
+                      <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 border border-indigo-200">
+                        {vidangeStats.completeCount}
+                      </span>
+                    </div>
+                  </div>
+
+                  {vidangeStats.lastVidangeDate && (
+                    <div className="text-3xs text-amber-900/80 pt-1.5 border-t border-amber-200/60 flex items-center justify-between">
+                      <span>Dernière vidange résolue :</span>
+                      <span className="font-semibold font-mono">
+                        {new Date(vidangeStats.lastVidangeDate).toLocaleDateString("fr-FR")} · {vidangeStats.lastVidangeType}
+                      </span>
+                    </div>
+                  )}
+
+                  {vidangeStats.total === 0 && (
+                    <div className="text-3xs text-amber-900 bg-white/80 p-2 rounded-xl border border-amber-200 text-center font-medium">
+                      ℹ️ Aucune vidange résolue antérieure pour ce véhicule. Ce ticket sera comptabilisé comme sa <strong>1ère vidange</strong> dès sa résolution.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-3xs text-amber-800 italic bg-white/60 p-2 rounded-xl border border-amber-100 text-center">
+                  Sélectionnez un véhicule pour afficher son historique de vidanges.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Bon de Commande & Tarification Section */}
           {(ticketType === "Vidange" || ticketType === "AdBleu" || ticketType === "Custom") && (
             <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/50 border border-blue-200/90 rounded-2xl p-4 space-y-3 shadow-2xs animate-fadeIn">
@@ -615,6 +717,17 @@ export default function TicketDrawer({
                       </div>
                     ))}
                   </div>
+
+                  {ticketType === "Vidange" && vidangeStats && (
+                    <div className="text-3xs text-amber-900 bg-amber-50/80 border border-amber-200/70 rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                      <span className="font-medium flex items-center gap-1">
+                        <span>🛢️</span> Vidanges résolues :
+                      </span>
+                      <span className="font-mono font-bold text-amber-950">
+                        {vidangeStats.total} au total ({vidangeStats.simpleCount} simple · {vidangeStats.completeCount} complète)
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between text-3xs text-gray-500 pt-1.5 border-t border-gray-100 font-medium">
                     <span>N° BC : <strong className="text-gray-800 font-mono">{bonDeCommandeData.bc_number || "À compléter"}</strong></span>
@@ -870,6 +983,7 @@ export default function TicketDrawer({
           onClose={() => setIsBcModalOpen(false)}
           onSave={handleBcSave}
           initialData={defaultBcInitialData}
+          vidangeStats={vidangeStats}
         />
       )}
     </div>

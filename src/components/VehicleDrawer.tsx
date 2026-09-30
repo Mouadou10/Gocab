@@ -710,7 +710,7 @@ export default function VehicleDrawer({
                       <div className="p-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
                         <div>
                           <span className="text-amber-900 font-bold block">
-                            Total Vidanges Effectuées : {vidangeStats.total}
+                            Total Vidanges Effectuées (Tickets Résolus) : {vidangeStats.total}
                           </span>
                           <span className="text-[11px] text-amber-700">
                             {vidangeStats.simpleCount} simples (huile + filtre) · {vidangeStats.completeCount} complètes (tous filtres)
@@ -739,6 +739,15 @@ export default function VehicleDrawer({
                                   }`}
                                 >
                                   {vid.type}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                    vid.is_solved
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : "bg-amber-50 text-amber-700 border border-amber-200"
+                                  }`}
+                                >
+                                  {vid.is_solved ? "✓ Résolue" : "⏳ En cours"}
                                 </span>
                                 <span className="font-semibold text-gray-800 text-[11px] truncate">
                                   {vid.garage}

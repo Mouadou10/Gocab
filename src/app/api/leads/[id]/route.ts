@@ -12,7 +12,7 @@ import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { LeadUpdateSchema } from "@/lib/validations";
 import { touchSyncState } from "@/lib/sync";
 import { logManyLeadActivities } from "@/lib/activity-log";
-import { invalidateLeadsCache } from "@/app/api/leads/route";
+import { invalidateLeadsCache } from "@/lib/leads-cache";
 
 export async function PATCH(
   request: NextRequest,

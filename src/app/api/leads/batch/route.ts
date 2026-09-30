@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { touchSyncState } from "@/lib/sync";
 import { logManyLeadActivities } from "@/lib/activity-log";
-import { invalidateLeadsCache } from "@/app/api/leads/route";
+import { invalidateLeadsCache } from "@/lib/leads-cache";
 
 export const dynamic = "force-dynamic";
 
-export function resolveLeadTargetStatus(targetStatus: string, reminderDate?: string | null) {
+function resolveLeadTargetStatus(targetStatus: string, reminderDate?: string | null) {
   let board_column = "BRAND_PRE_FILTER";
   let brand_status: string | null = null;
   let training_status: string | null = null;
