@@ -75,6 +75,22 @@ function getWhatsAppLink(phone: string | null | undefined): string | null {
   return `https://wa.me/${clean}`;
 }
 
+function parseTimeToMinutes(t: string): number {
+  if (!t || !t.includes(":")) return 0;
+  const [h, m] = t.split(":").map((x) => parseInt(x, 10));
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+function calculateDurationBetween(start: string, end: string): number {
+  const startM = parseTimeToMinutes(start);
+  let endM = parseTimeToMinutes(end);
+  if (endM <= startM) {
+    endM += 1440;
+  }
+  const diffHours = (endM - startM) / 60;
+  return Math.max(0.5, Math.round(diffHours * 10) / 10);
+}
+
 function computeEndTime(startTime: string, durationHours: number): string {
   const [hStr, mStr] = startTime.split(":");
   let totalMinutes = parseInt(hStr, 10) * 60 + parseInt(mStr, 10) + Math.round(durationHours * 60);
@@ -96,9 +112,25 @@ export default function FieldDailySchedule({
   const [supervisors, setSupervisors] = useState<FieldSupervisorInfo[]>([]);
   const [isLoadingSupervisors, setIsLoadingSupervisors] = useState(false);
 
-  // Slot Quick-Assign Modal state
+  // Slot Quick-Assign & Complete Modal state
   const [assigningSlotTime, setAssigningSlotTime] = useState<string | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assignModalDate, setAssignModalDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [assignModalStartTime, setAssignModalStartTime] = useState<string>("09:00");
+  const [assignModalEndTime, setAssignModalEndTime] = useState<string>("10:00");
+  const [assignModalDuration, setAssignModalDuration] = useState<number>(1.0);
+  const [selectedPoolTaskId, setSelectedPoolTaskId] = useState<string | null>(null);
+  const [editingScheduledTask, setEditingScheduledTask] = useState<FieldTask | null>(null);
+
+  // Completion toggle & handover checklist
+  const [assignModalIsCompleted, setAssignModalIsCompleted] = useState<boolean>(false);
+  const [assignModalCompletedDate, setAssignModalCompletedDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [assignModalCompletedTime, setAssignModalCompletedTime] = useState<string>("10:00");
+  const [assignModalHasKey, setAssignModalHasKey] = useState<boolean>(true);
+  const [assignModalHasCarteGrise, setAssignModalHasCarteGrise] = useState<boolean>(true);
+  const [assignModalHasAssurance, setAssignModalHasAssurance] = useState<boolean>(true);
+  const [assignModalRecoveryNotes, setAssignModalRecoveryNotes] = useState<string>("");
+  const [isSubmittingAssign, setIsSubmittingAssign] = useState<boolean>(false);
 
   // Create Task Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -284,6 +316,143 @@ export default function FieldDailySchedule({
 
   const handleToday = () => {
     setSelectedDate(new Date().toISOString().split("T")[0]);
+  };
+
+  // Current active task in assign/complete modal
+  const currentModalTask = useMemo(() => {
+    if (editingScheduledTask) return editingScheduledTask;
+    if (selectedPoolTaskId) {
+      return poolTasks.find((t) => t.id === selectedPoolTaskId) || tasks.find((t) => t.id === selectedPoolTaskId) || null;
+    }
+    return poolTasks[0] || null;
+  }, [editingScheduledTask, selectedPoolTaskId, poolTasks, tasks]);
+
+  const isCurrentTaskRecovery = useMemo(() => {
+    if (!currentModalTask) return false;
+    return currentModalTask.task_type === "VEHICLE_RECOVERY" || currentModalTask.task_type?.includes("Recovery");
+  }, [currentModalTask]);
+
+  const openAssignModal = (slotTime: string, preselectedTaskId?: string, taskToEdit?: FieldTask) => {
+    setAssigningSlotTime(slotTime);
+    setEditingScheduledTask(taskToEdit || null);
+
+    const initialDate = taskToEdit?.scheduled_date || selectedDate;
+    const initialStart = taskToEdit?.scheduled_time || slotTime || "09:00";
+    const initialDur = taskToEdit?.duration_hours && taskToEdit.duration_hours > 0 ? taskToEdit.duration_hours : 1.0;
+    const initialEnd = computeEndTime(initialStart, initialDur);
+
+    setAssignModalDate(initialDate);
+    setAssignModalStartTime(initialStart);
+    setAssignModalDuration(initialDur);
+    setAssignModalEndTime(initialEnd);
+
+    const targetTaskId = taskToEdit
+      ? taskToEdit.id
+      : (preselectedTaskId || (poolTasks.length > 0 ? poolTasks[0].id : null));
+    setSelectedPoolTaskId(targetTaskId);
+
+    const isAlreadyDone = taskToEdit?.status === "COMPLETED";
+    setAssignModalIsCompleted(isAlreadyDone);
+    setAssignModalCompletedDate(initialDate);
+    setAssignModalCompletedTime(initialEnd);
+    setAssignModalHasKey(taskToEdit?.has_key ?? true);
+    setAssignModalHasCarteGrise(taskToEdit?.has_carte_grise ?? true);
+    setAssignModalHasAssurance(taskToEdit?.has_assurance ?? true);
+    setAssignModalRecoveryNotes(taskToEdit?.recovery_notes || "");
+
+    setIsAssignModalOpen(true);
+  };
+
+  const handleStartTimeChange = (newStart: string) => {
+    setAssignModalStartTime(newStart);
+    const newEnd = computeEndTime(newStart, assignModalDuration);
+    setAssignModalEndTime(newEnd);
+    setAssignModalCompletedTime(newEnd);
+  };
+
+  const handleEndTimeChange = (newEnd: string) => {
+    setAssignModalEndTime(newEnd);
+    const dur = calculateDurationBetween(assignModalStartTime, newEnd);
+    setAssignModalDuration(dur);
+    setAssignModalCompletedTime(newEnd);
+  };
+
+  const handleDurationPreset = (dur: number) => {
+    setAssignModalDuration(dur);
+    const newEnd = computeEndTime(assignModalStartTime, dur);
+    setAssignModalEndTime(newEnd);
+    setAssignModalCompletedTime(newEnd);
+  };
+
+  // Confirm schedule or complete mission
+  const handleConfirmAssignOrComplete = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const targetTaskId = editingScheduledTask ? editingScheduledTask.id : selectedPoolTaskId;
+    if (!targetTaskId) {
+      toast.error("Veuillez sélectionner une tâche à planifier.");
+      return;
+    }
+
+    const taskObj = currentModalTask;
+    const isRecovery = isCurrentTaskRecovery;
+    const agentName = currentSupervisor?.name || currentSupervisor?.id || "HAMZA RASSID";
+
+    setIsSubmittingAssign(true);
+    try {
+      const payload: any = {
+        scheduled_date: assignModalDate,
+        scheduled_time: assignModalStartTime,
+        duration_hours: assignModalDuration,
+        assigned_to: agentName,
+      };
+
+      if (assignModalIsCompleted) {
+        payload.status = "COMPLETED";
+        const completedDateTimeStr = `${assignModalCompletedDate}T${assignModalCompletedTime || assignModalEndTime}:00`;
+        const completedDate = new Date(completedDateTimeStr);
+        payload.completed_at = isNaN(completedDate.getTime()) ? new Date() : completedDate;
+
+        if (isRecovery) {
+          payload.has_key = assignModalHasKey;
+          payload.has_carte_grise = assignModalHasCarteGrise;
+          payload.has_assurance = assignModalHasAssurance;
+          payload.recovery_notes = assignModalRecoveryNotes;
+          payload.recovery_duration_hours = assignModalDuration;
+        }
+      }
+
+      const res = await fetch(`/api/field-tasks/${targetTaskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        if (assignModalIsCompleted) {
+          toast.success(
+            isRecovery
+              ? `✅ Véhicule ${taskObj?.plate_number || ""} récupéré avec succès (${assignModalStartTime} ➔ ${assignModalCompletedTime}) !`
+              : `✅ Mission clôturée avec succès (${assignModalStartTime} ➔ ${assignModalCompletedTime}) !`
+          );
+        } else {
+          toast.success(
+            `📅 Mission ${taskObj?.plate_number || ""} planifiée le ${assignModalDate} de ${assignModalStartTime} à ${assignModalEndTime} (${assignModalDuration}h) pour ${agentName}`
+          );
+        }
+        setIsAssignModalOpen(false);
+        setAssigningSlotTime(null);
+        setEditingScheduledTask(null);
+        onTaskUpdated();
+        fetchSupervisors();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Erreur lors de l'enregistrement");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erreur réseau");
+    } finally {
+      setIsSubmittingAssign(false);
+    }
   };
 
   // Schedule task into a slot
@@ -676,8 +845,12 @@ export default function FieldDailySchedule({
                   >
                     {/* Time & Task Header */}
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 shrink-0 min-w-[70px]">
-                        <span className="text-xs font-black text-slate-900 dark:text-white font-mono">{hour}</span>
+                      <div
+                        onClick={() => openAssignModal(task.scheduled_time || hour, undefined, task)}
+                        className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 rounded-xl px-2.5 py-1.5 shrink-0 min-w-[70px] cursor-pointer transition-colors group/time shadow-2xs"
+                        title="Modifier la date, l'heure ou clôturer cette mission"
+                      >
+                        <span className="text-xs font-black text-slate-900 dark:text-white font-mono group-hover/time:text-blue-600">{hour}</span>
                         <span className="text-[10px] text-slate-400 font-mono">➔ {endTime}</span>
                       </div>
 
@@ -825,6 +998,18 @@ export default function FieldDailySchedule({
                         </button>
                       )}
 
+                      {/* Edit Horaires / Clôturer direct button */}
+                      {!isCompleted && (
+                        <button
+                          type="button"
+                          onClick={() => openAssignModal(task.scheduled_time || hour, undefined, task)}
+                          className="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+                          title="Modifier la date, l'heure ou clôturer cette mission"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       {/* Unschedule button (Return to pool) */}
                       {!isCompleted && (
                         <button
@@ -911,10 +1096,7 @@ export default function FieldDailySchedule({
                     {poolTasks.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setAssigningSlotTime(hour);
-                          setIsAssignModalOpen(true);
-                        }}
+                        onClick={() => openAssignModal(hour)}
                         className="px-3 py-1 bg-slate-50 hover:bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-300 border border-slate-200 dark:border-slate-700 rounded-lg text-2xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1"
                       >
                         <Calendar className="w-3 h-3" />
@@ -1069,10 +1251,7 @@ export default function FieldDailySchedule({
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setAssigningSlotTime(nextFree || "09:00");
-                            setIsAssignModalOpen(true);
-                          }}
+                          onClick={() => openAssignModal(nextFree || "09:00", t.id)}
                           className="text-3xs font-semibold text-slate-500 hover:text-blue-600 cursor-pointer"
                         >
                           Choisir l&apos;heure...
@@ -1087,108 +1266,423 @@ export default function FieldDailySchedule({
         </div>
       </div>
 
-      {/* MODAL 1: Slot Quick Picker Modal */}
-      {isAssignModalOpen && assigningSlotTime && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-5 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Planifier un créneau : {assigningSlotTime} ({formattedDateTitle})
-                </h3>
+      {/* MODAL 1: Slot Schedule & Completion Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <Clock className="w-5 h-5 text-blue-200" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black">
+                    {editingScheduledTask
+                      ? `Modifier / Clôturer : ${editingScheduledTask.plate_number || "Mission"}`
+                      : `Planifier une mission — Agenda ${currentSupervisor?.name || ""}`}
+                  </h3>
+                  <p className="text-2xs text-blue-100 font-medium">
+                    {editingScheduledTask
+                      ? `Créneau actuel : ${editingScheduledTask.scheduled_time || ""} (${editingScheduledTask.scheduled_date || ""})`
+                      : `Configurez la date, les heures de début et fin, ou validez l'intervention terminée.`}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setIsAssignModalOpen(false);
                   setAssigningSlotTime(null);
+                  setEditingScheduledTask(null);
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Sélectionnez une mission parmi les {poolTasks.length} tâches en attente à assigner à{" "}
-              <strong className="text-slate-800 dark:text-white">{currentSupervisor?.name}</strong> :
-            </p>
+            {/* Modal Body - Scrollable */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
+              {/* Task Selection (If assigning from backlog pool) */}
+              {!editingScheduledTask && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <span>🎯 Mission à traiter</span>
+                      <span className="text-3xs bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 rounded-full font-mono">
+                        {poolTasks.length} disponible(s)
+                      </span>
+                    </label>
+                  </div>
 
-            <div className="space-y-2 max-h-[350px] overflow-y-auto">
-              {poolTasks.length === 0 ? (
-                <div className="py-8 text-center text-slate-400 text-xs">
-                  Aucune tâche restante en attente.
-                </div>
-              ) : (
-                poolTasks.map((pt) => (
-                  <div
-                    key={pt.id}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-all flex items-center justify-between gap-3 group"
-                  >
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <MoroccanPlateBadge plate={pt.plate_number} />
-                        <span className="text-2xs font-bold text-slate-700 dark:text-slate-300 truncate">
-                          {pt.driver_name || "Sans chauffeur"}
+                  {poolTasks.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                      Aucune mission en attente dans la file.
+                    </div>
+                  ) : poolTasks.length === 1 ? (
+                    // Single task auto-selected
+                    <div className="p-3.5 rounded-xl border-2 border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <MoroccanPlateBadge plate={poolTasks[0].plate_number} />
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {poolTasks[0].driver_name || "Sans chauffeur"}
+                          </span>
+                          {poolTasks[0].driver_phone && (
+                            <span className="text-3xs text-slate-400 font-mono">({poolTasks[0].driver_phone})</span>
+                          )}
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-3xs font-bold ${
+                            poolTasks[0].task_type === "VEHICLE_RECOVERY"
+                              ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                          }`}
+                        >
+                          {poolTasks[0].task_type === "VEHICLE_RECOVERY"
+                            ? "🚨 Récupération"
+                            : poolTasks[0].task_type === "GARAGE_PICKUP"
+                            ? "🔧 Retrait Garage"
+                            : "📋 Contrôle"}
                         </span>
                       </div>
-                      <p className="text-3xs text-slate-500 line-clamp-1 italic">{pt.description}</p>
+                      <p className="text-2xs text-slate-600 dark:text-slate-400 italic line-clamp-2">
+                        {poolTasks[0].description}
+                      </p>
+                    </div>
+                  ) : (
+                    // Multiple tasks list with selectable card
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {poolTasks.map((pt) => {
+                        const isSelected = selectedPoolTaskId === pt.id;
+                        const isRec = pt.task_type === "VEHICLE_RECOVERY";
+                        return (
+                          <div
+                            key={pt.id}
+                            onClick={() => setSelectedPoolTaskId(pt.id)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? "border-blue-600 bg-blue-50/60 dark:bg-blue-950/40 ring-1 ring-blue-500 shadow-2xs"
+                                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                  isSelected
+                                    ? "border-blue-600 bg-blue-600 text-white"
+                                    : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+                                }`}
+                              >
+                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </div>
+                              <MoroccanPlateBadge plate={pt.plate_number} />
+                              <div className="min-w-0 truncate">
+                                <span className="font-bold text-slate-800 dark:text-slate-200 text-2xs block truncate">
+                                  {pt.driver_name || "Sans chauffeur"}
+                                </span>
+                                <span className="text-3xs text-slate-500 dark:text-slate-400 italic truncate block">
+                                  {pt.description}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                isRec
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {isRec ? "🚨 Récupération" : "Contrôle"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* If editing an existing task, show summary */}
+              {editingScheduledTask && (
+                <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MoroccanPlateBadge plate={editingScheduledTask.plate_number} />
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {editingScheduledTask.driver_name || "Sans chauffeur"}
+                      </span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-3xs font-bold ${
+                        editingScheduledTask.task_type === "VEHICLE_RECOVERY"
+                          ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                      }`}
+                    >
+                      {editingScheduledTask.task_type === "VEHICLE_RECOVERY"
+                        ? "🚨 Récupération"
+                        : editingScheduledTask.task_type === "GARAGE_PICKUP"
+                        ? "🔧 Retrait Garage"
+                        : "📋 Contrôle"}
+                    </span>
+                  </div>
+                  <p className="text-2xs text-slate-600 dark:text-slate-400 italic">
+                    {editingScheduledTask.description}
+                  </p>
+                </div>
+              )}
+
+              {/* SECTION: Date, Start Time, End Time & Duration */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-xs">
+                    <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span>Date & Horaires d&apos;intervention :</span>
+                  </span>
+                  <span className="text-3xs font-mono font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-900">
+                    ⏱️ Durée : {assignModalDuration}h
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Date Input */}
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Date d&apos;intervention *
+                    </label>
+                    <input
+                      type="date"
+                      value={assignModalDate}
+                      onChange={(e) => {
+                        setAssignModalDate(e.target.value);
+                        setAssignModalCompletedDate(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Start Time Input */}
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Heure de début *
+                    </label>
+                    <input
+                      type="time"
+                      value={assignModalStartTime}
+                      onChange={(e) => handleStartTimeChange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* End Time Input */}
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Heure de fin *
+                    </label>
+                    <input
+                      type="time"
+                      value={assignModalEndTime}
+                      onChange={(e) => handleEndTimeChange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Duration Presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-3xs font-semibold text-slate-400 mr-1">Raccourcis durée :</span>
+                  {[0.5, 1.0, 1.5, 2.0, 3.0, 4.0].map((d) => (
+                    <button
+                      type="button"
+                      key={d}
+                      onClick={() => handleDurationPreset(d)}
+                      className={`px-2 py-0.5 rounded-lg text-3xs font-bold transition-all cursor-pointer ${
+                        assignModalDuration === d
+                          ? "bg-blue-600 text-white shadow-2xs"
+                          : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 border border-slate-200 dark:border-slate-600"
+                      }`}
+                    >
+                      {d}h {d === 0.5 ? "(30min)" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION: Option "Mission déjà terminée sur le terrain ?" */}
+              <div
+                className={`p-4 rounded-2xl border transition-all ${
+                  assignModalIsCompleted
+                    ? "bg-emerald-50/80 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={assignModalIsCompleted}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setAssignModalIsCompleted(checked);
+                      if (checked && !assignModalCompletedTime) {
+                        setAssignModalCompletedTime(assignModalEndTime || assignModalStartTime);
+                      }
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>✅ Mission déjà terminée sur le terrain ?</span>
+                      <span className="text-3xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.2 rounded">
+                        Intervention effectuée
+                      </span>
+                    </span>
+                    <p className="text-3xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Cochez si l&apos;agent a déjà réalisé cette intervention. Vous pourrez choisir l&apos;heure exacte de fin et valider la restitution du véhicule.
+                    </p>
+                  </div>
+                </label>
+
+                {assignModalIsCompleted && (
+                  <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900/60 space-y-3 animate-fadeIn">
+                    {/* Date & Heure de fin d'achèvement */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-3xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                          Date de réalisation
+                        </label>
+                        <input
+                          type="date"
+                          value={assignModalCompletedDate}
+                          onChange={(e) => setAssignModalCompletedDate(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-3xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                          Heure de fin / clôture *
+                        </label>
+                        <input
+                          type="time"
+                          value={assignModalCompletedTime}
+                          onChange={(e) => setAssignModalCompletedTime(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs font-bold font-mono rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white cursor-pointer"
+                        />
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {deletingTaskId === pt.id ? (
-                        <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/60 p-1 rounded-lg border border-red-200 dark:border-red-900/60 animate-fadeIn">
-                          <span className="text-3xs font-bold text-red-700 dark:text-red-300 px-0.5">Supprimer ?</span>
+                    {/* Restitution Handover Checklist (for vehicle recovery / car need to get back) */}
+                    {isCurrentTaskRecovery && (
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-3xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          📋 Checklist Restitution Véhicule (Handover) :
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
                           <button
                             type="button"
-                            onClick={() => handleDeleteTask(pt.id)}
-                            className="text-2xs bg-red-600 text-white font-bold px-1.5 py-0.5 rounded hover:bg-red-700 cursor-pointer"
+                            onClick={() => setAssignModalHasKey(!assignModalHasKey)}
+                            className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                              assignModalHasKey
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800"
+                                : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900"
+                            }`}
                           >
-                            Oui
+                            <span>🔑 Clé</span>
+                            <span className="text-3xs font-black">{assignModalHasKey ? "✓ Récupérée" : "✗ Manquante"}</span>
                           </button>
+
                           <button
                             type="button"
-                            onClick={() => setDeletingTaskId(null)}
-                            className="text-2xs bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-medium px-1 py-0.5 rounded hover:bg-gray-300 cursor-pointer"
+                            onClick={() => setAssignModalHasCarteGrise(!assignModalHasCarteGrise)}
+                            className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                              assignModalHasCarteGrise
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800"
+                                : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900"
+                            }`}
                           >
-                            Non
+                            <span>📄 Carte Grise</span>
+                            <span className="text-3xs font-black">{assignModalHasCarteGrise ? "✓ Récupérée" : "✗ Manquante"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setAssignModalHasAssurance(!assignModalHasAssurance)}
+                            className={`p-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                              assignModalHasAssurance
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800"
+                                : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900"
+                            }`}
+                          >
+                            <span>🛡️ Assurance</span>
+                            <span className="text-3xs font-black">{assignModalHasAssurance ? "✓ Récupérée" : "✗ Manquante"}</span>
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setDeletingTaskId(pt.id)}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                          title="Supprimer la mission"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleAssignTaskToSlot(pt.id, assigningSlotTime, 1.0)}
-                        className="px-2.5 py-1 bg-blue-600 text-white text-2xs font-bold rounded-lg shadow-2xs group-hover:scale-105 transition-transform shrink-0 cursor-pointer"
-                      >
-                        Affecter (1h)
-                      </button>
-                    </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Observations sur l'état du véhicule (pneu de secours, état carrosserie, lieu dépôt...)"
+                            value={assignModalRecoveryNotes}
+                            onChange={(e) => setAssignModalRecoveryNotes(e.target.value)}
+                            className="w-full px-3 py-1.5 text-xs rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <div className="text-3xs text-emerald-800 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+                          ℹ️ <strong>Action automatique :</strong> En validant, le véhicule sera remis en statut <strong>Available (Au parc)</strong>, l&apos;ancien chauffeur dissocié et le ticket support résolu.
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
+                )}
+              </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850 flex items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   setIsAssignModalOpen(false);
                   setAssigningSlotTime(null);
+                  setEditingScheduledTask(null);
                 }}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               >
                 Fermer
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmittingAssign || (!editingScheduledTask && poolTasks.length === 0)}
+                onClick={() => handleConfirmAssignOrComplete()}
+                className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5 ${
+                  assignModalIsCompleted
+                    ? "bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800"
+                }`}
+              >
+                {isSubmittingAssign ? (
+                  <span>Enregistrement...</span>
+                ) : assignModalIsCompleted ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {isCurrentTaskRecovery
+                        ? "✅ Valider la Récupération & Clôturer"
+                        : "✅ Clôturer la mission terminée"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-4 h-4" />
+                    <span>
+                      Planifier ({assignModalStartTime} ➔ {assignModalEndTime})
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

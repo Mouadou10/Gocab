@@ -337,11 +337,31 @@ export default function FieldSupervisorView() {
   const [recoveryNotes, setRecoveryNotes] = useState("");
   const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
 
+  // Recovery Start/End times
+  const [recoveryDate, setRecoveryDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [recoveryStartTime, setRecoveryStartTime] = useState<string>("09:00");
+  const [recoveryEndTime, setRecoveryEndTime] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+  });
+  const [recoveryDuration, setRecoveryDuration] = useState<number>(1.0);
+
   // In-card delete confirmation state (task ID being confirmed for deletion)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
 
   // Vider la file confirmation state
   const [isClearingQueue, setIsClearingQueue] = useState(false);
+
+  const calculateDurationBetween = (start: string, end: string): number => {
+    if (!start || !end || !start.includes(":") || !end.includes(":")) return 1.0;
+    const [h1, m1] = start.split(":").map((x) => parseInt(x, 10));
+    const [h2, m2] = end.split(":").map((x) => parseInt(x, 10));
+    let startM = (isNaN(h1) ? 0 : h1) * 60 + (isNaN(m1) ? 0 : m1);
+    let endM = (isNaN(h2) ? 0 : h2) * 60 + (isNaN(m2) ? 0 : m2);
+    if (endM <= startM) endM += 1440;
+    const diffHours = (endM - startM) / 60;
+    return Math.max(0.5, Math.round(diffHours * 10) / 10);
+  };
 
   const handleOpenRecoveryModal = (task: FieldTask) => {
     setRecoveryModalTask(task);
@@ -349,6 +369,28 @@ export default function FieldSupervisorView() {
     setHasCarteGrise(true);
     setHasAssurance(true);
     setRecoveryNotes("");
+
+    const initialDate = task.scheduled_date || new Date().toISOString().split("T")[0];
+    const initialStart = task.scheduled_time || "09:00";
+    const d = new Date();
+    const currentHM = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+    const initialEnd = currentHM;
+    const dur = calculateDurationBetween(initialStart, initialEnd);
+
+    setRecoveryDate(initialDate);
+    setRecoveryStartTime(initialStart);
+    setRecoveryEndTime(initialEnd);
+    setRecoveryDuration(dur);
+  };
+
+  const handleRecoveryStartChange = (val: string) => {
+    setRecoveryStartTime(val);
+    setRecoveryDuration(calculateDurationBetween(val, recoveryEndTime));
+  };
+
+  const handleRecoveryEndChange = (val: string) => {
+    setRecoveryEndTime(val);
+    setRecoveryDuration(calculateDurationBetween(recoveryStartTime, val));
   };
 
   const handleConfirmRecovery = async (e: React.FormEvent) => {
@@ -356,11 +398,17 @@ export default function FieldSupervisorView() {
     if (!recoveryModalTask) return;
     setIsRecoverySubmitting(true);
     try {
+      const completedAt = new Date(`${recoveryDate}T${recoveryEndTime}:00`);
       const res = await fetch(`/api/field-tasks/${recoveryModalTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "COMPLETED",
+          completed_at: isNaN(completedAt.getTime()) ? new Date() : completedAt,
+          scheduled_date: recoveryDate,
+          scheduled_time: recoveryStartTime,
+          duration_hours: recoveryDuration,
+          recovery_duration_hours: recoveryDuration,
           has_key: hasKey,
           has_carte_grise: hasCarteGrise,
           has_assurance: hasAssurance,
@@ -369,7 +417,7 @@ export default function FieldSupervisorView() {
       });
 
       if (res.ok) {
-        toast.success("✅ Véhicule récupéré avec succès ! Clôturé et replacé en Available.");
+        toast.success(`✅ Véhicule récupéré avec succès (${recoveryStartTime} ➔ ${recoveryEndTime}) ! Clôturé et replacé en Available.`);
         setRecoveryModalTask(null);
         fetchTasks();
         notifyMutation("tickets");
@@ -2316,6 +2364,86 @@ export default function FieldSupervisorView() {
                     Motif : {recoveryModalTask.description}
                   </div>
                 )}
+              </div>
+
+              {/* SECTION: Date, Start Time, End Time & Duration */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-xs">
+                    <Clock className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    <span>Date & Horaires de la Récupération :</span>
+                  </span>
+                  <span className="text-3xs font-mono font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 px-2.5 py-0.5 rounded-full border border-red-200 dark:border-red-900">
+                    ⏱️ Durée : {recoveryDuration}h
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Date d&apos;intervention *
+                    </label>
+                    <input
+                      type="date"
+                      value={recoveryDate}
+                      onChange={(e) => setRecoveryDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Heure de début *
+                    </label>
+                    <input
+                      type="time"
+                      value={recoveryStartTime}
+                      onChange={(e) => handleRecoveryStartChange(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-3xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Heure de fin *
+                    </label>
+                    <input
+                      type="time"
+                      value={recoveryEndTime}
+                      onChange={(e) => handleRecoveryEndChange(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Duration Presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-3xs font-semibold text-slate-400 mr-1">Raccourcis durée :</span>
+                  {[0.5, 1.0, 1.5, 2.0, 3.0, 4.0].map((d) => (
+                    <button
+                      type="button"
+                      key={d}
+                      onClick={() => {
+                        setRecoveryDuration(d);
+                        if (recoveryStartTime && recoveryStartTime.includes(":")) {
+                          const [h, m] = recoveryStartTime.split(":").map((x) => parseInt(x, 10));
+                          const startM = (isNaN(h) ? 9 : h) * 60 + (isNaN(m) ? 0 : m);
+                          const endM = (startM + Math.round(d * 60)) % 1440;
+                          const endH = Math.floor(endM / 60).toString().padStart(2, "0");
+                          const endMin = (endM % 60).toString().padStart(2, "0");
+                          setRecoveryEndTime(`${endH}:${endMin}`);
+                        }
+                      }}
+                      className={`px-2 py-0.5 rounded text-3xs font-mono font-bold transition-all cursor-pointer ${
+                        recoveryDuration === d
+                          ? "bg-red-600 text-white shadow-2xs"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300"
+                      }`}
+                    >
+                      {d}h
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Handover Checklist Elements */}

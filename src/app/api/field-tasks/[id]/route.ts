@@ -25,7 +25,7 @@ export async function PATCH(
     if (body.status !== undefined) {
       updateData.status = body.status;
       if (body.status === "COMPLETED" || body.status === "FAILED") {
-        updateData.completed_at = new Date();
+        updateData.completed_at = body.completed_at ? new Date(body.completed_at) : new Date();
       }
     }
     if (body.priority !== undefined) updateData.priority = body.priority;
@@ -43,10 +43,12 @@ export async function PATCH(
     if (body.has_assurance !== undefined) updateData.has_assurance = Boolean(body.has_assurance);
     if (body.recovery_notes !== undefined) updateData.recovery_notes = body.recovery_notes ? body.recovery_notes.trim() : null;
 
-    // Calculate recovery turnaround time in hours
-    if (body.status === "COMPLETED" && existingTask.task_type === "VEHICLE_RECOVERY") {
+    // Calculate recovery turnaround time in hours (or respect explicitly provided recovery_duration_hours)
+    if (body.recovery_duration_hours !== undefined && body.recovery_duration_hours !== null) {
+      updateData.recovery_duration_hours = Number(body.recovery_duration_hours);
+    } else if (body.status === "COMPLETED" && existingTask.task_type === "VEHICLE_RECOVERY") {
       const startMs = new Date(existingTask.created_at).getTime();
-      const endMs = Date.now();
+      const endMs = updateData.completed_at ? new Date(updateData.completed_at).getTime() : Date.now();
       const elapsedHours = Math.max(0.1, (endMs - startMs) / (1000 * 60 * 60));
       updateData.recovery_duration_hours = Number(elapsedHours.toFixed(1));
     }
@@ -159,7 +161,7 @@ export async function PATCH(
           where: { id: task.linked_ticket_id },
           data: {
             status: "RESOLVED",
-            resolved_at: new Date(),
+            resolved_at: updateData.completed_at || new Date(),
             field_status: "COMPLETED",
             resolution_notes: notes.trim(),
           },
