@@ -30,23 +30,40 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "impounded";
   }
 
-  // 3. Maintenance & Accident
-  if (s.includes("accident") || s.includes("maintenance") || s.includes("garage") || s.includes("repair") || s.includes("panne")) {
+  // 3. Accident
+  if (s.includes("accident") || s.includes("sinistre")) {
     return "Accident";
   }
 
-  // 4. Blocked
+  // 4. In garage / Maintenance / Réparation / Récupération
+  if (
+    s.includes("garage") ||
+    s.includes("maintenance") ||
+    s.includes("repair") ||
+    s.includes("reparation") ||
+    s.includes("réparation") ||
+    s.includes("panne") ||
+    s.includes("atelier") ||
+    s.includes("mecanique") ||
+    s.includes("mécanique") ||
+    s.includes("recup") ||
+    s.includes("récup")
+  ) {
+    return "In garage";
+  }
+
+  // 5. Blocked
   if (s.includes("block") || s.includes("bloqu")) {
     return "Blocked";
   }
 
-  // 5. Working / Active
+  // 6. Working / Active
   if (s.includes("working") || s.includes("actif") || s.includes("service")) {
     return "Actif";
   }
 
-  // 6. Available
-  if (s.includes("avail") || s.includes("dispo") || s.includes("libre")) {
+  // 7. Available
+  if (s.includes("avail") || s.includes("dispo") || s.includes("libre") || s.includes("parc")) {
     return "Available";
   }
 
