@@ -79,9 +79,9 @@ export async function POST(request: Request) {
       transfer_field_supervisor,
     } = body;
 
-    if (!plate_number || !title || !description) {
+    if (!plate_number || !title) {
       return NextResponse.json(
-        { error: "Le matricule du véhicule, le titre et la description sont requis." },
+        { error: "Le matricule du véhicule et le titre sont requis." },
         { status: 400 }
       );
     }
@@ -107,6 +107,8 @@ export async function POST(request: Request) {
       }
     }
 
+    const effectiveDescription = (description && description.trim()) ? description.trim() : title.trim();
+
     // Create the issue in database
     const issue = await prisma.vehicleIssue.create({
       data: {
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
         driver_phone: resolvedDriverPhone,
         category: category || "MECANIQUE",
         title: title.trim(),
-        description: description.trim(),
+        description: effectiveDescription,
         priority: priority || "Normal",
         status: "PENDING",
         reported_by_name: reported_by_name || "Agent",

@@ -201,8 +201,8 @@ export default function SharedVehicleHubView() {
   // Submit Create Issue
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPlate.trim() || !newTitle.trim() || !newDescription.trim()) {
-      toast.error("Veuillez renseigner le matricule, le titre et la description.");
+    if (!newPlate.trim() || !newTitle.trim()) {
+      toast.error("Veuillez renseigner le matricule et le titre du problème.");
       return;
     }
 
@@ -217,7 +217,7 @@ export default function SharedVehicleHubView() {
           driver_phone: newDriverPhone.trim() || null,
           category: newCategory,
           title: newTitle.trim(),
-          description: newDescription.trim(),
+          description: newDescription.trim() || newTitle.trim(),
           priority: newPriority,
           reported_by_name: userName,
           reported_by_role: userRole,
@@ -1046,11 +1046,10 @@ export default function SharedVehicleHubView() {
               {/* Description */}
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Détails & Constatations du problème *
+                  Détails & Constatations du problème (Optionnel)
                 </label>
                 <textarea
                   rows={3}
-                  required
                   placeholder="Expliquez ce qui s'est passé, les symptômes constatés, les démarches déjà entreprises, la localisation..."
                   value={newDescription}
                   onFocus={() => setIsPlateDropdownOpen(false)}
