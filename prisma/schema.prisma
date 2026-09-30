@@ -487,3 +487,43 @@ model LeadActivityLog {
   @@index([lead_id, created_at])
   @@index([agent])
 }
+
+/// Shared operational logbook for all vehicle issues, remarks, and incidents.
+/// Accessible by all roles; assignable by Fleet Performance; convertible to support ticket or field task.
+model VehicleIssue {
+  id                   String    @id @default(uuid())
+  vehicle_id           String?
+  plate_number         String
+  driver_name          String?
+  driver_phone         String?
+  category             String    // MECANIQUE, BRUIT_VOYANT, ACCIDENT, PNEU, TELEMATIQUE, PAPIERS, CHAUFFEUR, AUTRE
+  title                String
+  description          String
+  priority             String    @default("Normal") // Basse, Normal, Urgent, Critical
+  status               String    @default("PENDING") // PENDING, IN_PROGRESS, SOLVED, TRANSFERRED
+
+  reported_by_name     String
+  reported_by_role     String?
+  reported_by_email    String?
+
+  assigned_to_name     String?   // Fleet Performance agent who took ownership
+  assigned_to_id       String?
+  assigned_at          DateTime?
+
+  resolved_by_name     String?
+  resolved_at          DateTime?
+  resolution_notes     String?
+
+  linked_ticket_id     String?   // MaintenanceTicket ID when converted
+  linked_ticket_type   String?   // Vidange, AdBleu, Repair, Accident
+
+  field_task_id        String?   // FieldTask ID when transferred to field supervisor
+  telegram_alert_sent  Boolean   @default(false)
+
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  @@index([plate_number, status])
+  @@index([status])
+}
+

@@ -367,3 +367,35 @@ CREATE TABLE IF NOT EXISTS "WhatsAppMessage" (
 
 CREATE INDEX IF NOT EXISTS "WhatsAppMessage_conversation_id_created_at_idx" ON "WhatsAppMessage"("conversation_id", "created_at");
 CREATE INDEX IF NOT EXISTS "WhatsAppMessage_wa_message_id_idx" ON "WhatsAppMessage"("wa_message_id");
+
+-- Shared Vehicle Operational Logbook & Issue Feed
+CREATE TABLE IF NOT EXISTS "VehicleIssue" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "vehicle_id" TEXT,
+    "plate_number" TEXT NOT NULL,
+    "driver_name" TEXT,
+    "driver_phone" TEXT,
+    "category" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "priority" TEXT NOT NULL DEFAULT 'Normal',
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "reported_by_name" TEXT NOT NULL,
+    "reported_by_role" TEXT,
+    "reported_by_email" TEXT,
+    "assigned_to_name" TEXT,
+    "assigned_to_id" TEXT,
+    "assigned_at" DATETIME,
+    "resolved_by_name" TEXT,
+    "resolved_at" DATETIME,
+    "resolution_notes" TEXT,
+    "linked_ticket_id" TEXT,
+    "linked_ticket_type" TEXT,
+    "field_task_id" TEXT,
+    "telegram_alert_sent" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS "VehicleIssue_plate_number_status_idx" ON "VehicleIssue"("plate_number", "status");
+CREATE INDEX IF NOT EXISTS "VehicleIssue_status_idx" ON "VehicleIssue"("status");

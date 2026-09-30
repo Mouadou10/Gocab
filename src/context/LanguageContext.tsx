@@ -17,6 +17,7 @@ export interface Translations {
   perf: string;
   field: string;
   insurance: string;
+  vehicleOps: string;
   settings: string;
   signOut: string;
   autoClosing: string;
@@ -118,6 +119,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     perf: "Collections & Perf",
     field: "Field",
     insurance: "Insurance",
+    vehicleOps: "Fleet Log",
     settings: "Settings",
     signOut: "Sign Out",
     autoClosing: "auto-closing",
@@ -214,6 +216,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     perf: "Encaissements & Perf",
     field: "Terrain",
     insurance: "Assurance",
+    vehicleOps: "Journal Flotte",
     settings: "Paramètres",
     signOut: "Déconnexion",
     autoClosing: "fermeture auto",
@@ -310,6 +313,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     perf: "التحصيل والأداء",
     field: "الميدان",
     insurance: "التأمين",
+    vehicleOps: "سجل الأسطول",
     settings: "الإعدادات",
     signOut: "تسجيل الخروج",
     autoClosing: "إغلاق تلقائي",

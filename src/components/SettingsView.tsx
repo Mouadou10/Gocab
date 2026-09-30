@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
 const ALL_TABS: { id: TabType; label: string; icon: string; description: string }[] = [
   { id: "dashboard", label: "Home", icon: "📊", description: "KPI overview & command metrics" },
@@ -23,6 +23,7 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
   { id: "training", label: "Training", icon: "🎓", description: "Driver training pipeline & KYC checks" },
   { id: "drivers", label: "Drivers", icon: "🚖", description: "Driver fleet profiles & CSV imports" },
   { id: "fleet", label: "Fleet", icon: "🚗", description: "Vehicle fleet inventory & assignments" },
+  { id: "vehicle-ops", label: "Journal Flotte", icon: "🚘", description: "Journal partagé des événements, pannes et interventions véhicules" },
   { id: "tickets", label: "Support", icon: "🔧", description: "Maintenance & 24h SLA tickets" },
   { id: "performance", label: "Perf", icon: "📈", description: "Fleet performance, collections & waivers" },
   { id: "field", label: "Field", icon: "🛡️", description: "Field supervisor inspections & recoveries" },
@@ -32,12 +33,12 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "whatsapp"],
-  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "field", "tickets", "whatsapp"],
-  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
-  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "vehicle-ops", "whatsapp"],
+  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
+  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
+  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {

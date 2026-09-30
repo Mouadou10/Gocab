@@ -151,3 +151,57 @@ export async function sendFieldTaskCancelledTelegramAlert(task: {
     console.error("Failed to send field task cancelled Telegram alert:", err);
   }
 }
+
+/**
+ * Sends a Telegram alert when a vehicle issue/incident is transferred to the Field Supervisor
+ */
+export async function sendVehicleIssueTelegramAlert(issue: {
+  plate_number: string;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  category: string;
+  title: string;
+  description: string;
+  priority: string;
+  reported_by?: string | null;
+  assigned_to?: string | null;
+}): Promise<void> {
+  try {
+    const config = await getTelegramConfig();
+    if (!config.isEnabled || !config.botToken || !config.chatId) {
+      return;
+    }
+
+    const priorityBadge =
+      issue.priority === "Critical"
+        ? "🔴 CRITIQUE"
+        : issue.priority === "Urgent"
+        ? "🟠 URGENT"
+        : "🟡 NORMAL";
+
+    const message = [
+      `🚨 <b>SIGNALEMENT VÉHICULE — INTERVENTION TERRAIN REQUISE</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🚗 <b>Véhicule :</b> <code>${issue.plate_number}</code>`,
+      issue.driver_name ? `👤 <b>Chauffeur :</b> <b>${issue.driver_name}</b>` : null,
+      issue.driver_phone ? `📞 <b>Téléphone :</b> <a href="tel:${issue.driver_phone}">${issue.driver_phone}</a>` : null,
+      `🏷️ <b>Catégorie :</b> <b>${issue.category}</b>`,
+      `⚠️ <b>Priorité :</b> ${priorityBadge}`,
+      issue.assigned_to ? `👨‍💼 <b>Pris en charge par :</b> <b>${issue.assigned_to}</b> (Fleet Performance)` : null,
+      issue.reported_by ? `📣 <b>Signalé par :</b> ${issue.reported_by}` : null,
+      `\n📝 <b>Description du problème :</b>`,
+      `<b>${issue.title}</b>`,
+      `<i>${issue.description}</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `👉 <i>À traiter par le Superviseur Terrain dans l'Agenda / File Terrain.</i>`,
+      `🕒 <i>${new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</i>`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendTelegramMessage(message);
+  } catch (err) {
+    console.error("Failed to send vehicle issue Telegram alert:", err);
+  }
+}
+
