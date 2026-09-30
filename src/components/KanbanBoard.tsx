@@ -689,6 +689,67 @@ export default function KanbanBoard() {
     }
   }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length, activeTab, userRole]);
 
+  /** Check if a lead matches the search query by name or flexible phone formatting */
+  const doesLeadMatchSearch = useCallback((l: Lead, cleanQuery: string): boolean => {
+    if (!cleanQuery) return true;
+    const name = (l.raw_name || "").toLowerCase();
+    if (name.includes(cleanQuery)) return true;
+
+    const cleanPhoneQuery = cleanQuery.replace(/\s+/g, "");
+    const rawPhone = (l.sanitized_phone || "").toLowerCase();
+    if (rawPhone.includes(cleanPhoneQuery)) return true;
+
+    const queryDigits = cleanQuery.replace(/\D/g, "");
+    if (queryDigits.length > 0) {
+      const phoneDigits = rawPhone.replace(/\D/g, "");
+      if (phoneDigits.includes(queryDigits)) return true;
+
+      // Strip leading Moroccan country code '212' or national prefix '0'
+      const normalizedQueryDigits = queryDigits.startsWith("212")
+        ? queryDigits.slice(3)
+        : queryDigits.startsWith("0")
+        ? queryDigits.slice(1)
+        : queryDigits;
+
+      const normalizedPhoneDigits = phoneDigits.startsWith("212")
+        ? phoneDigits.slice(3)
+        : phoneDigits.startsWith("0")
+        ? phoneDigits.slice(1)
+        : phoneDigits;
+
+      if (
+        normalizedQueryDigits.length > 0 &&
+        (normalizedPhoneDigits.includes(normalizedQueryDigits) ||
+          ("0" + normalizedPhoneDigits).includes(queryDigits))
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }, []);
+
+  // Multi-tab search result discovery
+  const searchMatches = useMemo(() => {
+    const cleanQuery = searchQuery.trim().toLowerCase();
+    if (!cleanQuery) return { inLeadsTab: 0, inTrainingTab: 0, total: 0, leadList: [] as Lead[] };
+
+    const matched = leads.filter((l) => doesLeadMatchSearch(l, cleanQuery));
+    const inLeadsTab = matched.filter(
+      (l) => l.board_column === "NEW_LEADS" || l.board_column === "BRAND_PRE_FILTER"
+    ).length;
+    const inTrainingTab = matched.filter(
+      (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+    ).length;
+
+    return {
+      inLeadsTab,
+      inTrainingTab,
+      total: matched.length,
+      leadList: matched,
+    };
+  }, [leads, searchQuery, doesLeadMatchSearch]);
+
   /** Group leads dynamically based on their specific status/column. */
   function getLeadsByColumn(column: string): Lead[] {
     let filteredLeads = leads;
@@ -697,12 +758,7 @@ export default function KanbanBoard() {
     const isSearching = cleanQuery.length > 0;
 
     if (isSearching) {
-      const cleanPhoneQuery = cleanQuery.replace(/\s+/g, "");
-      filteredLeads = filteredLeads.filter((l) => {
-        const name = (l.raw_name || "").toLowerCase();
-        const phone = (l.sanitized_phone || "").replace(/\s+/g, "");
-        return name.includes(cleanQuery) || phone.includes(cleanPhoneQuery);
-      });
+      filteredLeads = filteredLeads.filter((l) => doesLeadMatchSearch(l, cleanQuery));
     }
 
     if (filterCity) {
@@ -800,9 +856,9 @@ export default function KanbanBoard() {
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
           const isMatch =
-            l.brand_status === "Training fixed" ||
+            (l.brand_status || "").toLowerCase() === "training fixed" ||
             (l.board_column === "TRAINING_PIPELINE" &&
-              (l.training_status === "Scheduled" || !l.training_status));
+              ((l.training_status || "").toLowerCase() === "scheduled" || !l.training_status));
           if (!isMatch) return false;
           if (isSearching) return true;
           return isLeadTrainingDateMatch(l, trainingDateFilter);
@@ -811,16 +867,16 @@ export default function KanbanBoard() {
 
       if (column === "To Recall") {
         return filteredLeads.filter((l) => {
-          if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== "To Recall") return false;
+          if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== "to recall") return false;
           if (isSearching) return true;
           if (l.reminder_date && isDateMatchToday(l.reminder_date)) return true;
           return isStatusChangedToday(l);
         });
       }
 
-      // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, Wrong number)
+      // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, Wrong number, Already a client)
       return filteredLeads.filter((l) => {
-        if (l.board_column !== "BRAND_PRE_FILTER" || l.brand_status !== column) return false;
+        if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== column.toLowerCase()) return false;
         if (isSearching) return true;
         return isStatusChangedToday(l);
       });
@@ -830,8 +886,8 @@ export default function KanbanBoard() {
         return filteredLeads.filter((l) => {
           const isVehicleMatch =
             l.board_column === "VEHICLE_ASSIGNMENT" ||
-            l.training_status === "Assign vehicle" ||
-            l.training_status === "Accept offer";
+            (l.training_status || "").toLowerCase() === "assign vehicle" ||
+            (l.training_status || "").toLowerCase() === "accept offer";
           if (!isVehicleMatch) return false;
           if (isSearching) return true;
           return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
@@ -842,7 +898,7 @@ export default function KanbanBoard() {
         return filteredLeads.filter((l) => {
           const isScheduledMatch =
             l.board_column === "TRAINING_PIPELINE" &&
-            (!l.training_status || l.training_status === "Scheduled");
+            (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
           if (!isScheduledMatch) return false;
           if (isSearching) return true;
           return isLeadTrainingDateMatch(l, trainingDateFilter);
@@ -852,7 +908,7 @@ export default function KanbanBoard() {
       // For Pending: display leads matching trainingDateFilter (or today if specific role)
       if (column === "Pending") {
         return filteredLeads.filter((l) => {
-          if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== "Pending") return false;
+          if (l.board_column !== "TRAINING_PIPELINE" || (l.training_status || "").toLowerCase() !== "pending") return false;
           if (isSearching) return true;
           return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
         });
@@ -860,7 +916,7 @@ export default function KanbanBoard() {
 
       // All other training columns (Attended, Attended and not interested, Refused the offer, Preorder, Not attended, No response)
       return filteredLeads.filter((l) => {
-        if (l.board_column !== "TRAINING_PIPELINE" || l.training_status !== column) {
+        if (l.board_column !== "TRAINING_PIPELINE" || (l.training_status || "").toLowerCase() !== column.toLowerCase()) {
           return false;
         }
         if (isSearching) return true;
@@ -1577,6 +1633,58 @@ export default function KanbanBoard() {
               )}
             </div>
 
+            {/* Live Search Discovery Feedback */}
+            {searchQuery.trim().length > 0 && (
+              <div className="flex items-center gap-1.5 animate-fade-in">
+                <span className="px-2.5 py-1 rounded-xl text-xs font-bold bg-navy/10 text-navy border border-navy/15 shadow-2xs">
+                  {searchMatches.total} {language === "fr" ? (searchMatches.total > 1 ? "résultats" : "résultat") : "result(s)"}
+                </span>
+
+                {activeTab === "leads" && searchMatches.inLeadsTab === 0 && searchMatches.inTrainingTab > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab("training")}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer animate-pulse"
+                    title="Voir les résultats dans l'onglet Formation"
+                  >
+                    <span>🎓</span>
+                    <span>
+                      {searchMatches.inTrainingTab} {language === "fr" ? "dans Formation → Voir" : "in Training → View"}
+                    </span>
+                  </button>
+                )}
+
+                {activeTab === "training" && searchMatches.inTrainingTab === 0 && searchMatches.inLeadsTab > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab("leads")}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer animate-pulse"
+                    title="Voir les résultats dans l'onglet Prospects"
+                  >
+                    <span>💼</span>
+                    <span>
+                      {searchMatches.inLeadsTab} {language === "fr" ? "dans Prospects → Voir" : "in Leads → View"}
+                    </span>
+                  </button>
+                )}
+
+                {searchMatches.leadList.length === 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(searchMatches.leadList[0])}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs"
+                    title="Ouvrir la fiche de ce prospect"
+                  >
+                    <span>👤</span>
+                    <span className="truncate max-w-[200px]">
+                      {searchMatches.leadList[0].raw_name} ({searchMatches.leadList[0].brand_status || searchMatches.leadList[0].training_status || "Nouveau"})
+                    </span>
+                    <span className="underline ml-0.5">{language === "fr" ? "Ouvrir" : "Open"}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* City Filter */}
             <div className="relative flex items-center">
               <span className="absolute left-2.5 text-slate-400 text-xs">📍</span>
@@ -1945,6 +2053,22 @@ export default function KanbanBoard() {
         onClose={() => setIsAddLeadModalOpen(false)}
         onLeadAdded={fetchLeads}
         activeTab={activeTab}
+        onSelectExistingLead={(existing) => {
+          if (existing.board_column === "TRAINING_PIPELINE" || existing.board_column === "VEHICLE_ASSIGNMENT") {
+            handleSelectTab("training");
+          } else {
+            handleSelectTab("leads");
+          }
+          if (existing.sanitized_phone) {
+            setSearchQuery(existing.sanitized_phone);
+          }
+          const found = leads.find((l) => l.id === existing.id);
+          if (found) {
+            setSelectedLead(found);
+          } else if (existing) {
+            setSelectedLead(existing as any);
+          }
+        }}
       />
 
       {/* Agent Personal & Team Activity Log Drawer */}

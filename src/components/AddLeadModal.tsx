@@ -60,9 +60,10 @@ interface AddLeadModalProps {
   onClose: () => void;
   onLeadAdded: () => void;
   activeTab?: string;
+  onSelectExistingLead?: (lead: any) => void;
 }
 
-export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab = "leads" }: AddLeadModalProps) {
+export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab = "leads", onSelectExistingLead }: AddLeadModalProps) {
   const { t, language } = useLanguage();
 
   // Destination pipeline: "leads" vs "training"
@@ -70,6 +71,7 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
     activeTab === "training" ? "training" : "leads"
   );
 
+  const [existingLead, setExistingLead] = useState<any | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("Casablanca");
@@ -169,6 +171,8 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
     }
 
     setIsSubmitting(true);
+    setErrorMsg("");
+    setExistingLead(null);
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
@@ -196,6 +200,9 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.existingLead) {
+          setExistingLead(data.existingLead);
+        }
         throw new Error(data.error || "Erreur lors de l'ajout du prospect");
       }
 
@@ -299,9 +306,24 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-            <span>⚠️</span>
-            <span className="flex-1">{errorMsg}</span>
+          <div className="mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-base">⚠️</span>
+              <span className="flex-1 font-semibold">{errorMsg}</span>
+            </div>
+            {existingLead && onSelectExistingLead && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectExistingLead(existingLead);
+                  onClose();
+                }}
+                className="self-start px-3 py-1.5 bg-navy hover:bg-navy/90 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🔍</span>
+                <span>Ouvrir la fiche de {existingLead.raw_name}</span>
+              </button>
+            )}
           </div>
         )}
 

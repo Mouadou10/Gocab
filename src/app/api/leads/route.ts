@@ -138,7 +138,17 @@ export async function POST(request: Request) {
 
     if (existing) {
       return NextResponse.json(
-        { error: `Ce numéro (${sanitized_phone}) existe déjà dans la base (Prospect: ${existing.raw_name}).` },
+        {
+          error: `Ce numéro (${sanitized_phone}) existe déjà dans la base (Prospect: ${existing.raw_name}).`,
+          existingLead: {
+            id: existing.id,
+            raw_name: existing.raw_name,
+            sanitized_phone: existing.sanitized_phone,
+            board_column: existing.board_column,
+            brand_status: existing.brand_status,
+            training_status: existing.training_status,
+          },
+        },
         { status: 409 }
       );
     }
