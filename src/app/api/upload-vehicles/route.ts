@@ -217,14 +217,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Pre-fetch all active accident claims in 1 query
-    const allActiveClaims = await prisma.accidentClaim.findMany({
-      where: { timeline_step: { not: "VEHICLE_BACK" } },
+    // 4. Pre-fetch all accident claims in 1 query
+    const allClaims = await prisma.accidentClaim.findMany({
+      orderBy: { created_at: "desc" },
     });
-    const activeClaimsByVehicleId = new Map<string, typeof allActiveClaims[0]>();
-    for (const c of allActiveClaims) {
+    const claimsByVehicleId = new Map<string, typeof allClaims>();
+    for (const c of allClaims) {
       if (c.vehicle_id) {
-        activeClaimsByVehicleId.set(c.vehicle_id, c);
+        const list = claimsByVehicleId.get(c.vehicle_id) || [];
+        list.push(c);
+        claimsByVehicleId.set(c.vehicle_id, list);
       }
     }
 
@@ -667,8 +669,53 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              const existingClaim = activeClaimsByVehicleId.get(vehicleId);
-              if (!existingClaim) {
+              const vClaims = claimsByVehicleId.get(vehicleId) || [];
+              const activeClaim = vClaims.find((c) => c.timeline_step !== "VEHICLE_BACK");
+
+              if (activeClaim) {
+                // Vehicle already in "Dossiers En Cours"
+                // Clean up any old duplicate completed claims in VEHICLE_BACK so vehicle is removed from retablis
+                const restoredDuplicates = vClaims.filter((c) => c.timeline_step === "VEHICLE_BACK");
+                if (restoredDuplicates.length > 0) {
+                  await prisma.accidentClaim.deleteMany({
+                    where: { id: { in: restoredDuplicates.map((c) => c.id) } },
+                  }).catch(() => {});
+                  claimsByVehicleId.set(vehicleId, [activeClaim]);
+                }
+              } else if (vClaims.length > 0) {
+                // Vehicle has claim(s) in VEHICLE_BACK (Véhicules Rétablis) but is currently in maintenance in Excel!
+                // Reopen the primary claim to CAR_IN_GARAGE ("need to be in dossiers en cours and get removed from retablis")!
+                const sortedClaims = [...vClaims].sort((a, b) => {
+                  let aComments = 0;
+                  let bComments = 0;
+                  try { aComments = a.comments ? JSON.parse(a.comments).length : 0; } catch {}
+                  try { bComments = b.comments ? JSON.parse(b.comments).length : 0; } catch {}
+                  return bComments - aComments;
+                });
+                const primaryClaim = sortedClaims[0];
+                const extraDuplicates = sortedClaims.slice(1);
+
+                await prisma.accidentClaim.update({
+                  where: { id: primaryClaim.id },
+                  data: {
+                    timeline_step: "CAR_IN_GARAGE",
+                    step_updated_at: statusStartDate,
+                    driver_id: matchedDriver?.id || null,
+                    driver_name: item.driverName || matchedDriver?.fullName || primaryClaim.driver_name,
+                    driver_phone: matchedDriver?.phoneSanitized || primaryClaim.driver_phone,
+                  },
+                }).catch(() => {});
+
+                if (extraDuplicates.length > 0) {
+                  await prisma.accidentClaim.deleteMany({
+                    where: { id: { in: extraDuplicates.map((c) => c.id) } },
+                  }).catch(() => {});
+                }
+
+                primaryClaim.timeline_step = "CAR_IN_GARAGE";
+                claimsByVehicleId.set(vehicleId, [primaryClaim]);
+              } else {
+                // No claim at all -> create new in CAR_IN_GARAGE
                 const newClaim = await prisma.accidentClaim.create({
                   data: {
                     vehicle_id: vehicleId,
@@ -693,7 +740,7 @@ export async function POST(request: NextRequest) {
                 }).catch(() => null);
 
                 if (newClaim) {
-                  activeClaimsByVehicleId.set(vehicleId, newClaim);
+                  claimsByVehicleId.set(vehicleId, [newClaim]);
                 }
               }
             } else if (item.status === "Actif" || item.status === "Available") {
@@ -711,7 +758,9 @@ export async function POST(request: NextRequest) {
                 openTicketsByVehicleId.delete(vehicleId);
               }
 
-              if (activeClaimsByVehicleId.has(vehicleId)) {
+              const vClaims = claimsByVehicleId.get(vehicleId) || [];
+              const activeClaims = vClaims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
+              if (activeClaims.length > 0) {
                 await prisma.accidentClaim.updateMany({
                   where: {
                     vehicle_id: vehicleId,
@@ -722,7 +771,10 @@ export async function POST(request: NextRequest) {
                     step_updated_at: new Date(),
                   },
                 }).catch(() => {});
-                activeClaimsByVehicleId.delete(vehicleId);
+
+                for (const c of activeClaims) {
+                  c.timeline_step = "VEHICLE_BACK";
+                }
               }
             }
           } catch (rowErr: any) {

@@ -19,11 +19,21 @@ export async function processVehicleSideEffects(
     });
   }
 
-  // If status changed to Accident, auto-create BOTH AccidentClaim (Assurance) AND MaintenanceTicket (Support)
-  const isAccidentStatus = body.status === "Accident" || body.status === "Accidenté" || (typeof body.status === "string" && body.status.toLowerCase().includes("acc"));
-  const wasAccidentStatus = prevVehicle?.status === "Accident" || prevVehicle?.status === "Accidenté" || (typeof prevVehicle?.status === "string" && prevVehicle?.status.toLowerCase().includes("acc"));
+  // If status changed to Accident or In garage, auto-create/reopen BOTH AccidentClaim (Assurance) AND MaintenanceTicket (Support)
+  const isMaintenanceStatus =
+    body.status === "Accident" ||
+    body.status === "Accidenté" ||
+    body.status === "In garage" ||
+    (typeof body.status === "string" &&
+      (body.status.toLowerCase().includes("acc") || body.status.toLowerCase().includes("garage")));
+  const wasMaintenanceStatus =
+    prevVehicle?.status === "Accident" ||
+    prevVehicle?.status === "Accidenté" ||
+    prevVehicle?.status === "In garage" ||
+    (typeof prevVehicle?.status === "string" &&
+      (prevVehicle?.status.toLowerCase().includes("acc") || prevVehicle?.status.toLowerCase().includes("garage")));
 
-  if (isAccidentStatus && !wasAccidentStatus) {
+  if (isMaintenanceStatus && !wasMaintenanceStatus) {
     let driver = await prisma.driverProfile.findFirst({
       where: { assignedVehicleId: id },
     });
@@ -100,8 +110,8 @@ export async function processVehicleSideEffects(
     }
   }
 
-  // If status changed from Accident to Actif or Available, auto-resolve both
-  if ((body.status === "Actif" || body.status === "Available") && wasAccidentStatus) {
+  // If status changed from Accident or In garage to Actif or Available, auto-resolve both
+  if ((body.status === "Actif" || body.status === "Available") && wasMaintenanceStatus) {
     await prisma.accidentClaim.updateMany({
       where: {
         vehicle_id: id,

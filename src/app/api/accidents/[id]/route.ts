@@ -117,7 +117,7 @@ export async function PATCH(req: Request, context: any) {
     // When vehicle is recovered and back in service (VEHICLE_BACK)
     if (isStatusChange && updatedClaim.timeline_step === 'VEHICLE_BACK') {
       const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
-      if (vehicle && vehicle.status === "Accident") {
+      if (vehicle && (vehicle.status === "Accident" || vehicle.status === "In garage")) {
         const hasDriver = !!vehicle.assigned_driver_name;
         await prisma.vehicle.update({
           where: { id: updatedClaim.vehicle_id },
@@ -129,7 +129,6 @@ export async function PATCH(req: Request, context: any) {
       await prisma.maintenanceTicket.updateMany({
         where: {
           vehicle_id: updatedClaim.vehicle_id,
-          ticket_type: "Accident",
           status: { not: "RESOLVED" },
         },
         data: {
@@ -147,10 +146,10 @@ export async function PATCH(req: Request, context: any) {
       (body.reopen && currentClaim.timeline_step === 'VEHICLE_BACK')
     ) {
       const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
-      if (vehicle && vehicle.status !== "Accident") {
+      if (vehicle && vehicle.status !== "Accident" && vehicle.status !== "In garage") {
         await prisma.vehicle.update({
           where: { id: updatedClaim.vehicle_id },
-          data: { status: "Accident" },
+          data: { status: "In garage" },
         });
       }
 
@@ -193,7 +192,7 @@ export async function DELETE(req: Request, context: any) {
       });
 
       // Revert the vehicle status so the auto-sync doesn't immediately recreate the claim
-      if (claim.vehicle && claim.vehicle.status === "Accident") {
+      if (claim.vehicle && (claim.vehicle.status === "Accident" || claim.vehicle.status === "In garage")) {
         const hasDriver = !!claim.vehicle.assigned_driver_name;
         await prisma.vehicle.update({
           where: { id: claim.vehicle_id },
