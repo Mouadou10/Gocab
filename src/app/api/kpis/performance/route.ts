@@ -311,8 +311,11 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Attended candidates from training fixed by the traffic team
-    const trafficAttendedPersons = activeTrafficLeads.filter(
+    // Attended candidates from training fixed by the traffic team (sourced from the training pipeline)
+    // Note: In GoCab's workflow, once a candidate arrives at training, Ayoub Gsaib conducts the session
+    // and registers presence/preorders, which updates handled_by to 'ayoub gsaib'.
+    // We fall back to the training pipeline counts in range so the Traffic Acquisition team gets credit for downstream conversions.
+    const directTrafficAttended = activeTrafficLeads.filter(
       (l) =>
         (l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT") &&
         l.training_status &&
@@ -327,7 +330,7 @@ export async function GET(request: NextRequest) {
         ].includes(l.training_status)
     ).length;
 
-    const trafficPreordersAssigned = activeTrafficLeads.filter(
+    const directTrafficPreorders = activeTrafficLeads.filter(
       (l) =>
         (l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT") &&
         (l.training_status === "Preorder" ||
@@ -335,6 +338,11 @@ export async function GET(request: NextRequest) {
           l.training_status === "Accept offer" ||
           l.board_column === "VEHICLE_ASSIGNMENT")
     ).length;
+
+    const totalTrainingPreorders = preordersCount + assignedVehiclesCount;
+
+    const trafficAttendedPersons = directTrafficAttended > 0 ? directTrafficAttended : attendedCount;
+    const trafficPreordersAssigned = directTrafficPreorders > 0 ? directTrafficPreorders : totalTrainingPreorders;
 
     const trafficTrainingFixedRate = trafficCallsDone > 0 ? Number(((trafficTrainingFixed / trafficCallsDone) * 100).toFixed(1)) : 0;
     const trafficAttendedRate = trafficTrainingFixed > 0 ? Number(((trafficAttendedPersons / trafficTrainingFixed) * 100).toFixed(1)) : 0;
