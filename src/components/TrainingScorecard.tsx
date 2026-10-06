@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { getMoroccanWorkingDays } from '@/lib/moroccoCalendar';
 
 /**
  * TrainingScorecard — shows daily training pipeline metrics.
@@ -277,24 +278,89 @@ export default function TrainingScorecard({
   ).length;
   const attendanceRate = totalInTraining > 0 ? ((attendedCount / totalInTraining) * 100).toFixed(1) : '0';
 
-  // Calculate days in period for scaling target
-  let periodDays = 1;
+  // ── Dynamic Period Scaling based on Moroccan Business Calendar ──────
+  let workingDays = 1;
+  let periodTargetLabel = `/ ${dailyPreordersTarget} obj. jour`;
+  let periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${dailyPreordersTarget}/j)`;
+
   if (startDate && endDate) {
+    if (startDate === endDate) {
+      workingDays = 1;
+      periodTargetLabel = `/ ${dailyPreordersTarget} obj. jour`;
+      periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${dailyPreordersTarget}/j)`;
+    } else {
+      try {
+        const s = new Date(startDate + 'T00:00:00');
+        const e = new Date(endDate + 'T23:59:59');
+        workingDays = Math.max(1, getMoroccanWorkingDays(s, e).workingDays);
+      } catch {
+        workingDays = 1;
+      }
+      const scaled = dailyPreordersTarget * workingDays;
+      if (isThisWeekSelected) {
+        periodTargetLabel = `/ ${scaled} obj. semaine (${workingDays}j)`;
+      } else if (isThisMonthSelected) {
+        periodTargetLabel = `/ ${scaled} obj. mois (${workingDays}j)`;
+      } else {
+        periodTargetLabel = `/ ${scaled} obj. (${workingDays}j ouvrés)`;
+      }
+      periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled} sur ${workingDays} jours ouvrés)`;
+    }
+  } else if (isAllTimeSelected) {
+    // All time: evaluate active span of training leads in Moroccan working days
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+    trainingLeads.forEach(l => {
+      const dStr = l.reminder_date || l.created_at;
+      if (dStr) {
+        const d = new Date(dStr);
+        if (!isNaN(d.getTime())) {
+          if (!minDate || d < minDate) minDate = d;
+          if (!maxDate || d > maxDate) maxDate = d;
+        }
+      }
+    });
+    if (minDate && maxDate) {
+      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, maxDate).workingDays);
+    } else {
+      workingDays = 1;
+    }
+    const scaled = dailyPreordersTarget * workingDays;
+    periodTargetLabel = `/ ${scaled} obj. cumul (${workingDays}j)`;
+    periodDescription = `${totalConverted} convertis en précommande / véhicule sur ${workingDays} jours ouvrés (cible : ${scaled})`;
+  } else if (startDate && !endDate) {
     try {
-      const s = new Date(startDate);
-      const e = new Date(endDate);
-      const diffTime = Math.abs(e.getTime() - s.getTime());
-      periodDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
-    } catch {}
+      const s = new Date(startDate + 'T00:00:00');
+      workingDays = Math.max(1, getMoroccanWorkingDays(s, new Date()).workingDays);
+    } catch {
+      workingDays = 1;
+    }
+    const scaled = dailyPreordersTarget * workingDays;
+    periodTargetLabel = `/ ${scaled} obj. (${workingDays}j ouvrés)`;
+    periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled} sur ${workingDays} jours)`;
+  } else if (!startDate && endDate) {
+    try {
+      let minDate = new Date();
+      trainingLeads.forEach(l => {
+        const dStr = l.reminder_date || l.created_at;
+        if (dStr) {
+          const d = new Date(dStr);
+          if (!isNaN(d.getTime()) && d < minDate) minDate = d;
+        }
+      });
+      const e = new Date(endDate + 'T23:59:59');
+      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, e).workingDays);
+    } catch {
+      workingDays = 1;
+    }
+    const scaled = dailyPreordersTarget * workingDays;
+    periodTargetLabel = `/ ${scaled} obj. (${workingDays}j ouvrés)`;
+    periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled} sur ${workingDays} jours)`;
   }
 
-  // Daily or scaled period target configured in Operations Settings
-  const dailyTarget = dailyPreordersTarget;
-  const scaledTarget = (startDate && endDate && periodDays > 1)
-    ? dailyTarget * periodDays
-    : dailyTarget;
-
-  const progress = scaledTarget > 0 ? Math.min((totalConverted / scaledTarget) * 100, 100) : 0;
+  const periodTarget = dailyPreordersTarget * workingDays;
+  const rawProgress = periodTarget > 0 ? (totalConverted / periodTarget) * 100 : 0;
+  const progressWidth = Math.min(rawProgress, 100);
 
   const conversionRate = totalInTraining > 0
     ? ((totalConverted / totalInTraining) * 100).toFixed(1)
@@ -494,24 +560,30 @@ export default function TrainingScorecard({
         <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-bold text-slate-600">Précommandes & Véhicules</span>
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-              🎯 {progress.toFixed(0)}% obj.
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+              rawProgress >= 100
+                ? "bg-emerald-100 text-emerald-800"
+                : rawProgress >= 50
+                ? "bg-blue-100 text-blue-800"
+                : "bg-amber-100 text-amber-800"
+            }`}>
+              🎯 {rawProgress.toFixed(0)}% obj.
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-2xl font-black text-emerald-700">{totalConverted}</span>
-            <span className="text-xs text-slate-400 font-semibold">/ {dailyTarget} obj. jour</span>
+            <span className="text-2xl font-black text-emerald-700 font-mono">{totalConverted}</span>
+            <span className="text-xs text-slate-400 font-semibold">{periodTargetLabel}</span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all duration-500 ${
-                progress >= 100 ? 'bg-emerald-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+                rawProgress >= 100 ? 'bg-emerald-500' : rawProgress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
               }`}
-              style={{ width: `${progress}%` }}
+              style={{ width: `${progressWidth}%` }}
             />
           </div>
           <p className="text-[11px] text-slate-500 mt-1.5">
-            {totalConverted} convertis en précommande / véhicule
+            {periodDescription}
           </p>
         </div>
 

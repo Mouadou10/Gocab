@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { getMoroccanWorkingDays } from '@/lib/moroccoCalendar';
 
 interface LeadsScorecardProps {
   leads: any[];
@@ -70,27 +71,12 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
     l => l.brand_status === 'Training fixed'
   ).length;
 
-  // Daily target set by Operations Manager in parameters
-  const dailyTarget = dailyCallsTarget;
-  const rawCallProgress = dailyTarget > 0 ? (totalCalled / dailyTarget) * 100 : 0;
-  const callProgress = Math.min(rawCallProgress, 100);
-
-  const conversionRateNum = totalCalled > 0 ? (trainingFixed / totalCalled) * 100 : 0;
-  const conversionRate = conversionRateNum.toFixed(1);
-
-  // Status breakdown
-  const statusCounts: Record<string, number> = {};
-  calledLeads.forEach(lead => {
-    const status = lead.brand_status || lead.board_column;
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
-  });
-
+  // Format display date
   const todayStr = new Date().toISOString().split('T')[0];
   const yesterdayDate = new Date();
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
-  // Format display date
   const isToday = dateFilter === todayStr;
   const isYesterday = dateFilter === yesterdayStr;
   const isAllTime = !dateFilter;
@@ -107,6 +93,45 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
         month: 'short',
         year: 'numeric',
       });
+
+  // Dynamic Target Scaling based on Moroccan Calendar
+  let workingDays = 1;
+  let scaledCallsTarget = dailyCallsTarget;
+  let targetLabel = `/ ${dailyCallsTarget} cible du jour`;
+  let rhythmLabel = 'Rythme journalier';
+
+  if (isAllTime) {
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+    calledLeads.forEach(l => {
+      if (l.status_changed_at) {
+        const d = new Date(l.status_changed_at);
+        if (!isNaN(d.getTime())) {
+          if (!minDate || d < minDate) minDate = d;
+          if (!maxDate || d > maxDate) maxDate = d;
+        }
+      }
+    });
+    if (minDate && maxDate) {
+      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, maxDate).workingDays);
+    }
+    scaledCallsTarget = dailyCallsTarget * workingDays;
+    targetLabel = `/ ${scaledCallsTarget} cible (${workingDays}j)`;
+    rhythmLabel = `Rythme global (${workingDays}j ouvrés)`;
+  }
+
+  const rawCallProgress = scaledCallsTarget > 0 ? (totalCalled / scaledCallsTarget) * 100 : 0;
+  const callProgress = Math.min(rawCallProgress, 100);
+
+  const conversionRateNum = totalCalled > 0 ? (trainingFixed / totalCalled) * 100 : 0;
+  const conversionRate = conversionRateNum.toFixed(1);
+
+  // Status breakdown
+  const statusCounts: Record<string, number> = {};
+  calledLeads.forEach(lead => {
+    const status = lead.brand_status || lead.board_column;
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  });
 
   const statusConfig: {
     key: string;
@@ -281,7 +306,7 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
                 {totalCalled}
               </span>
               <span className="text-xs font-semibold text-slate-400">
-                / {dailyTarget} cible
+                {targetLabel}
               </span>
             </div>
 
@@ -301,9 +326,9 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
           </div>
 
           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-3xs text-slate-500 font-medium">
-            <span>Rythme journalier</span>
+            <span>{rhythmLabel}</span>
             <span className={`font-bold ${rawCallProgress >= 100 ? 'text-emerald-700' : 'text-slate-700'}`}>
-              {rawCallProgress >= 100 ? '🔥 Objectif dépassé' : `${Math.max(0, dailyTarget - totalCalled)} restants`}
+              {rawCallProgress >= 100 ? '🔥 Objectif atteint' : `${Math.max(0, scaledCallsTarget - totalCalled)} restants`}
             </span>
           </div>
         </div>
