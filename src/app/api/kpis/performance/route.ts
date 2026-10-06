@@ -235,44 +235,6 @@ export async function GET(request: NextRequest) {
 
     const attendanceRate = trainingFixed > 0 ? Number(((attendedPersons / trainingFixed) * 100).toFixed(1)) : 0;
 
-    // ── Call Results Breakdown (Nour & Kaoutar) ────────────────────────
-    const callResults = {
-      trainingFixed: 0,
-      noResponse: 0,
-      toRecall: 0,
-      notInterested: 0,
-      wrongNumber: 0,
-      alreadyClient: 0,
-      other: 0,
-      total: 0,
-    };
-
-    filteredLeadsInRange.forEach((l) => {
-      if (l.board_column !== "NEW_LEADS") {
-        callResults.total++;
-        const s = (l.brand_status || "").toLowerCase();
-        if (
-          l.brand_status === "Training fixed" ||
-          l.board_column === "TRAINING_PIPELINE" ||
-          l.board_column === "VEHICLE_ASSIGNMENT"
-        ) {
-          callResults.trainingFixed++;
-        } else if (s.includes("no response") || s.includes("pas de réponse")) {
-          callResults.noResponse++;
-        } else if (s.includes("recall") || s.includes("rappeler")) {
-          callResults.toRecall++;
-        } else if (s.includes("not interested") || s.includes("pas intéressé")) {
-          callResults.notInterested++;
-        } else if (s.includes("wrong number") || s.includes("faux numéro")) {
-          callResults.wrongNumber++;
-        } else if (s.includes("client")) {
-          callResults.alreadyClient++;
-        } else {
-          callResults.other++;
-        }
-      }
-    });
-
     // ── Cascading Targets based on Moroccan Working Days ───────────────
     const dailyCallsTarget = targets.target_daily_calls || 50;
     const dailyTrainingFixedTarget = Math.round(dailyCallsTarget * 0.30);
@@ -310,6 +272,44 @@ export async function GET(request: NextRequest) {
     const trafficTrainingFixed = activeTrafficLeads.filter(
       (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
     ).length;
+
+    // ── Call Results Breakdown for Traffic Team (Nour & Kaoutar) ───────
+    const callResults = {
+      trainingFixed: 0,
+      noResponse: 0,
+      toRecall: 0,
+      notInterested: 0,
+      wrongNumber: 0,
+      alreadyClient: 0,
+      other: 0,
+      total: 0,
+    };
+
+    activeTrafficLeads.forEach((l) => {
+      if (l.board_column !== "NEW_LEADS") {
+        callResults.total++;
+        const s = (l.brand_status || "").toLowerCase();
+        if (
+          l.brand_status === "Training fixed" ||
+          l.board_column === "TRAINING_PIPELINE" ||
+          l.board_column === "VEHICLE_ASSIGNMENT"
+        ) {
+          callResults.trainingFixed++;
+        } else if (s.includes("no response") || s.includes("pas de réponse")) {
+          callResults.noResponse++;
+        } else if (s.includes("recall") || s.includes("rappeler")) {
+          callResults.toRecall++;
+        } else if (s.includes("not interested") || s.includes("pas intéressé")) {
+          callResults.notInterested++;
+        } else if (s.includes("wrong number") || s.includes("faux numéro")) {
+          callResults.wrongNumber++;
+        } else if (s.includes("client")) {
+          callResults.alreadyClient++;
+        } else {
+          callResults.other++;
+        }
+      }
+    });
 
     // Attended candidates from training fixed by the traffic team
     const trafficAttendedPersons = activeTrafficLeads.filter(

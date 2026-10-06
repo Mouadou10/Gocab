@@ -173,7 +173,7 @@ const PRESET_RANGES = [
   { id: "today", label: "Aujourd'hui", days: 0 },
   { id: "yesterday", label: "Hier", days: 1 },
   { id: "7d", label: "7 Derniers Jours", days: 7 },
-  { id: "month", label: "Ce Mois", days: 30 },
+  { id: "month", label: "Ce Mois (en cours)", days: 30 },
   { id: "30d", label: "30 Derniers Jours", days: 30 },
   { id: "custom", label: "Personnalisé 📅", days: -1 },
 ];
