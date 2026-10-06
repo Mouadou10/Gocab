@@ -81,6 +81,8 @@ interface PerformanceData {
     targetShowupRate: number;
     preorderAssignedRate: number;
     targetPreorderAssignedRate: number;
+    conversionPerAttendedRate?: number;
+    targetConversionPerAttendedRate?: number;
     avgDaysCarAvailable: number;
     targetAvgDaysCarAvailable: number;
     velocityScorePct: number;
@@ -88,6 +90,19 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    trainingSessions?: {
+      date: string;
+      convokedCount: number;
+      attendedCount: number;
+      preordersCount: number;
+      assignedCount: number;
+      preordersAssignedTotal: number;
+      conversionPerAttendedPct: number;
+      targetConversionPct: number;
+      isCompliant: boolean;
+    }[];
+    compliantSessionsCount?: number;
+    totalActiveSessionsCount?: number;
   };
   monthlyTargets?: {
     monthlyCallsTarget: number;
@@ -995,11 +1010,23 @@ export default function PowerBiDashboardView() {
                         style={{ width: `${Math.min(100, onboarding?.preordersAttainmentPct ?? 0)}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-3xs font-semibold">
-                      <span className="text-gray-500">Tx Conversion :</span>
-                      <strong className={onboarding?.preorderAssignedRate && onboarding.preorderAssignedRate >= 25 ? "text-emerald-700" : "text-emerald-600"}>
-                        {onboarding?.preorderAssignedRate ?? 0}% (Cible 25%)
-                      </strong>
+                    <div className="space-y-1 pt-0.5">
+                      <div className="flex justify-between text-3xs font-semibold">
+                        <span className="text-gray-500">Tx Conv. / Inscrits :</span>
+                        <strong className={onboarding?.preorderAssignedRate && onboarding.preorderAssignedRate >= 25 ? "text-emerald-700" : "text-emerald-600"}>
+                          {onboarding?.preorderAssignedRate ?? 0}% <span className="text-3xs text-gray-400 font-normal">/ 25%</span>
+                        </strong>
+                      </div>
+                      <div className="flex justify-between items-center text-3xs font-semibold bg-white px-2 py-1 rounded-lg border border-slate-200">
+                        <span className="text-purple-800 font-bold">Tx Conv. / Présents :</span>
+                        <span className={`px-1.5 py-0.5 rounded font-black font-mono text-3xs ${
+                          (onboarding?.conversionPerAttendedRate ?? 0) >= 20
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-rose-100 text-rose-800"
+                        }`}>
+                          {onboarding?.conversionPerAttendedRate ?? 0}% {(onboarding?.conversionPerAttendedRate ?? 0) >= 20 ? "✓" : "⚠️"} (Cible &gt; 20%)
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1242,6 +1269,112 @@ export default function PowerBiDashboardView() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* ── Training Sessions Compliance Breakdown (> 20% Target) ── */}
+                <div className="bg-gradient-to-r from-purple-50/70 via-white to-emerald-50/50 border border-purple-200/80 rounded-2xl p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-2 bg-purple-100 text-purple-700 rounded-xl text-base">
+                        🎯
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                            Rendement par Session de Formation
+                          </h4>
+                          <span className="text-3xs px-2 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold rounded-full">
+                            Règle : &gt; 20% de transformation / présents
+                          </span>
+                        </div>
+                        <p className="text-3xs text-gray-500 mt-0.5">
+                          Chaque session animée par Ayoub doit convertir au minimum 20% des candidats présents en précommande ou véhicule.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-purple-200 shadow-2xs text-center">
+                        <span className="text-3xs text-gray-500 font-bold block uppercase">Conformité Sessions</span>
+                        <span className="text-xs font-black text-purple-900 font-mono">
+                          {onboarding?.compliantSessionsCount ?? 0} / {onboarding?.totalActiveSessionsCount ?? 0} conformes
+                        </span>
+                      </div>
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-2xs text-center">
+                        <span className="text-3xs text-gray-500 font-bold block uppercase">Moyenne Période</span>
+                        <span className={`text-xs font-black font-mono ${
+                          (onboarding?.conversionPerAttendedRate ?? 0) >= 20 ? "text-emerald-700" : "text-rose-600"
+                        }`}>
+                          {onboarding?.conversionPerAttendedRate ?? 0}% {(onboarding?.conversionPerAttendedRate ?? 0) >= 20 ? "✅" : "⚠️"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sessions Grid / Table */}
+                  {onboarding?.trainingSessions && onboarding.trainingSessions.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-purple-100 text-3xs font-black uppercase tracking-wider text-gray-500">
+                            <th className="pb-2 pl-2">Session (Date)</th>
+                            <th className="pb-2 text-center">Convoqués</th>
+                            <th className="pb-2 text-center">Présents (Salle)</th>
+                            <th className="pb-2 text-center">Précommandes</th>
+                            <th className="pb-2 text-center">Affectées</th>
+                            <th className="pb-2 text-center">Total Signés</th>
+                            <th className="pb-2 text-center">Taux / Présents</th>
+                            <th className="pb-2 text-right pr-2">Conformité (&gt; 20%)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-purple-50 font-medium">
+                          {onboarding.trainingSessions.map((session, idx) => (
+                            <tr key={`session-${session.date}-${idx}`} className="hover:bg-purple-50/40 transition-colors">
+                              <td className="py-2.5 pl-2 font-bold font-mono text-gray-900 flex items-center gap-1.5">
+                                <span>📅</span>
+                                <span>{session.date}</span>
+                              </td>
+                              <td className="py-2.5 text-center text-gray-600 font-mono">{session.convokedCount}</td>
+                              <td className="py-2.5 text-center font-bold text-purple-700 font-mono">{session.attendedCount}</td>
+                              <td className="py-2.5 text-center text-purple-600 font-mono">{session.preordersCount}</td>
+                              <td className="py-2.5 text-center text-emerald-600 font-mono">{session.assignedCount}</td>
+                              <td className="py-2.5 text-center font-black text-gray-900 font-mono">{session.preordersAssignedTotal}</td>
+                              <td className="py-2.5 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-md font-black font-mono text-xs ${
+                                  session.conversionPerAttendedPct >= 20
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : session.attendedCount === 0
+                                    ? "bg-gray-100 text-gray-500"
+                                    : "bg-rose-100 text-rose-700"
+                                }`}>
+                                  {session.conversionPerAttendedPct}%
+                                </span>
+                              </td>
+                              <td className="py-2.5 text-right pr-2">
+                                {session.attendedCount === 0 ? (
+                                  <span className="text-3xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full font-bold">
+                                    Non tenue
+                                  </span>
+                                ) : session.isCompliant ? (
+                                  <span className="text-3xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-black border border-emerald-300">
+                                    ✅ Conforme (&gt; 20%)
+                                  </span>
+                                ) : (
+                                  <span className="text-3xs px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full font-black border border-rose-300">
+                                    ⚠️ Sous objectif (&le; 20%)
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-400">
+                      <p className="text-xs font-semibold">Aucune session enregistrée sur la période sélectionnée</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

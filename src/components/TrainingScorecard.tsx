@@ -366,6 +366,10 @@ export default function TrainingScorecard({
     ? ((totalConverted / totalInTraining) * 100).toFixed(1)
     : '0';
 
+  const conversionPerAttendedRate = attendedCount > 0
+    ? ((totalConverted / attendedCount) * 100).toFixed(1)
+    : '0';
+
   // Status breakdown
   const statusCounts: Record<string, number> = {};
   filteredLeads.forEach(lead => {
@@ -587,29 +591,36 @@ export default function TrainingScorecard({
           </p>
         </div>
 
-        {/* Card 4: Conversion Rate */}
+        {/* Card 4: Conversion Rate per Attended (> 20% Target) */}
         <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Taux de Conversion</span>
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
-              Cible {targetConversionRate}%
+            <span className="text-xs font-bold text-slate-600">Tx Conversion / Présents</span>
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+              Number(conversionPerAttendedRate) >= 20 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-purple-100 text-purple-800"
+            }`}>
+              Cible &gt; 20%
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-2xl font-black text-purple-700">{conversionRate}%</span>
-            <span className="text-xs text-slate-400 font-semibold">de conversion</span>
+            <span className={`text-2xl font-black ${
+              Number(conversionPerAttendedRate) >= 20 ? "text-emerald-700" : "text-purple-700"
+            }`}>{conversionPerAttendedRate}%</span>
+            <span className="text-xs text-slate-500 font-semibold">
+              ({totalConverted} / {attendedCount} présents)
+            </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all duration-500 ${
-                Number(conversionRate) >= targetConversionRate ? 'bg-emerald-500' : 'bg-purple-500'
+                Number(conversionPerAttendedRate) >= 20 ? 'bg-emerald-500' : 'bg-purple-500'
               }`}
-              style={{ width: `${Math.min(100, targetConversionRate > 0 ? (Number(conversionRate) / targetConversionRate) * 100 : 0)}%` }}
+              style={{ width: `${Math.min(100, (Number(conversionPerAttendedRate) / 20) * 100)}%` }}
             />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1.5">
-            {totalConverted} sur {totalInTraining} candidats de la session
-          </p>
+          <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1.5">
+            <span>{totalConverted} signés sur {attendedCount} présents</span>
+            <span className="font-semibold text-slate-600">({conversionRate}% / convoqués)</span>
+          </div>
         </div>
       </div>
 

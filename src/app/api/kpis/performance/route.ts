@@ -394,6 +394,98 @@ export async function GET(request: NextRequest) {
     const onboardingShowupRate = scheduledTrainingCount > 0 ? Number(((onboardingAttendedCount / scheduledTrainingCount) * 100).toFixed(1)) : 0;
     const onboardingConversionRate = scheduledTrainingCount > 0 ? Number(((onboardingPreorderAssignedTotal / scheduledTrainingCount) * 100).toFixed(1)) : 0;
 
+    // Conversion rate specifically of attended candidates: % preorder-assign / attended (Target: > 20% in each session)
+    const onboardingAttendedConversionRate = onboardingAttendedCount > 0
+      ? Number(((onboardingPreorderAssignedTotal / onboardingAttendedCount) * 100).toFixed(1))
+      : 0;
+
+    // Session-by-Session Performance Breakdown (reminder_date = scheduled training session date)
+    const sessionMap = new Map<string, {
+      date: string;
+      convokedCount: number;
+      attendedCount: number;
+      preordersCount: number;
+      assignedCount: number;
+    }>();
+
+    activeOnboardingLeads.forEach((l) => {
+      let sessionDate = "";
+      if (l.reminder_date) {
+        try {
+          const d = new Date(l.reminder_date);
+          if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
+        } catch {}
+      }
+      if (!sessionDate && l.created_at) {
+        try {
+          const d = new Date(l.created_at);
+          if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
+        } catch {}
+      }
+      if (!sessionDate) sessionDate = "Session non datée";
+
+      if (!sessionMap.has(sessionDate)) {
+        sessionMap.set(sessionDate, {
+          date: sessionDate,
+          convokedCount: 0,
+          attendedCount: 0,
+          preordersCount: 0,
+          assignedCount: 0,
+        });
+      }
+
+      const entry = sessionMap.get(sessionDate)!;
+      entry.convokedCount++;
+
+      const isAttended = Boolean(
+        l.training_status &&
+        [
+          "Attended",
+          "Attended and not interested",
+          "Pending",
+          "Refused the offer",
+          "Assign vehicle",
+          "Preorder",
+          "Accept offer",
+        ].includes(l.training_status)
+      );
+
+      if (isAttended) {
+        entry.attendedCount++;
+      }
+
+      if (l.training_status === "Preorder") {
+        entry.preordersCount++;
+      }
+      if (l.board_column === "VEHICLE_ASSIGNMENT" || l.training_status === "Assign vehicle" || l.training_status === "Accept offer") {
+        entry.assignedCount++;
+      }
+    });
+
+    const trainingSessionsList = Array.from(sessionMap.values())
+      .map((s) => {
+        const totalPreordersAssigned = s.preordersCount + s.assignedCount;
+        const conversionPerAttendedPct = s.attendedCount > 0
+          ? Number(((totalPreordersAssigned / s.attendedCount) * 100).toFixed(1))
+          : 0;
+        const isCompliant = s.attendedCount > 0 && conversionPerAttendedPct >= 20.0;
+        return {
+          date: s.date,
+          convokedCount: s.convokedCount,
+          attendedCount: s.attendedCount,
+          preordersCount: s.preordersCount,
+          assignedCount: s.assignedCount,
+          preordersAssignedTotal: totalPreordersAssigned,
+          conversionPerAttendedPct,
+          targetConversionPct: 20.0,
+          isCompliant,
+        };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const compliantSessionsCount = trainingSessionsList.filter((s) => s.attendedCount > 0 && s.isCompliant).length;
+    const totalActiveSessionsCount = trainingSessionsList.filter((s) => s.attendedCount > 0).length;
+
     // AVG Days Cars Remain as "Available" status
     const availableCars = await prisma.vehicle.findMany({
       where: { status: "Available", is_archived: false },
@@ -764,6 +856,8 @@ export async function GET(request: NextRequest) {
         targetShowupRate: 65.0,
         preorderAssignedRate: onboardingConversionRate,
         targetPreorderAssignedRate: 25.0,
+        conversionPerAttendedRate: onboardingAttendedConversionRate,
+        targetConversionPerAttendedRate: 20.0,
         avgDaysCarAvailable,
         targetAvgDaysCarAvailable: 1.0,
         velocityScorePct,
@@ -771,6 +865,9 @@ export async function GET(request: NextRequest) {
         monthlyBonusBudgetMAD: 1000,
         bonusEarnedMAD: onboardingBonusEarnedMAD,
         members: ["Ayoub Gsaib"],
+        trainingSessions: trainingSessionsList,
+        compliantSessionsCount,
+        totalActiveSessionsCount,
       },
       monthlyTargets: {
         monthlyCallsTarget,
