@@ -93,6 +93,7 @@ interface PerformanceData {
     trainingSessions?: {
       date: string;
       convokedCount: number;
+      scheduledCount?: number;
       attendedCount: number;
       preordersCount: number;
       assignedCount: number;
@@ -1318,7 +1319,8 @@ export default function PowerBiDashboardView() {
                         <thead>
                           <tr className="border-b border-purple-100 text-3xs font-black uppercase tracking-wider text-gray-500">
                             <th className="pb-2 pl-2">Session (Date)</th>
-                            <th className="pb-2 text-center">Convoqués</th>
+                            <th className="pb-2 text-center" title="Total des candidats programmés pour cette session">Convoqués Total</th>
+                            <th className="pb-2 text-center" title="Nombre de candidats actuellement en colonne Training Fixed (Scheduled)">En Attente (Scheduled)</th>
                             <th className="pb-2 text-center">Présents (Salle)</th>
                             <th className="pb-2 text-center">Précommandes</th>
                             <th className="pb-2 text-center">Affectées</th>
@@ -1334,7 +1336,12 @@ export default function PowerBiDashboardView() {
                                 <span>📅</span>
                                 <span>{session.date}</span>
                               </td>
-                              <td className="py-2.5 text-center text-gray-600 font-mono">{session.convokedCount}</td>
+                              <td className="py-2.5 text-center font-bold text-gray-800 font-mono">{session.convokedCount}</td>
+                              <td className="py-2.5 text-center font-mono">
+                                <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 text-3xs">
+                                  ⏳ {session.scheduledCount ?? 0}
+                                </span>
+                              </td>
                               <td className="py-2.5 text-center font-bold text-purple-700 font-mono">{session.attendedCount}</td>
                               <td className="py-2.5 text-center text-purple-600 font-mono">{session.preordersCount}</td>
                               <td className="py-2.5 text-center text-emerald-600 font-mono">{session.assignedCount}</td>
@@ -1375,6 +1382,13 @@ export default function PowerBiDashboardView() {
                       <p className="text-xs font-semibold">Aucune session enregistrée sur la période sélectionnée</p>
                     </div>
                   )}
+
+                  <p className="text-3xs text-gray-500 pt-2 border-t border-purple-100 flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>
+                      <strong>Rapprochement Pipeline :</strong> La colonne <em>« En Attente (Scheduled) »</em> correspond directement au compteur de la colonne <em>Training Fixed (Scheduled)</em> de la page Formation pour cette date de session.
+                    </span>
+                  </p>
                 </div>
               </div>
 

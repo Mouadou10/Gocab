@@ -160,8 +160,14 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Filter leads treated in date range
+    // Filter leads treated in date range or scheduled for training session in date range
     const leadsTreatedInRange = allLeads.filter((l) => {
+      if (l.reminder_date) {
+        const rd = new Date(l.reminder_date);
+        if (!isNaN(rd.getTime()) && rd >= startDate && rd <= endDate) {
+          return true;
+        }
+      }
       const ts = l.status_changed_at || l.updated_at || l.created_at;
       if (!ts) return false;
       const d = new Date(ts);
@@ -360,15 +366,10 @@ export async function GET(request: NextRequest) {
     const trafficTeamBonusEarnedMAD = Math.min(1000, Math.round(1000 * (trafficTeamAttainmentPct / 100)));
 
     // ── Onboarding Specialist Team (Ayoub Gsaib) ───────────────────────
-    const ayoubLeads = leadsTreatedInRange.filter((l) => {
-      const h = ((l as any).handled_by || "").toLowerCase();
-      const n = (l.notes || "").toLowerCase();
-      return h.includes("ayoub") || n.includes("ayoub");
-    });
-
+    // Ayoub Gsaib conducts and manages the training sessions for all scheduled candidates
     const activeOnboardingLeads = targetUser && targetUser.role === "ONBOARDING_SPECIALIST"
       ? filteredLeadsInRange
-      : (ayoubLeads.length > 0 ? ayoubLeads : trainingLeads);
+      : trainingLeads;
 
     const onboardingAttendedCount = activeOnboardingLeads.filter(
       (l) =>
@@ -403,6 +404,7 @@ export async function GET(request: NextRequest) {
     const sessionMap = new Map<string, {
       date: string;
       convokedCount: number;
+      scheduledCount: number;
       attendedCount: number;
       preordersCount: number;
       assignedCount: number;
@@ -413,6 +415,12 @@ export async function GET(request: NextRequest) {
       if (l.reminder_date) {
         try {
           const d = new Date(l.reminder_date);
+          if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
+        } catch {}
+      }
+      if (!sessionDate && l.status_changed_at) {
+        try {
+          const d = new Date(l.status_changed_at);
           if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
         } catch {}
       }
@@ -428,6 +436,7 @@ export async function GET(request: NextRequest) {
         sessionMap.set(sessionDate, {
           date: sessionDate,
           convokedCount: 0,
+          scheduledCount: 0,
           attendedCount: 0,
           preordersCount: 0,
           assignedCount: 0,
@@ -436,6 +445,14 @@ export async function GET(request: NextRequest) {
 
       const entry = sessionMap.get(sessionDate)!;
       entry.convokedCount++;
+
+      // Count leads currently in "Scheduled" status (Training Fixed awaiting session)
+      const isScheduled =
+        l.training_status === "Scheduled" ||
+        (!l.training_status && l.board_column === "TRAINING_PIPELINE");
+      if (isScheduled) {
+        entry.scheduledCount++;
+      }
 
       const isAttended = Boolean(
         l.training_status &&
@@ -472,6 +489,7 @@ export async function GET(request: NextRequest) {
         return {
           date: s.date,
           convokedCount: s.convokedCount,
+          scheduledCount: s.scheduledCount,
           attendedCount: s.attendedCount,
           preordersCount: s.preordersCount,
           assignedCount: s.assignedCount,
