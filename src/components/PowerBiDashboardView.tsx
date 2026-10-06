@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLanguage } from "@/context/LanguageContext";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  AreaChart,
+  Area,
+} from "recharts";
 
 interface PerformanceData {
   period: {
@@ -281,6 +295,99 @@ export default function PowerBiDashboardView() {
   const traffic = data?.trafficAcquisitionTeam;
   const onboarding = data?.onboardingSpecialistTeam;
   const callResults = data?.callResultsBreakdown;
+
+  // ── Chart 1 Data: Call Distribution Donut ────────────────────────
+  const callDistributionData = useMemo(() => {
+    if (!callResults || callResults.total === 0) return [];
+    return [
+      { name: "Formations Fixées", value: callResults.trainingFixed, color: "#10b981", icon: "✅" },
+      { name: "Pas de réponse", value: callResults.noResponse, color: "#94a3b8", icon: "📵" },
+      { name: "À rappeler", value: callResults.toRecall, color: "#f59e0b", icon: "🔁" },
+      { name: "Pas intéressé", value: callResults.notInterested, color: "#f43f5e", icon: "🚫" },
+      { name: "Mauvais numéro", value: callResults.wrongNumber, color: "#ef4444", icon: "❌" },
+      { name: "Déjà client", value: callResults.alreadyClient, color: "#8b5cf6", icon: "🤝" },
+    ].filter((item) => item.value > 0);
+  }, [callResults]);
+
+  // ── Chart 2 Data: Acquisition Pipeline Funnel ────────────────────
+  const trafficFunnelData = useMemo(() => {
+    if (!traffic) return [];
+    const calls = traffic.callsDone || 0;
+    const fixed = traffic.trainingFixed || 0;
+    const attended = traffic.attendedPersons || 0;
+    const preorders = traffic.preordersAssigned || 0;
+
+    return [
+      {
+        stage: "1. Appels Réalisés",
+        count: calls,
+        rate: 100,
+        targetRate: 100,
+        fill: "#2563eb",
+        badge: "Base prospection",
+      },
+      {
+        stage: "2. Formations Fixées",
+        count: fixed,
+        rate: calls > 0 ? Number(((fixed / calls) * 100).toFixed(1)) : 0,
+        targetRate: 30,
+        fill: "#10b981",
+        badge: "Cible : 30%",
+      },
+      {
+        stage: "3. Présents Formation",
+        count: attended,
+        rate: fixed > 0 ? Number(((attended / fixed) * 100).toFixed(1)) : 0,
+        targetRate: 65,
+        fill: "#0d9488",
+        badge: "Cible : 65%",
+      },
+      {
+        stage: "4. Précommandes & Voitures",
+        count: preorders,
+        rate: fixed > 0 ? Number(((preorders / fixed) * 100).toFixed(1)) : 0,
+        targetRate: 25,
+        fill: "#7c3aed",
+        badge: "Cible : 25%",
+      },
+    ];
+  }, [traffic]);
+
+  // ── Chart 3 Data: Onboarding Actual vs Target Comparison ─────────
+  const onboardingComparisonData = useMemo(() => {
+    if (!onboarding) return [];
+    return [
+      {
+        name: "Présences Formation",
+        Réalisé: onboarding.attendedCount,
+        Objectif: onboarding.attendedTarget,
+        attainment: onboarding.attendedAttainmentPct,
+      },
+      {
+        name: "Précommandes / Affectées",
+        Réalisé: onboarding.preordersAssignedTotal,
+        Objectif: onboarding.preordersTarget,
+        attainment: onboarding.preordersAttainmentPct,
+      },
+    ];
+  }, [onboarding]);
+
+  // ── Chart 4 Data: Onboarding Contracts Breakdown ─────────────────
+  const onboardingContractsData = useMemo(() => {
+    if (!onboarding) return [];
+    return [
+      { name: "Précommandes", value: onboarding.preordersCount, color: "#7c3aed" },
+      { name: "Véhicules Affectés", value: onboarding.assignedCount, color: "#10b981" },
+    ].filter((i) => i.value > 0);
+  }, [onboarding]);
+
+  // ── Chart 5 Data: Daily Activity Trends ──────────────────────────
+  const timelineData = useMemo(() => {
+    return (data?.dailyTimeline || []).map((d) => ({
+      ...d,
+      shortDate: d.date.length > 5 ? d.date.slice(5) : d.date,
+    }));
+  }, [data?.dailyTimeline]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
@@ -629,44 +736,183 @@ export default function PowerBiDashboardView() {
                   </div>
                 </div>
 
-                {/* Call Results Distribution Waterfall */}
-                {callResults && (
-                  <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                        <span>📊</span>
-                        <span>Répartition des Résultats d&apos;Appels ({callResults.total} appels traités)</span>
-                      </p>
+                {/* ── Visual Analytics Grid: Donut + Funnel ──────────── */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
+                  {/* Left: Call Outcome Donut Chart */}
+                  <div className="lg:col-span-5 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-lg bg-blue-100 text-blue-700 text-xs">📊</span>
+                        <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                          Répartition des Appels
+                        </h4>
+                      </div>
+                      <span className="text-3xs font-extrabold text-blue-800 bg-blue-100/70 px-2 py-0.5 rounded-full">
+                        {callResults?.total || 0} traités
+                      </span>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 text-2xs font-semibold">
-                      <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl border border-emerald-200">
-                        <span>✅ Formations Fixées :</span>
-                        <strong className="font-mono text-xs">{callResults.trainingFixed}</strong>
+                    {/* Donut Chart with Centered Metric */}
+                    <div className="relative h-56 w-full flex items-center justify-center">
+                      {callDistributionData.length > 0 ? (
+                        <>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const d = payload[0];
+                                    const total = callResults?.total || 1;
+                                    const pct = (((Number(d.value) || 0) / total) * 100).toFixed(1);
+                                    return (
+                                      <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700">
+                                        <p className="font-bold flex items-center gap-1.5">
+                                          <span>{d.payload.icon}</span>
+                                          <span>{d.name}</span>
+                                        </p>
+                                        <p className="text-emerald-400 font-mono font-black text-sm mt-0.5">
+                                          {d.value} appels ({pct}%)
+                                        </p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                              <Pie
+                                data={callDistributionData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={55}
+                                outerRadius={82}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {callDistributionData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                          {/* Centered Donut Label */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-xl font-black text-gray-900 font-mono leading-none">
+                              {callResults?.trainingFixed || 0}
+                            </span>
+                            <span className="text-3xs text-gray-500 font-bold uppercase tracking-wider mt-0.5">
+                              Fixées ({traffic?.trainingFixedRate ?? 0}%)
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400 font-semibold">Aucun appel dans cette période.</p>
+                      )}
+                    </div>
+
+                    {/* Compact Interactive Chips Legend */}
+                    <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-200/60 text-3xs font-semibold">
+                      {callDistributionData.map((item) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center justify-between px-2 py-1 rounded-lg bg-white border border-slate-200/70"
+                        >
+                          <span className="flex items-center gap-1 truncate text-gray-700">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                            <span className="truncate">{item.name}</span>
+                          </span>
+                          <strong className="font-mono text-gray-900 ml-1">{item.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right: End-to-End Pipeline Funnel Chart */}
+                  <div className="lg:col-span-7 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs">🎯</span>
+                        <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                          Entonnoir de Conversion Prospection &rarr; Formation
+                        </h4>
                       </div>
-                      <div className="flex items-center gap-1.5 bg-slate-100 text-slate-800 px-3 py-1 rounded-xl border border-slate-200">
-                        <span>📵 Pas de réponse :</span>
-                        <strong className="font-mono text-xs">{callResults.noResponse}</strong>
+                      <span className="text-3xs font-extrabold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                        Fin d&apos;entonnoir : {traffic?.preorderAssignedRate ?? 0}%
+                      </span>
+                    </div>
+
+                    {/* Horizontal Stepped Funnel */}
+                    <div className="h-56 w-full pt-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          layout="vertical"
+                          data={trafficFunnelData}
+                          margin={{ top: 5, right: 35, left: 10, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                          <XAxis type="number" hide />
+                          <YAxis
+                            dataKey="stage"
+                            type="category"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 11, fontWeight: 700, fill: "#1e293b" }}
+                            width={130}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const d = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700">
+                                    <p className="font-bold text-slate-200">{d.stage}</p>
+                                    <p className="text-emerald-400 font-mono font-black text-sm mt-0.5">
+                                      {d.count} candidats ({d.rate}%)
+                                    </p>
+                                    <p className="text-3xs text-slate-400 mt-1">{d.badge}</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                            {trafficFunnelData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Step-by-Step Conversion Badges */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 text-center">
+                      <div className="p-2 bg-white rounded-xl border border-slate-200/70">
+                        <p className="text-3xs text-gray-500 font-bold uppercase">1. Tx Fixées / Appels</p>
+                        <p className={`text-xs font-black font-mono mt-0.5 ${
+                          (traffic?.trainingFixedRate ?? 0) >= 30 ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {traffic?.trainingFixedRate ?? 0}% <span className="text-3xs text-gray-400 font-normal">/ 30%</span>
+                        </p>
                       </div>
-                      <div className="flex items-center gap-1.5 bg-amber-100 text-amber-800 px-3 py-1 rounded-xl border border-amber-200">
-                        <span>🔁 À rappeler :</span>
-                        <strong className="font-mono text-xs">{callResults.toRecall}</strong>
+                      <div className="p-2 bg-white rounded-xl border border-slate-200/70">
+                        <p className="text-3xs text-gray-500 font-bold uppercase">2. Tx Présence Salle</p>
+                        <p className={`text-xs font-black font-mono mt-0.5 ${
+                          (traffic?.attendedRate ?? 0) >= 65 ? "text-emerald-600" : "text-teal-600"
+                        }`}>
+                          {traffic?.attendedRate ?? 0}% <span className="text-3xs text-gray-400 font-normal">/ 65%</span>
+                        </p>
                       </div>
-                      <div className="flex items-center gap-1.5 bg-rose-100 text-rose-800 px-3 py-1 rounded-xl border border-rose-200">
-                        <span>🚫 Pas intéressé :</span>
-                        <strong className="font-mono text-xs">{callResults.notInterested}</strong>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-red-100 text-red-800 px-3 py-1 rounded-xl border border-red-200">
-                        <span>❌ Mauvais numéro :</span>
-                        <strong className="font-mono text-xs">{callResults.wrongNumber}</strong>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-purple-100 text-purple-800 px-3 py-1 rounded-xl border border-purple-200">
-                        <span>🤝 Déjà client :</span>
-                        <strong className="font-mono text-xs">{callResults.alreadyClient}</strong>
+                      <div className="p-2 bg-white rounded-xl border border-slate-200/70">
+                        <p className="text-3xs text-gray-500 font-bold uppercase">3. Tx Précommandes</p>
+                        <p className={`text-xs font-black font-mono mt-0.5 ${
+                          (traffic?.preorderAssignedRate ?? 0) >= 25 ? "text-emerald-600" : "text-purple-600"
+                        }`}>
+                          {traffic?.preorderAssignedRate ?? 0}% <span className="text-3xs text-gray-400 font-normal">/ 25%</span>
+                        </p>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* ══════════════════════════════════════════════════════════════
@@ -814,6 +1060,187 @@ export default function PowerBiDashboardView() {
                     <p className="text-3xs text-gray-600 font-semibold">
                       Temps moyen d&apos;attente d&apos;une voiture en statut &quot;Available&quot;
                     </p>
+                  </div>
+                </div>
+
+                {/* Visual Analytics Panel for Onboarding Specialist (Ayoub Gsaib) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-purple-100">
+                  {/* Left: Grouped Bar Chart (Réalisé vs Objectif) */}
+                  <div className="lg:col-span-7 bg-purple-50/30 border border-purple-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-2.5 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-lg bg-purple-100 text-purple-700 text-xs">📊</span>
+                        <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                          Comparatif Performance : Réalisé vs Objectif Cible
+                        </h4>
+                      </div>
+                      <span className="text-3xs font-extrabold text-purple-800 bg-purple-100/70 px-2 py-0.5 rounded-full">
+                        Score global : {onboarding?.teamAttainmentPct ?? 0}%
+                      </span>
+                    </div>
+
+                    {/* Grouped Bar Chart */}
+                    <div className="h-56 w-full pt-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={onboardingComparisonData}
+                          margin={{ top: 15, right: 20, left: -10, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis
+                            dataKey="name"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 11, fontWeight: 700, fill: "#1e293b" }}
+                          />
+                          <YAxis
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 10, fill: "#64748b" }}
+                            allowDecimals={false}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const d = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700">
+                                    <p className="font-bold text-slate-200">{d.name}</p>
+                                    <div className="flex items-center justify-between gap-4 mt-1.5 font-mono">
+                                      <span className="text-purple-300">Réalisé : <strong>{d.Réalisé}</strong></span>
+                                      <span className="text-slate-400">Obj : <strong>{d.Objectif}</strong></span>
+                                    </div>
+                                    <p className="text-3xs text-emerald-400 font-bold mt-1">
+                                      Taux d&apos;atteinte : {d.attainment}%
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Bar dataKey="Réalisé" fill="#9333ea" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="Objectif" fill="#cbd5e1" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Chart Legend & Metric Badges */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-purple-200/60 text-3xs font-semibold">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded-sm bg-purple-600 inline-block" />
+                          <span className="text-gray-700">Réalisé</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded-sm bg-slate-300 inline-block" />
+                          <span className="text-gray-500">Objectif (Cible)</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Présences :</span>
+                        <strong className="text-purple-700">{onboarding?.attendedAttainmentPct ?? 0}%</strong>
+                        <span className="text-gray-300">|</span>
+                        <span className="text-gray-500">Contrats :</span>
+                        <strong className="text-emerald-700">{onboarding?.preordersAttainmentPct ?? 0}%</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Contrats Conclus Donut & Répartition */}
+                  <div className="lg:col-span-5 bg-purple-50/30 border border-purple-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-2.5 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-lg bg-pink-100 text-pink-700 text-xs">📝</span>
+                        <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                          Mix Contrats & Affectations
+                        </h4>
+                      </div>
+                      <span className="text-3xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                        {onboarding?.preordersAssignedTotal ?? 0} au total
+                      </span>
+                    </div>
+
+                    {/* Donut Chart */}
+                    <div className="h-44 w-full relative flex items-center justify-center">
+                      {onboardingContractsData.length > 0 ? (
+                        <>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={onboardingContractsData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={42}
+                                outerRadius={68}
+                                paddingAngle={4}
+                                stroke="none"
+                              >
+                                {onboardingContractsData.map((entry, index) => (
+                                  <Cell key={`cell-onboarding-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const d = payload[0].payload;
+                                    const total = onboarding?.preordersAssignedTotal || 1;
+                                    const pct = ((d.value / total) * 100).toFixed(1);
+                                    return (
+                                      <div className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs shadow-xl border border-slate-700">
+                                        <p className="font-bold text-slate-200">{d.name}</p>
+                                        <p className="text-pink-300 font-mono font-black mt-0.5">
+                                          {d.value} ({pct}%)
+                                        </p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          {/* Centered Counter */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-xl font-black text-gray-900 font-mono">
+                              {onboarding?.preordersAssignedTotal ?? 0}
+                            </span>
+                            <span className="text-3xs font-bold uppercase tracking-wider text-purple-700">
+                              Contrats
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-center text-gray-400 py-8">
+                          <span className="text-2xl mb-1">📋</span>
+                          <p className="text-xs font-semibold">Aucun contrat signé sur la période</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Breakdown Badges */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200/60">
+                      <div className="p-2 bg-white rounded-xl border border-purple-200/60 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
+                          <span className="text-3xs font-bold text-gray-600">Précommandes</span>
+                        </div>
+                        <span className="text-xs font-black text-purple-700 font-mono">
+                          {onboarding?.preordersCount ?? 0}
+                        </span>
+                      </div>
+                      <div className="p-2 bg-white rounded-xl border border-purple-200/60 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
+                          <span className="text-3xs font-bold text-gray-600">Affectées</span>
+                        </div>
+                        <span className="text-xs font-black text-emerald-700 font-mono">
+                          {onboarding?.assignedCount ?? 0}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1016,40 +1443,251 @@ export default function PowerBiDashboardView() {
           )}
 
           {activeTab === "trends" && (
-            <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                <div>
-                  <h3 className="text-sm font-black text-navy uppercase tracking-wider flex items-center gap-2">
-                    <span>📈</span>
-                    <span>Vélocité Journalière & Historique d&apos;Activité</span>
-                  </h3>
-                  <p className="text-2xs text-gray-500 mt-0.5">
-                    Évolution quotidienne des métriques clés sur la période sélectionnée.
-                  </p>
+            <div className="space-y-6">
+              {/* Header & Quick Summary */}
+              <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-navy uppercase tracking-wider flex items-center gap-2">
+                      <span>📈</span>
+                      <span>Vélocité Journalière & Historique d&apos;Activité</span>
+                    </h3>
+                    <p className="text-2xs text-gray-500 mt-0.5">
+                      Évolution chronologique des appels, formations, encaissements et interventions terrain.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-3xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+                      📞 {traffic?.callsDone ?? 0} Appels
+                    </span>
+                    <span className="text-3xs font-bold px-2.5 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg">
+                      🎓 {traffic?.trainingFixed ?? 0} Formations
+                    </span>
+                    <span className="text-3xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg font-mono">
+                      💰 {(kpis?.fleetCollections.totalEveningCollectedMAD ?? 0).toLocaleString()} MAD
+                    </span>
+                    <span className="text-3xs font-bold px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg">
+                      🛡️ {kpis?.fieldOperations.tasksCompleted ?? 0} Tâches
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Daily Bar Matrix */}
-              <div className="space-y-4">
-                {(data?.dailyTimeline || []).map((day) => (
-                  <div key={day.date} className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-900 font-mono">📅 {day.date}</span>
-                      <div className="flex items-center gap-4 text-2xs font-semibold">
-                        <span className="text-blue-700">📞 {day.calls} Appels</span>
-                        <span className="text-teal-700">🎓 {day.trainings} Formations</span>
-                        <span className="text-emerald-700 font-bold">💰 {day.collectedMAD.toLocaleString()} MAD</span>
-                        <span className="text-green-700">🛡️ {day.tasksDone} Tâches</span>
+                {timelineData.length > 0 ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-5">
+                    {/* Chart 1: Volume d'Activité Multi-Séries (AreaChart) */}
+                    <div className="lg:col-span-7 bg-slate-50/60 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 rounded-lg bg-blue-100 text-blue-700 text-xs">📊</span>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                            Volume Quotidien : Prospection & Terrain
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-3 text-3xs font-bold">
+                          <div className="flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
+                            <span className="text-blue-900">Appels</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block" />
+                            <span className="text-teal-900">Formations</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-green-600 inline-block" />
+                            <span className="text-green-900">Tâches</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="h-64 w-full pt-1">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart
+                            data={timelineData}
+                            margin={{ top: 10, right: 15, left: -15, bottom: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="callGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                              </linearGradient>
+                              <linearGradient id="trainGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#0d9488" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#0d9488" stopOpacity={0.0} />
+                              </linearGradient>
+                              <linearGradient id="taskGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#16a34a" stopOpacity={0.0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <XAxis
+                              dataKey="shortDate"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fontWeight: 700, fill: "#475569" }}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fill: "#64748b" }}
+                              allowDecimals={false}
+                            />
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const d = payload[0].payload;
+                                  return (
+                                    <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700 space-y-1">
+                                      <p className="font-bold text-slate-200 border-b border-slate-700 pb-1 font-mono">
+                                        📅 {d.date}
+                                      </p>
+                                      <div className="flex items-center justify-between gap-4 text-blue-300">
+                                        <span>📞 Appels :</span>
+                                        <strong>{d.calls}</strong>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-4 text-teal-300">
+                                        <span>🎓 Formations :</span>
+                                        <strong>{d.trainings}</strong>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-4 text-green-300">
+                                        <span>🛡️ Tâches :</span>
+                                        <strong>{d.tasksDone}</strong>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="calls"
+                              stroke="#2563eb"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#callGradient)"
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="trainings"
+                              stroke="#0d9488"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#trainGradient)"
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="tasksDone"
+                              stroke="#16a34a"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#taskGradient)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
                       </div>
                     </div>
-                    {/* Visual mini bar */}
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden flex">
-                      <div className="bg-blue-500 h-full" style={{ width: `${Math.min(30, (day.calls / 60) * 30)}%` }} title="Appels" />
-                      <div className="bg-teal-500 h-full" style={{ width: `${Math.min(30, (day.trainings / 15) * 30)}%` }} title="Formations" />
-                      <div className="bg-emerald-500 h-full" style={{ width: `${Math.min(40, (day.collectedMAD / 5000) * 40)}%` }} title="Collections" />
+
+                    {/* Chart 2: Cash Recouvrement Quotidien (BarChart) */}
+                    <div className="lg:col-span-5 bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                      <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2.5 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs">💰</span>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                            Encaissements Flotte (MAD)
+                          </h4>
+                        </div>
+                        <span className="text-3xs font-extrabold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded-full font-mono">
+                          {kpis.fleetCollections.totalEveningCollectedMAD.toLocaleString()} DH
+                        </span>
+                      </div>
+
+                      <div className="h-64 w-full pt-1">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={timelineData}
+                            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d1fae5" />
+                            <XAxis
+                              dataKey="shortDate"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fontWeight: 700, fill: "#065f46" }}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fill: "#047857" }}
+                              tickFormatter={(v) => `${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                            />
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const d = payload[0].payload;
+                                  return (
+                                    <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700 font-mono">
+                                      <p className="font-bold text-slate-200 border-b border-slate-700 pb-1">
+                                        📅 {d.date}
+                                      </p>
+                                      <p className="text-emerald-400 font-black text-sm mt-1">
+                                        {d.collectedMAD.toLocaleString()} MAD
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Bar dataKey="collectedMAD" fill="#059669" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <div className="py-12 text-center text-gray-400">
+                    <span className="text-3xl mb-2 inline-block">📅</span>
+                    <p className="text-xs font-semibold">Aucune donnée d&apos;activité journalière sur cette plage</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Day-by-Day Historical Breakdown Cards */}
+              <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+                <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                  <span>📋</span>
+                  <span>Détail Journalier Consolidé</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(data?.dailyTimeline || []).map((day) => (
+                    <div
+                      key={day.date}
+                      className="p-3.5 bg-gray-50/80 border border-gray-200/80 rounded-xl space-y-2 hover:bg-white hover:shadow-xs transition-all"
+                    >
+                      <div className="flex justify-between items-center border-b border-gray-200/60 pb-2">
+                        <span className="font-bold text-gray-900 font-mono text-xs">📅 {day.date}</span>
+                        <span className="text-3xs font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-mono">
+                          {day.collectedMAD.toLocaleString()} DH
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center text-3xs">
+                        <div className="bg-white p-1.5 rounded-lg border border-gray-200/70">
+                          <p className="text-gray-500 font-semibold">Appels</p>
+                          <p className="font-black text-blue-700 text-xs font-mono">{day.calls}</p>
+                        </div>
+                        <div className="bg-white p-1.5 rounded-lg border border-gray-200/70">
+                          <p className="text-gray-500 font-semibold">Formations</p>
+                          <p className="font-black text-teal-700 text-xs font-mono">{day.trainings}</p>
+                        </div>
+                        <div className="bg-white p-1.5 rounded-lg border border-gray-200/70">
+                          <p className="text-gray-500 font-semibold">Tâches</p>
+                          <p className="font-black text-green-700 text-xs font-mono">{day.tasksDone}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
