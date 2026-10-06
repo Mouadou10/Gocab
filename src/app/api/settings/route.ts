@@ -29,7 +29,8 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     issuer_phone: "0662 70 91 79",
   }),
   role_tab_permissions: JSON.stringify({
-    LEAD_ACQUISITION_JR: ["dashboard", "leads", "training"],
+    LEAD_ACQUISITION_JR: ["dashboard", "leads"],
+    ONBOARDING_SPECIALIST: ["dashboard", "training"],
     FLEET_PERF_MANAGER: ["dashboard", "fleet", "tickets", "performance"],
     FIELD_SUPERVISOR: ["dashboard", "fleet", "field", "tickets"],
     FINANCE_OFFICER: ["dashboard", "performance", "insurance"],

@@ -26,6 +26,7 @@ function GoCabLogoLarge() {
 
 const ROLE_LABELS: Record<string, string> = {
   LEAD_ACQUISITION_JR: "Lead Acquisition",
+  ONBOARDING_SPECIALIST: "Onboarding Specialist",
   FLEET_PERF_MANAGER: "Fleet Performance",
   FIELD_SUPERVISOR: "Field Supervisor",
   FINANCE_OFFICER: "Finance Officer",

@@ -10,9 +10,10 @@
  * 4. 💬 WhatsApp Templates: Customize messaging for candidate training invites.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
+import { getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
 
 type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
@@ -33,7 +34,8 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "vehicle-ops", "whatsapp"],
+  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
+  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
   FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
   FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
   FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
@@ -43,6 +45,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
   LEAD_ACQUISITION_JR: "Lead Acquisition Jr",
+  ONBOARDING_SPECIALIST: "Onboarding Specialist",
   FLEET_PERF_MANAGER: "Fleet Performance Manager",
   FIELD_SUPERVISOR: "Field Supervisor",
   FINANCE_OFFICER: "Finance Officer",
@@ -55,9 +58,11 @@ interface DepartmentTargets {
   target_daily_training_fixed: number;
   target_weekly_leads: number;
   target_daily_preorders: number;
+  target_daily_attended?: number;
   target_training_showup_rate: number;
   target_kyc_completion_rate: number;
   target_lead_conversion_rate: number;
+  target_preorder_conversion_rate?: number;
   target_active_fleet_rate: number;
   target_max_downtime_days: number;
   target_weekly_churn_limit: number;
@@ -69,16 +74,20 @@ interface DepartmentTargets {
   target_max_open_tickets: number;
   target_collection_rate: number;
   target_weekly_revenue_mad: number;
+  target_avg_available_days?: number;
+  monthly_bonus_amount_mad?: number;
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
-  target_daily_calls: 34,
-  target_daily_training_fixed: 7,
+  target_daily_calls: 50,
+  target_daily_training_fixed: 15,
   target_weekly_leads: 100,
-  target_daily_preorders: 9,
-  target_training_showup_rate: 80,
+  target_daily_preorders: 4,
+  target_daily_attended: 10,
+  target_training_showup_rate: 65,
   target_kyc_completion_rate: 25,
-  target_lead_conversion_rate: 20,
+  target_lead_conversion_rate: 30,
+  target_preorder_conversion_rate: 25,
   target_active_fleet_rate: 85,
   target_max_downtime_days: 7,
   target_weekly_churn_limit: 2,
@@ -90,6 +99,8 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_max_open_tickets: 5,
   target_collection_rate: 90,
   target_weekly_revenue_mad: 50000,
+  target_avg_available_days: 1.0,
+  monthly_bonus_amount_mad: 1000,
 };
 
 interface UserRecord {
@@ -292,6 +303,69 @@ export default function SettingsView() {
     } finally {
       setIsAddingAllowlist(false);
     }
+  }
+
+  // Dynamic Moroccan Calendar calculation for current month
+  const today = useMemo(() => new Date(), []);
+  const moroccanMonthData = useMemo(() => {
+    return getWorkingDaysInFullMonth(today.getFullYear(), today.getMonth());
+  }, [today]);
+
+  const workingDaysMonth = moroccanMonthData.workingDays;
+
+  // Bi-directional Funnel Handlers:
+  // 1. Changing Daily Calls -> auto recalculates Training Fixed (30%), Attended (65%), Preorders (25%)
+  function handleDailyCallsChange(val: number) {
+    const calls = Math.max(0, val);
+    const fixed = Math.round(calls * 0.30);
+    const attended = Math.round(fixed * 0.65);
+    const preorders = Math.round(fixed * 0.25);
+    setTargets((prev) => ({
+      ...prev,
+      target_daily_calls: calls,
+      target_daily_training_fixed: fixed,
+      target_daily_attended: attended,
+      target_daily_preorders: preorders,
+      target_lead_conversion_rate: 30,
+      target_training_showup_rate: 65,
+      target_preorder_conversion_rate: 25,
+    }));
+  }
+
+  // 2. Changing Daily Preorders -> reverse calculates Training Fixed (/25%) and Calls (/30%)
+  function handleDailyPreordersChange(val: number) {
+    const preorders = Math.max(0, val);
+    const fixed = Math.round(preorders / 0.25);
+    const calls = Math.round(fixed / 0.30);
+    const attended = Math.round(fixed * 0.65);
+    setTargets((prev) => ({
+      ...prev,
+      target_daily_preorders: preorders,
+      target_daily_training_fixed: fixed,
+      target_daily_calls: calls,
+      target_daily_attended: attended,
+      target_lead_conversion_rate: 30,
+      target_training_showup_rate: 65,
+      target_preorder_conversion_rate: 25,
+    }));
+  }
+
+  // 3. Changing Training Fixed -> auto calculates Calls (/30%), Attended (65%), Preorders (25%)
+  function handleTrainingFixedChange(val: number) {
+    const fixed = Math.max(0, val);
+    const calls = Math.round(fixed / 0.30);
+    const attended = Math.round(fixed * 0.65);
+    const preorders = Math.round(fixed * 0.25);
+    setTargets((prev) => ({
+      ...prev,
+      target_daily_training_fixed: fixed,
+      target_daily_calls: calls,
+      target_daily_attended: attended,
+      target_daily_preorders: preorders,
+      target_lead_conversion_rate: 30,
+      target_training_showup_rate: 65,
+      target_preorder_conversion_rate: 25,
+    }));
   }
 
   // Save Department Targets
@@ -833,108 +907,195 @@ export default function SettingsView() {
             {/* Department Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Pillar 1: Lead Acquisition */}
-              <div className="border border-blue-100 bg-blue-50/40 rounded-2xl p-5 space-y-4">
-                <div className="flex items-center gap-2 text-blue-900">
-                  <span className="text-lg">💼</span>
-                  <h4 className="font-bold text-sm">Lead Acquisition (Junior)</h4>
+              {/* Moroccan Business Calendar & Dynamic Funnel Banner */}
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-gradient-to-r from-blue-900 via-indigo-900 to-navy text-white rounded-2xl p-5 shadow-sm space-y-3 border border-blue-800">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl p-2 bg-white/10 rounded-xl">🇲🇦</span>
+                    <div>
+                      <h4 className="font-black text-sm text-amber-300 flex items-center gap-2">
+                        <span>Moteur d&apos;Objectifs Dynamiques & Calendrier Marocain</span>
+                        <span className="text-3xs bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Automatisé</span>
+                      </h4>
+                      <p className="text-xs text-white/80 mt-0.5">
+                        Semaine du <strong>Lundi au Vendredi</strong> (5j ouvrés) · Jours fériés officiels marocains déduits automatiquement.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/15 text-xs font-semibold">
+                    <span>🗓️ Mois en cours :</span>
+                    <strong className="text-amber-300 font-mono text-sm">{workingDaysMonth} jours ouvrés</strong>
+                  </div>
+                </div>
+
+                {/* Quick Interactive Formula Preview */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/10 text-3xs font-medium">
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-white/60">📞 1. Appels</p>
+                    <p className="text-white font-bold text-xs mt-0.5">{targets.target_daily_calls || 50} / jour</p>
+                    <p className="text-white/50">{targets.target_daily_calls * 5} / sem · {targets.target_daily_calls * workingDaysMonth} / mois</p>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-white/60">📅 2. Formations Fixées (30%)</p>
+                    <p className="text-amber-300 font-bold text-xs mt-0.5">{targets.target_daily_training_fixed || 15} / jour</p>
+                    <p className="text-white/50">{targets.target_daily_training_fixed * 5} / sem · {targets.target_daily_training_fixed * workingDaysMonth} / mois</p>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-white/60">🎓 3. Présents (65%)</p>
+                    <p className="text-emerald-300 font-bold text-xs mt-0.5">{targets.target_daily_attended || 10} / jour</p>
+                    <p className="text-white/50">{(targets.target_daily_attended || 10) * 5} / sem · {(targets.target_daily_attended || 10) * workingDaysMonth} / mois</p>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-white/60">🚗 4. Précommandes (25%)</p>
+                    <p className="text-purple-300 font-bold text-xs mt-0.5">{targets.target_daily_preorders || 4} / jour</p>
+                    <p className="text-white/50">{(targets.target_daily_preorders || 4) * 5} / sem · {(targets.target_daily_preorders || 4) * workingDaysMonth} / mois</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 1: Traffic Acquisition Team (Nour & Kaoutar) */}
+              <div className="border border-blue-200 bg-blue-50/50 rounded-2xl p-5 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between text-blue-900 border-b border-blue-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💼</span>
+                    <div>
+                      <h4 className="font-bold text-sm">Traffic Acquisition Team</h4>
+                      <p className="text-3xs text-blue-700 font-semibold">Nour Abouri & Kaoutar Ouardi</p>
+                    </div>
+                  </div>
+                  <span className="text-3xs px-2 py-0.5 bg-blue-200/80 text-blue-900 font-bold rounded-full">
+                    Équipe 1
+                  </span>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Daily Calls Target (Objective)
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>Daily Calls Objective (Pilote Maître)</span>
+                      <span className="text-3xs text-blue-600 font-bold">100% Volume</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min={1}
-                        value={targets.target_daily_calls || 34}
-                        onChange={(e) => setTargets({ ...targets, target_daily_calls: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={targets.target_daily_calls || 50}
+                        onChange={(e) => handleDailyCallsChange(Number(e.target.value))}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">calls/day</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">appels/jour</span>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Daily Training Fixed Target (Goal)
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>Objectif Formations Fixées</span>
+                      <span className="text-3xs text-emerald-700 font-bold">30% des appels</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min={1}
-                        value={targets.target_daily_training_fixed || 7}
-                        onChange={(e) => setTargets({ ...targets, target_daily_training_fixed: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={targets.target_daily_training_fixed || 15}
+                        onChange={(e) => handleTrainingFixedChange(Number(e.target.value))}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">trainings/day</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">formations/jour</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-blue-100 space-y-1.5 text-2xs">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Cible Hebdomadaire (5j ouvrés) :</span>
+                      <strong className="text-gray-900 font-mono">{targets.target_daily_calls * 5} appels · {targets.target_daily_training_fixed * 5} fixées</strong>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Cible Mensuelle ({workingDaysMonth}j ouvrés) :</span>
+                      <strong className="text-gray-900 font-mono">{targets.target_daily_calls * workingDaysMonth} appels · {targets.target_daily_training_fixed * workingDaysMonth} fixées</strong>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-gray-100 text-emerald-700 font-bold">
+                      <span>Prime Mensuelle Équipe :</span>
+                      <span>💰 1 000 DH / collaborateur (Prop. pur)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 1b: Onboarding Specialist Team (Ayoub Gsaib) */}
+              <div className="border border-purple-200 bg-purple-50/50 rounded-2xl p-5 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between text-purple-900 border-b border-purple-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎓</span>
+                    <div>
+                      <h4 className="font-bold text-sm">Onboarding Specialist</h4>
+                      <p className="text-3xs text-purple-700 font-semibold">Ayoub Gsaib</p>
+                    </div>
+                  </div>
+                  <span className="text-3xs px-2 py-0.5 bg-purple-200/80 text-purple-900 font-bold rounded-full">
+                    Équipe 2
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>Objectif Présence Candidats</span>
+                      <span className="text-3xs text-purple-700 font-bold">65% des fixées</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={targets.target_daily_attended || 10}
+                        onChange={(e) => setTargets({ ...targets, target_daily_attended: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">présents/jour</span>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Weekly New Leads Target
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>Objectif Précommandes & Affectations</span>
+                      <span className="text-3xs text-purple-700 font-bold">25% des fixées</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min={1}
-                        value={targets.target_weekly_leads}
-                        onChange={(e) => setTargets({ ...targets, target_weekly_leads: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={targets.target_daily_preorders || 4}
+                        onChange={(e) => handleDailyPreordersChange(Number(e.target.value))}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">leads/wk</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">précommandes/jour</span>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Training Show-Up Rate
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>Vélocité Véhicule Disponible au Parc</span>
+                      <span className="text-3xs text-emerald-700 font-bold">&le; 1 jour</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
-                        min={1}
-                        max={100}
-                        value={targets.target_training_showup_rate}
-                        onChange={(e) => setTargets({ ...targets, target_training_showup_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        step={0.1}
+                        min={0.1}
+                        value={targets.target_avg_available_days || 1.0}
+                        onChange={(e) => setTargets({ ...targets, target_avg_available_days: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">jour max</span>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Daily Preorders Target (Training Review)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={1}
-                        value={targets.target_daily_preorders || 9}
-                        onChange={(e) => setTargets({ ...targets, target_daily_preorders: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">preorders/day</span>
+                  <div className="p-3 bg-white rounded-xl border border-purple-100 space-y-1.5 text-2xs">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Cible Mensuelle ({workingDaysMonth}j ouvrés) :</span>
+                      <strong className="text-gray-900 font-mono">{(targets.target_daily_attended || 10) * workingDaysMonth} présents · {(targets.target_daily_preorders || 4) * workingDaysMonth} précommandes</strong>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      KYC Verified (4/4 Docs) Target
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={1}
-                        value={targets.target_kyc_completion_rate}
-                        onChange={(e) => setTargets({ ...targets, target_kyc_completion_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">candidates</span>
+                    <div className="flex justify-between pt-1 border-t border-gray-100 text-purple-700 font-bold">
+                      <span>Prime Mensuelle Équipe :</span>
+                      <span>💰 1 000 DH (Option 2 Prop. pur)</span>
                     </div>
                   </div>
                 </div>

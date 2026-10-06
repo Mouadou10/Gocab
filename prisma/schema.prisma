@@ -253,7 +253,7 @@ model User {
   email         String   @unique
   name          String   // Display name shown in UI header
   fullName      String
-  role          String   // LEAD_ACQUISITION_JR | FLEET_PERF_MANAGER | FIELD_SUPERVISOR | FINANCE_OFFICER | OPS_MANAGER | ADMIN
+  role          String   // LEAD_ACQUISITION_JR | ONBOARDING_SPECIALIST | FLEET_PERF_MANAGER | FIELD_SUPERVISOR | FINANCE_OFFICER | OPS_MANAGER | ADMIN
   region        String   @default("CASABLANCA") // e.g. CASABLANCA, RABAT
   assignedCars  Int      @default(0)
   passwordHash        String?  // bcrypt hash â€” set during seed, changeable via admin panel

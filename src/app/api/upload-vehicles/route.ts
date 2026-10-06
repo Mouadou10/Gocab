@@ -52,7 +52,17 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "In garage";
   }
 
-  // 5. Blocked
+  // 5. Missing documents (Documents manquants)
+  if (
+    s.includes("missing") ||
+    s.includes("document") ||
+    s.includes("doc_manquant") ||
+    s.includes("manquant")
+  ) {
+    return "missing_document";
+  }
+
+  // 6. Blocked
   if (s.includes("block") || s.includes("bloqu")) {
     return "Blocked";
   }
@@ -625,6 +635,48 @@ export async function POST(request: NextRequest) {
                     driver_name: item.driverName || null,
                     driver_phone: matchedDriver?.phoneSanitized || null,
                     ticket_type: "Police Immobilization",
+                    priority,
+                    status: "OPEN",
+                    description: desc,
+                    created_at: statusStartDate,
+                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                }).catch(() => null);
+
+                if (newTicket) {
+                  openTickets.push(newTicket);
+                  openTicketsByVehicleId.set(vehicleId, openTickets);
+                  tickets_created++;
+                }
+              }
+            } else if (item.status === "missing_document") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const existingTicket = openTickets.find((t) =>
+                ["Documents manquants", "missing_document", "missing_documents"].includes(t.ticket_type)
+              );
+
+              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+              const desc = `📄 Documents manquants signalés depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative requise.`;
+
+              if (existingTicket) {
+                await prisma.maintenanceTicket.update({
+                  where: { id: existingTicket.id },
+                  data: {
+                    description: desc,
+                    priority,
+                    driver_name: item.driverName || existingTicket.driver_name,
+                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+                  },
+                }).catch(() => {});
+                tickets_updated++;
+              } else {
+                const newTicket = await prisma.maintenanceTicket.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    plate_number: item.plate_number,
+                    driver_name: item.driverName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    ticket_type: "Documents manquants",
                     priority,
                     status: "OPEN",
                     description: desc,

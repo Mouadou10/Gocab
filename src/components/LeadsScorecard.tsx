@@ -45,19 +45,29 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
   }, []);
 
   // Filter called leads by the date they were actually called (status_changed_at)
+  // Dedicated unique counter for the Leads Acquisition Agent
   const calledLeads = leads.filter(l => {
     if (l.board_column === 'NEW_LEADS') return false; // Still untouched
     if (!l.status_changed_at) return false; // No timestamp yet (legacy data)
+
+    // Strictly Leads page workflow: either BRAND_PRE_FILTER statuses or Training fixed
+    const isLeadsWorkflow = l.board_column === 'BRAND_PRE_FILTER' || l.brand_status === 'Training fixed';
+    if (!isLeadsWorkflow) return false;
+
     if (!dateFilter) return true; // No filter = show all
-    const changedDate = new Date(l.status_changed_at).toISOString().split('T')[0];
-    return changedDate === dateFilter;
+    try {
+      const changedDate = new Date(l.status_changed_at).toISOString().split('T')[0];
+      return changedDate === dateFilter;
+    } catch {
+      return false;
+    }
   });
 
   const totalCalled = calledLeads.length;
 
-  // Training conversions for filtered set
+  // Training conversions for filtered set (only leads marked "Training fixed" on this date)
   const trainingFixed = calledLeads.filter(
-    l => l.brand_status === 'Training fixed' || l.board_column === 'TRAINING_PIPELINE'
+    l => l.brand_status === 'Training fixed'
   ).length;
 
   // Daily target set by Operations Manager in parameters
@@ -176,10 +186,10 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-            <span>Revue d&apos;acquisition :</span>
+            <span>Compteur Prospection (Agent Acquisition) —</span>
             <span className="font-semibold text-slate-800 capitalize">{displayDate}</span>
             <span className="text-slate-300">•</span>
-            <span>{totalCalled} prospects qualifiés</span>
+            <span>{totalCalled} appels / qualifications</span>
           </p>
         </div>
 

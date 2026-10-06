@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 
 interface PerformanceData {
@@ -8,6 +8,10 @@ interface PerformanceData {
     startDate: string;
     endDate: string;
     dayCount: number;
+    calendarDays?: number;
+    workingDays?: number;
+    workingDaysInMonth?: number;
+    holidaysEncountered?: { date: string; name: string }[];
   };
   targets: {
     target_daily_calls: number;
@@ -17,6 +21,66 @@ interface PerformanceData {
     target_daily_tasks: number;
     target_fleet_uptime: number;
     target_ticket_resolution_rate: number;
+    target_avg_available_days?: number;
+    monthly_bonus_amount_mad?: number;
+  };
+  callResultsBreakdown?: {
+    trainingFixed: number;
+    noResponse: number;
+    toRecall: number;
+    notInterested: number;
+    wrongNumber: number;
+    alreadyClient: number;
+    other: number;
+    total: number;
+  };
+  trafficAcquisitionTeam?: {
+    callsDone: number;
+    callsTarget: number;
+    callsAttainmentPct: number;
+    trainingFixed: number;
+    trainingFixedTarget: number;
+    trainingFixedAttainmentPct: number;
+    trainingFixedRate: number;
+    targetTrainingFixedRate: number;
+    attendedPersons: number;
+    attendedRate: number;
+    targetAttendedRate: number;
+    preordersAssigned: number;
+    preorderAssignedRate: number;
+    targetPreorderAssignedRate: number;
+    teamAttainmentPct: number;
+    monthlyBonusBudgetMAD: number;
+    bonusEarnedMAD: number;
+    members: string[];
+  };
+  onboardingSpecialistTeam?: {
+    attendedCount: number;
+    attendedTarget: number;
+    attendedAttainmentPct: number;
+    preordersCount: number;
+    assignedCount: number;
+    preordersAssignedTotal: number;
+    preordersTarget: number;
+    preordersAttainmentPct: number;
+    showupRate: number;
+    targetShowupRate: number;
+    preorderAssignedRate: number;
+    targetPreorderAssignedRate: number;
+    avgDaysCarAvailable: number;
+    targetAvgDaysCarAvailable: number;
+    velocityScorePct: number;
+    teamAttainmentPct: number;
+    monthlyBonusBudgetMAD: number;
+    bonusEarnedMAD: number;
+    members: string[];
+  };
+  monthlyTargets?: {
+    monthlyCallsTarget: number;
+    monthlyTrainingTarget: number;
+    monthlyAttendedTarget: number;
+    monthlyPreordersTarget: number;
+    workingDaysInMonth: number;
   };
   kpis: {
     leadAcquisition: {
@@ -27,6 +91,9 @@ interface PerformanceData {
       trainingTarget: number;
       trainingAttainmentPct: number;
       attendedPersons: number;
+      conversionRate?: number;
+      targetConversionRate?: number;
+      bonusEarnedMAD?: number;
     };
     trainingOnboarding: {
       attendanceRate: number;
@@ -37,6 +104,9 @@ interface PerformanceData {
       preordersTarget: number;
       preordersAttainmentPct: number;
       totalPreorderMAD: number;
+      avgDaysCarAvailable?: number;
+      targetAvgDaysCarAvailable?: number;
+      bonusEarnedMAD?: number;
     };
     fleetCollections: {
       totalMorningTargetMAD: number;
@@ -71,11 +141,15 @@ interface PerformanceData {
     email: string;
     role: string;
     department: string;
+    teamName?: string;
     keyMetric: string;
     actual: number;
     target: number;
     unit: string;
     attainmentPct: number;
+    individualAttainmentPct?: number;
+    bonusEarnedMAD?: number;
+    bonusBudgetMAD?: number;
     status: "EXCEEDED" | "ON_TRACK" | "BEHIND";
   }[];
   dailyTimeline: {
@@ -106,8 +180,8 @@ const PRESET_RANGES = [
 
 const DEPARTMENTS = [
   { id: "ALL", label: "Tous les Départements" },
-  { id: "LEAD_ACQUISITION_JR", label: "📞 Acquisition Prospects" },
-  { id: "TRAINING", label: "🎓 Formation & Onboarding" },
+  { id: "LEAD_ACQUISITION_JR", label: "📞 Traffic Acquisition (Nour & Kaoutar)" },
+  { id: "TRAINING", label: "🎓 Onboarding (Ayoub Gsaib)" },
   { id: "FLEET_PERF_MANAGER", label: "💰 Recouvrement & Flotte" },
   { id: "FIELD_SUPERVISOR", label: "🛡️ Opérations Terrain" },
   { id: "GARAGE", label: "🔧 Maintenance & Garage" },
@@ -119,7 +193,7 @@ export default function PowerBiDashboardView() {
   const { t } = useLanguage();
 
   // Filter States (PowerBI Slicers)
-  const [selectedPreset, setSelectedPreset] = useState("7d");
+  const [selectedPreset, setSelectedPreset] = useState("month");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedUser, setSelectedUser] = useState("ALL");
@@ -161,8 +235,8 @@ export default function PowerBiDashboardView() {
     }
   }, [selectedPreset]);
 
-  // Fetch KPI Performance Data
-  const fetchPerformanceData = useCallback(async () => {
+  // Fetch KPI Performance Analytics from Backend
+  const fetchPerformance = useCallback(async () => {
     if (!startDate || !endDate) return;
     setIsLoading(true);
     try {
@@ -170,98 +244,94 @@ export default function PowerBiDashboardView() {
         startDate,
         endDate,
       });
-      if (selectedUser !== "ALL") params.set("userId", selectedUser);
-      if (selectedDept !== "ALL") params.set("role", selectedDept);
-      if (selectedCity !== "ALL") params.set("hubCity", selectedCity);
+
+      if (selectedUser !== "ALL") params.append("userId", selectedUser);
+      if (selectedDept !== "ALL") params.append("role", selectedDept);
+      if (selectedCity !== "ALL") params.append("hubCity", selectedCity);
 
       const res = await fetch(`/api/kpis/performance?${params.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
+      if (!res.ok) throw new Error("Failed to load performance metrics");
+      const json = await res.json();
+      setData(json);
     } catch (err) {
-      console.error("Failed to fetch performance KPIs:", err);
+      console.error("fetchPerformance error:", err);
     } finally {
       setIsLoading(false);
     }
   }, [startDate, endDate, selectedUser, selectedDept, selectedCity]);
 
   useEffect(() => {
-    if (startDate && endDate) {
-      fetchPerformanceData();
-    }
-  }, [fetchPerformanceData, startDate, endDate]);
+    fetchPerformance();
+  }, [fetchPerformance]);
+
+  // Filter leaderboard on client side by selected department if needed
+  const filteredLeaderboard = useMemo(() => {
+    if (!data?.leaderboard) return [];
+    if (selectedDept === "ALL") return data.leaderboard;
+    return data.leaderboard.filter((u) => {
+      if (selectedDept === "LEAD_ACQUISITION_JR") return u.role === "LEAD_ACQUISITION_JR" || u.department.includes("Acquisition");
+      if (selectedDept === "TRAINING") return u.role === "ONBOARDING_SPECIALIST" || u.department.includes("Formation");
+      if (selectedDept === "FLEET_PERF_MANAGER") return u.role === "FLEET_PERF_MANAGER";
+      if (selectedDept === "FIELD_SUPERVISOR") return u.role === "FIELD_SUPERVISOR";
+      return true;
+    });
+  }, [data?.leaderboard, selectedDept]);
 
   const kpis = data?.kpis;
-
-  // Filter leaderboard based on selection
-  const filteredLeaderboard = (data?.leaderboard || []).filter((item) => {
-    if (selectedUser !== "ALL" && item.id !== selectedUser) return false;
-    if (selectedDept !== "ALL" && item.role !== selectedDept) return false;
-    return true;
-  });
+  const traffic = data?.trafficAcquisitionTeam;
+  const onboarding = data?.onboardingSpecialistTeam;
+  const callResults = data?.callResultsBreakdown;
 
   return (
-    <div className="space-y-6 pb-12 animate-fadeIn text-gray-900">
-      {/* ── Top Bar / Header ─────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-navy via-navy/95 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-white/10 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-gold/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-2xl p-2 bg-white/10 rounded-xl backdrop-blur-md">📊</span>
-              <div>
-                <h1 className="text-xl md:text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                  <span>GoCab Command Analytics</span>
-                  <span className="text-3xs uppercase tracking-widest font-black bg-gold/20 text-gold border border-gold/40 px-2.5 py-0.5 rounded-full">
-                    PowerBI View
-                  </span>
-                </h1>
-                <p className="text-xs text-white/70 mt-0.5">
-                  Suivi des KPIs individuels, atteinte des objectifs opérationnels & pacing en temps réel.
-                </p>
-              </div>
-            </div>
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ── Top Header Banner ───────────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-navy via-navy/95 to-[#1a3352] text-white p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">📈</span>
+            <h2 className="text-xl font-bold tracking-tight">Tableau de Bord Exécutif & Bonus Équipe</h2>
           </div>
+          <p className="text-white/70 text-xs mt-1">
+            Indicateurs de performance en temps réel · Moteur d&apos;objectifs dynamiques · Prime mensuelle de 1 000 DH
+          </p>
+        </div>
 
-          {/* Quick Stats Banner */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => fetchPerformanceData()}
-              disabled={isLoading}
-              className="px-4 py-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-xl text-xs font-bold border border-white/15 backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-            >
-              <span className={`inline-block ${isLoading ? "animate-spin" : ""}`}>🔄</span>
-              <span>{isLoading ? "Actualisation..." : "Rafraîchir"}</span>
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2 bg-gold hover:bg-gold/90 active:scale-95 text-navy font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>📥</span>
-              <span>Imprimer / PDF</span>
-            </button>
+        {/* Moroccan Working Calendar Badge */}
+        <div className="flex flex-wrap items-center gap-2 bg-white/10 p-2.5 rounded-2xl backdrop-blur-md border border-white/10 shrink-0 text-xs">
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-400 text-slate-950 font-black rounded-xl">
+            <span>🇲🇦</span>
+            <span>{data?.period.workingDays || 1} j ouvrés</span>
           </div>
+          <div className="text-white/90 font-medium px-1">
+            <span>(Lun–Ven · Fériés déduits : <strong>{data?.period.holidaysEncountered?.length || 0}</strong>)</span>
+          </div>
+          <button
+            onClick={() => fetchPerformance()}
+            className="p-1.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all cursor-pointer text-white"
+            title="Rafraîchir les données"
+          >
+            🔄
+          </button>
         </div>
       </div>
 
-      {/* ── PowerBI Slicer Bar (Interactive Filters) ────────────────── */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+      {/* ── Interactive PowerBI Slicers Bar ─────────────────────────── */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <div className="flex items-center gap-2 text-xs font-black text-navy uppercase tracking-wider">
             <span>🎛️</span>
             <span>Filtres & Slicers Interactifs</span>
           </div>
           <span className="text-2xs font-semibold text-gray-500">
-            Période analysée : <strong>{data?.period.dayCount || 1} jour(s)</strong> ({startDate} ➔ {endDate})
+            Période : <strong>{data?.period.workingDays || 1} jour(s) ouvré(s)</strong> ({startDate} ➔ {endDate})
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Slicer: Preset Date Buttons */}
+          {/* Preset Buttons */}
           <div className="space-y-1.5 lg:col-span-2">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
-              Période Rapide (Date Range Preset)
+              Période Rapide
             </label>
             <div className="flex flex-wrap gap-1.5">
               {PRESET_RANGES.map((preset) => (
@@ -280,7 +350,7 @@ export default function PowerBiDashboardView() {
             </div>
           </div>
 
-          {/* Slicer: Custom Date From */}
+          {/* Date From */}
           <div className="space-y-1.5">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
               Date Début (From)
@@ -296,7 +366,7 @@ export default function PowerBiDashboardView() {
             />
           </div>
 
-          {/* Slicer: Custom Date To */}
+          {/* Date To */}
           <div className="space-y-1.5">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
               Date Fin (To)
@@ -312,17 +382,17 @@ export default function PowerBiDashboardView() {
             />
           </div>
 
-          {/* Slicer: Person / User */}
+          {/* User Slicer */}
           <div className="space-y-1.5">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
-              👤 Collaborateur (Person)
+              👤 Collaborateur
             </label>
             <select
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-2 focus:ring-navy/30 focus:border-navy outline-none"
             >
-              <option value="ALL">👥 Toute l&apos;Équipe (All Members)</option>
+              <option value="ALL">👥 Toute l&apos;Équipe</option>
               {(data?.users || []).map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.fullName || u.name} ({u.role})
@@ -331,10 +401,10 @@ export default function PowerBiDashboardView() {
             </select>
           </div>
 
-          {/* Slicer: Department */}
+          {/* Department Slicer */}
           <div className="space-y-1.5">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
-              🏢 Département (Role)
+              🏢 Département
             </label>
             <select
               value={selectedDept}
@@ -349,7 +419,7 @@ export default function PowerBiDashboardView() {
             </select>
           </div>
 
-          {/* Slicer: City */}
+          {/* City Slicer */}
           <div className="space-y-1.5">
             <label className="block text-2xs font-bold text-gray-600 uppercase tracking-wide">
               📍 Ville / Hub City
@@ -361,17 +431,17 @@ export default function PowerBiDashboardView() {
             >
               {CITIES.map((city) => (
                 <option key={city} value={city}>
-                  {city === "ALL" ? "Toutes les Villes (Morocco)" : city}
+                  {city === "ALL" ? "Toutes les Villes (Maroc)" : city}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Slicer: Reset Action */}
+          {/* Reset Action */}
           <div className="flex items-end">
             <button
               onClick={() => {
-                setSelectedPreset("7d");
+                setSelectedPreset("month");
                 setSelectedUser("ALL");
                 setSelectedDept("ALL");
                 setSelectedCity("ALL");
@@ -396,7 +466,7 @@ export default function PowerBiDashboardView() {
           }`}
         >
           <span>🎯</span>
-          <span>Tableau de Bord & Pacing KPIs</span>
+          <span>Tableau de Bord & Équipes</span>
         </button>
         <button
           onClick={() => setActiveTab("leaderboard")}
@@ -407,7 +477,7 @@ export default function PowerBiDashboardView() {
           }`}
         >
           <span>🏆</span>
-          <span>Classement Équipe ({filteredLeaderboard.length})</span>
+          <span>Classement & Prime Mensuelle (1 000 DH)</span>
         </button>
         <button
           onClick={() => setActiveTab("trends")}
@@ -425,317 +495,406 @@ export default function PowerBiDashboardView() {
       {isLoading ? (
         <div className="py-24 text-center space-y-3 bg-white rounded-3xl border border-gray-200">
           <div className="w-10 h-10 border-4 border-navy border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-gray-500">Calcul des KPIs et agrégation des performances...</p>
+          <p className="text-xs font-bold text-gray-500">Calcul des KPIs et calcul des primes d&apos;équipe...</p>
         </div>
       ) : kpis ? (
         <>
           {activeTab === "overview" && (
-            <div className="space-y-6">
-              {/* ── 4 Major Executive KPI Tiles ─────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                {/* 1. Lead Acquisition Card */}
-                <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
-                  <div className="flex justify-between items-start">
+            <div className="space-y-8">
+              {/* ══════════════════════════════════════════════════════════════
+                  SECTION 1: TRAFFIC ACQUISITION TEAM (NOUR & KAOUTAR)
+                 ══════════════════════════════════════════════════════════════ */}
+              <div className="bg-white border-2 border-blue-200 rounded-3xl p-6 shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl p-2.5 bg-blue-50 text-blue-800 rounded-2xl border border-blue-200">
+                      📞
+                    </span>
                     <div>
-                      <p className="text-3xs font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full inline-block">
-                        📞 Acquisition Prospects
-                      </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.leadAcquisition.callsDone}{" "}
-                        <span className="text-xs text-gray-500 font-normal">/ {kpis.leadAcquisition.callsTarget} Appels Obj.</span>
-                      </h3>
-                      <p className="text-2xs text-gray-600 font-medium mt-0.5 flex items-center gap-1.5">
-                        <span>🎯 <strong>{kpis.leadAcquisition.trainingFixed}</strong> / {kpis.leadAcquisition.trainingTarget} Formations fixées Obj.</span>
-                        {kpis.leadAcquisition.trainingTarget > 0 && (
-                          <span className="text-3xs font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded-full">
-                            {kpis.leadAcquisition.trainingAttainmentPct}%
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <span className="text-2xl">🎯</span>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Atteinte Objectif Appels :</span>
-                      <span className={kpis.leadAcquisition.callsAttainmentPct >= 100 ? "text-emerald-700 font-black" : "text-blue-700"}>
-                        {kpis.leadAcquisition.callsAttainmentPct}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          kpis.leadAcquisition.callsAttainmentPct >= 100
-                            ? "bg-emerald-500"
-                            : kpis.leadAcquisition.callsAttainmentPct >= 80
-                            ? "bg-blue-600"
-                            : "bg-amber-500"
-                        }`}
-                        style={{ width: `${Math.min(100, kpis.leadAcquisition.callsAttainmentPct)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Personnes Présentes :</span>
-                    <strong className="text-gray-900">{kpis.leadAcquisition.attendedPersons} présences</strong>
-                  </div>
-                </div>
-
-                {/* 2. Training & Preorders Card */}
-                <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-3xs font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full inline-block">
-                        🎓 Onboarding
-                      </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.trainingOnboarding.attendanceRate}%{" "}
-                        <span className="text-xs text-gray-500 font-normal">
-                          / {kpis.trainingOnboarding.targetAttendanceRate || 80}% Cible
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black text-gray-900">
+                          Traffic Acquisition Team
+                        </h3>
+                        <span className="text-3xs px-2.5 py-0.5 bg-blue-100 text-blue-900 font-bold rounded-full">
+                          Nour Abouri & Kaoutar Ouardi
                         </span>
-                      </h3>
-                      <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Taux de présence (Attended / Fixed)
+                      </div>
+                      <p className="text-2xs text-gray-500 mt-0.5">
+                        Prospection · Qualification téléphonique · Taux de conversion cible : <strong>30%</strong>
                       </p>
                     </div>
-                    <span className="text-2xl">🚗</span>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Objectif Précommandes :</span>
-                      <span className={kpis.trainingOnboarding.preordersAttainmentPct >= 100 ? "text-emerald-700 font-black" : "text-purple-700"}>
-                        {kpis.trainingOnboarding.preordersCount} / {kpis.trainingOnboarding.preordersTarget} Obj.
-                      </span>
+                  {/* 1 000 MAD Monthly Bonus Card */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
+                      💰
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          kpis.trainingOnboarding.preordersAttainmentPct >= 100
-                            ? "bg-emerald-500"
-                            : "bg-purple-600"
-                        }`}
-                        style={{ width: `${Math.min(100, kpis.trainingOnboarding.preordersAttainmentPct)}%` }}
-                      />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-3xs font-black uppercase tracking-wider text-blue-700">Prime Mensuelle</span>
+                        <span className="text-3xs px-1.5 py-0.2 bg-blue-200 text-blue-900 rounded font-bold">Option 2 (Prop. pur)</span>
+                      </div>
+                      <p className="text-sm font-black text-gray-900 font-mono">
+                        {traffic?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
+                      </p>
+                      <p className="text-3xs text-gray-600 font-semibold">
+                        Atteinte globale équipe : <strong>{traffic?.teamAttainmentPct ?? 0}%</strong>
+                      </p>
                     </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Véhicules affectés :</span>
-                    <strong className="text-emerald-700 font-bold">
-                      {kpis.trainingOnboarding.assignedVehiclesCount} / {kpis.trainingOnboarding.assignedVehiclesTarget || kpis.trainingOnboarding.preordersTarget} affectations Obj.
-                    </strong>
                   </div>
                 </div>
 
-                {/* 3. Cash Collections & Support SLAs Card */}
+                {/* 4 Core Traffic KPIs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 1. Calls Made */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-blue-700">1. Appels Réalisés</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{traffic?.callsDone ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">Obj : {traffic?.callsTarget ?? 0}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, traffic?.callsAttainmentPct ?? 0)}%` }}
+                      />
+                    </div>
+                    <p className="text-3xs text-gray-500 font-medium text-right">
+                      Atteinte : <strong className="text-blue-700">{traffic?.callsAttainmentPct ?? 0}%</strong>
+                    </p>
+                  </div>
+
+                  {/* 2. Training Fixed */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-emerald-700">2. Formations Fixées (30%)</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{traffic?.trainingFixed ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">Obj : {traffic?.trainingFixedTarget ?? 0}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, traffic?.trainingFixedAttainmentPct ?? 0)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-semibold">
+                      <span className="text-gray-500">Tx Conversion :</span>
+                      <strong className={traffic?.trainingFixedRate && traffic.trainingFixedRate >= 30 ? "text-emerald-700" : "text-amber-700"}>
+                        {traffic?.trainingFixedRate ?? 0}% (Cible 30%)
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 3. Attended Show-up from their fixed */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-teal-700">3. Présents en Formation (65%)</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{traffic?.attendedPersons ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">issus de leurs fixées</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-teal-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, ((traffic?.attendedPersons ?? 0) / Math.max(1, (traffic?.trainingFixed ?? 1) * 0.65)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-semibold">
+                      <span className="text-gray-500">Tx Présence :</span>
+                      <strong className={traffic?.attendedRate && traffic.attendedRate >= 65 ? "text-emerald-700" : "text-teal-700"}>
+                        {traffic?.attendedRate ?? 0}% (Cible 65%)
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 4. Preorders / Assigned from their fixed */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-purple-700">4. Précommandes & Affectations (25%)</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{traffic?.preordersAssigned ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">fin d&apos;entonnoir</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-purple-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, ((traffic?.preordersAssigned ?? 0) / Math.max(1, (traffic?.trainingFixed ?? 1) * 0.25)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-semibold">
+                      <span className="text-gray-500">Tx Conversion Finale :</span>
+                      <strong className={traffic?.preorderAssignedRate && traffic.preorderAssignedRate >= 25 ? "text-emerald-700" : "text-purple-700"}>
+                        {traffic?.preorderAssignedRate ?? 0}% (Cible 25%)
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Call Results Distribution Waterfall */}
+                {callResults && (
+                  <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                        <span>📊</span>
+                        <span>Répartition des Résultats d&apos;Appels ({callResults.total} appels traités)</span>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 text-2xs font-semibold">
+                      <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl border border-emerald-200">
+                        <span>✅ Formations Fixées :</span>
+                        <strong className="font-mono text-xs">{callResults.trainingFixed}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-slate-100 text-slate-800 px-3 py-1 rounded-xl border border-slate-200">
+                        <span>📵 Pas de réponse :</span>
+                        <strong className="font-mono text-xs">{callResults.noResponse}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-amber-100 text-amber-800 px-3 py-1 rounded-xl border border-amber-200">
+                        <span>🔁 À rappeler :</span>
+                        <strong className="font-mono text-xs">{callResults.toRecall}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-rose-100 text-rose-800 px-3 py-1 rounded-xl border border-rose-200">
+                        <span>🚫 Pas intéressé :</span>
+                        <strong className="font-mono text-xs">{callResults.notInterested}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-red-100 text-red-800 px-3 py-1 rounded-xl border border-red-200">
+                        <span>❌ Mauvais numéro :</span>
+                        <strong className="font-mono text-xs">{callResults.wrongNumber}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-purple-100 text-purple-800 px-3 py-1 rounded-xl border border-purple-200">
+                        <span>🤝 Déjà client :</span>
+                        <strong className="font-mono text-xs">{callResults.alreadyClient}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ══════════════════════════════════════════════════════════════
+                  SECTION 2: ONBOARDING SPECIALIST TEAM (AYOUB GSAIB)
+                 ══════════════════════════════════════════════════════════════ */}
+              <div className="bg-white border-2 border-purple-200 rounded-3xl p-6 shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl p-2.5 bg-purple-50 text-purple-800 rounded-2xl border border-purple-200">
+                      🎓
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black text-gray-900">
+                          Onboarding Specialist
+                        </h3>
+                        <span className="text-3xs px-2.5 py-0.5 bg-purple-100 text-purple-900 font-bold rounded-full">
+                          Ayoub Gsaib
+                        </span>
+                      </div>
+                      <p className="text-2xs text-gray-500 mt-0.5">
+                        Formation chauffeurs · Précommandes & Contrats · Vélocité d&apos;attribution parc (&le; 1 jour)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 1 000 MAD Monthly Bonus Card */}
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
+                      💰
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-3xs font-black uppercase tracking-wider text-purple-700">Prime Mensuelle</span>
+                        <span className="text-3xs px-1.5 py-0.2 bg-purple-200 text-purple-900 rounded font-bold">Option 2 (Prop. pur)</span>
+                      </div>
+                      <p className="text-sm font-black text-gray-900 font-mono">
+                        {onboarding?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
+                      </p>
+                      <p className="text-3xs text-gray-600 font-semibold">
+                        Atteinte globale équipe : <strong>{onboarding?.teamAttainmentPct ?? 0}%</strong>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Core Onboarding KPIs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 1. Attended Persons */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-purple-700">1. Présences en Formation</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{onboarding?.attendedCount ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">Obj : {onboarding?.attendedTarget ?? 0}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-purple-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, onboarding?.attendedAttainmentPct ?? 0)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-semibold">
+                      <span className="text-gray-500">Tx de Présence :</span>
+                      <strong className={onboarding?.showupRate && onboarding.showupRate >= 65 ? "text-emerald-700" : "text-amber-700"}>
+                        {onboarding?.showupRate ?? 0}% (Cible 65%)
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 2. Preorders & Vehicles Assigned */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-emerald-700">2. Précommandes & Affectations</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">{onboarding?.preordersAssignedTotal ?? 0}</span>
+                      <span className="text-2xs text-gray-500 font-medium">Obj : {onboarding?.preordersTarget ?? 0}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, onboarding?.preordersAttainmentPct ?? 0)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-semibold">
+                      <span className="text-gray-500">Tx Conversion :</span>
+                      <strong className={onboarding?.preorderAssignedRate && onboarding.preorderAssignedRate >= 25 ? "text-emerald-700" : "text-emerald-600"}>
+                        {onboarding?.preorderAssignedRate ?? 0}% (Cible 25%)
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 3. Preorder Breakdown */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
+                    <p className="text-3xs font-black uppercase tracking-wider text-indigo-700">3. Détail Contrats Conclus</p>
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-center flex-1">
+                        <span className="text-lg font-black text-gray-900">{onboarding?.preordersCount ?? 0}</span>
+                        <p className="text-3xs text-gray-500 font-semibold">Précommandes</p>
+                      </div>
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-center flex-1">
+                        <span className="text-lg font-black text-emerald-700">{onboarding?.assignedCount ?? 0}</span>
+                        <p className="text-3xs text-gray-500 font-semibold">Affectées</p>
+                      </div>
+                    </div>
+                    <p className="text-3xs text-gray-500 text-center font-medium">
+                      Encaissements : <strong>{kpis.trainingOnboarding.totalPreorderMAD.toLocaleString()} MAD</strong>
+                    </p>
+                  </div>
+
+                  {/* 4. Fleet Velocity Speedometer (Available Cars <= 1 day) */}
+                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                    (onboarding?.avgDaysCarAvailable ?? 1) <= 1.0
+                      ? "bg-emerald-50/80 border-emerald-300"
+                      : (onboarding?.avgDaysCarAvailable ?? 1) <= 1.5
+                      ? "bg-amber-50/80 border-amber-300"
+                      : "bg-rose-50/80 border-rose-300"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-3xs font-black uppercase tracking-wider text-gray-800">
+                        4. Vélocité Disponibilité Parc
+                      </p>
+                      <span className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                        (onboarding?.avgDaysCarAvailable ?? 1) <= 1.0
+                          ? "bg-emerald-200 text-emerald-900"
+                          : "bg-amber-200 text-amber-900"
+                      }`}>
+                        {(onboarding?.avgDaysCarAvailable ?? 1) <= 1.0 ? "⚡ Excellent" : "⚠️ À surveiller"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-gray-900 font-mono">
+                        {onboarding?.avgDaysCarAvailable ?? 1.0} jour(s)
+                      </span>
+                      <span className="text-2xs font-bold text-gray-600">Cible : &le; 1.0 jour</span>
+                    </div>
+
+                    <div className="w-full bg-white/70 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          (onboarding?.avgDaysCarAvailable ?? 1) <= 1.0 ? "bg-emerald-500" : "bg-amber-500"
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(20, (1.0 / Math.max(0.1, onboarding?.avgDaysCarAvailable ?? 1)) * 100))}%` }}
+                      />
+                    </div>
+                    <p className="text-3xs text-gray-600 font-semibold">
+                      Temps moyen d&apos;attente d&apos;une voiture en statut &quot;Available&quot;
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ══════════════════════════════════════════════════════════════
+                  SECTION 3: FLEET COLLECTIONS & FIELD OPS OVERVIEW
+                 ══════════════════════════════════════════════════════════════ */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Cash Collections & Support SLAs Card */}
                 <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-3xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full inline-block">
-                        💸 Support & Driver Perf
+                        💸 Recouvrement & Support Flotte
                       </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1">
+                      <h3 className="text-2xl font-black text-gray-900 mt-1 font-mono">
                         {kpis.fleetCollections.collectionRecoveryRate}%{" "}
                         <span className="text-xs text-gray-500 font-normal">
                           / {kpis.fleetCollections.recoveryObjectivePct || 90}% Cible
                         </span>
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Cash Recouvrement (Cible: {kpis.fleetCollections.recoveryObjectivePct || 90}%)
+                        Encaissé : <strong>{kpis.fleetCollections.totalEveningCollectedMAD.toLocaleString()} MAD</strong>
                       </p>
                     </div>
-                    <span className="text-2xl">🔧</span>
+                    <span className="text-2xl">💰</span>
                   </div>
 
-                  {/* Objective Visual Progress */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex justify-between text-3xs font-bold">
-                      <span className="text-gray-600">Assurance (jours) :</span>
-                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= (kpis.fleetCollections.maxDaysInsuranceRepair || 7) ? "text-emerald-700 font-black" : "text-red-700"}>
-                        {kpis.fleetCollections.avgDaysInsuranceRepair} j <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxDaysInsuranceRepair || 7}j)</span>
+                  <div className="space-y-1.5 pt-1 text-3xs font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Assurance (jours réparation) :</span>
+                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= (kpis.fleetCollections.maxDaysInsuranceRepair || 7) ? "text-emerald-700" : "text-red-700"}>
+                        {kpis.fleetCollections.avgDaysInsuranceRepair} j (Max Obj : {kpis.fleetCollections.maxDaysInsuranceRepair || 7}j)
                       </span>
                     </div>
-                    <div className="flex justify-between text-3xs font-bold">
+                    <div className="flex justify-between">
                       <span className="text-gray-600">AdBlue/Vidange (heures) :</span>
-                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= (kpis.fleetCollections.maxHoursAdBlueVidange || 5) ? "text-emerald-700 font-black" : "text-amber-700"}>
-                        {kpis.fleetCollections.avgHoursAdBlueVidange} h <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxHoursAdBlueVidange || 5}h)</span>
+                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= (kpis.fleetCollections.maxHoursAdBlueVidange || 5) ? "text-emerald-700" : "text-amber-700"}>
+                        {kpis.fleetCollections.avgHoursAdBlueVidange} h (Max Obj : {kpis.fleetCollections.maxHoursAdBlueVidange || 5}h)
                       </span>
                     </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Taux de Churn hebdo :</span>
-                    <strong className={kpis.fleetCollections.weeklyChurnRate <= (kpis.fleetCollections.maxWeeklyChurnRate || 2) ? "text-emerald-600" : "text-red-600"}>
-                      {kpis.fleetCollections.weeklyChurnRate}% <span className="font-normal text-gray-400">(Max Obj: {kpis.fleetCollections.maxWeeklyChurnRate || 2}%)</span>
-                    </strong>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Taux de Churn hebdo :</span>
+                      <span className={kpis.fleetCollections.weeklyChurnRate <= (kpis.fleetCollections.maxWeeklyChurnRate || 2) ? "text-emerald-600" : "text-red-600"}>
+                        {kpis.fleetCollections.weeklyChurnRate}% (Max Obj : {kpis.fleetCollections.maxWeeklyChurnRate || 2}%)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* 4. Field Operations */}
+                {/* Field Operations */}
                 <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-3xs font-black uppercase tracking-wider text-green-800 bg-green-50 px-2 py-0.5 rounded-full inline-block">
-                        🛡️ Field Operations
+                        🛡️ Opérations Terrain
                       </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1">
-                        {kpis.fieldOperations.avgHoursVehicleRecovery} h
+                      <h3 className="text-2xl font-black text-gray-900 mt-1 font-mono">
+                        {kpis.fieldOperations.tasksCompleted} / {kpis.fieldOperations.tasksTarget} Tâches
                       </h3>
                       <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Temps moyen de récupération véhicule
+                        Taux de réalisation : <strong>{kpis.fieldOperations.taskCompletionRate}%</strong>
                       </p>
                     </div>
                     <span className="text-2xl">⚡</span>
                   </div>
 
-                  {/* Task Completion Bar */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex justify-between text-3xs font-bold">
+                  <div className="space-y-1.5 pt-1 text-3xs font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Temps récupération véhicule :</span>
+                      <span className="text-green-800">{kpis.fieldOperations.avgHoursVehicleRecovery} h</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-600">Contrôles Mensuels (Checks) :</span>
-                      <span className="text-green-800 font-bold">
-                        {kpis.fieldOperations.monthlyChecksCount} / {kpis.fieldOperations.monthlyChecksTarget || 30} réalisés Obj.
+                      <span className="text-green-800">
+                        {kpis.fieldOperations.monthlyChecksCount} / {kpis.fieldOperations.monthlyChecksTarget || 30} réalisés
                       </span>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-full bg-green-600 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${Math.min(100, ((kpis.fieldOperations.monthlyChecksCount || 0) / (kpis.fieldOperations.monthlyChecksTarget || 30)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-3xs pt-2 border-t border-gray-100 font-medium text-gray-500">
-                    <span>Score Santé Moyen :</span>
-                    <strong className="text-gray-900">⭐ {kpis.fieldOperations.avgHealthScore} / 5.0</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Comprehensive Department OKR Matrix ─────────────── */}
-              <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-sm space-y-5">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <div>
-                    <h3 className="text-sm font-black text-navy uppercase tracking-wider flex items-center gap-2">
-                      <span>🎯</span>
-                      <span>Matrice d&apos;Objectifs par Département (OKRs & Pacing)</span>
-                    </h3>
-                    <p className="text-2xs text-gray-500 mt-0.5">
-                      Comparaison des résultats consolidés avec les objectifs fixés dans les Paramètres d&apos;Opérations.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Lead Calls Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>📞 Volume d&apos;Appels</span>
-                      <span className="text-3xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-black">
-                        {kpis.leadAcquisition.callsAttainmentPct}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Réalisé : <strong>{kpis.leadAcquisition.callsDone}</strong></span>
-                      <span>Objectif : <strong>{kpis.leadAcquisition.callsTarget}</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className="bg-blue-600 h-full rounded-full" style={{ width: `${Math.min(100, kpis.leadAcquisition.callsAttainmentPct)}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Training Fixed Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>🎓 Formations Fixées</span>
-                      <span className="text-3xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-black">
-                        {kpis.leadAcquisition.trainingAttainmentPct}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Réalisé : <strong>{kpis.leadAcquisition.trainingFixed}</strong></span>
-                      <span>Objectif : <strong>{kpis.leadAcquisition.trainingTarget}</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className="bg-teal-600 h-full rounded-full" style={{ width: `${Math.min(100, kpis.leadAcquisition.trainingAttainmentPct)}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Preorders Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>💵 Précommandes Véhicules</span>
-                      <span className="text-3xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-black">
-                        {kpis.trainingOnboarding.preordersAttainmentPct}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Réalisé : <strong>{kpis.trainingOnboarding.preordersCount}</strong></span>
-                      <span>Objectif : <strong>{kpis.trainingOnboarding.preordersTarget}</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className="bg-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, kpis.trainingOnboarding.preordersAttainmentPct)}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Cash Recovery Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>💰 Taux de Recouvrement</span>
-                      <span className={`text-3xs px-2 py-0.5 rounded-full font-black ${
-                        kpis.fleetCollections.isObjectiveMet ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                      }`}>
-                        {kpis.fleetCollections.collectionRecoveryRate}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Encaissé : <strong>{kpis.fleetCollections.totalEveningCollectedMAD.toLocaleString()} MAD</strong></span>
-                      <span>Seuil 60% : <strong>{(kpis.fleetCollections.totalMorningTargetMAD * 0.6).toLocaleString()} MAD</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full rounded-full ${kpis.fleetCollections.isObjectiveMet ? "bg-emerald-500" : "bg-amber-500"}`}
-                        style={{ width: `${Math.min(100, (kpis.fleetCollections.collectionRecoveryRate / 60) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Field Tasks Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>🛡️ Tâches Terrain</span>
-                      <span className="text-3xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-black">
-                        {kpis.fieldOperations.tasksAttainmentPct}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Réalisé : <strong>{kpis.fieldOperations.tasksCompleted}</strong></span>
-                      <span>Objectif : <strong>{kpis.fieldOperations.tasksTarget}</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className="bg-green-600 h-full rounded-full" style={{ width: `${Math.min(100, kpis.fieldOperations.tasksAttainmentPct)}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Maintenance Tickets Goal */}
-                  <div className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-800">
-                      <span>🔧 Taux de Churn / Départ</span>
-                      <span className={`text-3xs px-2 py-0.5 rounded-full font-black ${kpis.fleetCollections.weeklyChurnRate < 5 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                        {kpis.fleetCollections.weeklyChurnRate}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-2xs text-gray-500">
-                      <span>Semaine courante</span>
-                      <span>Seuil Alerte : <strong>5%</strong></span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full rounded-full ${kpis.fleetCollections.weeklyChurnRate < 5 ? "bg-emerald-600" : "bg-red-600"}`} style={{ width: `${Math.min(100, kpis.fleetCollections.weeklyChurnRate * 10)}%` }} />
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Score Santé Moyen Flotte :</span>
+                      <span className="text-gray-900">⭐ {kpis.fieldOperations.avgHealthScore} / 5.0</span>
                     </div>
                   </div>
                 </div>
@@ -745,15 +904,18 @@ export default function PowerBiDashboardView() {
 
           {activeTab === "leaderboard" && (
             <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
                 <div>
                   <h3 className="text-sm font-black text-navy uppercase tracking-wider flex items-center gap-2">
                     <span>🏆</span>
-                    <span>Classement Individuel de l&apos;Équipe (Team Leaderboard)</span>
+                    <span>Classement des Équipes & Matrice des Primes (1 000 DH)</span>
                   </h3>
                   <p className="text-2xs text-gray-500 mt-0.5">
-                    Évaluation de la performance de chaque collaborateur par rapport aux objectifs assignés.
+                    Attribution collective par équipe · Option 2 : Paiement Proportionnel pur de la prime mensuelle.
                   </p>
+                </div>
+                <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-3xs font-bold text-amber-900">
+                  💰 Enveloppe Max : 1 000 DH / collaborateur
                 </div>
               </div>
 
@@ -763,18 +925,19 @@ export default function PowerBiDashboardView() {
                     <tr className="border-b border-gray-200 text-3xs font-black text-gray-500 uppercase tracking-wider bg-gray-50/80">
                       <th className="py-3 px-4">Rang</th>
                       <th className="py-3 px-4">Collaborateur</th>
-                      <th className="py-3 px-4">Département</th>
+                      <th className="py-3 px-4">Équipe / Pôle</th>
                       <th className="py-3 px-4">Métrique Clé</th>
                       <th className="py-3 px-4">Réalisé</th>
                       <th className="py-3 px-4">Objectif</th>
-                      <th className="py-3 px-4">Taux d&apos;Atteinte</th>
+                      <th className="py-3 px-4">Atteinte Équipe</th>
+                      <th className="py-3 px-4">Prime Mensuelle</th>
                       <th className="py-3 px-4">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredLeaderboard.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-gray-400 font-medium">
+                        <td colSpan={9} className="py-8 text-center text-gray-400 font-medium">
                           Aucun collaborateur trouvé pour les filtres sélectionnés.
                         </td>
                       </tr>
@@ -789,22 +952,22 @@ export default function PowerBiDashboardView() {
                             <p className="text-3xs text-gray-500">{user.email}</p>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-gray-100 text-gray-700">
-                              {user.department}
+                            <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-blue-50 text-blue-900 border border-blue-200">
+                              {user.teamName || user.department}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-medium text-gray-700">
                             {user.keyMetric}
                           </td>
-                          <td className="py-3 px-4 font-bold text-navy">
+                          <td className="py-3 px-4 font-bold text-navy font-mono">
                             {typeof user.actual === "number" ? user.actual.toLocaleString() : user.actual} {user.unit}
                           </td>
-                          <td className="py-3 px-4 font-medium text-gray-500">
+                          <td className="py-3 px-4 font-medium text-gray-500 font-mono">
                             {typeof user.target === "number" ? user.target.toLocaleString() : user.target} {user.unit}
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
-                              <span className="font-black text-gray-900">{user.attainmentPct}%</span>
+                              <span className="font-black text-gray-900 font-mono">{user.attainmentPct}%</span>
                               <div className="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
@@ -812,11 +975,18 @@ export default function PowerBiDashboardView() {
                                       ? "bg-emerald-500"
                                       : user.attainmentPct >= 80
                                       ? "bg-blue-600"
-                                      : "bg-red-500"
+                                      : "bg-amber-500"
                                   }`}
                                   style={{ width: `${Math.min(100, user.attainmentPct)}%` }}
                                 />
                               </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl font-bold font-mono text-xs">
+                              <span>💰</span>
+                              <span>{user.bonusEarnedMAD ?? 0} DH</span>
+                              <span className="text-3xs text-gray-500 font-normal">/ 1 000</span>
                             </div>
                           </td>
                           <td className="py-3 px-4">
@@ -826,14 +996,14 @@ export default function PowerBiDashboardView() {
                                   ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                   : user.status === "ON_TRACK"
                                   ? "bg-blue-100 text-blue-800 border border-blue-300"
-                                  : "bg-red-100 text-red-800 border border-red-300"
+                                  : "bg-amber-100 text-amber-800 border border-amber-300"
                               }`}
                             >
                               {user.status === "EXCEEDED"
                                 ? "🌟 Dépassé"
                                 : user.status === "ON_TRACK"
-                                ? "✓ En Objectif"
-                                : "⚠️ En Retard"}
+                                ? "✓ Sur Cible"
+                                : "⚠️ En Cours"}
                             </span>
                           </td>
                         </tr>

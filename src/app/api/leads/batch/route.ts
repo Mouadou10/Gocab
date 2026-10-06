@@ -45,13 +45,28 @@ function resolveLeadTargetStatus(targetStatus: string, reminderDate?: string | n
     training_status = targetStatus;
   }
 
+  const isLeadsStatus = [
+    "Training fixed",
+    "Not interested",
+    "No response 1",
+    "To Recall",
+    "Wrong number",
+    "No response 2",
+    "Already a client",
+  ].includes(targetStatus);
+
   const updateData: any = {
     board_column,
     brand_status,
     training_status,
-    status_changed_at: new Date(),
     updated_at: new Date(),
   };
+
+  if (targetStatus === "NEW_LEADS") {
+    updateData.status_changed_at = null;
+  } else if (isLeadsStatus) {
+    updateData.status_changed_at = new Date();
+  }
 
   if (reminderDate !== undefined) {
     updateData.reminder_date = reminderDate ? new Date(reminderDate) : null;

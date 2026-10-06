@@ -49,6 +49,7 @@ const TICKET_TYPES = [
   { id: "Accident", label: "💥 Accident / Insurance", statusImpact: "In garage" },
   { id: "Fourrière", label: "🚔 Fourrière Municipale (Impounded)", statusImpact: "impounded" },
   { id: "Police Immobilization", label: "🛑 Immobilisation Police / Sabot", statusImpact: "police_immobilization" },
+  { id: "Documents manquants", label: "📄 Documents manquants (Admin)", statusImpact: "missing_document" },
   { id: "VEHICLE_RECOVERY", label: "🚨 Blocage Véhicule / Récupération", statusImpact: "Blocked" },
 ] as const;
 

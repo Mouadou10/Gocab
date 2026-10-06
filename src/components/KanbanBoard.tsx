@@ -79,42 +79,46 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:  ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "vehicle-ops", "whatsapp"],
-  FLEET_PERF_MANAGER:   ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR:     ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
-  FINANCE_OFFICER:      ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER:          ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
-  ADMIN:                ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
+  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
+  FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
+  FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
+  FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
-  LEAD_ACQUISITION_JR: "Lead Acquisition",
-  FLEET_PERF_MANAGER:  "Fleet Performance",
-  FIELD_SUPERVISOR:    "Field Supervisor",
-  FINANCE_OFFICER:     "Finance Officer",
-  OPS_MANAGER:         "Ops Manager",
-  ADMIN:               "Admin",
+  LEAD_ACQUISITION_JR:   "Lead Acquisition Jr",
+  ONBOARDING_SPECIALIST: "Onboarding Specialist",
+  FLEET_PERF_MANAGER:    "Fleet Performance",
+  FIELD_SUPERVISOR:      "Field Supervisor",
+  FINANCE_OFFICER:       "Finance Officer",
+  OPS_MANAGER:           "Ops Manager",
+  ADMIN:                 "Admin",
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  LEAD_ACQUISITION_JR: "bg-blue-100 text-blue-700",
-  FLEET_PERF_MANAGER:  "bg-amber-100 text-amber-700",
-  FIELD_SUPERVISOR:    "bg-green-100 text-green-700",
-  FINANCE_OFFICER:     "bg-purple-100 text-purple-700",
-  OPS_MANAGER:         "bg-navy/10 text-navy",
-  ADMIN:               "bg-red-100 text-red-700",
+  LEAD_ACQUISITION_JR:   "bg-blue-100 text-blue-700",
+  ONBOARDING_SPECIALIST: "bg-emerald-100 text-emerald-800",
+  FLEET_PERF_MANAGER:    "bg-amber-100 text-amber-700",
+  FIELD_SUPERVISOR:      "bg-green-100 text-green-700",
+  FINANCE_OFFICER:       "bg-purple-100 text-purple-700",
+  OPS_MANAGER:           "bg-navy/10 text-navy",
+  ADMIN:                 "bg-red-100 text-red-700",
 };
 
 type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
-  LEAD_ACQUISITION_JR: "leads",
-  FLEET_PERF_MANAGER:  "fleet",
-  FIELD_SUPERVISOR:    "field",
-  FINANCE_OFFICER:     "performance",
-  OPS_MANAGER:         "dashboard",
-  ADMIN:               "dashboard",
+  LEAD_ACQUISITION_JR:   "leads",
+  ONBOARDING_SPECIALIST: "training",
+  FLEET_PERF_MANAGER:    "fleet",
+  FIELD_SUPERVISOR:      "field",
+  FINANCE_OFFICER:       "performance",
+  OPS_MANAGER:           "dashboard",
+  ADMIN:                 "dashboard",
 };
 
 
@@ -596,9 +600,8 @@ export default function KanbanBoard() {
     const countsByDate = new Map<string, number>();
     leads.forEach((l) => {
       const isTrainingFixed =
-        l.brand_status === "Training fixed" ||
-        (l.board_column === "TRAINING_PIPELINE" &&
-          (l.training_status === "Scheduled" || !l.training_status));
+        (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
+        (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
       if (!isTrainingFixed) return;
 
       // Only index by reminder_date (the actual training session date).
@@ -630,9 +633,8 @@ export default function KanbanBoard() {
   const totalTrainingFixedCount = useMemo(() => {
     return leads.filter((l) => {
       return (
-        l.brand_status === "Training fixed" ||
-        (l.board_column === "TRAINING_PIPELINE" &&
-          (l.training_status === "Scheduled" || !l.training_status))
+        (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
+        (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
       );
     }).length;
   }, [leads]);
@@ -640,6 +642,9 @@ export default function KanbanBoard() {
   const callsDoneToday = leads.filter((l) => {
     if (l.board_column === "NEW_LEADS") return false;
     if (!l.status_changed_at) return false;
+    // Strictly Leads page interactions: either BRAND_PRE_FILTER or newly moved to Training fixed
+    const isLeadsWorkflow = l.board_column === "BRAND_PRE_FILTER" || l.brand_status === "Training fixed";
+    if (!isLeadsWorkflow) return false;
     try {
       const d = new Date(l.status_changed_at);
       if (isNaN(d.getTime())) return false;
@@ -650,15 +655,21 @@ export default function KanbanBoard() {
   }).length;
 
   const trainingFixedToday = leads.filter((l) => {
-    if (
-      l.brand_status !== "Training fixed" &&
-      l.board_column !== "TRAINING_PIPELINE" &&
-      l.board_column !== "VEHICLE_ASSIGNMENT"
-    )
-      return false;
+    if (l.brand_status !== "Training fixed") return false;
     if (!l.status_changed_at) return false;
     try {
       const d = new Date(l.status_changed_at);
+      if (isNaN(d.getTime())) return false;
+      return d.toISOString().split("T")[0] === todayStr;
+    } catch {
+      return false;
+    }
+  }).length;
+
+  const ayoubCallsDoneToday = leads.filter((l) => {
+    if (!l.presence_confirmed_at) return false;
+    try {
+      const d = new Date(l.presence_confirmed_at);
       if (isNaN(d.getTime())) return false;
       return d.toISOString().split("T")[0] === todayStr;
     } catch {
@@ -672,8 +683,8 @@ export default function KanbanBoard() {
   // Scheduled counts for training header/filter
   const scheduledLeadsTotal = leads.filter(
     (l) =>
-      l.board_column === "TRAINING_PIPELINE" &&
-      (!l.training_status || l.training_status === "Scheduled")
+      (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
+      (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
   );
   const allScheduledCount = scheduledLeadsTotal.length;
   const todayScheduledCount = scheduledLeadsTotal.filter((l) =>
@@ -856,9 +867,8 @@ export default function KanbanBoard() {
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
           const isMatch =
-            (l.brand_status || "").toLowerCase() === "training fixed" ||
-            (l.board_column === "TRAINING_PIPELINE" &&
-              ((l.training_status || "").toLowerCase() === "scheduled" || !l.training_status));
+            (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
+            (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
           if (!isMatch) return false;
           if (isSearching) return true;
           return isLeadTrainingDateMatch(l, trainingDateFilter);
@@ -897,7 +907,7 @@ export default function KanbanBoard() {
       if (column === "Scheduled") {
         return filteredLeads.filter((l) => {
           const isScheduledMatch =
-            l.board_column === "TRAINING_PIPELINE" &&
+            (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
             (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
           if (!isScheduledMatch) return false;
           if (isSearching) return true;
@@ -1207,6 +1217,14 @@ export default function KanbanBoard() {
             setLeads((prev) =>
               prev.map((l) =>
                 l.id === leadId ? { ...l, board_column: "NEW_LEADS", brand_status: null } : l
+              )
+            );
+          }
+        } else if (targetColumn === "Training fixed") {
+          if (lead.brand_status !== "Training fixed" || lead.board_column !== "TRAINING_PIPELINE") {
+            setLeads((prev) =>
+              prev.map((l) =>
+                l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", brand_status: "Training fixed", training_status: "Scheduled" } : l
               )
             );
           }
@@ -1808,6 +1826,17 @@ export default function KanbanBoard() {
                 )}
               </div>
             </div>
+
+            {/* Ayoub Confirmation Calls Counter Pill for Training Tab */}
+            {activeTab === "training" && (
+              <div className="flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-200/90 px-3 py-1 rounded-xl text-xs font-bold text-emerald-900 shadow-2xs">
+                <span>📞</span>
+                <span>Appels Confirmation (Ayoub) :</span>
+                <span className="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full font-black">
+                  {ayoubCallsDoneToday}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Active Filter Clear Button */}

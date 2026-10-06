@@ -59,7 +59,9 @@ export async function GET(request: NextRequest) {
     const activeVehicles = vehicles.filter((v) => v.status === "Actif");
     const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.status === "Disponible");
     const inRepairVehicles = vehicles.filter((v) => v.status === "In garage" || v.status === "In service");
-    const impoundedVehicles = vehicles.filter((v) => v.status === "impounded by police" || v.status === "Accident" || v.status === "Blocked");
+    const impoundedVehicles = vehicles.filter((v) =>
+      ["impounded by police", "impounded", "police_immobilization", "missing_document", "Accident", "Blocked"].includes(v.status)
+    );
 
     const totalActiveCount = activeVehicles.length;
     const totalInactiveCount = totalFleet - totalActiveCount;

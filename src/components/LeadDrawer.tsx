@@ -1177,8 +1177,8 @@ export default function LeadDrawer({
             </div>
           )}
 
-          {/* Recalled Status Checkbox (For any lead not in new lead status) */}
-          {(lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")) && (
+          {/* Recalled Status Checkbox (For Leads prospection only) */}
+          {boardType === "leads" && (lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")) && (
             <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-2xl space-y-2">
               <label className="flex items-start gap-3 cursor-pointer select-none">
                 <input

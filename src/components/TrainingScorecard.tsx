@@ -187,37 +187,79 @@ export default function TrainingScorecard({
     l.board_column === 'TRAINING_PIPELINE' || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
 
-  // Filter by date range using status_changed_at, updated_at, reminder_date, or created_at
+  // Filter by date range: reminder_date is the scheduled session date.
+  // Falls back to created_at if reminder_date is not set.
   const filteredLeads = trainingLeads.filter(lead => {
     if (!startDate && !endDate) return true;
-    const candidates = [
-      lead.status_changed_at,
-      lead.updated_at,
-      lead.reminder_date,
-      lead.created_at,
-    ].filter(Boolean);
+    const dateToCheck = lead.reminder_date || lead.created_at;
+    if (!dateToCheck) return false;
 
-    return candidates.some((val: any) => {
-      try {
-        const d = new Date(val);
-        if (isNaN(d.getTime())) return false;
-        const iso = d.toISOString().split('T')[0];
-        const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try {
+      const d = new Date(dateToCheck);
+      if (isNaN(d.getTime())) return false;
+      const iso = d.toISOString().split('T')[0];
+      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-        const inRange = (ymd: string) => {
-          if (startDate && ymd < startDate) return false;
-          if (endDate && ymd > endDate) return false;
-          return true;
-        };
+      const inRange = (ymd: string) => {
+        if (startDate && ymd < startDate) return false;
+        if (endDate && ymd > endDate) return false;
+        return true;
+      };
 
-        return inRange(iso) || inRange(local);
-      } catch {
-        return false;
-      }
-    });
+      return inRange(iso) || inRange(local);
+    } catch {
+      return false;
+    }
   });
 
   const totalInTraining = filteredLeads.length;
+
+  // Dedicated unique calls counter for Onboarding Specialist (Ayoub Gsaib):
+  // Tracks all presence confirmation calls performed by Ayoub in the selected date range.
+  const ayoubCalls = safeLeads.filter(lead => {
+    if (!lead.presence_confirmed_at && !lead.presence_confirmed) return false;
+
+    // Check presence_confirmed_at against date range
+    if (lead.presence_confirmed_at) {
+      try {
+        const d = new Date(lead.presence_confirmed_at);
+        if (!isNaN(d.getTime())) {
+          const iso = d.toISOString().split('T')[0];
+          const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          if (!startDate && !endDate) return true;
+          const inRange = (ymd: string) => {
+            if (startDate && ymd < startDate) return false;
+            if (endDate && ymd > endDate) return false;
+            return true;
+          };
+          return inRange(iso) || inRange(local);
+        }
+      } catch {}
+    }
+
+    // Fallback: If presence_confirmed is true but presence_confirmed_at is null (legacy records),
+    // count if the lead's reminder_date is in range
+    if (lead.presence_confirmed && lead.reminder_date) {
+      try {
+        const d = new Date(lead.reminder_date);
+        if (!isNaN(d.getTime())) {
+          const iso = d.toISOString().split('T')[0];
+          if (!startDate && !endDate) return true;
+          if (startDate && iso < startDate) return false;
+          if (endDate && iso > endDate) return false;
+          return true;
+        }
+      } catch {}
+    }
+
+    return false;
+  });
+
+  const ayoubCallsCount = ayoubCalls.length;
+
+  // Presence confirmation calls count for the training session
+  const presenceConfirmedCount = filteredLeads.filter(l => Boolean(l.presence_confirmed)).length;
+  const presenceConfirmedPct = totalInTraining > 0 ? Math.round((presenceConfirmedCount / totalInTraining) * 100) : 0;
 
   // Conversion statuses — the goal of the training pipeline
   const CONVERSION_STATUSES = ['Assign vehicle', 'Accept offer', 'Preorder', 'VEHICLE_ASSIGNMENT'];
@@ -225,6 +267,15 @@ export default function TrainingScorecard({
     CONVERSION_STATUSES.includes(l.training_status) || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
   const totalConverted = converted.length;
+
+  // Attendance count
+  const attendedCount = filteredLeads.filter(l =>
+    l.training_status === 'Attended' ||
+    l.training_status === 'Attended and not interested' ||
+    CONVERSION_STATUSES.includes(l.training_status) ||
+    l.board_column === 'VEHICLE_ASSIGNMENT'
+  ).length;
+  const attendanceRate = totalInTraining > 0 ? ((attendedCount / totalInTraining) * 100).toFixed(1) : '0';
 
   // Calculate days in period for scaling target
   let periodDays = 1;
@@ -293,12 +344,22 @@ export default function TrainingScorecard({
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 mb-5 transition-all">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-5 gap-4 pb-4 border-b border-slate-100">
         <div>
-          <h2 className="text-lg font-bold text-navy">Training Pipeline Performance</h2>
-          <p className="text-sm text-gray-500">
-            Training review — <span className="font-semibold text-navy">{displayDate}</span>
+          <h2 className="text-base font-extrabold text-navy tracking-tight flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+              🎓
+            </span>
+            Performance Formation & Confirmations (Ayoub Gsaib)
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span>Compteur Onboarding Specialist (Ayoub Gsaib) — Date :</span>
+            <span className="font-semibold text-slate-800">{displayDate}</span>
+            <span className="text-slate-300">•</span>
+            <span className="font-bold text-emerald-700">📞 {ayoubCallsCount} appel{ayoubCallsCount > 1 ? "s" : ""} réalisé{ayoubCallsCount > 1 ? "s" : ""}</span>
+            <span className="text-slate-300">•</span>
+            <span>{totalInTraining} candidats convoqués</span>
           </p>
         </div>
 
@@ -379,54 +440,117 @@ export default function TrainingScorecard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* New Drivers / Preorders Today */}
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-          <div className="text-sm font-medium text-gray-500 mb-1">New Drivers / Preorders</div>
-          <div className="flex items-end gap-2 mb-2">
-            <span className="text-3xl font-bold text-navy">{totalConverted}</span>
-            <span className="text-sm text-gray-400 mb-1">/ {dailyTarget} target</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              className={`h-2.5 rounded-full transition-all duration-500 ${
-                progress >= 100 ? 'bg-green-500' : progress >= 50 ? 'bg-blue-500' : 'bg-orange-400'
-              }`}
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{progress.toFixed(0)}% of daily target</p>
-        </div>
-
-        {/* Conversion Rate */}
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-          <div className="text-sm font-medium text-gray-500 mb-1">Training Conversion</div>
-          <div className="flex items-end gap-2 mb-2">
-            <span className="text-3xl font-bold text-green-600">{conversionRate}%</span>
-            <span className="text-sm text-gray-400 mb-1">/ {targetConversionRate}% obj.</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-1.5">
-            <div
-              className={`h-2.5 rounded-full transition-all duration-500 ${
-                Number(conversionRate) >= targetConversionRate ? 'bg-green-500' : 'bg-blue-500'
-              }`}
-              style={{ width: `${Math.min(100, targetConversionRate > 0 ? (Number(conversionRate) / targetConversionRate) * 100 : 0)}%` }}
-            ></div>
-          </div>
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span>{totalConverted} of {totalInTraining} leads</span>
-            <span className="font-semibold text-navy">Obj: {totalConverted}/{dailyPreordersTarget} convertis</span>
-          </div>
-        </div>
-
-        {/* Status Breakdown */}
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 col-span-1 md:col-span-2">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-gray-500">Status Breakdown</span>
-            <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
-              ✨ Click a status to bring column to 2nd position
+      {/* Top 4 Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        {/* Card 1: Appels Confirmation Présence (Ayoub Gsaib) */}
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-slate-600">Appels Confirmation (Ayoub)</span>
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+              📞 {ayoubCallsCount} appel{ayoubCallsCount > 1 ? "s" : ""}
             </span>
           </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-black text-slate-900">{ayoubCallsCount}</span>
+            <span className="text-xs text-slate-500 font-semibold">
+              appels passés ({presenceConfirmedCount} / {totalInTraining} session)
+            </span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
+              style={{ width: `${Math.min(presenceConfirmedPct, 100)}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1.5">
+            {ayoubCallsCount} confirmation(s) enregistrée(s) par Ayoub ({presenceConfirmedCount} sur {totalInTraining} confirmés session)
+          </p>
+        </div>
+
+        {/* Card 2: Présents en Formation */}
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-slate-600">Présents en Session</span>
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+              👥 {attendanceRate}%
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-black text-navy">{attendedCount}</span>
+            <span className="text-xs text-slate-400 font-semibold">/ {totalInTraining} convoqués</span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className="h-2 rounded-full bg-blue-500 transition-all duration-500"
+              style={{ width: `${Math.min(Number(attendanceRate), 100)}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1.5">
+            {attendedCount} candidats ont assisté à la formation
+          </p>
+        </div>
+
+        {/* Card 3: New Drivers / Preorders */}
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-slate-600">Précommandes & Véhicules</span>
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+              🎯 {progress.toFixed(0)}% obj.
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-black text-emerald-700">{totalConverted}</span>
+            <span className="text-xs text-slate-400 font-semibold">/ {dailyTarget} obj. jour</span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${
+                progress >= 100 ? 'bg-emerald-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1.5">
+            {totalConverted} convertis en précommande / véhicule
+          </p>
+        </div>
+
+        {/* Card 4: Conversion Rate */}
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-slate-600">Taux de Conversion</span>
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+              Cible {targetConversionRate}%
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-black text-purple-700">{conversionRate}%</span>
+            <span className="text-xs text-slate-400 font-semibold">de conversion</span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${
+                Number(conversionRate) >= targetConversionRate ? 'bg-emerald-500' : 'bg-purple-500'
+              }`}
+              style={{ width: `${Math.min(100, targetConversionRate > 0 ? (Number(conversionRate) / targetConversionRate) * 100 : 0)}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1.5">
+            {totalConverted} sur {totalInTraining} candidats de la session
+          </p>
+        </div>
+      </div>
+
+      {/* Status Breakdown Section */}
+      <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Répartition par Statut Formation
+          </span>
+          <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+            ✨ Cliquez sur un statut pour afficher sa colonne en 2ᵉ position
+          </span>
+        </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -522,6 +646,5 @@ export default function TrainingScorecard({
           </div>
         </div>
       </div>
-    </div>
   );
 }

@@ -146,22 +146,35 @@ export async function PATCH(
     // Explicit call confirm from the agent (e.g. checkbox "Marquer comme Rappelé (+1 Appel Comptabilisé)")
     const isExplicitlyCalled = Boolean(body.mark_as_called || body.is_recalled);
 
-    // Presence confirmed call newly checked (e.g. "Appel de confirmation de présence effectué")
-    const isPresenceNewlyConfirmed = Boolean(body.presence_confirmed && !existingLead.presence_confirmed);
+    // Initial movement out of NEW_LEADS into the Leads pipeline
+    const isInitialExitFromNewLeads = existingLead.board_column === "NEW_LEADS" && body.board_column !== undefined && body.board_column !== "NEW_LEADS";
 
-    // Only update status_changed_at (counting as a call / status transition) if:
-    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called)
-    // 2. The agent newly confirmed presence by call
-    // 3. Status or pipeline column actually changed (e.g. initial transition out of NEW_LEADS or movement between columns)
-    // CRITICAL: Changing training date alone on a training fixed lead WITHOUT call confirm does NOT update status_changed_at.
-    const shouldStampStatusChanged =
-      isExplicitlyCalled ||
-      isPresenceNewlyConfirmed ||
-      isColumnChanged ||
+    // Moving lead into "Training fixed" (the conversion milestone from Leads to Training)
+    const isMovingToTrainingFixed = body.brand_status === "Training fixed" && existingLead.brand_status !== "Training fixed";
+
+    // Only update status_changed_at (Leads Prospection Call counter) if:
+    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called) on the Leads board
+    // 2. Lead moves out of NEW_LEADS into any status
+    // 3. Brand status changes on the Leads board (e.g. to NRP1, NRP2, To Recall, Not interested, Training fixed)
+    // 4. Lead is moved to "Training fixed"
+    // CRITICAL DECOUPLING:
+    // Training presence confirmation (presence_confirmed) has its own presence_confirmed_at timestamp and belongs ONLY to Training.
+    // Changes to training_status (Attended, Pending, Refused, Assign vehicle, Preorder) belong ONLY to Training.
+    // Neither Training presence confirmations nor training_status changes may EVER stamp status_changed_at!
+    const isLeadsContext =
+      existingLead.board_column === "NEW_LEADS" ||
+      existingLead.board_column === "BRAND_PRE_FILTER" ||
+      body.board_column === "BRAND_PRE_FILTER" ||
+      body.board_column === "NEW_LEADS";
+
+    if (body.board_column === "NEW_LEADS") {
+      (updateData as any).status_changed_at = null;
+    } else if (
+      (isExplicitlyCalled && isLeadsContext) ||
+      isInitialExitFromNewLeads ||
       isBrandStatusChanged ||
-      isTrainingStatusChanged;
-
-    if (shouldStampStatusChanged) {
+      isMovingToTrainingFixed
+    ) {
       (updateData as any).status_changed_at = new Date();
     }
 

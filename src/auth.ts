@@ -81,7 +81,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             id: "4002369c-0e84-49dc-9db7-ce6c11a27956",
             name: "Ayoub Gsaib",
             fullName: "Ayoub Gsaib",
-            role: "LEAD_ACQUISITION_JR",
+            role: "ONBOARDING_SPECIALIST",
           },
           "mohamed.aziz@gocab.io": {
             id: "70dfbcfe-cb1c-4d4a-aece-6c1af1c3d69a",

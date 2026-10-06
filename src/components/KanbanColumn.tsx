@@ -50,7 +50,7 @@ const COLUMN_LABELS: Record<string, string> = {
   "Already a client": "Already a Client",
 
   // Training Page
-  Scheduled: "Scheduled",
+  Scheduled: "Training Fixed (Scheduled)",
   Attended: "Attended",
   "Attended and not interested": "Attended & Not Interested",
   Pending: "Pending",
