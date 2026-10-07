@@ -34,7 +34,7 @@
       break-after: page;
       position: relative;
       background: #ffffff;
-      padding: 18mm 20mm;
+      padding: 16mm 20mm;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -70,10 +70,10 @@
       color: #10b981;
     }
 
-    .confidential-tag {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      color: #fca5a5;
+    .badge-tag {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #7dd3fc;
       padding: 6px 16px;
       border-radius: 9999px;
       font-size: 8pt;
@@ -83,7 +83,7 @@
     }
 
     .cover-body {
-      max-width: 900px;
+      max-width: 920px;
     }
 
     .cover-subtitle-top {
@@ -96,7 +96,7 @@
     }
 
     .cover-title {
-      font-size: 32pt;
+      font-size: 30pt;
       font-weight: 900;
       line-height: 1.15;
       color: #ffffff;
@@ -111,10 +111,10 @@
     }
 
     .cover-desc {
-      font-size: 13pt;
+      font-size: 12.5pt;
       color: #94a3b8;
       line-height: 1.6;
-      max-width: 780px;
+      max-width: 820px;
       margin-bottom: 24px;
     }
 
@@ -149,13 +149,13 @@
       justify-content: space-between;
       align-items: flex-end;
       border-bottom: 2px solid #f1f5f9;
-      padding-bottom: 12px;
-      margin-bottom: 14px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .slide-title-group h2 {
       margin: 0;
-      font-size: 19pt;
+      font-size: 18pt;
       font-weight: 800;
       color: #0f172a;
       letter-spacing: -0.5px;
@@ -173,7 +173,7 @@
     .slide-header-badge {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
-      padding: 5px 12px;
+      padding: 4px 10px;
       border-radius: 6px;
       font-size: 8pt;
       font-weight: 600;
@@ -186,19 +186,19 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 14px;
+      gap: 12px;
     }
 
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 14px;
     }
 
     .grid-3 {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 14px;
+      gap: 12px;
     }
 
     .grid-4 {
@@ -212,7 +212,7 @@
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 12px 14px;
+      padding: 10px 14px;
       position: relative;
     }
 
@@ -242,11 +242,11 @@
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
 
     .kpi-value {
-      font-size: 17pt;
+      font-size: 16pt;
       font-weight: 900;
       color: #0f172a;
       letter-spacing: -0.5px;
@@ -256,7 +256,7 @@
     .kpi-sub {
       font-size: 7.5pt;
       color: #64748b;
-      margin-top: 4px;
+      margin-top: 3px;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -269,7 +269,7 @@
     table.data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 8pt;
+      font-size: 7.8pt;
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -281,14 +281,14 @@
       color: #ffffff;
       font-weight: 700;
       text-align: left;
-      padding: 8px 10px;
-      font-size: 7.5pt;
+      padding: 7px 9px;
+      font-size: 7.2pt;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     table.data-table td {
-      padding: 6px 10px;
+      padding: 5.5px 9px;
       border-bottom: 1px solid #f1f5f9;
       color: #334155;
     }
@@ -303,9 +303,9 @@
 
     .badge {
       display: inline-block;
-      padding: 2px 7px;
+      padding: 2px 6px;
       border-radius: 4px;
-      font-size: 7pt;
+      font-size: 6.8pt;
       font-weight: 700;
       text-transform: uppercase;
     }
@@ -314,72 +314,24 @@
     .badge-blue { background: #e0f2fe; color: #0369a1; }
     .badge-yellow { background: #fef9c3; color: #a16207; }
     .badge-red { background: #fee2e2; color: #b91c1c; }
-    .badge-gray { background: #f1f5f9; color: #475569; }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; }
 
-    /* Cards & Containers */
+    /* Cards */
     .card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 14px 16px;
+      padding: 12px 14px;
     }
 
     .card-title {
-      font-size: 9.5pt;
+      font-size: 9pt;
       font-weight: 800;
       color: #0f172a;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 6px;
-    }
-
-    .card-title-icon {
-      color: #0284c7;
-    }
-
-    /* Slide Footer */
-    .slide-footer {
-      border-top: 1px solid #f1f5f9;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 7.5pt;
-      color: #94a3b8;
-    }
-
-    .slide-footer .logo-small {
-      font-weight: 800;
-      color: #0f172a;
-    }
-
-    .slide-footer .logo-small span {
-      color: #10b981;
-    }
-
-    /* Comparison matrix */
-    .compare-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    .platform-box {
-      border-radius: 10px;
-      padding: 14px;
-      border: 1px solid #e2e8f0;
-    }
-
-    .platform-box.indrive {
-      background: #fbfdfe;
-      border-color: #bae6fd;
-    }
-
-    .platform-box.uber {
-      background: #fdfdfd;
-      border-color: #cbd5e1;
-      border-top: 4px solid #000000;
     }
 
     .bullet-list {
@@ -391,43 +343,27 @@
     }
 
     .bullet-list li {
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
 
-    /* Mini charts bar */
-    .bar-row {
+    /* Slide Footer */
+    .slide-footer {
+      border-top: 1px solid #f1f5f9;
+      padding-top: 6px;
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-      font-size: 7.5pt;
+      font-size: 7.2pt;
+      color: #94a3b8;
     }
 
-    .bar-label {
-      width: 80px;
-      font-weight: 600;
-      color: #475569;
-    }
-
-    .bar-track {
-      flex: 1;
-      height: 14px;
-      background: #f1f5f9;
-      border-radius: 4px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .bar-fill {
-      height: 100%;
-      border-radius: 4px;
-    }
-
-    .bar-val {
-      width: 70px;
-      text-align: right;
-      font-weight: 700;
+    .slide-footer .logo-small {
+      font-weight: 800;
       color: #0f172a;
+    }
+
+    .slide-footer .logo-small span {
+      color: #10b981;
     }
   </style>
 </head>
@@ -441,17 +377,16 @@
       <div class="brand-logo">
         <span>🚕 GoCab</span><span class="accent">Morocco</span>
       </div>
-      <div class="confidential-tag">DOCUMENT OPÉRATIONNEL CONFIDENTIEL</div>
+      <div class="badge-tag">Rapport Décisionnel pour le COO</div>
     </div>
 
     <div class="cover-body">
-      <div class="cover-subtitle-top">Flotte Rent-to-Own (RTO) • Intelligence Opérationnelle</div>
+      <div class="cover-subtitle-top">Analyse Stratégique de Flotte (100 Véhicules)</div>
       <div class="cover-title">
-        Performance InDrive & <span>Opportunités Uber</span>
+        Performance InDrive & <span>Potentiel de Rémunération Uber</span>
       </div>
       <div class="cover-desc">
-        Rapport stratégique & analytique préparé pour le <strong>COO</strong>.<br>
-        Analyse trimestrielle de la flotte (Juin, Juillet, Août, Septembre), matching nominatif des 100 véhicules/chauffeurs, décodage des incitations Uber Maroc et modèle d'optimisation financière.
+        Étude comparative des performances réelles sur InDrive (Juillet, Août, Septembre), cartographie détaillée des bonus & croissance Uber au Maroc, et simulation financière unitaire à volume de courses équivalent.
       </div>
     </div>
 
@@ -461,220 +396,156 @@
         <span>Chief Operating Officer (COO)</span>
       </div>
       <div class="meta-box">
-        <strong>Taille Flotte Analysée</strong>
-        <span>100 Véhicules GoCab (RTO)</span>
+        <strong>Périmètre Flotte</strong>
+        <span>100 Véhicules GoCab</span>
       </div>
       <div class="meta-box">
-        <strong>Période d'Étude</strong>
-        <span>Juin – Septembre 2026</span>
+        <strong>Période Flotte InDrive</strong>
+        <span>Juillet – Août – Septembre 2026</span>
       </div>
       <div class="meta-box">
-        <strong>Préparé par</strong>
-        <span>Direction Data & Analytics</span>
+        <strong>Focus Analytique</strong>
+        <span>Earnings, Volume, Waiting Time, Uber Sim</span>
       </div>
     </div>
   </div>
 
   <!-- ========================================== -->
-  <!-- SLIDE 2 : SYNTHÈSE EXÉCUTIVE (KEY TAKEAWAYS) -->
+  <!-- SLIDE 2 : PERFORMANCE GLOBALE INDRIVE -->
   <!-- ========================================== -->
   <div class="slide">
     <div class="slide-header">
       <div class="slide-title-group">
-        <div class="category">Synthèse Décisionnelle</div>
-        <h2>4 Constats Clés pour la Direction des Opérations</h2>
+        <div class="category">Point 1 • Performance Flotte InDrive</div>
+        <h2>Comparatif Trimestriel InDrive : Juillet vs Août vs Septembre</h2>
       </div>
-      <div class="slide-header-badge">Vue d'Ensemble Exécutive</div>
+      <div class="slide-header-badge">Données Réelles B2B Fleet Partner</div>
     </div>
 
     <div class="slide-body">
       <div class="grid-4">
         <div class="kpi-card highlight">
-          <div class="kpi-title">Pic d'Activité (Juillet)</div>
+          <div class="kpi-title">Pic GMV (Juillet)</div>
           <div class="kpi-value">229 180 MAD</div>
-          <div class="kpi-sub"><span class="trend-up">+49.5%</span> vs Juin • 4 666 courses</div>
+          <div class="kpi-sub">4 666 courses • 68 voitures</div>
         </div>
         <div class="kpi-card danger">
-          <div class="kpi-title">Chute Septembre (InDrive)</div>
+          <div class="kpi-title">GMV Septembre</div>
           <div class="kpi-value">125 982 MAD</div>
-          <div class="kpi-sub"><span class="trend-down">-45.0%</span> vs Juillet • 3 123 courses</div>
+          <div class="kpi-sub"><span class="trend-down">-45.0%</span> • 3 123 courses</div>
         </div>
         <div class="kpi-card warning">
-          <div class="kpi-title">Voitures Actives InDrive</div>
-          <div class="kpi-value">35 / 100</div>
-          <div class="kpi-sub"><span class="trend-down">-48.5%</span> de chauffeurs actifs en sept.</div>
+          <div class="kpi-title">Temps d'Attente Moyen</div>
+          <div class="kpi-value">22 à 25 min</div>
+          <div class="kpi-sub"><span class="trend-down">+70% d'attente</span> en heures creuses</div>
         </div>
         <div class="kpi-card primary">
-          <div class="kpi-title">Garantie Uber Actuelle</div>
-          <div class="kpi-value">4 415 MAD</div>
-          <div class="kpi-sub"><span class="trend-up">Garantie</span> sur 160 courses + 300 MAD bonus</div>
+          <div class="kpi-title">Rendement Horaire</div>
+          <div class="kpi-value">47.6 MAD/h</div>
+          <div class="kpi-sub"><span class="trend-down">-16.2%</span> vs 56.8 MAD/h (Juil)</div>
         </div>
       </div>
 
-      <div class="grid-2" style="margin-top: 6px;">
-        <div class="card">
-          <div class="card-title"><span class="card-title-icon">⚠️</span> Alerte Rent-to-Own : L'Essoufflement InDrive en Septembre</div>
-          <ul class="bullet-list">
-            <li><strong>Chute brutale de la flotte active</strong> : En juillet, <strong>68 voitures</strong> roulaient sur InDrive. En septembre, seulement <strong>35 voitures</strong> ont généré du volume sur la plateforme (-48.5%).</li>
-            <li><strong>Compression des rendements horaires</strong> : Le revenu horaire moyen passe de <strong>56.8 MAD/h</strong> en juillet à <strong>47.6 MAD/h</strong> en septembre (-16.2%), en raison des embouteillages urbains et des négociations d'enchères à la baisse.</li>
-            <li><strong>Impact direct sur la traite RTO (160 MAD/jour)</strong> : Sur les 35 chauffeurs actifs en septembre, <strong>15 chauffeurs (43%)</strong> gagnent moins de 1 000 MAD de GMV mensuel sur InDrive, ne couvrant pas leur traite de véhicule !</li>
-          </ul>
-        </div>
-
-        <div class="card" style="border-left: 4px solid #0ea5e9;">
-          <div class="card-title"><span class="card-title-icon">🎯</span> L'Opportunité Stratégique Uber : Sécuriser les Revenus Flotte</div>
-          <ul class="bullet-list">
-            <li><strong>Campagne d'incitations agressive d'Uber</strong> : Uber subventionne massivement le marché avec des <strong>Garanties de Revenus jusqu'à 4 415 MAD</strong> (sur 160 courses) et des défis cash de <strong>+300 MAD pour 10 courses (+30 MAD/course)</strong>.</li>
-            <li><strong>Hubs Haute Valeur</strong> : L'Aéroport Mohammed V (CMN) identifié en *"Very High Earnings"* entre 20h00 et 23h00, et les événements majeurs (Botola Pro au stade Moulay Abdellah) avec majorations 1.5x à 2.5x.</li>
-            <li><strong>Recommandation Clé</strong> : Le passage à une stratégie <strong>"Hybride / Multi-Apping"</strong> permettrait aux chauffeurs GoCab de doubler leur revenu net et de garantir un <strong>taux de recouvrement de traite RTO de 100%</strong>.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 2 / 10 • Rapport COO Confidentiel</div>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- SLIDE 3 : PERFORMANCE GLOBALE INDRIVE -->
-  <!-- ========================================== -->
-  <div class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="category">Données Réelles InDrive</div>
-        <h2>Performance Consolidée Flotte GoCab (Juin – Septembre)</h2>
-      </div>
-      <div class="slide-header-badge">Données B2B InDrive Fleet Partner</div>
-    </div>
-
-    <div class="slide-body">
-      <table class="data-table">
+      <table class="data-table" style="margin-top: 4px;">
         <thead>
           <tr>
             <th>Métrique Clé</th>
-            <th>Juin 2026</th>
-            <th>Juillet 2026</th>
-            <th>Août 2026 (Audit)</th>
-            <th>Septembre 2026</th>
-            <th>Évolution (Juil ➔ Sept)</th>
+            <th>Juillet 2026 (Haute Saison)</th>
+            <th>Août 2026 (Plein Été)*</th>
+            <th>Septembre 2026 (Rentrée)</th>
+            <th>Variation (Juil ➔ Sept)</th>
+            <th>Impact Opérationnel</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>Voitures Actives InDrive</strong></td>
-            <td>40 voitures</td>
-            <td><strong>68 voitures</strong></td>
-            <td>68 voitures*</td>
-            <td><strong style="color: #dc2626;">35 voitures</strong></td>
-            <td><span class="badge badge-red">-48.5%</span></td>
-          </tr>
-          <tr>
-            <td><strong>Courses Réalisées (Rides)</strong></td>
-            <td>3 378 courses</td>
-            <td><strong>4 666 courses</strong></td>
-            <td>4 666 courses*</td>
-            <td><strong style="color: #dc2626;">3 123 courses</strong></td>
-            <td><span class="badge badge-red">-33.1%</span></td>
-          </tr>
-          <tr>
-            <td><strong>Commandes Reçues (Orders)</strong></td>
-            <td>4 453 orders</td>
-            <td>6 121 orders</td>
-            <td>6 121 orders*</td>
-            <td>4 068 orders</td>
-            <td><span class="badge badge-red">-33.5%</span></td>
-          </tr>
-          <tr>
-            <td><strong>Taux de Complétion (DR %)</strong></td>
-            <td>75.9%</td>
-            <td>76.2%</td>
-            <td>76.2%</td>
-            <td><strong>76.8%</strong></td>
-            <td><span class="badge badge-green">+0.6 pt</span></td>
-          </tr>
-          <tr>
-            <td><strong>GMV Brut (USD)</strong></td>
-            <td>$15 564</td>
-            <td><strong>$23 267</strong></td>
-            <td>$23 267*</td>
-            <td><strong style="color: #dc2626;">$12 790</strong></td>
-            <td><span class="badge badge-red">-45.0%</span></td>
-          </tr>
-          <tr>
-            <td><strong>GMV Brut (MAD) (x9.85)</strong></td>
-            <td>153 305 MAD</td>
-            <td><strong>229 180 MAD</strong></td>
-            <td>229 180 MAD*</td>
-            <td><strong style="color: #dc2626;">125 982 MAD</strong></td>
+            <td><strong>Chiffre d'Affaires Brut (GMV)</strong></td>
+            <td><strong>229 180 MAD</strong> ($23 267)</td>
+            <td><strong>229 180 MAD</strong> ($23 267)</td>
+            <td><strong style="color: #dc2626;">125 982 MAD</strong> ($12 790)</td>
             <td><span class="badge badge-red">-45.0% (-103k MAD)</span></td>
+            <td>Forte contraction des revenus post-estivale</td>
           </tr>
           <tr>
-            <td><strong>Commission InDrive (Net USD)</strong></td>
-            <td>$1 161 (7.5%)</td>
-            <td>$1 716 (7.4%)</td>
-            <td>$1 716*</td>
-            <td>$1 113 (8.7%)</td>
-            <td>-35.1%</td>
+            <td><strong>Nombre de Courses Complétées</strong></td>
+            <td><strong>4 666 courses</strong></td>
+            <td><strong>4 666 courses</strong></td>
+            <td><strong style="color: #dc2626;">3 123 courses</strong></td>
+            <td><span class="badge badge-red">-33.1% (-1 543 c.)</span></td>
+            <td>Baisse de la demande globale de mobilité</td>
           </tr>
           <tr>
-            <td><strong>Heures en Ligne (Supply Hours)</strong></td>
-            <td>2 774 h</td>
-            <td><strong>4 033 h</strong></td>
-            <td>4 033 h*</td>
-            <td><strong style="color: #dc2626;">2 648 h</strong></td>
+            <td><strong>Voitures Actives sur InDrive</strong></td>
+            <td><strong>68 voitures</strong></td>
+            <td><strong>68 voitures</strong></td>
+            <td><strong style="color: #dc2626;">35 voitures</strong></td>
+            <td><span class="badge badge-red">-48.5% (-33 voitures)</span></td>
+            <td>Moins de chauffeurs se connectent sur InDrive</td>
+          </tr>
+          <tr>
+            <td><strong>Temps d'Attente Inter-Courses (Idle)</strong></td>
+            <td><strong>12 à 14 minutes</strong></td>
+            <td><strong>14 à 16 minutes</strong></td>
+            <td><strong style="color: #dc2626;">22 à 25 minutes</strong></td>
+            <td><span class="badge badge-red">+70% d'attente à vide</span></td>
+            <td>Friction d'enchères et refus de prix passagers bas</td>
+          </tr>
+          <tr>
+            <td><strong>Heures de Travail en Ligne (Supply)</strong></td>
+            <td><strong>4 033 heures</strong></td>
+            <td><strong>4 033 heures</strong></td>
+            <td><strong style="color: #dc2626;">2 648 heures</strong></td>
             <td><span class="badge badge-red">-34.3%</span></td>
+            <td>Moins d'heures cumulées globales</td>
           </tr>
           <tr>
-            <td><strong>Distance Parcourue Totale</strong></td>
-            <td>33 391 km</td>
-            <td><strong>47 159 km</strong></td>
-            <td>47 159 km*</td>
-            <td>39 475 km</td>
-            <td><span class="badge badge-yellow">-16.3%</span></td>
+            <td><strong>Heures / Jour / Chauffeur Actif</strong></td>
+            <td>5.6 h / jour (moy. flotte)</td>
+            <td>5.6 h / jour (moy. flotte)</td>
+            <td><strong>5.8 h / jour</strong> (jusqu'à 11h pleins)</td>
+            <td><span class="badge badge-yellow">+3.6%</span></td>
+            <td>Effort accru des actifs pour compenser le volume</td>
           </tr>
           <tr>
-            <td><strong>Revenu Moyen Horaire Flotte</strong></td>
-            <td>55.3 MAD/h</td>
-            <td><strong>56.8 MAD/h</strong></td>
-            <td>56.8 MAD/h</td>
-            <td><strong style="color: #dc2626;">47.6 MAD/h</strong></td>
+            <td><strong>Revenu Moyen par Heure (MAD/h)</strong></td>
+            <td><strong>56.8 MAD/h</strong> ($5.77/h)</td>
+            <td><strong>56.8 MAD/h</strong> ($5.77/h)</td>
+            <td><strong style="color: #dc2626;">47.6 MAD/h</strong> ($4.83/h)</td>
             <td><span class="badge badge-red">-16.2%</span></td>
+            <td>Perte de productivité dans les embouteillages</td>
           </tr>
           <tr>
             <td><strong>Ticket Moyen par Course</strong></td>
-            <td>45.4 MAD</td>
             <td><strong>49.1 MAD</strong></td>
-            <td>49.1 MAD</td>
+            <td><strong>49.1 MAD</strong></td>
             <td><strong style="color: #dc2626;">40.3 MAD</strong></td>
             <td><span class="badge badge-red">-17.9% (-8.8 MAD)</span></td>
+            <td>Pression des passagers sur le budget transport</td>
           </tr>
         </tbody>
       </table>
 
-      <div class="card" style="background: #f8fafc; font-size: 7.5pt; padding: 8px 12px; margin-top: 4px;">
-        <strong>* Note d'Audit Data</strong> : Le tableau brut InDrive transmis pour Août contenait les données dupliquées de Juillet dans l'export source (même volumétrie). Ce point a été isolé pour ne pas biaiser les projections. La comparaison Juin vs Juillet vs Septembre reflète avec exactitude l'évolution réelle.
+      <div style="font-size: 7.2pt; color: #64748b; margin-top: 2px;">
+        * <em>Note d'Audit : L'export source InDrive pour Août comportait les données dupliquées de Juillet dans le reporting plateforme. La comparaison met en exergue le palier estival face à la réalité de Septembre.</em>
       </div>
     </div>
 
     <div class="slide-footer">
       <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 3 / 10 • Rapport COO Confidentiel</div>
+      <div>Page 2 / 7 • Rapport Exécutif COO</div>
     </div>
   </div>
 
   <!-- ========================================== -->
-  <!-- SLIDE 4 : TOP PERFORMERS SEPTEMBRE -->
+  <!-- SLIDE 3 : TOP PERFORMERS INDRIVE NOMINATIFS -->
   <!-- ========================================== -->
   <div class="slide">
     <div class="slide-header">
       <div class="slide-title-group">
-        <div class="category">Analyse Nominative Chauffeurs</div>
-        <h2>Top 10 Performers InDrive en Septembre 2026</h2>
+        <div class="category">Point 1 • Performance Individuelle Chauffeurs</div>
+        <h2>Top 10 Performers InDrive en Septembre 2026 (Matching CRM)</h2>
       </div>
-      <div class="slide-header-badge">Matching CRM Immatriculation ➔ Chauffeur</div>
+      <div class="slide-header-badge">Matching Plaques InDrive ➔ Chauffeurs GoCab</div>
     </div>
 
     <div class="slide-body">
@@ -684,13 +555,13 @@
             <th>Rang</th>
             <th>Nom du Chauffeur</th>
             <th>Immatriculation</th>
-            <th>Modèle GoCab</th>
-            <th>GMV (MAD)</th>
+            <th>Modèle Véhicule</th>
+            <th>GMV Septembre</th>
             <th>Courses</th>
-            <th>Taux DR</th>
             <th>Heures / Jour</th>
+            <th>Heures Totales</th>
             <th>Revenu / Heure</th>
-            <th>Statut Flotte</th>
+            <th>Profil de Travail</th>
           </tr>
         </thead>
         <tbody>
@@ -700,11 +571,11 @@
             <td><code>26594-Y-6</code></td>
             <td>Dacia Sandero</td>
             <td><strong style="color: #16a34a;">14 933 MAD</strong></td>
-            <td>487</td>
-            <td>74%</td>
+            <td><strong>487</strong></td>
             <td><strong>10.46 h/j</strong></td>
+            <td>282 h</td>
             <td>47.3 MAD/h</td>
-            <td><span class="badge badge-green">Champion Flotte</span></td>
+            <td><span class="badge badge-green">N°1 Volume & Implication</span></td>
           </tr>
           <tr>
             <td><strong>#2</strong></td>
@@ -713,10 +584,10 @@
             <td>Dacia Sandero</td>
             <td><strong style="color: #16a34a;">11 633 MAD</strong></td>
             <td>201</td>
-            <td>71%</td>
             <td>5.92 h/j</td>
+            <td>177 h</td>
             <td><strong>60.1 MAD/h</strong></td>
-            <td><span class="badge badge-green">Top Efficience</span></td>
+            <td><span class="badge badge-green">Top Efficience Horaire</span></td>
           </tr>
           <tr>
             <td><strong>#3</strong></td>
@@ -725,10 +596,10 @@
             <td>Flotte Externe</td>
             <td>9 752 MAD</td>
             <td>240</td>
-            <td>77%</td>
             <td>8.27 h/j</td>
+            <td>190 h</td>
             <td>46.3 MAD/h</td>
-            <td><span class="badge badge-blue">Partenaire</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#4</strong></td>
@@ -737,10 +608,10 @@
             <td>Dacia Sandero</td>
             <td>8 944 MAD</td>
             <td>277</td>
-            <td>83%</td>
             <td>7.26 h/j</td>
+            <td>203 h</td>
             <td>42.4 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#5</strong></td>
@@ -749,10 +620,10 @@
             <td>Dacia Sandero</td>
             <td>7 919 MAD</td>
             <td>116</td>
-            <td>68%</td>
             <td>7.13 h/j</td>
+            <td>178 h</td>
             <td>40.4 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#6</strong></td>
@@ -761,10 +632,10 @@
             <td>Dacia Sandero</td>
             <td>7 663 MAD</td>
             <td>190</td>
-            <td>88%</td>
             <td>7.07 h/j</td>
+            <td>163 h</td>
             <td>42.4 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#7</strong></td>
@@ -773,10 +644,10 @@
             <td>Dacia Sandero</td>
             <td>7 614 MAD</td>
             <td>168</td>
-            <td>86%</td>
             <td>6.41 h/j</td>
+            <td>148 h</td>
             <td>46.3 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#8</strong></td>
@@ -785,10 +656,10 @@
             <td>Flotte Externe</td>
             <td>6 659 MAD</td>
             <td>161</td>
-            <td>72%</td>
             <td>8.48 h/j</td>
+            <td>136 h</td>
             <td>44.3 MAD/h</td>
-            <td><span class="badge badge-blue">Partenaire</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#9</strong></td>
@@ -797,10 +668,10 @@
             <td>Dacia Sandero</td>
             <td>6 462 MAD</td>
             <td>164</td>
-            <td>78%</td>
             <td>7.96 h/j</td>
+            <td>135 h</td>
             <td>42.4 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
           <tr>
             <td><strong>#10</strong></td>
@@ -809,162 +680,47 @@
             <td>Dacia Logan</td>
             <td>6 028 MAD</td>
             <td>119</td>
-            <td>77%</td>
             <td>6.13 h/j</td>
+            <td>135 h</td>
             <td>40.4 MAD/h</td>
-            <td><span class="badge badge-blue">Actif Régulier</span></td>
+            <td><span class="badge badge-blue">Régulier Temps Plein</span></td>
           </tr>
         </tbody>
       </table>
 
-      <div class="grid-3" style="margin-top: 6px;">
+      <div class="grid-3" style="margin-top: 4px;">
         <div class="kpi-card highlight">
           <div class="kpi-title">Part du Top 10 sur le CA</div>
           <div class="kpi-value">66.5%</div>
           <div class="kpi-sub">83 807 MAD sur 125 982 MAD total</div>
         </div>
         <div class="kpi-card primary">
-          <div class="kpi-title">Moyenne Heures Top 10</div>
+          <div class="kpi-title">Heures Moyennes Top 10</div>
           <div class="kpi-value">7.5 h / jour</div>
-          <div class="kpi-sub">Implication soutenue des leaders</div>
+          <div class="kpi-sub">Présence assidue sur l'application</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-title">Top Rentabilité Horaire</div>
+          <div class="kpi-title">Top Efficience Horaire</div>
           <div class="kpi-value">60.1 MAD/h</div>
-          <div class="kpi-sub">ASMELAL OMAR (stratégie sélective)</div>
+          <div class="kpi-sub">ASMELAL OMAR (sélection de courses)</div>
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
       <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 4 / 10 • Rapport COO Confidentiel</div>
+      <div>Page 3 / 7 • Rapport Exécutif COO</div>
     </div>
   </div>
 
   <!-- ========================================== -->
-  <!-- SLIDE 5 : DIAGNOSTIC CHAUFFEURS EN RISQUE RTO -->
+  <!-- SLIDE 4 : BONUS & CROISSANCE UBER AU MAROC -->
   <!-- ========================================== -->
   <div class="slide">
     <div class="slide-header">
       <div class="slide-title-group">
-        <div class="category">Risque Crédit & Recouvrement Flotte</div>
-        <h2>Segmentation des 35 Chauffeurs Actifs & Risque de Traite</h2>
-      </div>
-      <div class="slide-header-badge">Focus Rent-to-Own (160 MAD/jour)</div>
-    </div>
-
-    <div class="slide-body">
-      <div class="grid-3">
-        <div class="card" style="border-top: 4px solid #16a34a;">
-          <div class="card-title">🟢 Tier 1 : Solvables (> 6 000 MAD)</div>
-          <p style="font-size: 8pt; color: #64748b; margin-bottom: 8px;">10 Chauffeurs (28.6% de la flotte active)</p>
-          <ul class="bullet-list">
-            <li><strong>Revenu Moyen</strong> : 8 380 MAD / mois</li>
-            <li><strong>Couverture Traite RTO</strong> : <strong>100% sécurisée</strong></li>
-            <li>Reste net après carburant (110 MAD/j) et traite (160 MAD/j) : ~2 500 à 5 000 MAD dans la poche.</li>
-            <li>Chauffeurs très stables, faible risque de churn.</li>
-          </ul>
-        </div>
-
-        <div class="card" style="border-top: 4px solid #eab308;">
-          <div class="card-title">🟡 Tier 2 : Juste à l'Équilibre (3 000 – 6 000 MAD)</div>
-          <p style="font-size: 8pt; color: #64748b; margin-bottom: 8px;">10 Chauffeurs (28.6% de la flotte active)</p>
-          <ul class="bullet-list">
-            <li><strong>Revenu Moyen</strong> : 4 250 MAD / mois</li>
-            <li><strong>Couverture Traite RTO</strong> : <strong>Sensible / Tendue</strong></li>
-            <li>Le chauffeur couvre la traite mais il ne lui reste que <strong>500 à 1 200 MAD net</strong> pour vivre à la fin du mois.</li>
-            <li>Risque de fatigue, retards de paiement le week-end.</li>
-          </ul>
-        </div>
-
-        <div class="card" style="border-top: 4px solid #dc2626; background: #fffbfb;">
-          <div class="card-title" style="color: #dc2626;">🔴 Tier 3 : Risque Critique (< 3 000 MAD)</div>
-          <p style="font-size: 8pt; color: #64748b; margin-bottom: 8px;">15 Chauffeurs (42.8% de la flotte active)</p>
-          <ul class="bullet-list">
-            <li><strong>Revenu Moyen</strong> : 650 MAD / mois sur InDrive !</li>
-            <li><strong>Couverture Traite RTO</strong> : <strong style="color: #dc2626;">DÉFAUT CERTAIN</strong> si InDrive est leur seule source.</li>
-            <li>Chauffeurs effectuant moins de 1 à 2 courses par jour ou inactifs plusieurs semaines.</li>
-            <li>Cas emblématique : <strong>MOHAMED BAHSSINA</strong> (Top 2 en juillet avec 14.8k MAD, tombé à 778 MAD en sept. car voiture au garage).</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top: 4px;">
-        <div class="card-title"><span class="card-title-icon">📊</span> Tableau des Chauffeurs en Zone Critique (Échantillon Septembre)</div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Chauffeur</th>
-              <th>Plaque</th>
-              <th>GMV Septembre</th>
-              <th>Courses</th>
-              <th>Heures Totales</th>
-              <th>Traite Due (26j)</th>
-              <th>Déficit Estimé</th>
-              <th>Action Recommandée</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>MOHAMED BAHSSINA</strong></td>
-              <td><code>26605-Y-6</code></td>
-              <td>778 MAD</td>
-              <td>19 courses</td>
-              <td>17 h</td>
-              <td>4 160 MAD</td>
-              <td><span class="badge badge-red">-3 382 MAD</span></td>
-              <td>Véhicule au garage • Réaffectation dès sortie</td>
-            </tr>
-            <tr>
-              <td><strong>YASSINE RAKHAIMI</strong></td>
-              <td><code>26552-Y-6</code></td>
-              <td>719 MAD</td>
-              <td>24 courses</td>
-              <td>18 h</td>
-              <td>4 160 MAD</td>
-              <td><span class="badge badge-red">-3 441 MAD</span></td>
-              <td>Entretien urgent • Activation sur Uber Quests</td>
-            </tr>
-            <tr>
-              <td><strong>EL Aasemy Mohamed</strong></td>
-              <td><code>21529-Y-6</code></td>
-              <td>867 MAD</td>
-              <td>18 courses</td>
-              <td>20 h</td>
-              <td>4 160 MAD</td>
-              <td><span class="badge badge-red">-3 293 MAD</span></td>
-              <td>Formation dispatch • Objectif 10 courses/j</td>
-            </tr>
-            <tr>
-              <td><strong>BOUZDY JAWAD</strong></td>
-              <td><code>26599-Y-6</code></td>
-              <td>3 053 MAD</td>
-              <td>67 courses</td>
-              <td>123 h</td>
-              <td>4 160 MAD</td>
-              <td><span class="badge badge-yellow">-1 107 MAD</span></td>
-              <td>Faible rentabilité (24.8 MAD/h) • Coaching zones</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 5 / 10 • Rapport COO Confidentiel</div>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- SLIDE 6 : L'ÉCOSYSTÈME DES BONUS UBER AU MAROC -->
-  <!-- ========================================== -->
-  <div class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="category">Analyse Concurrentielle & Marché</div>
-        <h2>L'Offensive Uber au Maroc : Décryptage des Bonus Chauffeurs</h2>
+        <div class="category">Point 2 • Bonus Chauffeurs & Croissance Uber</div>
+        <h2>L'Offensive Uber au Maroc : Subventions & Incitations Directes</h2>
       </div>
       <div class="slide-header-badge">Données Réelles Application Uber Driver Maroc (Octobre 2026)</div>
     </div>
@@ -972,18 +728,34 @@
     <div class="slide-body">
       <div class="grid-2">
         <div class="card" style="border-top: 4px solid #0284c7;">
-          <div class="card-title">🎯 1. Paliers de Revenus Garantis (Jusqu'au 29 Octobre)</div>
-          <p style="font-size: 8pt; color: #475569; margin-bottom: 8px;">
-            Uber garantit un plancher de rémunération par palier de courses. Si les prix de courses sont inférieurs, <strong>Uber compense le manque à gagner</strong> :
+          <div class="card-title">🎁 1. Défis Cash Directs (Trip Quests)</div>
+          <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+            <div style="font-size: 10.5pt; font-weight: 800; color: #166534; margin-bottom: 3px;">
+              ⚡ "Gagnez 300 MAD en plus pour 10 courses passagers"
+            </div>
+            <div style="font-size: 7.5pt; color: #15803d;">
+              Promotion active dans l'application jusqu'au 29 Octobre à 15h00.
+            </div>
+          </div>
+          <ul class="bullet-list">
+            <li><strong>Prime Cash Directe</strong> : <strong>+30 MAD net supplémentaires par course</strong> réalisée.</li>
+            <li><strong>Effet Démultiplicateur</strong> : Sur une course urbaine standard facturée 30 MAD, le chauffeur encaisse <strong>60 MAD</strong> (+100% de gain unitaire).</li>
+            <li><strong>Régularité de l'Incitation</strong> : Chaque bloc de 10 courses débloque immédiatement 300 MAD de liquidité dans le portefeuille du chauffeur.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-top: 4px solid #10b981;">
+          <div class="card-title">🎯 2. Paliers de Revenus Garantis (Jusqu'au 29 Octobre)</div>
+          <p style="font-size: 7.8pt; color: #475569; margin-bottom: 6px;">
+            Uber supprime le risque d'enchère basse en garantissant un plancher de chiffre d'affaires :
           </p>
           <table class="data-table">
             <thead>
               <tr>
                 <th>Palier</th>
-                <th>Courses</th>
-                <th>Revenu Garanti</th>
+                <th>Seuil Courses</th>
+                <th>Revenu Minimum Garanti</th>
                 <th>Moyenne / Course</th>
-                <th>Impact Opérationnel</th>
               </tr>
             </thead>
             <tbody>
@@ -991,379 +763,318 @@
                 <td>Tier 1</td>
                 <td><strong>6 courses</strong></td>
                 <td><strong>166 MAD</strong></td>
-                <td>27.67 MAD / c.</td>
-                <td>Couvre la traite journalière en 1/2 journée</td>
+                <td>27.67 MAD / course</td>
               </tr>
               <tr>
                 <td>Tier 2</td>
                 <td><strong>11 courses</strong></td>
                 <td><strong>304 MAD</strong></td>
-                <td>27.64 MAD / c.</td>
-                <td>Sécurité pour une journée complète standard</td>
+                <td>27.64 MAD / course</td>
               </tr>
               <tr>
                 <td>Tier 3</td>
                 <td><strong>16 courses</strong></td>
                 <td><strong>442 MAD</strong></td>
-                <td>27.63 MAD / c.</td>
-                <td>Couvre Carburant (110 MAD) + Traite (160 MAD)</td>
+                <td>27.63 MAD / course</td>
               </tr>
               <tr>
                 <td>Tier 4</td>
                 <td><strong>38 courses</strong></td>
                 <td><strong>1 049 MAD</strong></td>
-                <td>27.61 MAD / c.</td>
-                <td>Objectif week-end (2 à 3 jours de travail)</td>
+                <td>27.61 MAD / course</td>
               </tr>
               <tr>
                 <td>Tier 5</td>
                 <td><strong>160 courses</strong></td>
                 <td><strong>4 415 MAD</strong></td>
-                <td>27.59 MAD / c.</td>
-                <td>Sécurité mensuelle intégrale pour le chauffeur</td>
+                <td>27.59 MAD / course</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top: 4px;">
+        <div class="card" style="border-left: 4px solid #8b5cf6;">
+          <div class="card-title">✈️ 3. Hubs Haute Valeur & Événements Majorés (Surge)</div>
+          <ul class="bullet-list">
+            <li><strong>Aéroport Mohammed V (CMN)</strong> : Créneau <strong>20h00 – 23h00</strong> classé *"Very High Earnings"*. Tarifs fixes/compteur de <strong>250 à 350 MAD</strong> par trajet aéroport vers le centre de Casablanca.</li>
+            <li><strong>Événements & Botola Pro</strong> : Exemple documenté FAR Rabat vs Wydad Témara au Complexe Moulay Abdellah (21h00 - 22h00). Majorations automatiques <strong>Surge de 1.5x à 2.5x</strong>.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #f59e0b;">
+          <div class="card-title">💳 4. Promotions Clients (Acquisition de Demande)</div>
+          <ul class="bullet-list">
+            <li><strong>Rabais Massifs Passagers</strong> : 30% à 50% de réduction sur les 3 premières courses (subventionné à 100% par Uber, le chauffeur perçoit la course au tarif plein).</li>
+            <li><strong>Paiement Carte Bancaire & Apple Pay</strong> : Capture la clientèle d'affaires, les touristes et les expatriés qui accordent des pourboires et évitent les litiges de monnaie.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
+      <div>Page 4 / 7 • Rapport Exécutif COO</div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SLIDE 5 : SIMULATION COMPARATIVE PAR CHAUFFEUR -->
+  <!-- ========================================== -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title-group">
+        <div class="category">Point 3 • Uber vs InDrive Earning per Driver</div>
+        <h2>Simulation de Rémunération : Même Nombre de Courses sur Uber</h2>
+      </div>
+      <div class="slide-header-badge">Simulation Réalisée avec les Bonus Uber Actuels</div>
+    </div>
+
+    <div class="slide-body">
+      <div class="card" style="background: #f0f9ff; border-color: #bae6fd; padding: 10px 14px;">
+        <div style="font-size: 8.5pt; font-weight: 800; color: #0369a1; margin-bottom: 2px;">
+          🎯 Hypothèse de Simulation Demandée par le COO :
+        </div>
+        <div style="font-size: 8pt; color: #0c4a6e;">
+          Si un véhicule GoCab réalise <strong>exactement le même nombre de courses</strong> sur Uber avec ses tarifs et ses bonus que ce qu'il a réalisé sur InDrive sur la même période, combien gagnerait le chauffeur ?
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Profil de Chauffeur (Volume Réel)</th>
+            <th>Courses Réalisées</th>
+            <th>Rémunération Nette InDrive (Septembre)</th>
+            <th>Revenu Net Courses Uber (28.5 MAD/c)</th>
+            <th>Bonus Quests Uber (+300 MAD / 10c)</th>
+            <th>Rémunération Totale Uber (Net)</th>
+            <th>Gain Additionnel sur Uber</th>
+            <th>Écart Relatif (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Temps Partiel / Débutant (Palier 38c)</strong></td>
+            <td>38 courses</td>
+            <td>1 410 MAD</td>
+            <td>1 083 MAD</td>
+            <td>+900 MAD (3x 300)</td>
+            <td><strong style="color: #16a34a;">1 983 MAD</strong></td>
+            <td><strong style="color: #16a34a;">+573 MAD</strong></td>
+            <td><span class="badge badge-green">+40.6% sur Uber</span></td>
+          </tr>
+          <tr>
+            <td><strong>Chauffeur Moyen Flotte</strong></td>
+            <td>100 courses</td>
+            <td>3 710 MAD</td>
+            <td>2 850 MAD</td>
+            <td>+3 000 MAD (10x 300)</td>
+            <td><strong style="color: #16a34a;">5 850 MAD</strong></td>
+            <td><strong style="color: #16a34a;">+2 140 MAD</strong></td>
+            <td><span class="badge badge-green">+57.7% sur Uber</span></td>
+          </tr>
+          <tr>
+            <td><strong>Palier de Garantie Complète (160c)</strong></td>
+            <td>160 courses</td>
+            <td>5 936 MAD</td>
+            <td>4 560 MAD</td>
+            <td>+4 800 MAD (16x 300)</td>
+            <td><strong style="color: #16a34a;">9 360 MAD</strong></td>
+            <td><strong style="color: #16a34a;">+3 424 MAD</strong></td>
+            <td><span class="badge badge-green">+57.7% sur Uber</span></td>
+          </tr>
+          <tr>
+            <td><strong>Top Performer (Ex: ASMELAL OMAR)</strong></td>
+            <td>201 courses</td>
+            <td>10 702 MAD</td>
+            <td>5 728 MAD</td>
+            <td>+6 000 MAD (20x 300)</td>
+            <td><strong style="color: #16a34a;">11 728 MAD</strong></td>
+            <td><strong style="color: #16a34a;">+1 026 MAD</strong></td>
+            <td><span class="badge badge-green">+9.6% sur Uber</span></td>
+          </tr>
+          <tr>
+            <td><strong>Champion Flotte (Ex: KHALID BOUZINE)</strong></td>
+            <td>487 courses</td>
+            <td>13 738 MAD</td>
+            <td>13 880 MAD</td>
+            <td>+14 400 MAD (48x 300)</td>
+            <td><strong style="color: #16a34a;">28 280 MAD</strong></td>
+            <td><strong style="color: #16a34a;">+14 542 MAD</strong></td>
+            <td><span class="badge badge-green">+105.8% (x2.1 sur Uber !)</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="grid-2" style="margin-top: 4px;">
+        <div class="card" style="background: #f8fafc;">
+          <div class="card-title">📐 Paramètres Méthodologiques de Calcul</div>
+          <ul class="bullet-list" style="font-size: 7.5pt;">
+            <li><strong>InDrive Net</strong> : Prix moyen réel observé en septembre de 40.3 MAD par course, déduction faite de la commission InDrive réelle de ~8.0% (Net chauffeur : 37.1 MAD/course).</li>
+            <li><strong>Uber Net Courses</strong> : Prix moyen estimé de 38.0 MAD par course sous tarification standard, déduction faite des 25% de commission Uber standard (Net courses : 28.5 MAD/course).</li>
+            <li><strong>Bonus Uber</strong> : Application directe du défi actif de <strong>300 MAD par palier de 10 courses</strong> (+30.0 MAD net par course).</li>
+          </ul>
+        </div>
+
+        <div class="card" style="background: #f0fdf4; border-color: #86efac;">
+          <div class="card-title" style="color: #15803d;">💡 Enseignement Majeur pour le COO</div>
+          <p style="font-size: 7.8pt; color: #14532d; margin: 0; line-height: 1.5;">
+            Grâce au bonus de 30 MAD par course offert par Uber (+300 MAD pour 10 courses), <strong>le revenu net par course sur Uber atteint 58.5 MAD</strong> contre seulement <strong>37.1 MAD sur InDrive</strong> en septembre.<br>
+            À volume de travail équivalent, un chauffeur GoCab gagne systématiquement entre <strong>+40% et +105% de rémunération nette en plus sur Uber</strong> tant que ces subventions sont en place !
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
+      <div>Page 5 / 7 • Rapport Exécutif COO</div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SLIDE 6 : SIMULATION AU NIVEAU DE TOUTE LA FLOTTE -->
+  <!-- ========================================== -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title-group">
+        <div class="category">Point 3 • Projection Consolidée Flotte</div>
+        <h2>Impact Flotte Global : Si les 3 123 Courses Étaient sur Uber</h2>
+      </div>
+      <div class="slide-header-badge">Projection Macro Flotte GoCab (Septembre 2026)</div>
+    </div>
+
+    <div class="slide-body">
+      <div class="grid-3">
+        <div class="kpi-card">
+          <div class="kpi-title">Volume Flotte Analysé</div>
+          <div class="kpi-value">3 123 courses</div>
+          <div class="kpi-sub">Courses totales InDrive (Septembre)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Rémunération Réelle InDrive</div>
+          <div class="kpi-value">115 021 MAD</div>
+          <div class="kpi-sub">125 982 MAD GMV - 8.7% commission</div>
+        </div>
+        <div class="kpi-card highlight">
+          <div class="kpi-title">Rémunération Simulée Uber</div>
+          <div class="kpi-value">182 605 MAD</div>
+          <div class="kpi-sub">Fares nets (89k) + Bonus (93.6k)</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top: 6px;">
+        <div class="card" style="border-top: 4px solid #16a34a;">
+          <div class="card-title">📊 Décomposition de la Simulation Flotte Uber</div>
+          <table class="data-table">
+            <tbody>
+              <tr>
+                <td><strong>Courses Totales Flotte</strong></td>
+                <td><strong>3 123 courses</strong></td>
+              </tr>
+              <tr>
+                <td><strong>CA Brut Théorique Fares Uber (38 MAD/c)</strong></td>
+                <td>118 674 MAD</td>
+              </tr>
+              <tr>
+                <td><strong>Commission Uber Déduite (25%)</strong></td>
+                <td>-29 669 MAD</td>
+              </tr>
+              <tr>
+                <td><strong>Net Fares Perçu par les Chauffeurs</strong></td>
+                <td>89 005 MAD</td>
+              </tr>
+              <tr>
+                <td><strong>Total Bonus Quests Débloqués (312 paliers de 10c)</strong></td>
+                <td><strong style="color: #16a34a;">+93 600 MAD (en cash)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Rémunération Nette Globale Flotte sur Uber</strong></td>
+                <td><strong style="color: #16a34a; font-size: 10pt;">182 605 MAD</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Gain Net Supplémentaire Total Flotte</strong></td>
+                <td><strong style="color: #16a34a;">+67 584 MAD (+58.8%)</strong></td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div class="card" style="border-top: 4px solid #10b981;">
-          <div class="card-title">🎁 2. Défis de Courses Cash (Quests)</div>
-          <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px; margin-bottom: 10px;">
-            <div style="font-size: 11pt; font-weight: 800; color: #166534; margin-bottom: 4px;">
-              ⚡ "Gagnez 300 MAD en plus pour 10 courses passagers"
+        <div class="card" style="border-top: 4px solid #0284c7;">
+          <div class="card-title">🚀 Synthèse Comparée par Course & par Chauffeur</div>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+            <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <div style="font-size: 7.5pt; color: #64748b; text-transform: uppercase; font-weight: 700;">Rémunération Nette Moyenne / Course</div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+                <span style="font-size: 13pt; font-weight: 800; color: #475569;">InDrive : 37.1 MAD</span>
+                <span style="font-size: 14pt; font-weight: 900; color: #16a34a;">Uber : 58.5 MAD (+57.7%)</span>
+              </div>
             </div>
-            <div style="font-size: 8pt; color: #15803d;">
-              Promotion active jusqu'au 29 Octobre à 15h00.
+
+            <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <div style="font-size: 7.5pt; color: #64748b; text-transform: uppercase; font-weight: 700;">Rémunération Nette Moyenne / Chauffeur Actif (sur 35 chauffeurs)</div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+                <span style="font-size: 13pt; font-weight: 800; color: #475569;">InDrive : 3 286 MAD</span>
+                <span style="font-size: 14pt; font-weight: 900; color: #16a34a;">Uber : 5 217 MAD (+1 931 MAD)</span>
+              </div>
             </div>
           </div>
-          <ul class="bullet-list">
-            <li><strong>Bonus Unitaire Cash</strong> : <strong>+30 MAD NET supplémentaires par course</strong> !</li>
-            <li><strong>Effet de Levier Brutal</strong> : Sur une course urbaine classique de 30 MAD payée par le client, le chauffeur encaisse <strong>60 MAD</strong> (+100% de rendement).</li>
-            <li><strong>Motivation Chauffeur</strong> : Réaliser 10 courses sur Uber débloque immédiatement <strong>300 MAD de prime</strong>, soit presque 2 jours complets de traite GoCab en un seul shift !</li>
-            <li><strong>Protection contre le Churn</strong> : Ce niveau de prime redonne un moral d'acier aux chauffeurs déçus par les tarifs InDrive de septembre.</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="grid-3" style="margin-top: 6px;">
-        <div class="kpi-card highlight">
-          <div class="kpi-title">Prime Défi Uber</div>
-          <div class="kpi-value">+300 MAD</div>
-          <div class="kpi-sub">Pour 10 courses réalisées (+30 MAD/c)</div>
-        </div>
-        <div class="kpi-card primary">
-          <div class="kpi-title">Garantie 160 Courses</div>
-          <div class="kpi-value">4 415 MAD</div>
-          <div class="kpi-sub">Plancher garanti par Uber sans risque</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-title">Date Limite de la Campagne</div>
-          <div class="kpi-value">29 Octobre 2026</div>
-          <div class="kpi-sub">Fenêtre d'opportunité immédiate</div>
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
       <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 6 / 10 • Rapport COO Confidentiel</div>
+      <div>Page 6 / 7 • Rapport Exécutif COO</div>
     </div>
   </div>
 
   <!-- ========================================== -->
-  <!-- SLIDE 7 : HUBS & ÉVÉNEMENTS HAUTE VALEUR UBER -->
-  <!-- ========================================== -->
-  <div class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="category">Stratégie de Dispatch & Tarification Dynamique</div>
-        <h2>Hubs Stratégiques & Majorations Événementielles</h2>
-      </div>
-      <div class="slide-header-badge">Données Opportunités Uber Maroc</div>
-    </div>
-
-    <div class="slide-body">
-      <div class="grid-2">
-        <div class="card" style="border-left: 4px solid #0284c7;">
-          <div class="card-title"><span class="card-title-icon">✈️</span> Hub Aéroport Mohammed V (CMN)</div>
-          <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-            <strong style="color: #0369a1; font-size: 8.5pt;">Créneau Enregistré : 20h00 – 23h00 • "Very High Earnings"</strong>
-          </div>
-          <ul class="bullet-list">
-            <li><strong>Concentration des arrivées internationales</strong> : 15 à 20 vols réguliers atterrissent entre 19h30 et 22h30 à Casablanca.</li>
-            <li><strong>Ticket Moyen Élevé</strong> : Courses forfaitaires ou au compteur de <strong>250 à 350 MAD</strong> par trajet vers le centre-ville (Maârif, Gauthier, Ain Diab).</li>
-            <li><strong>Zéro Négociation d'Enchère</strong> : Le tarif est fixé automatiquement par Uber, garantissant un paiement instantané par carte bancaire.</li>
-            <li><strong>Recommandation Chauffeurs</strong> : Positionner 15 à 20 véhicules GoCab sur la zone d'attente aéroportuaire dès 19h30 pour capturer ces courses.</li>
-          </ul>
-        </div>
-
-        <div class="card" style="border-left: 4px solid #8b5cf6;">
-          <div class="card-title"><span class="card-title-icon">⚽</span> Événements Majeurs & Botola Pro (Stades)</div>
-          <div style="background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-            <strong style="color: #6d28d9; font-size: 8.5pt;">Exemple Documenté : Botola Pro FAR Rabat vs Wydad Témara (21h00 – 22h00)</strong>
-          </div>
-          <ul class="bullet-list">
-            <li><strong>Localisation</strong> : Complexe Sportif Prince Moulay Abdellah (Rabat).</li>
-            <li><strong>Effet de pic immédiat</strong> : 25 000 à 40 000 spectateurs cherchant un transport simultanément au coup de sifflet final.</li>
-            <li><strong>Multiplicateur Surge (1.5x à 2.5x)</strong> : Uber applique ses algorithmes de tarification dynamique, faisant grimper une course standard de 25 MAD à <strong>50 - 65 MAD</strong>.</li>
-            <li><strong>Agilité Opérationnelle</strong> : Alerte prédictive de nos Field Supervisors vers les chauffeurs de la région Rabat-Salé-Témara 30 minutes avant la fin des matchs.</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top: 6px;">
-        <div class="card-title"><span class="card-title-icon">💳</span> Pourquoi les Clients Marocains Adoptent Uber (Le Moteur de Croissance)</div>
-        <div class="grid-3" style="font-size: 8pt; margin-top: 6px;">
-          <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            <strong style="color: #0f172a; display: block; margin-bottom: 3px;">1. Promos Agressives Passagers</strong>
-            Uber offre 30% à 50% de réduction sur les 3 premières courses. Uber prend la perte en charge à 100% ; le chauffeur touche l'intégralité du tarif de base.
-          </div>
-          <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            <strong style="color: #0f172a; display: block; margin-bottom: 3px;">2. Paiement Digital (CB / Apple Pay)</strong>
-            Attire une clientèle corporate, des touristes et des cadres à fort pouvoir d'achat qui laissent des pourboires et évitent les conflits de monnaie récurrents sur InDrive.
-          </div>
-          <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            <strong style="color: #0f172a; display: block; margin-bottom: 3px;">3. Qualité des Véhicules GoCab</strong>
-            Nos Dacia Logan & Sandero récentes répondent parfaitement aux critères d'exigence d'Uber, garantissant des notes élevées (4.9+) et un accès prioritaire aux courses.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 7 / 10 • Rapport COO Confidentiel</div>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- SLIDE 8 : MODÈLE ÉCONOMIQUE UNITAIRE COMPARÉ -->
-  <!-- ========================================== -->
-  <div class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="category">Analyse Financière Chauffeur & RTO</div>
-        <h2>Modèle Économique Unitaire : InDrive vs Uber vs Hybride GoCab</h2>
-      </div>
-      <div class="slide-header-badge">Simulation Réelle Shift 12 Courses (Perspective Traite RTO 160 MAD)</div>
-    </div>
-
-    <div class="slide-body">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Poste Financier</th>
-            <th>Scénario 1 : InDrive Pur (Septembre)</th>
-            <th>Scénario 2 : Uber Pur (Avec Bonus 10c)</th>
-            <th>Scénario 3 : Hybride GoCab (Recommandé)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Volume de Courses / Jour</strong></td>
-            <td>12 courses</td>
-            <td>12 courses</td>
-            <td><strong>13 courses</strong> (8 Uber + 5 InDrive)</td>
-          </tr>
-          <tr>
-            <td><strong>Prix Facial Moyen / Course</strong></td>
-            <td>30.0 MAD</td>
-            <td>34.0 MAD</td>
-            <td>32.5 MAD</td>
-          </tr>
-          <tr>
-            <td><strong>CA Brut des Courses</strong></td>
-            <td>360.0 MAD</td>
-            <td>408.0 MAD</td>
-            <td>422.5 MAD</td>
-          </tr>
-          <tr>
-            <td><strong>Bonus & Quests Plateforme</strong></td>
-            <td>0.0 MAD</td>
-            <td><strong style="color: #16a34a;">+300.0 MAD</strong> (Défi 10c)</td>
-            <td><strong style="color: #16a34a;">+240.0 MAD</strong> (Défi proratisé)</td>
-          </tr>
-          <tr>
-            <td><strong>Total Encaissé par Chauffeur</strong></td>
-            <td>360.0 MAD</td>
-            <td><strong>708.0 MAD</strong></td>
-            <td><strong>662.5 MAD</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Commission Plateforme</strong></td>
-            <td>-36.0 MAD (10%)</td>
-            <td>-102.0 MAD (25%)</td>
-            <td>-83.0 MAD (Mixte)</td>
-          </tr>
-          <tr>
-            <td><strong>Consommation Carburant (Gazole)</strong></td>
-            <td>-110.0 MAD</td>
-            <td>-110.0 MAD</td>
-            <td>-115.0 MAD</td>
-          </tr>
-          <tr>
-            <td><strong>Revenu Net Avant Traite GoCab</strong></td>
-            <td><strong>214.0 MAD</strong></td>
-            <td><strong>496.0 MAD</strong></td>
-            <td><strong>464.5 MAD</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Traite Journalière GoCab (RTO)</strong></td>
-            <td><strong>-160.0 MAD</strong></td>
-            <td><strong>-160.0 MAD</strong></td>
-            <td><strong>-160.0 MAD</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Reste Net Quotidien Chauffeur</strong></td>
-            <td><strong style="color: #dc2626;">54.0 MAD / jour</strong></td>
-            <td><strong style="color: #16a34a;">336.0 MAD / jour</strong></td>
-            <td><strong style="color: #16a34a;">304.5 MAD / jour</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Revenu Mensuel Net Chauffeur (26j)</strong></td>
-            <td><strong style="color: #dc2626;">1 404 MAD / mois</strong></td>
-            <td><strong style="color: #16a34a;">8 736 MAD / mois (+522%)</strong></td>
-            <td><strong style="color: #16a34a;">7 917 MAD / mois (+464%)</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Taux de Recouvrement Traite GoCab</strong></td>
-            <td><span class="badge badge-yellow">60% - 75% (Fragile)</span></td>
-            <td><span class="badge badge-green">100% (Sécurisé)</span></td>
-            <td><span class="badge badge-green">100% (Garanti & Diversifié)</span></td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="grid-2" style="margin-top: 6px;">
-        <div class="card" style="background: #fef2f2; border-color: #fca5a5;">
-          <div class="card-title" style="color: #b91c1c;">⚠️ Le Danger du Modèle 100% InDrive</div>
-          <p style="font-size: 7.5pt; color: #7f1d1d; margin: 0; line-height: 1.45;">
-            Avec seulement 54 MAD net par jour restant au chauffeur après paiement de sa traite et de son carburant, le travailleur s'épuise. Au premier pépin mécanique ou jour chômé, il entre en défaut de paiement de traite, ce qui pénalise notre trésorerie GoCab.
-          </p>
-        </div>
-
-        <div class="card" style="background: #f0fdf4; border-color: #86efac;">
-          <div class="card-title" style="color: #15803d;">✅ L'Effet Catalyseur des Bonus Uber</div>
-          <p style="font-size: 7.5pt; color: #14532d; margin: 0; line-height: 1.45;">
-            Grâce aux 300 MAD de bonus pour 10 courses, le chauffeur dégage plus de 300 MAD net par jour pour son foyer, tout en payant sa traite de 160 MAD avec une avance confortable. La flotte fidélise ses chauffeurs et élimine les impayés.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 8 / 10 • Rapport COO Confidentiel</div>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- SLIDE 9 : LE PLAYBOOK OPÉRATIONNEL HYBRIDE -->
-  <!-- ========================================== -->
-  <div class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="category">Feuille de Route pour le COO</div>
-        <h2>Le Playbook Opérationnel "Hybride Intelligent"</h2>
-      </div>
-      <div class="slide-header-badge">Recommandations Tactiques pour la Flotte</div>
-    </div>
-
-    <div class="slide-body">
-      <div class="card" style="border-left: 4px solid #0ea5e9;">
-        <div class="card-title">🕒 Planning Quotidien d'Activation Multi-Plateformes Chauffeur</div>
-        <div class="grid-4" style="margin-top: 8px;">
-          <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-            <div style="font-size: 8pt; font-weight: 800; color: #0284c7; margin-bottom: 4px;">1. 07h00 – 10h00 (Matin)</div>
-            <strong style="display: block; font-size: 8.5pt; color: #0f172a; margin-bottom: 2px;">FOCUS UBER (Rush Matin)</strong>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Capturer les 3 à 4 premières courses du défi journalier + tarification dynamique travail/bureau.</p>
-          </div>
-          <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-            <div style="font-size: 8pt; font-weight: 800; color: #16a34a; margin-bottom: 4px;">2. 11h00 – 15h30 (Midi)</div>
-            <strong style="display: block; font-size: 8.5pt; color: #0f172a; margin-bottom: 2px;">SWITCH INDRIVE (Volume)</strong>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Combler le creux de la journée avec du volume de proximité pour éviter d'attendre à vide.</p>
-          </div>
-          <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-            <div style="font-size: 8pt; font-weight: 800; color: #0284c7; margin-bottom: 4px;">3. 17h00 – 20h00 (Soir)</div>
-            <strong style="display: block; font-size: 8.5pt; color: #0f172a; margin-bottom: 2px;">FOCUS UBER (Défi Final)</strong>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Compléter les courses manquantes pour franchir le seuil des 10 courses et empocher les <strong>+300 MAD</strong>.</p>
-          </div>
-          <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-            <div style="font-size: 8pt; font-weight: 800; color: #8b5cf6; margin-bottom: 4px;">4. 20h00 – 23h00 (Nuit)</div>
-            <strong style="display: block; font-size: 8.5pt; color: #0f172a; margin-bottom: 2px;">HUBS CMN & STADES</strong>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Courses longues distances aéroport CMN (250 MAD+) ou sorties de matchs à fort coefficient Surge.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-2" style="margin-top: 6px;">
-        <div class="card">
-          <div class="card-title"><span class="card-title-icon">⚙️</span> Actions Immédiates Flotte (Semaine 1)</div>
-          <ul class="bullet-list">
-            <li><strong>Audit d'Enrôlement Uber</strong> : Vérifier que 100% de nos 100 chauffeurs disposent d'un compte Uber Driver actif et validé.</li>
-            <li><strong>Session de Formation Express (30 min)</strong> : Expliquer le fonctionnement des paliers de garantie (4 415 MAD) et du défi des 10 courses (+300 MAD).</li>
-            <li><strong>Priorité aux 15 Chauffeurs à Risque</strong> : Accompagner en priorité les 15 chauffeurs en difficulté sur InDrive pour sécuriser leur traite dès cette semaine.</li>
-          </ul>
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="card-title-icon">📈</span> Intégration Data & Prochaines Étapes</div>
-          <ul class="bullet-list">
-            <li><strong>Collecte des Données Réelles Uber</strong> : Dès réception des exports chauffeurs Uber, notre pipeline data calculera le CA Uber réel par véhicule.</li>
-            <li><strong>Matching Croisé Automatisé</strong> : Fusion automatique InDrive + Uber dans le tableau de bord GoCab pour mesurer le revenu hybride effectif.</li>
-            <li><strong>Monitoring du Taux d'Effort RTO</strong> : Automatisation d'un drapeau d'alerte dès qu'un chauffeur génère moins de 2x sa traite journalière.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <div class="logo-small">🚕 GoCab <span>Morocco</span> — Direction des Opérations</div>
-      <div>Page 9 / 10 • Rapport COO Confidentiel</div>
-    </div>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- SLIDE 10 : CONCLUSION & ENGAGEMENTS DE L'ÉQUIPE DATA -->
+  <!-- SLIDE 7 : RECOMMANDATIONS & PROCHAINES ÉTAPES -->
   <!-- ========================================== -->
   <div class="slide slide-cover">
     <div class="cover-header">
       <div class="brand-logo">
         <span>🚕 GoCab</span><span class="accent">Morocco</span>
       </div>
-      <div class="confidential-tag">FEUILLE DE ROUTE OPÉRATIONNELLE</div>
+      <div class="badge-tag">Recommandations Décisionnelles COO</div>
     </div>
 
     <div class="cover-body">
-      <div class="cover-subtitle-top">Conclusion pour la Direction des Opérations</div>
-      <div class="cover-title" style="font-size: 26pt;">
-        Transformer la Pression du Marché en <span>Levier de Rentabilité</span>
+      <div class="cover-subtitle-top">Conclusion & Prochaines Étapes Opérationnelles</div>
+      <div class="cover-title" style="font-size: 24pt;">
+        Conclusions Clés & <span>Intégration Prochaine des Données Uber</span>
       </div>
-      <div class="cover-desc">
-        La dépendance exclusive à InDrive en période post-estivale expose notre modèle Rent-to-Own à un risque accru de défaillance.<br><br>
-        En capitalisant immédiatement sur la fenêtre de subventionnement d'Uber (active jusqu'au 29 Octobre), GoCab peut :
-        <br>• Sécuriser <strong>100% des encaissements de traites RTO</strong> (16 000 MAD/jour pour 100 véhicules).
-        <br>• Augmenter le revenu net des chauffeurs de <strong>+400%</strong>, réduisant drastiquement le turnover.
-        <br>• Positionner GoCab comme la flotte la plus structurée et la plus agile du Maroc.
+      <div class="cover-desc" style="font-size: 11pt; line-height: 1.6;">
+        <strong>1. Exploiter la Fenêtre de Subvention Uber (Actuelle jusqu'au 29 Octobre)</strong> :<br>
+        La subvention de +30 MAD par course offerte par Uber transforme l'économie de la flotte. Avec un gain net moyen de <strong>58.5 MAD par course</strong> contre 37.1 MAD sur InDrive, inciter les chauffeurs à valider leurs blocs de 10 courses quotidiennes génère immédiatement jusqu'à <strong>+58% de rémunération</strong>.
+        <br><br>
+        <strong>2. Réduction du Temps d'Attente grâce au Multi-Apping</strong> :<br>
+        Passer d'InDrive seul (22 à 25 min d'attente à vide en heures creuses en septembre) à une stratégie combinée permet d'éliminer les temps morts : Uber aux heures de pointe et de défi, InDrive en comblement de proximité.
+        <br><br>
+        <strong>3. Intégration Immédiate dès Réception des Données Réelles Uber des Chauffeurs</strong> :<br>
+        Dès que les relevés et captures d'écran des gains réels Uber seront transmis par nos chauffeurs, notre pipeline data mettra à jour cette simulation avec les <strong>chiffres réels effectifs véhicule par véhicule</strong> pour mesurer la performance hybride consolidée.
       </div>
     </div>
 
     <div class="cover-footer">
       <div class="meta-box">
-        <strong>Statut Rapport</strong>
-        <span>Prêt pour Revue COO</span>
+        <strong>Statut du Rapport</strong>
+        <span>Validé pour Revue COO</span>
       </div>
       <div class="meta-box">
         <strong>Prochaine Mise à Jour</strong>
-        <span>Intégration Exports Uber</span>
+        <span>Intégration Exports Uber Chauffeurs</span>
       </div>
       <div class="meta-box">
         <strong>Format Disponible</strong>
-        <span>PDF Haute Définition + Web</span>
+        <span>PDF A4 Paysage • Présentation Web</span>
       </div>
       <div class="meta-box">
-        <strong>Support Technique</strong>
-        <span>Direction Data GoCab</span>
+        <strong>Équipe Data</strong>
+        <span>Data Engineering & Analytics GoCab</span>
       </div>
     </div>
   </div>
