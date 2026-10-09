@@ -59,14 +59,28 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   }),
 };
 
+import { requireAuth } from "@/lib/api-auth";
+
 export async function GET() {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const user = authResult.user;
+
     const settings = await prisma.setting.findMany();
     const settingsMap = { ...DEFAULT_SETTINGS };
 
     settings.forEach((s) => {
       settingsMap[s.key] = s.value;
     });
+
+    // SECURITY: Mask sensitive bot token for non-management roles
+    const isManager = user.role === "ADMIN" || user.role === "OPS_MANAGER";
+    if (!isManager && settingsMap.telegram_bot_token) {
+      settingsMap.telegram_bot_token = "••••••••";
+    }
 
     return NextResponse.json({ settings: settingsMap });
   } catch (error) {
@@ -80,7 +94,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+
+    const body = await request.json().catch(() => ({}));
     const { key, value } = body;
 
     if (!key || value === undefined) {

@@ -6,7 +6,7 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const authConfig: NextAuthConfig = {
   trustHost: true,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "81c134e63b7d02ddbdd6f6a3edae9042ace9af18cccada6e294bcc4998318c9f",
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === "development" ? "gocab-dev-only-secret-do-not-use-in-production" : undefined),
   pages: {
     signIn: "/login",
     error: "/login",
@@ -18,7 +18,6 @@ export const authConfig: NextAuthConfig = {
       const isLoginPage = pathname === "/login";
       const isPublic =
         pathname.startsWith("/api/auth") ||
-        pathname.startsWith("/api/seed") ||
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon");
 

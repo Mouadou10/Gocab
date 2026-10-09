@@ -1,0 +1,11 @@
+ID,Title,Severity,Category,CVSS_v3,CWE,OWASP,File,PriorityScore,SLA,Status
+BUG-001,"Unauthenticated Account Takeover via Arbitrary Password Reset",Critical,Security,9.8,"CWE-306, CWE-640","A01:2021, A07:2021",src/app/api/users/change-password/route.ts,9.8,≤ 24h,Open
+BUG-002,"Hardcoded Plaintext Passwords & DB Reseed in Public /api/seed",Critical,Security,9.1,"CWE-798, CWE-306",A07:2021,src/app/api/seed/route.ts,9.1,≤ 24h,Open
+BUG-003,"Hardcoded Cryptographic Fallback Secret in auth.config.ts",Critical,Security,8.6,"CWE-798, CWE-321",A02:2021,src/auth.config.ts,8.6,≤ 24h,Open
+BUG-004,"Telegram Bot Token & System Settings Exposed Unauthenticated",High,Security,8.2,"CWE-200, CWE-306",A01:2021,src/app/api/settings/route.ts,8.2,≤ 72h,Open
+BUG-005,"Systematic Missing Authentication Across Core Operational Endpoints (IDOR & PII)",High,Security,8.6,"CWE-306, CWE-862, CWE-639",A01:2021,"src/app/api/(leads|drivers|tickets|accidents|uploads)",8.5,≤ 72h,Open
+BUG-006,"Unauthenticated Cron Execution Enabling Remote Telematics Vehicle Block",High,Security,7.5,CWE-306,A01:2021,"src/app/api/cron/(daily-billing|escalation|predictive-maintenance)/route.ts",7.8,≤ 72h,Open
+BUG-007,"Missing Webhook HMAC Signature Verification on WhatsApp Endpoint",High,Security,7.5,"CWE-345, CWE-353",A08:2021,src/app/api/whatsapp/webhook/route.ts,7.5,≤ 72h,Open
+BUG-008,"Dual Conflicting requireAuth Implementations & Inconsistent Types",Medium,Quality,5.3,CWE-398,A04:2021,"src/lib/api-auth.ts, src/lib/auth-guard.ts",5.5,≤ 2 weeks,Open
+BUG-009,"Unsafe Database Mutation Side-Effects in HTTP GET /api/accidents",Medium,Functional,5.2,CWE-398,A04:2021,src/app/api/accidents/route.ts,5.2,≤ 2 weeks,Open
+BUG-010,"Supply Chain Dependencies with Known High & Critical CVEs",High,SupplyChain,7.5,CWE-1395,A06:2021,package.json,7.0,≤ 72h,Open

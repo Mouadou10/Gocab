@@ -7,12 +7,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { id } = await params;
     const driver = await prisma.driverProfile.findUnique({
       where: { id },
@@ -40,8 +45,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { id } = await params;
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const {
       fullName,
       phone,
@@ -138,6 +147,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { id } = await params;
 
     const driver = await prisma.driverProfile.findUnique({

@@ -30,8 +30,14 @@ function normalizePlate(raw: string): string {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+import { requireAuth } from "@/lib/api-auth";
+
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER", "FLEET_PERF_MANAGER", "ONBOARDING_SPECIALIST"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 

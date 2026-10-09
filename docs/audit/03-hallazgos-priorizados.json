@@ -1,0 +1,142 @@
+{
+  "audit_version": "1.0",
+  "total_findings": 10,
+  "summary": {
+    "critical": 3,
+    "high": 4,
+    "medium": 3,
+    "low": 0
+  },
+  "findings": [
+    {
+      "id": "BUG-001",
+      "title": "Unauthenticated Full Account Takeover via Arbitrary Password Reset",
+      "severity": "Critical",
+      "category": "Security",
+      "cvss_v3": 9.8,
+      "cwe": "CWE-306, CWE-640",
+      "owasp": "A01:2021, A07:2021",
+      "file": "src/app/api/users/change-password/route.ts",
+      "priority_score": 9.8,
+      "sla_fix": "≤ 24h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-002",
+      "title": "Hardcoded Plaintext Passwords & DB Reseed in Public /api/seed",
+      "severity": "Critical",
+      "category": "Security",
+      "cvss_v3": 9.1,
+      "cwe": "CWE-798, CWE-306",
+      "owasp": "A07:2021",
+      "file": "src/app/api/seed/route.ts",
+      "priority_score": 9.1,
+      "sla_fix": "≤ 24h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-003",
+      "title": "Hardcoded Cryptographic Fallback Secret in NextAuth Configuration",
+      "severity": "Critical",
+      "category": "Security",
+      "cvss_v3": 8.6,
+      "cwe": "CWE-798, CWE-321",
+      "owasp": "A02:2021",
+      "file": "src/auth.config.ts",
+      "priority_score": 8.6,
+      "sla_fix": "≤ 24h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-004",
+      "title": "Telegram Bot Token & System Settings Exposed Unauthenticated",
+      "severity": "High",
+      "category": "Security",
+      "cvss_v3": 8.2,
+      "cwe": "CWE-200, CWE-306",
+      "owasp": "A01:2021",
+      "file": "src/app/api/settings/route.ts",
+      "priority_score": 8.2,
+      "sla_fix": "≤ 72h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-005",
+      "title": "Systematic Missing Authentication Across Core Operational Endpoints (IDOR & PII Leak)",
+      "severity": "High",
+      "category": "Security",
+      "cvss_v3": 8.6,
+      "cwe": "CWE-306, CWE-862, CWE-639",
+      "owasp": "A01:2021",
+      "file": "src/app/api/(leads|drivers|tickets|accidents|uploads)",
+      "priority_score": 8.5,
+      "sla_fix": "≤ 72h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-006",
+      "title": "Unauthenticated Cron Execution Enabling Remote Telematics Vehicle Kill-Switch",
+      "severity": "High",
+      "category": "Security",
+      "cvss_v3": 7.5,
+      "cwe": "CWE-306",
+      "owasp": "A01:2021",
+      "file": "src/app/api/cron/(daily-billing|escalation|predictive-maintenance)/route.ts",
+      "priority_score": 7.8,
+      "sla_fix": "≤ 72h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-007",
+      "title": "Missing Webhook HMAC Signature Verification on WhatsApp Inbound Webhook",
+      "severity": "High",
+      "category": "Security",
+      "cvss_v3": 7.5,
+      "cwe": "CWE-345, CWE-353",
+      "owasp": "A08:2021",
+      "file": "src/app/api/whatsapp/webhook/route.ts",
+      "priority_score": 7.5,
+      "sla_fix": "≤ 72h",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-008",
+      "title": "Dual Conflicting requireAuth Implementations & Inconsistent Return Types",
+      "severity": "Medium",
+      "category": "Quality",
+      "cvss_v3": 5.3,
+      "cwe": "CWE-398",
+      "owasp": "A04:2021",
+      "file": "src/lib/api-auth.ts, src/lib/auth-guard.ts",
+      "priority_score": 5.5,
+      "sla_fix": "≤ 2 weeks",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-009",
+      "title": "Unsafe Database Mutation Side-Effects in HTTP GET /api/accidents",
+      "severity": "Medium",
+      "category": "Functional",
+      "cvss_v3": 5.2,
+      "cwe": "CWE-398",
+      "owasp": "A04:2021",
+      "file": "src/app/api/accidents/route.ts",
+      "priority_score": 5.2,
+      "sla_fix": "≤ 2 weeks",
+      "status": "Open"
+    },
+    {
+      "id": "BUG-010",
+      "title": "Supply Chain Dependencies with Known High & Critical CVEs",
+      "severity": "High",
+      "category": "SupplyChain",
+      "cvss_v3": 7.5,
+      "cwe": "CWE-1395",
+      "owasp": "A06:2021",
+      "file": "package.json",
+      "priority_score": 7.0,
+      "sla_fix": "≤ 72h",
+      "status": "Open"
+    }
+  ]
+}

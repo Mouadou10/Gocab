@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import crypto from "crypto";
 
 export type AllowedRole =
   | "ADMIN"
@@ -15,6 +16,47 @@ export interface AuthenticatedUser {
   name: string;
   email: string;
   role: string;
+}
+
+/**
+ * Validates that an incoming cron trigger has a valid Bearer token matching CRON_SECRET.
+ * Implements constant-time timing-safe hash comparison and fail-closed security.
+ */
+export function validateCronAuth(request: Request): { success: true } | { error: NextResponse } {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || cronSecret.trim().length === 0) {
+    return {
+      error: NextResponse.json(
+        { error: "Configuration requise: CRON_SECRET non configuré sur le serveur." },
+        { status: 500 }
+      ),
+    };
+  }
+
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return {
+      error: NextResponse.json(
+        { error: "Non autorisé: En-tête Authorization Bearer manquant." },
+        { status: 401 }
+      ),
+    };
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+  const a = crypto.createHash("sha256").update(token).digest();
+  const b = crypto.createHash("sha256").update(cronSecret).digest();
+
+  if (!crypto.timingSafeEqual(a, b)) {
+    return {
+      error: NextResponse.json(
+        { error: "Non autorisé: Jeton de tâche cron invalide." },
+        { status: 401 }
+      ),
+    };
+  }
+
+  return { success: true };
 }
 
 /**

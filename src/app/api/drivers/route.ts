@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,10 @@ function invalidateDriverCache() {
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { searchParams } = new URL(request.url);
     const unassignedOnly = searchParams.get("unassigned") === "true";
     const currentVehicleId = searchParams.get("current_vehicle_id");
@@ -98,7 +103,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER", "ONBOARDING_SPECIALIST", "FLEET_PERF_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const body = await request.json().catch(() => ({}));
     const {
       fullName,
       phone,

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendTelegramMessage } from "@/lib/services/telegramService";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const body = await request.json().catch(() => ({}));
     const { bot_token, chat_id } = body;
 

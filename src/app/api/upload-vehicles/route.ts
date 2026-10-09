@@ -149,8 +149,14 @@ const DRIVER_ALIASES = [
   "conducteur assigné",
 ];
 
+import { requireAuth } from "@/lib/api-auth";
+
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER", "FLEET_PERF_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 

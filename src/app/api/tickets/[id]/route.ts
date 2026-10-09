@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskCancelledTelegramAlert } from "@/lib/services/telegramService";
+import { requireAuth } from "@/lib/api-auth";
 
 /**
  * PATCH /api/tickets/[id]
@@ -14,8 +15,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { id } = await params;
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
 
     const currentTicket = await prisma.maintenanceTicket.findUnique({ where: { id } });
     if (!currentTicket) {
@@ -277,6 +282,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER", "FLEET_PERF_MANAGER"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { id } = await params;
 
     const ticket = await prisma.maintenanceTicket.findUnique({ where: { id } });

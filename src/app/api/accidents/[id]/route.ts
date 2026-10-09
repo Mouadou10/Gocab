@@ -6,14 +6,18 @@ import {
   sendInsuranceMissionTelegramAlert,
   sendVehicleBackTelegramAlert,
 } from "@/lib/services/telegramService";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, context: any) {
-  const params = await context.params;
-  const { id } = params;
-  
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const params = await context.params;
+    const { id } = params;
     const claim = await prisma.accidentClaim.findUnique({
       where: { id },
       include: {
@@ -34,11 +38,14 @@ export async function GET(req: Request, context: any) {
 }
 
 export async function PATCH(req: Request, context: any) {
-  const params = await context.params;
-  const { id } = params;
-  
   try {
-    const body = await req.json();
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const params = await context.params;
+    const { id } = params;
+    const body = await req.json().catch(() => ({}));
     
     const currentClaim = await prisma.accidentClaim.findUnique({
       where: { id },

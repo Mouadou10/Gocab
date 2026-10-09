@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const { searchParams } = new URL(request.url);
     const search = (searchParams.get("search") || "").trim();
     const status = searchParams.get("status") || "";
@@ -149,7 +154,11 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const body = await request.json().catch(() => ({}));
 
     const {
       vehicle_id,

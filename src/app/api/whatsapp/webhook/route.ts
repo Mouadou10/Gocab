@@ -31,12 +31,31 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Forbidden: verification token mismatch" }, { status: 403 });
 }
 
-/**
- * Meta Cloud API Inbound Message & Status updates (POST)
- */
+import crypto from "crypto";
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const signatureHeader = req.headers.get("x-hub-signature-256");
+    const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+    // Cryptographic signature check (BUG-007)
+    if (appSecret) {
+      if (!signatureHeader || !signatureHeader.startsWith("sha256=")) {
+        console.warn("❌ WhatsApp webhook signature missing or malformed");
+        return NextResponse.json({ error: "Signature manquante ou invalide" }, { status: 401 });
+      }
+      const expectedHash = crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
+      const providedHash = signatureHeader.replace("sha256=", "").trim();
+      const a = crypto.createHash("sha256").update(expectedHash).digest();
+      const b = crypto.createHash("sha256").update(providedHash).digest();
+      if (!crypto.timingSafeEqual(a, b)) {
+        console.warn("❌ WhatsApp webhook HMAC signature mismatch");
+        return NextResponse.json({ error: "Signature webhook non authentifiée" }, { status: 401 });
+      }
+    }
+
+    const body = JSON.parse(rawBody);
 
     // Helper to process messages
     const processMessages = async (messages: any[], contactName?: string) => {

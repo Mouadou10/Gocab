@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { validateCronAuth } from '@/lib/api-auth';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const cronAuth = validateCronAuth(request);
+    if ("error" in cronAuth) {
+      return cronAuth.error;
+    }
     // 1. Fetch drivers with active arrears
     // We assume currentArrearsMAD > 0 means they are in default
     const driversInDefault = await prisma.driverProfile.findMany({

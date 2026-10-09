@@ -1,0 +1,76 @@
+{
+  "audit_date": "2026-10-09",
+  "total_raw_findings": 10,
+  "findings": [
+    {
+      "id": "RAW-01",
+      "title": "Unauthenticated Account Takeover via Arbitrary Password Reset",
+      "severity": "Critical",
+      "file": "src/app/api/users/change-password/route.ts",
+      "cwe": "CWE-306, CWE-640"
+    },
+    {
+      "id": "RAW-02",
+      "title": "Hardcoded Passwords & Database Reseeding in Public /api/seed",
+      "severity": "Critical",
+      "file": "src/app/api/seed/route.ts",
+      "cwe": "CWE-798, CWE-306"
+    },
+    {
+      "id": "RAW-03",
+      "title": "Hardcoded Cryptographic Fallback Secret in auth.config.ts",
+      "severity": "Critical",
+      "file": "src/auth.config.ts",
+      "cwe": "CWE-798, CWE-321"
+    },
+    {
+      "id": "RAW-04",
+      "title": "Telegram Bot Token & Settings Exposed Unauthenticated",
+      "severity": "High",
+      "file": "src/app/api/settings/route.ts",
+      "cwe": "CWE-200, CWE-306"
+    },
+    {
+      "id": "RAW-05",
+      "title": "Systematic Missing Authentication Across Operational API Routes (PII & IDOR)",
+      "severity": "High",
+      "file": "src/app/api/(leads|drivers|tickets|accidents|uploads)",
+      "cwe": "CWE-306, CWE-862, CWE-639"
+    },
+    {
+      "id": "RAW-06",
+      "title": "Unauthenticated Cron Execution Enabling Remote Telematics Vehicle Block",
+      "severity": "High",
+      "file": "src/app/api/cron/(daily-billing|escalation|predictive-maintenance)/route.ts",
+      "cwe": "CWE-306"
+    },
+    {
+      "id": "RAW-07",
+      "title": "Missing Webhook HMAC Signature Verification on WhatsApp Endpoint",
+      "severity": "High",
+      "file": "src/app/api/whatsapp/webhook/route.ts",
+      "cwe": "CWE-345, CWE-353"
+    },
+    {
+      "id": "RAW-08",
+      "title": "Dual Conflicting requireAuth Implementations & Inconsistent Return Types",
+      "severity": "Medium",
+      "file": "src/lib/api-auth.ts, src/lib/auth-guard.ts",
+      "cwe": "CWE-398"
+    },
+    {
+      "id": "RAW-09",
+      "title": "Database Mutation Side-Effects During HTTP GET /api/accidents",
+      "severity": "Medium",
+      "file": "src/app/api/accidents/route.ts",
+      "cwe": "CWE-398"
+    },
+    {
+      "id": "RAW-10",
+      "title": "Supply Chain Vulnerabilities Across Dependencies",
+      "severity": "High",
+      "file": "package.json",
+      "cwe": "CWE-1395"
+    }
+  ]
+}

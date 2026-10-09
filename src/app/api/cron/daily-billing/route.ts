@@ -13,14 +13,13 @@ export const dynamic = "force-dynamic";
  * 4. Automates default escalation (NOMINAL -> DAY_1 -> DAY_2 -> TELEMATIC_BLOCK).
  * 5. Automatically creates VEHICLE_RECOVERY FieldTask on Day 3 default.
  */
+import { validateCronAuth } from "@/lib/api-auth";
+
 export async function POST(request: Request) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    
-    // Optional secret check if configured in production
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized cron trigger" }, { status: 401 });
+    const cronAuth = validateCronAuth(request);
+    if ("error" in cronAuth) {
+      return cronAuth.error;
     }
 
     const today = new Date();

@@ -147,7 +147,26 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "LeadActivityLog_agent_idx" ON "LeadActivityLog"("agent")`
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
+  // STRICT SECURITY CHECK (BUG-002):
+  // Disallow HTTP seeding in production to protect customer database and team accounts
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "L'endpoint de seed HTTP est strictement désactivé en production pour des raisons de sécurité." },
+      { status: 403 }
+    );
+  }
+
+  // In non-production, verify authorization header or development key
+  const authHeader = request.headers.get("x-seed-key") || request.headers.get("authorization");
+  const expectedKey = process.env.SEED_SECRET || "dev-local-seed";
+  if (authHeader !== expectedKey && authHeader !== `Bearer ${expectedKey}`) {
+    return NextResponse.json(
+      { error: "Accès refusé: clé de seed non autorisée (en-tête x-seed-key ou Authorization requis)." },
+      { status: 401 }
+    );
+  }
+
   try {
     const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./dev.db";
     const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -165,27 +184,28 @@ export async function GET() {
       }
     }
 
+    const defaultInitialPass = process.env.SEED_INITIAL_PASSWORD || "GoCab2024!";
     const teamToSeed = [
       {
         email: "mouad.koudia@gocab.io",
         name: "Mouad Koudia",
         fullName: "Mouad Koudia",
         role: "OPS_MANAGER",
-        pass: "Moulana@pc1995",
+        pass: defaultInitialPass,
       },
       {
         email: "kaoutar.ouardi@gocab.io",
         name: "Kaoutar Ouardi",
         fullName: "Kaoutar Ouardi",
         role: "LEAD_ACQUISITION_JR",
-        pass: "GoCab2024!",
+        pass: defaultInitialPass,
       },
       {
         email: "salma.abouri@gocab.io",
         name: "Salma Abouri",
         fullName: "Salma Abouri",
         role: "LEAD_ACQUISITION_JR",
-        pass: "GoCab2024!",
+        pass: defaultInitialPass,
       },
     ];
 

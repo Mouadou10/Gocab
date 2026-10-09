@@ -1,0 +1,45 @@
+{
+  "system": {
+    "name": "gocab-crm",
+    "version": "0.1.0",
+    "criticality": "Tier 1 (High)",
+    "domain": "Mobility Asset Operator & Driver KYC CRM",
+    "location": "Casablanca, Morocco",
+    "environments": [
+      "Vercel Edge / Serverless",
+      "Turso Cloud LibSQL",
+      "Local SQLite"
+    ],
+    "compliance_frameworks": [
+      "Moroccan Law 09-08 (CNDP)",
+      "GDPR",
+      "SOC2 Type II",
+      "ISO/IEC 27001:2022"
+    ]
+  },
+  "stack": {
+    "framework": "Next.js 16.3.0",
+    "frontend": "React 19.2.8, Tailwind CSS 4",
+    "backend": "Next.js App Router Route Handlers",
+    "orm": "Prisma 7.9.1",
+    "database": "LibSQL / SQLite",
+    "auth": "NextAuth v5 (beta.25)",
+    "integrations": [
+      "Meta WhatsApp Cloud API",
+      "Telegram Bot API",
+      "Vehicle Telematics Gateway"
+    ]
+  },
+  "routes_inventory": {
+    "total_api_routes": 45,
+    "authenticated_routes_count": 14,
+    "unauthenticated_routes_count": 31,
+    "auth_coverage_percentage": 31.1
+  },
+  "risk_assessment_initial": {
+    "critical_vulnerabilities": 3,
+    "high_vulnerabilities": 4,
+    "medium_vulnerabilities": 3,
+    "overall_security_posture": "High Risk - Immediate Remediation Required"
+  }
+}

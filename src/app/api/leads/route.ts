@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     // Return cached leads if fresh (5s TTL)
     const cached = getCachedLeads();
     if (cached) {
@@ -82,7 +87,11 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const body = await request.json().catch(() => ({}));
     const {
       name,
       phone,

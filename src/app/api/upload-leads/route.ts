@@ -36,8 +36,14 @@ function sanitizePhone(raw: string): string {
   return `+212${cleaned}`;
 }
 
+import { requireAuth } from "@/lib/api-auth";
+
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(["ADMIN", "OPS_MANAGER", "LEAD_ACQUISITION_JR"]);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 

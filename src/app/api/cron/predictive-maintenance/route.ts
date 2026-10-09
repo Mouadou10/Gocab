@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { validateCronAuth } from '@/lib/api-auth';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const cronAuth = validateCronAuth(request);
+    if ("error" in cronAuth) {
+      return cronAuth.error;
+    }
     // Find all vehicles where current mileage is >= 8000 km more than last vidange
     const vehiclesNeedingVidange = await prisma.vehicle.findMany({
       where: {
