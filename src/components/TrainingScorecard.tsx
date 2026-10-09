@@ -513,24 +513,26 @@ export default function TrainingScorecard({
       {/* Top 4 Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
         {/* Card 1: Appels Confirmation Présence (Ayoub Gsaib) */}
-        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Appels Confirmation (Ayoub)</span>
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-              📞 {ayoubCallsCount} appel{ayoubCallsCount > 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-2xl font-black text-slate-900">{ayoubCallsCount}</span>
-            <span className="text-xs text-slate-500 font-semibold">
-              appels passés ({presenceConfirmedCount} / {totalInTraining} session)
-            </span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div
-              className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
-              style={{ width: `${Math.min(presenceConfirmedPct, 100)}%` }}
-            />
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-600">Appels Confirmation (Ayoub)</span>
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                📞 {ayoubCallsCount} appel{ayoubCallsCount > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-black text-slate-900">{ayoubCallsCount}</span>
+              <span className="text-xs text-slate-500 font-semibold">
+                appels passés ({presenceConfirmedCount} / {totalInTraining} session)
+              </span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${Math.min(presenceConfirmedPct, 100)}%` }}
+              />
+            </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1.5">
             {ayoubCallsCount} confirmation(s) enregistrée(s) par Ayoub ({presenceConfirmedCount} sur {totalInTraining} confirmés session)
@@ -538,22 +540,24 @@ export default function TrainingScorecard({
         </div>
 
         {/* Card 2: Présents en Formation */}
-        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Présents en Session</span>
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
-              👥 {attendanceRate}%
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-2xl font-black text-navy">{attendedCount}</span>
-            <span className="text-xs text-slate-400 font-semibold">/ {totalInTraining} convoqués</span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div
-              className="h-2 rounded-full bg-blue-500 transition-all duration-500"
-              style={{ width: `${Math.min(Number(attendanceRate), 100)}%` }}
-            />
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-600">Présents en Session</span>
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                👥 {attendanceRate}%
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-black text-navy">{attendedCount}</span>
+              <span className="text-xs text-slate-400 font-semibold">/ {totalInTraining} convoqués</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-blue-500 transition-all duration-500"
+                style={{ width: `${Math.min(Number(attendanceRate), 100)}%` }}
+              />
+            </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1.5">
             {attendedCount} candidats ont assisté à la formation
@@ -561,65 +565,100 @@ export default function TrainingScorecard({
         </div>
 
         {/* Card 3: New Drivers / Preorders */}
-        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Précommandes & Véhicules</span>
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-              rawProgress >= 100
-                ? "bg-emerald-100 text-emerald-800"
-                : rawProgress >= 50
-                ? "bg-blue-100 text-blue-800"
-                : "bg-amber-100 text-amber-800"
-            }`}>
-              🎯 {rawProgress.toFixed(0)}% obj.
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-2xl font-black text-emerald-700 font-mono">{totalConverted}</span>
-            <span className="text-xs text-slate-400 font-semibold">{periodTargetLabel}</span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-500 ${
-                rawProgress >= 100 ? 'bg-emerald-500' : rawProgress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
-              }`}
-              style={{ width: `${progressWidth}%` }}
-            />
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-600">Précommandes & Véhicules</span>
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                rawProgress >= 100
+                  ? "bg-emerald-100 text-emerald-800"
+                  : rawProgress >= 50
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-amber-100 text-amber-800"
+              }`}>
+                🎯 {rawProgress.toFixed(0)}% obj.
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-black text-emerald-700 font-mono">{totalConverted}</span>
+              <span className="text-xs text-slate-400 font-semibold">{periodTargetLabel}</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  rawProgress >= 100 ? 'bg-emerald-500' : rawProgress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+                }`}
+                style={{ width: `${progressWidth}%` }}
+              />
+            </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1.5">
             {periodDescription}
           </p>
         </div>
 
-        {/* Card 4: Conversion Rate per Convoqués (> 20% Target) */}
-        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Tx Conversion / Convoqués</span>
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-              Number(conversionRate) >= 20 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-purple-100 text-purple-800"
-            }`}>
-              Cible &gt; 20%
-            </span>
+        {/* Card 4: Conversion Rate per Convoqués (> 20% Target) & Preorder-Assign / Présents */}
+        <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70 flex flex-col justify-between">
+          {/* Top Metric: Tx Conversion / Convoqués */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-600">Tx Conversion / Convoqués</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                Number(conversionRate) >= 20 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-purple-100 text-purple-800"
+              }`}>
+                Cible &gt; 20%
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className={`text-xl font-black ${
+                Number(conversionRate) >= 20 ? "text-emerald-700" : "text-purple-700"
+              }`}>{conversionRate}%</span>
+              <span className="text-[11px] text-slate-500 font-semibold">
+                ({totalConverted} / {totalInTraining} convoqués)
+              </span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  Number(conversionRate) >= 20 ? 'bg-emerald-500' : 'bg-purple-500'
+                }`}
+                style={{ width: `${Math.min(100, (Number(conversionRate) / 20) * 100)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {totalConverted} signés sur {totalInTraining} convoqués
+            </p>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className={`text-2xl font-black ${
-              Number(conversionRate) >= 20 ? "text-emerald-700" : "text-purple-700"
-            }`}>{conversionRate}%</span>
-            <span className="text-xs text-slate-500 font-semibold">
-              ({totalConverted} / {totalInTraining} convoqués)
-            </span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-500 ${
-                Number(conversionRate) >= 20 ? 'bg-emerald-500' : 'bg-purple-500'
-              }`}
-              style={{ width: `${Math.min(100, (Number(conversionRate) / 20) * 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1.5">
-            <span>{totalConverted} signés sur {totalInTraining} convoqués</span>
-            <span className="font-semibold text-slate-600">({conversionPerAttendedRate}% / présents)</span>
+
+          {/* Bottom Metric: % Preorder-Assign / Présents */}
+          <div className="pt-2.5 mt-2.5 border-t border-slate-200/80">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-600">% Preorder-Assign / Présents</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                Number(conversionPerAttendedRate) >= 50 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-indigo-100 text-indigo-800"
+              }`}>
+                {conversionPerAttendedRate}%
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className={`text-xl font-black ${
+                Number(conversionPerAttendedRate) >= 50 ? "text-emerald-700" : "text-indigo-700"
+              }`}>{conversionPerAttendedRate}%</span>
+              <span className="text-[11px] text-slate-500 font-semibold">
+                ({totalConverted} / {attendedCount} présents)
+              </span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  Number(conversionPerAttendedRate) >= 50 ? 'bg-emerald-500' : 'bg-indigo-500'
+                }`}
+                style={{ width: `${Math.min(100, Number(conversionPerAttendedRate))}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {totalConverted} signés sur {attendedCount} présents
+            </p>
           </div>
         </div>
       </div>
