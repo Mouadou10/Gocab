@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
-import { sendFieldTaskCancelledTelegramAlert } from "@/lib/services/telegramService";
+import {
+  sendFieldTaskCancelledTelegramAlert,
+  sendFieldTaskCompletedTelegramAlert,
+  sendFieldTaskAssignedTelegramAlert,
+} from "@/lib/services/telegramService";
 
 /**
  * PATCH /api/field-tasks/[id]
@@ -167,6 +171,41 @@ export async function PATCH(
           },
         }).catch((e) => console.warn("Failed to auto-resolve ticket on recovery:", e));
       }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // TELEGRAM NOTIFICATIONS: ASSIGNMENT & MISSION COMPLETE
+    // ─────────────────────────────────────────────────────────────
+    // 1. Mission Assignment notification if assigned_to changed
+    if (body.assigned_to && body.assigned_to !== existingTask.assigned_to) {
+      sendFieldTaskAssignedTelegramAlert({
+        task_type: task.task_type,
+        plate_number: task.plate_number,
+        driver_name: task.driver_name,
+        assigned_to: body.assigned_to,
+        assigned_by: body.author || body.assigned_by || null,
+      }).catch((err) => console.error("Error sending field task assigned alert:", err));
+    }
+
+    // 2. Mission Complete notification once set as finished by the field team
+    if (body.status === "COMPLETED" && existingTask.status !== "COMPLETED") {
+      const vehicle = task.vehicle_id
+        ? await prisma.vehicle.findUnique({ where: { id: task.vehicle_id } })
+        : null;
+
+      sendFieldTaskCompletedTelegramAlert({
+        task_type: task.task_type,
+        plate_number: task.plate_number,
+        make_model: vehicle?.make_model,
+        driver_name: task.driver_name,
+        assigned_to: task.assigned_to || body.completed_by || body.author || "Superviseur Terrain",
+        completed_by: body.completed_by || body.author || task.assigned_to,
+        duration_hours: task.recovery_duration_hours || task.duration_hours,
+        recovery_notes: task.recovery_notes || body.recovery_notes || body.failure_reason || null,
+        has_key: task.has_key,
+        has_carte_grise: task.has_carte_grise,
+        has_assurance: task.has_assurance,
+      }).catch((err) => console.error("Error sending field task completed telegram alert:", err));
     }
 
     touchSyncState("tickets").catch(() => {});

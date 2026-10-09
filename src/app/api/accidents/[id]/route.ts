@@ -4,6 +4,7 @@ import { touchSyncState } from "@/lib/sync";
 import {
   sendCarReadyTelegramAlert,
   sendInsuranceMissionTelegramAlert,
+  sendVehicleBackTelegramAlert,
 } from "@/lib/services/telegramService";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,7 @@ export async function PATCH(req: Request, context: any) {
           timeline_step_label: stepLabels[currentClaim.timeline_step] || currentClaim.timeline_step,
           description: description,
           author: body.author || "Agent Assurance",
+          assigned_to: body.assigned_to || null,
           scheduled_date: body.scheduled_date,
           scheduled_time: body.scheduled_time,
         }).catch((err) => console.error("Failed to send insurance mission Telegram alert:", err));
@@ -173,6 +175,7 @@ export async function PATCH(req: Request, context: any) {
         driver_name: currentClaim.driver_name,
         driver_phone: currentClaim.driver_phone,
         downtime_days: totalDays,
+        assigned_to: fieldTask.assigned_to || null,
         triggered_by: body.author || "Agent Assurance",
         notes: body.comment || "Rappel : Véhicule réparé au garage et prêt pour récupération & convoyage.",
       }).catch((err) => console.error("Failed to send car ready Telegram alert:", err));
@@ -286,6 +289,7 @@ export async function PATCH(req: Request, context: any) {
         driver_name: updatedClaim.driver_name,
         driver_phone: updatedClaim.driver_phone,
         downtime_days: totalDays,
+        assigned_to: existingTask?.assigned_to || null,
         triggered_by: body.author || "Agent Assurance",
         notes: body.comment || "Véhicule réparé au garage. Prêt pour récupération et convoyage en flotte.",
       }).catch((err) => console.error("Auto Telegram car ready alert error:", err));
@@ -332,9 +336,67 @@ export async function PATCH(req: Request, context: any) {
         data: {
           status: "RESOLVED",
           resolved_at: new Date(),
-          field_status: "READY_FOR_PICKUP",
+          field_status: "COMPLETED",
         },
       }).catch(() => {});
+
+      // Automatically complete any linked FieldTask for this claim
+      const linkedFieldTask = await prisma.fieldTask.findFirst({
+        where: {
+          OR: [
+            { linked_ticket_id: updatedClaim.id },
+            { vehicle_id: updatedClaim.vehicle_id, task_type: "GARAGE_PICKUP" },
+          ],
+          status: { not: "COMPLETED" },
+        },
+      });
+
+      if (linkedFieldTask) {
+        await prisma.fieldTask.update({
+          where: { id: linkedFieldTask.id },
+          data: { status: "COMPLETED", completed_at: new Date() },
+        });
+      }
+
+      // Handler who handled or is handling the task
+      const handlerName = linkedFieldTask?.assigned_to || body.author || "Équipe Flotte & Terrain";
+      const totalDays = Math.floor(
+        Math.abs(Date.now() - new Date(updatedClaim.created_at).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Send Telegram notification: VÉHICULE RÉTABLI EN FLOTTE — MISSION COMPLETE
+      await sendVehicleBackTelegramAlert({
+        plate_number: updatedClaim.vehicle?.plate_number || "Inconnu",
+        make_model: updatedClaim.vehicle?.make_model,
+        driver_name: updatedClaim.driver_name,
+        driver_phone: updatedClaim.driver_phone,
+        handler_name: handlerName,
+        validated_by: body.author || "Agent Assurance",
+        downtime_days: totalDays,
+        notes: body.comment || "Véhicule réparé et réintégré avec succès dans la flotte.",
+      }).catch((err) => console.error("Auto Telegram vehicle back alert error:", err));
+
+      // Append system comment documenting the vehicle back notification
+      let backComments: any[] = [];
+      try {
+        backComments = updatedClaim.comments ? JSON.parse(updatedClaim.comments) : [];
+      } catch {
+        backComments = [];
+      }
+
+      backComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: "VEHICLE_BACK",
+        comment: `✅ Véhicule rétabli en flotte. Mission complète notifiée sur Telegram (Traité par : ${handlerName}).`,
+        author: body.author || "Système Telegram",
+        created_at: new Date().toISOString(),
+      });
+
+      await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(backComments) },
+      });
+
       touchSyncState("tickets").catch(() => {});
     }
 

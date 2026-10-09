@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import {
@@ -55,6 +55,7 @@ export interface AccidentClaim {
     status: string;
     priority: string;
     description: string;
+    assigned_to?: string | null;
     scheduled_date?: string | null;
     scheduled_time?: string | null;
     created_at: string;
@@ -179,12 +180,39 @@ export default function AccidentCard({
       : "VEHICLE_RECOVERY"
   );
   const [missionPriority, setMissionPriority] = useState<"Normal" | "Urgent" | "Critical">("Urgent");
+  const [missionAssignedTo, setMissionAssignedTo] = useState(claim.fieldTask?.assigned_to || "");
+  const [supervisorsList, setSupervisorsList] = useState<string[]>([
+    "HAMZA RASSID",
+    "Ayoub Rassid",
+    "Mohamed Abed",
+  ]);
   const [missionDescription, setMissionDescription] = useState("");
   const [missionScheduledDate, setMissionScheduledDate] = useState("");
   const [missionScheduledTime, setMissionScheduledTime] = useState("");
   const [missionSendTelegram, setMissionSendTelegram] = useState(true);
   const [isSubmittingMission, setIsSubmittingMission] = useState(false);
   const [isSendingReadyTelegram, setIsSendingReadyTelegram] = useState(false);
+
+  // Fetch field supervisors for mission assignment
+  useEffect(() => {
+    async function fetchSupervisors() {
+      try {
+        const res = await fetch("/api/field-supervisors");
+        if (res.ok) {
+          const data = await res.json();
+          const names = (data.supervisors || [])
+            .map((s: any) => s.fullName || s.name)
+            .filter(Boolean);
+          if (names.length > 0) {
+            setSupervisorsList(Array.from(new Set(["HAMZA RASSID", "Ayoub Rassid", "Mohamed Abed", ...names])));
+          }
+        }
+      } catch (e) {
+        // Fallback default list remains
+      }
+    }
+    fetchSupervisors();
+  }, []);
 
   // Parse comments safely
   let commentsList: AccidentComment[] = [];
@@ -351,6 +379,7 @@ export default function AccidentCard({
           action: "DISPATCH_TELEGRAM_MISSION",
           task_type: missionTaskType,
           priority: missionPriority,
+          assigned_to: missionAssignedTo.trim() || null,
           description:
             missionDescription.trim() ||
             `[Sinistre ${claim.vehicle.plate_number}] Prise en charge terrain requise pour le véhicule.`,
@@ -430,7 +459,9 @@ export default function AccidentCard({
       });
 
       if (res.ok) {
-        if (nextStep.id === "READY_FOR_PICKUP") {
+        if (nextStep.id === "VEHICLE_BACK") {
+          toast.success("✅ Véhicule rétabli en flotte & alerte 'Mission Complete' envoyée sur Telegram !");
+        } else if (nextStep.id === "READY_FOR_PICKUP") {
           toast.success(
             commentText.trim()
               ? "🚗 Véhicule marqué prêt & alerte Telegram envoyée avec note !"
@@ -478,7 +509,9 @@ export default function AccidentCard({
       });
 
       if (res.ok) {
-        if (targetStep.id === "READY_FOR_PICKUP") {
+        if (targetStep.id === "VEHICLE_BACK") {
+          toast.success("✅ Véhicule rétabli en flotte & alerte 'Mission Complete' envoyée sur Telegram !");
+        } else if (targetStep.id === "READY_FOR_PICKUP") {
           toast.success("🚗 Véhicule marqué prêt & alerte Telegram envoyée au Superviseur Terrain !");
         } else {
           toast.success(`Étape mise à jour vers : ${targetStep.shortLabel}`);
@@ -624,8 +657,8 @@ export default function AccidentCard({
           <div className="flex items-center gap-1.5 flex-wrap">
             {claim.fieldTask && claim.fieldTask.status !== "COMPLETED" && (
               <span
-                className="inline-flex items-center gap-1.5 text-2xs font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-1 rounded-lg shadow-2xs"
-                title={`Mission ${claim.fieldTask.task_type} active : ${claim.fieldTask.description}`}
+                className="inline-flex items-center gap-1.5 text-2xs font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg shadow-2xs"
+                title={`Mission ${claim.fieldTask.task_type} active : ${claim.fieldTask.description}${claim.fieldTask.assigned_to ? ` • Assigné à : ${claim.fieldTask.assigned_to}` : ""}`}
               >
                 <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                 <span>
@@ -635,7 +668,21 @@ export default function AccidentCard({
                     : claim.fieldTask.task_type === "VEHICLE_RECOVERY"
                     ? "Récupération"
                     : "Visite"}
+                  {claim.fieldTask.assigned_to ? ` • 👮 ${claim.fieldTask.assigned_to}` : ""}
                   )
+                </span>
+              </span>
+            )}
+
+            {claim.fieldTask && claim.fieldTask.status === "COMPLETED" && (
+              <span
+                className="inline-flex items-center gap-1 text-2xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg shadow-2xs"
+                title="Mission terrain effectuée et clôturée avec succès"
+              >
+                <span>🎉</span>
+                <span>
+                  Mission Complete
+                  {claim.fieldTask.assigned_to ? ` (👮 ${claim.fieldTask.assigned_to})` : ""}
                 </span>
               </span>
             )}
@@ -848,13 +895,22 @@ export default function AccidentCard({
           <div className="mt-6 flex justify-end">
             {isCompleted ? (
               <div className="w-full flex flex-wrap items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-2xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-2xs">
                     <CheckCircle2 className="w-4 h-4" />
                     Véhicule Rétabli en Flotte (Clos)
                   </span>
                   <span className="text-2xs text-gray-500 hidden sm:inline">
                     Le véhicule a repris son service actif.
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-2xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                    <span>🎉</span>
+                    <span>Mission Complete</span>
+                    {claim.fieldTask?.assigned_to && (
+                      <span className="text-emerald-950 font-normal ml-0.5">
+                        • 👮 {claim.fieldTask.assigned_to}
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -888,9 +944,18 @@ export default function AccidentCard({
                     <div className="font-bold text-yellow-950">
                       Prêt pour récupération : En attente du superviseur terrain pour le convoyage.
                     </div>
-                    <div className="text-2xs text-yellow-800 flex items-center gap-1.5 mt-0.5">
+                    <div className="text-2xs text-yellow-800 flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <span>Alerte Telegram transmise au Superviseur Terrain</span>
+                      {claim.fieldTask?.assigned_to ? (
+                        <span className="bg-yellow-200/80 text-yellow-950 border border-yellow-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                          👮 Pris en charge par : {claim.fieldTask.assigned_to}
+                        </span>
+                      ) : (
+                        <span className="text-yellow-700 italic text-[10px]">
+                          (En attente d&apos;attribution)
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1126,6 +1191,25 @@ export default function AccidentCard({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Superviseur Terrain Assigné */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Superviseur Terrain Assigné (Prise en charge) :
+                </label>
+                <select
+                  value={missionAssignedTo}
+                  onChange={(e) => setMissionAssignedTo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none cursor-pointer"
+                >
+                  <option value="">-- À attribuer par l&apos;équipe terrain --</option>
+                  {supervisorsList.map((sup) => (
+                    <option key={sup} value={sup}>
+                      👮 {sup}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Date & Heure d'intervention souhaitée */}

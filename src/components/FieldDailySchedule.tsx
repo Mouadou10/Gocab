@@ -981,12 +981,17 @@ export default function FieldDailySchedule({
                             if (isRecovery) {
                               onOpenRecoveryModal(task);
                             } else {
+                              const supName = currentSupervisor?.name || currentSupervisor?.fullName || "Superviseur Terrain";
                               fetch(`/api/field-tasks/${task.id}`, {
                                 method: "PATCH",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ status: "COMPLETED" }),
+                                body: JSON.stringify({
+                                  status: "COMPLETED",
+                                  completed_by: supName,
+                                  author: supName,
+                                }),
                               }).then(() => {
-                                toast.success("Mission clôturée avec succès !");
+                                toast.success("Mission clôturée & 'Mission Complete' notifiée sur Telegram !");
                                 onTaskUpdated();
                               });
                             }

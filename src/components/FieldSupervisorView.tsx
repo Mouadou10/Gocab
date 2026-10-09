@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import CarModel3D from "./CarModel3D";
@@ -217,6 +218,9 @@ export function MoroccanPlateBadge({ plate }: { plate: string | null | undefined
 }
 
 export default function FieldSupervisorView() {
+  const { data: session } = useSession() || {};
+  const agentName = session?.user?.name || session?.user?.email || "Superviseur Terrain";
+
   const [tasks, setTasks] = useState<FieldTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -413,11 +417,13 @@ export default function FieldSupervisorView() {
           has_carte_grise: hasCarteGrise,
           has_assurance: hasAssurance,
           recovery_notes: recoveryNotes,
+          completed_by: agentName,
+          author: agentName,
         }),
       });
 
       if (res.ok) {
-        toast.success(`✅ Véhicule récupéré avec succès (${recoveryStartTime} ➔ ${recoveryEndTime}) ! Clôturé et replacé en Available.`);
+        toast.success(`✅ Véhicule récupéré avec succès (${recoveryStartTime} ➔ ${recoveryEndTime}) & 'Mission Complete' notifiée sur Telegram !`);
         setRecoveryModalTask(null);
         fetchTasks();
         notifyMutation("tickets");
@@ -513,14 +519,19 @@ export default function FieldSupervisorView() {
       const res = await fetch(`/api/field-tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, failure_reason: failReason }),
+        body: JSON.stringify({
+          status: newStatus,
+          failure_reason: failReason,
+          completed_by: agentName,
+          author: agentName,
+        }),
       });
       if (res.ok) {
         toast.success(
           newStatus === "IN_PROGRESS"
             ? "▶ Mission démarrée ! Ticket Support synchronisé en cours."
             : newStatus === "COMPLETED"
-            ? "✅ Mission validée et complétée !"
+            ? "✅ Mission validée & 'Mission Complete' notifiée sur Telegram !"
             : "Statut mis à jour"
         );
         fetchTasks();
