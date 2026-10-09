@@ -214,7 +214,28 @@ export async function GET() {
       }).catch(() => {});
     }
 
-    return NextResponse.json({ success: true, claims: finalClaims });
+    // Attach active or latest FieldTask for each claim
+    const claimIds = finalClaims.map((c) => c.id);
+    const fieldTasks = await prisma.fieldTask.findMany({
+      where: {
+        linked_ticket_id: { in: claimIds },
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    const fieldTasksByClaimId = new Map<string, (typeof fieldTasks)[0]>();
+    for (const ft of fieldTasks) {
+      if (ft.linked_ticket_id && !fieldTasksByClaimId.has(ft.linked_ticket_id)) {
+        fieldTasksByClaimId.set(ft.linked_ticket_id, ft);
+      }
+    }
+
+    const claimsWithTasks = finalClaims.map((claim) => ({
+      ...claim,
+      fieldTask: fieldTasksByClaimId.get(claim.id) || null,
+    }));
+
+    return NextResponse.json({ success: true, claims: claimsWithTasks });
   } catch (error: any) {
     console.error("Error fetching accident claims:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

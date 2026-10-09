@@ -205,3 +205,118 @@ export async function sendVehicleIssueTelegramAlert(issue: {
   }
 }
 
+/**
+ * Sends a rich Telegram alert when a repaired vehicle is READY FOR PICKUP at the garage (Stage 5)
+ */
+export async function sendCarReadyTelegramAlert(data: {
+  plate_number: string;
+  make_model?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  garage_name?: string | null;
+  downtime_days?: number;
+  triggered_by?: string | null;
+  notes?: string | null;
+}): Promise<void> {
+  try {
+    const config = await getTelegramConfig();
+    if (!config.isEnabled || !config.botToken || !config.chatId) {
+      return;
+    }
+
+    const message = [
+      `🚗 <b>VÉHICULE PRÊT POUR RÉCUPÉRATION (GARAGE)</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🚗 <b>Véhicule :</b> <code>${data.plate_number}</code>${data.make_model ? ` (${data.make_model})` : ""}`,
+      `🏬 <b>Statut :</b> <b>Prêt Récupération (Réparation terminée)</b>`,
+      data.garage_name ? `🏢 <b>Garage / Atelier :</b> <b>${data.garage_name}</b>` : null,
+      `👤 <b>Chauffeur :</b> <b>${data.driver_name || "Non assigné"}</b>`,
+      data.driver_phone ? `📞 <b>Téléphone :</b> <a href="tel:${data.driver_phone}">${data.driver_phone}</a>` : null,
+      data.downtime_days !== undefined && data.downtime_days > 0 ? `⏱️ <b>Immobilisation :</b> ${data.downtime_days} jour(s)` : null,
+      data.triggered_by ? `👮 <b>Déclenché par :</b> <b>${data.triggered_by}</b>` : null,
+      `⚠️ <b>Priorité :</b> 🟠 <b>URGENT</b>`,
+      `\n📝 <b>Consignes de convoyage :</b>`,
+      `<i>${data.notes || "Le véhicule a été réparé et est prêt au garage. Mission de convoyage et réintégration en flotte requise par le Superviseur Terrain."}</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `👉 <i>Tâche 'Reprise Garage' ajoutée automatiquement dans l'Agenda & File Terrain.</i>`,
+      `🕒 <i>${new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</i>`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendTelegramMessage(message);
+  } catch (err) {
+    console.error("Failed to send car ready Telegram alert:", err);
+  }
+}
+
+/**
+ * Sends a rich Telegram alert when an intervention / mission is dispatched from the Assurance page
+ */
+export async function sendInsuranceMissionTelegramAlert(mission: {
+  task_type: string;
+  plate_number: string;
+  make_model?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  priority: string;
+  timeline_step_label?: string | null;
+  description: string;
+  author?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+}): Promise<void> {
+  try {
+    const config = await getTelegramConfig();
+    if (!config.isEnabled || !config.botToken || !config.chatId) {
+      return;
+    }
+
+    const typeEmoji =
+      mission.task_type === "GARAGE_PICKUP"
+        ? "🔧"
+        : mission.task_type === "VEHICLE_RECOVERY"
+        ? "🚨"
+        : "🚗";
+
+    const typeLabel =
+      mission.task_type === "GARAGE_PICKUP"
+        ? "REPRISE AU GARAGE (Véhicule Réparé)"
+        : mission.task_type === "VEHICLE_RECOVERY"
+        ? "RÉCUPÉRATION VÉHICULE (Sinistre / Immobilisé)"
+        : "VISITE / CONSTAT TERRAIN (Expertise)";
+
+    const priorityBadge =
+      mission.priority === "Critical"
+        ? "🔴 CRITIQUE"
+        : mission.priority === "Urgent"
+        ? "🟠 URGENT"
+        : "🟡 NORMAL";
+
+    const message = [
+      `${typeEmoji} <b>NOUVELLE MISSION TERRAIN — DOSSIER ASSURANCE</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `📋 <b>Type d'intervention :</b> <b>${typeLabel}</b>`,
+      `🚗 <b>Véhicule :</b> <code>${mission.plate_number}</code>${mission.make_model ? ` (${mission.make_model})` : ""}`,
+      mission.timeline_step_label ? `📌 <b>Étape Sinistre :</b> ${mission.timeline_step_label}` : null,
+      `👤 <b>Chauffeur :</b> <b>${mission.driver_name || "Non assigné"}</b>`,
+      mission.driver_phone ? `📞 <b>Téléphone :</b> <a href="tel:${mission.driver_phone}">${mission.driver_phone}</a>` : null,
+      `⚠️ <b>Priorité :</b> ${priorityBadge}`,
+      mission.scheduled_date ? `📅 <b>Date prévue :</b> <b>${mission.scheduled_date} ${mission.scheduled_time || ""}</b>` : null,
+      mission.author ? `👮 <b>Transmis par :</b> <b>${mission.author}</b> (Assurance & Flotte)` : null,
+      `\n📝 <b>Instructions pour le Superviseur Terrain :</b>`,
+      `<i>${mission.description}</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `👉 <i>Visible dans l'Agenda & la File Terrain du Superviseur.</i>`,
+      `🕒 <i>${new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</i>`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendTelegramMessage(message);
+  } catch (err) {
+    console.error("Failed to send insurance mission Telegram alert:", err);
+  }
+}
+
+

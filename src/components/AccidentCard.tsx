@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   Send,
   Calendar,
+  X,
 } from "lucide-react";
 
 export interface AccidentComment {
@@ -47,6 +48,16 @@ export interface AccidentClaim {
   };
   driver?: {
     accidentClaims?: any[];
+  } | null;
+  fieldTask?: {
+    id: string;
+    task_type: string;
+    status: string;
+    priority: string;
+    description: string;
+    scheduled_date?: string | null;
+    scheduled_time?: string | null;
+    created_at: string;
   } | null;
 }
 
@@ -159,6 +170,21 @@ export default function AccidentCard({
   const [commentText, setCommentText] = useState("");
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
+
+  // Telegram Mission modal states
+  const [openTelegramModal, setOpenTelegramModal] = useState(false);
+  const [missionTaskType, setMissionTaskType] = useState<"GARAGE_PICKUP" | "VEHICLE_RECOVERY" | "FIELD_VISIT">(
+    claim.timeline_step === "READY_FOR_PICKUP" || claim.timeline_step === "CAR_IN_GARAGE" || claim.timeline_step === "STARTING_REPAIR"
+      ? "GARAGE_PICKUP"
+      : "VEHICLE_RECOVERY"
+  );
+  const [missionPriority, setMissionPriority] = useState<"Normal" | "Urgent" | "Critical">("Urgent");
+  const [missionDescription, setMissionDescription] = useState("");
+  const [missionScheduledDate, setMissionScheduledDate] = useState("");
+  const [missionScheduledTime, setMissionScheduledTime] = useState("");
+  const [missionSendTelegram, setMissionSendTelegram] = useState(true);
+  const [isSubmittingMission, setIsSubmittingMission] = useState(false);
+  const [isSendingReadyTelegram, setIsSendingReadyTelegram] = useState(false);
 
   // Parse comments safely
   let commentsList: AccidentComment[] = [];
@@ -313,6 +339,76 @@ export default function AccidentCard({
     }
   };
 
+  const handleDispatchMission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingMission(true);
+    try {
+      const agentName = session?.user?.name || session?.user?.email || "Agent";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "DISPATCH_TELEGRAM_MISSION",
+          task_type: missionTaskType,
+          priority: missionPriority,
+          description:
+            missionDescription.trim() ||
+            `[Sinistre ${claim.vehicle.plate_number}] Prise en charge terrain requise pour le véhicule.`,
+          scheduled_date: missionScheduledDate || null,
+          scheduled_time: missionScheduledTime || null,
+          send_telegram: missionSendTelegram,
+          author: agentName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(
+          missionSendTelegram
+            ? "🚀 Mission terrain créée & notifiée sur Telegram !"
+            : "📋 Mission terrain créée avec succès !"
+        );
+        setOpenTelegramModal(false);
+        onUpdate();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Échec de la création de la mission");
+      }
+    } catch (err) {
+      console.error("Error creating telegram mission:", err);
+      toast.error("Erreur réseau");
+    } finally {
+      setIsSubmittingMission(false);
+    }
+  };
+
+  const handleResendReadyTelegram = async () => {
+    setIsSendingReadyTelegram(true);
+    try {
+      const agentName = session?.user?.name || session?.user?.email || "Agent";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "NOTIFY_READY_TELEGRAM",
+          author: agentName,
+          comment: "Rappel : Véhicule réparé au garage et prêt pour récupération & convoyage.",
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("📱 Alerte 'Véhicule Prêt' renvoyée avec succès sur Telegram !");
+        onUpdate();
+      } else {
+        toast.error("Échec de l'envoi de l'alerte Telegram");
+      }
+    } catch (err) {
+      console.error("Failed to notify telegram:", err);
+      toast.error("Erreur réseau");
+    } finally {
+      setIsSendingReadyTelegram(false);
+    }
+  };
+
   const advanceTimeline = async () => {
     if (currentStepIndex >= TIMELINE_STEPS.length - 1) return;
     const nextStep = TIMELINE_STEPS[currentStepIndex + 1];
@@ -334,11 +430,19 @@ export default function AccidentCard({
       });
 
       if (res.ok) {
-        toast.success(
-          commentText.trim()
-            ? `Étape avancée à ${nextStep.shortLabel} avec note enregistrée`
-            : `Étape avancée à ${nextStep.shortLabel}`
-        );
+        if (nextStep.id === "READY_FOR_PICKUP") {
+          toast.success(
+            commentText.trim()
+              ? "🚗 Véhicule marqué prêt & alerte Telegram envoyée avec note !"
+              : "🚗 Véhicule marqué prêt & alerte Telegram envoyée au Superviseur Terrain !"
+          );
+        } else {
+          toast.success(
+            commentText.trim()
+              ? `Étape avancée à ${nextStep.shortLabel} avec note enregistrée`
+              : `Étape avancée à ${nextStep.shortLabel}`
+          );
+        }
         setCommentText("");
         onUpdate();
       } else {
@@ -374,7 +478,11 @@ export default function AccidentCard({
       });
 
       if (res.ok) {
-        toast.success(`Étape mise à jour vers : ${targetStep.shortLabel}`);
+        if (targetStep.id === "READY_FOR_PICKUP") {
+          toast.success("🚗 Véhicule marqué prêt & alerte Telegram envoyée au Superviseur Terrain !");
+        } else {
+          toast.success(`Étape mise à jour vers : ${targetStep.shortLabel}`);
+        }
         setCommentText("");
         onUpdate();
       } else {
@@ -512,32 +620,69 @@ export default function AccidentCard({
             )}
           </div>
 
-          {/* Quick Communication Buttons */}
-          {claim.driver_phone && (
-            <div className="flex items-center gap-1.5">
-              <a
-                href={`tel:${claim.driver_phone}`}
-                className="inline-flex items-center gap-1 text-2xs font-bold bg-white text-navy hover:bg-navy hover:text-white border border-gray-300 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
-                title="Appeler directement le chauffeur"
+          {/* Quick Communication Buttons & Telegram Mission Action */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {claim.fieldTask && claim.fieldTask.status !== "COMPLETED" && (
+              <span
+                className="inline-flex items-center gap-1.5 text-2xs font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-1 rounded-lg shadow-2xs"
+                title={`Mission ${claim.fieldTask.task_type} active : ${claim.fieldTask.description}`}
               >
-                <Phone className="w-3 h-3 text-blue-600" />
-                <span>Appeler</span>
-              </a>
+                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                <span>
+                  📱 Terrain (
+                  {claim.fieldTask.task_type === "GARAGE_PICKUP"
+                    ? "Reprise Garage"
+                    : claim.fieldTask.task_type === "VEHICLE_RECOVERY"
+                    ? "Récupération"
+                    : "Visite"}
+                  )
+                </span>
+              </span>
+            )}
 
-              {waLink && (
+            <button
+              type="button"
+              onClick={() => {
+                setMissionDescription(
+                  `[Sinistre ${claim.vehicle.plate_number}] Étape : ${currentStepDef.label}. ${
+                    claim.severity === "HARD" ? "Dommages lourds (structure)." : "Dommages légers (carrosserie)."
+                  } Chauffeur : ${claim.driver_name || "Non assigné"}. Prise en charge terrain requise.`
+                );
+                setOpenTelegramModal(true);
+              }}
+              className="inline-flex items-center gap-1 text-2xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 px-2.5 py-1 rounded-lg transition-colors shadow-2xs cursor-pointer"
+              title="Créer une mission pour le Superviseur Terrain et envoyer l'alerte sur Telegram"
+            >
+              <Send className="w-3 h-3 text-blue-600" />
+              <span>Mission Telegram</span>
+            </button>
+
+            {claim.driver_phone && (
+              <>
                 <a
-                  href={waLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-2xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-300 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
-                  title="Ouvrir WhatsApp direct"
+                  href={`tel:${claim.driver_phone}`}
+                  className="inline-flex items-center gap-1 text-2xs font-bold bg-white text-navy hover:bg-navy hover:text-white border border-gray-300 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                  title="Appeler directement le chauffeur"
                 >
-                  <MessageCircle className="w-3 h-3 text-emerald-600" />
-                  <span>WhatsApp</span>
+                  <Phone className="w-3 h-3 text-blue-600" />
+                  <span>Appeler</span>
                 </a>
-              )}
-            </div>
-          )}
+
+                {waLink && (
+                  <a
+                    href={waLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-2xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-300 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                    title="Ouvrir WhatsApp direct"
+                  >
+                    <MessageCircle className="w-3 h-3 text-emerald-600" />
+                    <span>WhatsApp</span>
+                  </a>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* 3. Segmented Controls: Severity & Fault */}
@@ -736,21 +881,41 @@ export default function AccidentCard({
                 </div>
               </div>
             ) : claim.timeline_step === "READY_FOR_PICKUP" ? (
-              <div className="w-full flex items-center justify-between p-3 bg-yellow-50 border border-yellow-300 text-yellow-900 rounded-xl font-medium text-xs shadow-2xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">⏳</span>
-                  <span>
-                    <strong>Prêt pour récupération :</strong> En attente du superviseur terrain pour le convoyage.
-                  </span>
+              <div className="w-full flex flex-wrap items-center justify-between p-3.5 bg-yellow-50 border border-yellow-300 text-yellow-900 rounded-xl font-medium text-xs shadow-2xs gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">⏳</span>
+                  <div>
+                    <div className="font-bold text-yellow-950">
+                      Prêt pour récupération : En attente du superviseur terrain pour le convoyage.
+                    </div>
+                    <div className="text-2xs text-yellow-800 flex items-center gap-1.5 mt-0.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Alerte Telegram transmise au Superviseur Terrain</span>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={advanceTimeline}
-                  disabled={isUpdating}
-                  className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs flex items-center gap-1"
-                >
-                  <span>Clôturer manuellement</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResendReadyTelegram}
+                    disabled={isUpdating || isSendingReadyTelegram}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Renvoyer l'alerte 'Véhicule Prêt' dans le groupe Telegram"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isSendingReadyTelegram ? "Envoi..." : "Relancer Telegram"}</span>
+                  </button>
+
+                  <button
+                    onClick={advanceTimeline}
+                    disabled={isUpdating}
+                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Clôturer manuellement</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ) : (
               <button
@@ -892,6 +1057,162 @@ export default function AccidentCard({
           </div>
         )}
       </div>
+
+      {/* 6. Modal: Création & Envoi Mission Telegram Superviseur Terrain */}
+      {openTelegramModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-blue-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-navy text-white flex items-center justify-between shrink-0">
+              <div className="min-w-0 pr-2">
+                <h3 className="font-black text-base flex items-center gap-2">
+                  <span>📱</span>
+                  <span>Mission Terrain & Alerte Telegram</span>
+                </h3>
+                <p className="text-xs text-blue-100 mt-0.5 truncate">
+                  Immat : <strong className="font-mono text-white">{claim.vehicle.plate_number}</strong>
+                  {claim.vehicle.make_model ? ` (${claim.vehicle.make_model})` : ""}
+                  {claim.driver_name ? ` • Chauffeur : ${claim.driver_name}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenTelegramModal(false)}
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                title="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDispatchMission} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Type de mission */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Type d&apos;intervention terrain :
+                </label>
+                <select
+                  value={missionTaskType}
+                  onChange={(e) => setMissionTaskType(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none cursor-pointer"
+                >
+                  <option value="GARAGE_PICKUP">🔧 Reprise au Garage (Véhicule réparé / Convoyage)</option>
+                  <option value="VEHICLE_RECOVERY">🚨 Récupération Véhicule (Accidenté / Fourrière / Dépannage)</option>
+                  <option value="FIELD_VISIT">🚗 Visite / Constat terrain / Expertise sinistre</option>
+                </select>
+              </div>
+
+              {/* Priorité */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Niveau d&apos;urgence / Priorité :
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Normal", "Urgent", "Critical"] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setMissionPriority(lvl)}
+                      className={`py-2 px-3 rounded-xl font-bold text-center border transition-all cursor-pointer ${
+                        missionPriority === lvl
+                          ? lvl === "Critical"
+                            ? "bg-red-600 text-white border-red-600 shadow-sm"
+                            : lvl === "Urgent"
+                            ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                            : "bg-blue-600 text-white border-blue-600 shadow-sm"
+                          : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {lvl === "Critical" ? "🚨 Critique" : lvl === "Urgent" ? "⚡ Urgent" : "🟢 Normal"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date & Heure d'intervention souhaitée */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    Date prévue (optionnel) :
+                  </label>
+                  <input
+                    type="date"
+                    value={missionScheduledDate}
+                    onChange={(e) => setMissionScheduledDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-800 font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    Heure prévue (optionnel) :
+                  </label>
+                  <input
+                    type="time"
+                    value={missionScheduledTime}
+                    onChange={(e) => setMissionScheduledTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-800 font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Description / Instructions détaillées */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Instructions & détails de la mission :
+                </label>
+                <textarea
+                  rows={3}
+                  value={missionDescription}
+                  onChange={(e) => setMissionDescription(e.target.value)}
+                  placeholder="Ex : Récupérer le véhicule réparé au garage et le rapatrier au parc, vérifier carrosserie..."
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none leading-relaxed"
+                />
+              </div>
+
+              {/* Notification Telegram checkbox */}
+              <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="telegramAlertCheck"
+                  checked={missionSendTelegram}
+                  onChange={(e) => setMissionSendTelegram(e.target.checked)}
+                  className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="telegramAlertCheck" className="text-2xs text-blue-900 cursor-pointer">
+                  <span className="font-bold block">Alerter instantanément sur Telegram</span>
+                  <span>
+                    Publie automatiquement une alerte formatée avec immatriculation, étape du sinistre et coordonnées dans le groupe Telegram du <strong>Superviseur Terrain</strong>.
+                  </span>
+                </label>
+              </div>
+
+              {/* Actions footer */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setOpenTelegramModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMission}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2 transition-all"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>
+                    {isSubmittingMission
+                      ? "Création en cours..."
+                      : missionSendTelegram
+                      ? "Créer & Envoyer sur Telegram"
+                      : "Créer la Mission"}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import {
+  sendCarReadyTelegramAlert,
+  sendInsuranceMissionTelegramAlert,
+} from "@/lib/services/telegramService";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +39,168 @@ export async function PATCH(req: Request, context: any) {
   try {
     const body = await req.json();
     
-    const currentClaim = await prisma.accidentClaim.findUnique({ where: { id } });
+    const currentClaim = await prisma.accidentClaim.findUnique({
+      where: { id },
+      include: {
+        vehicle: true,
+        driver: true,
+      },
+    });
     if (!currentClaim) {
       return NextResponse.json({ success: false, error: "Claim not found" }, { status: 404 });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: DIRECT DISPATCH OF FIELD TASK & TELEGRAM MISSION
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "DISPATCH_TELEGRAM_MISSION") {
+      const taskType = body.task_type || "GARAGE_PICKUP";
+      const priority = body.priority || "Urgent";
+      const plateNumber = currentClaim.vehicle?.plate_number || "Inconnu";
+      const description =
+        body.description?.trim() ||
+        `[Sinistre ${plateNumber}] Mission terrain requise pour le véhicule accidenté.`;
+
+      const fieldTask = await prisma.fieldTask.create({
+        data: {
+          task_type: taskType,
+          vehicle_id: currentClaim.vehicle_id,
+          plate_number: plateNumber,
+          driver_name: currentClaim.driver_name,
+          driver_phone: currentClaim.driver_phone,
+          description: description,
+          priority: priority === "Critical" ? "Critical" : priority === "Urgent" ? "Urgent" : "Normal",
+          status: "PENDING",
+          linked_ticket_id: currentClaim.id,
+          assigned_to: body.assigned_to || null,
+          scheduled_date: body.scheduled_date || null,
+          scheduled_time: body.scheduled_time || null,
+        },
+      });
+
+      // Send rich Telegram alert to Field Supervisor group
+      if (body.send_telegram !== false) {
+        const stepLabels: Record<string, string> = {
+          NEW_ACCIDENT: "1. Déclaré",
+          CAR_IN_GARAGE: "2. Entrée Garage",
+          STARTING_REPAIR: "3. Travaux en Cours",
+          INSURANCE_DOCS: "4. Expertise & Papiers",
+          READY_FOR_PICKUP: "5. Prêt Récupération",
+          VEHICLE_BACK: "6. Rétabli",
+        };
+
+        await sendInsuranceMissionTelegramAlert({
+          task_type: taskType,
+          plate_number: plateNumber,
+          make_model: currentClaim.vehicle?.make_model,
+          driver_name: currentClaim.driver_name,
+          driver_phone: currentClaim.driver_phone,
+          priority: priority,
+          timeline_step_label: stepLabels[currentClaim.timeline_step] || currentClaim.timeline_step,
+          description: description,
+          author: body.author || "Agent Assurance",
+          scheduled_date: body.scheduled_date,
+          scheduled_time: body.scheduled_time,
+        }).catch((err) => console.error("Failed to send insurance mission Telegram alert:", err));
+      }
+
+      // Append comment to history
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+      } catch {
+        existingComments = [];
+      }
+
+      const typeLabels: Record<string, string> = {
+        GARAGE_PICKUP: "Reprise au Garage",
+        VEHICLE_RECOVERY: "Récupération Véhicule",
+        FIELD_VISIT: "Visite / Constat Terrain",
+      };
+
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: currentClaim.timeline_step,
+        comment: `📱 Mission terrain (${typeLabels[taskType] || taskType}) transmise au Superviseur Terrain et notifiée sur Telegram par ${body.author || "Agent"}.`,
+        author: body.author || "Système",
+        created_at: new Date().toISOString(),
+      });
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(existingComments) },
+        include: { vehicle: true, driver: true },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim, fieldTask });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: RESEND / RELANCER TELEGRAM FOR CAR READY (STAGE 5)
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "NOTIFY_READY_TELEGRAM") {
+      const plateNumber = currentClaim.vehicle?.plate_number || "Inconnu";
+      const totalDays = Math.floor(
+        Math.abs(Date.now() - new Date(currentClaim.created_at).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Ensure FieldTask exists in PENDING state
+      let fieldTask = await prisma.fieldTask.findFirst({
+        where: { linked_ticket_id: currentClaim.id, task_type: "GARAGE_PICKUP", status: { not: "COMPLETED" } },
+      });
+
+      if (!fieldTask) {
+        fieldTask = await prisma.fieldTask.create({
+          data: {
+            task_type: "GARAGE_PICKUP",
+            vehicle_id: currentClaim.vehicle_id,
+            plate_number: plateNumber,
+            driver_name: currentClaim.driver_name,
+            driver_phone: currentClaim.driver_phone,
+            description: `Reprise au garage du véhicule réparé (Dossier Sinistre)`,
+            linked_ticket_id: currentClaim.id,
+            status: "PENDING",
+            priority: "Urgent",
+          },
+        });
+      }
+
+      // Send car ready Telegram alert
+      await sendCarReadyTelegramAlert({
+        plate_number: plateNumber,
+        make_model: currentClaim.vehicle?.make_model,
+        driver_name: currentClaim.driver_name,
+        driver_phone: currentClaim.driver_phone,
+        downtime_days: totalDays,
+        triggered_by: body.author || "Agent Assurance",
+        notes: body.comment || "Rappel : Véhicule réparé au garage et prêt pour récupération & convoyage.",
+      }).catch((err) => console.error("Failed to send car ready Telegram alert:", err));
+
+      // Append comment
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+      } catch {
+        existingComments = [];
+      }
+
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: "READY_FOR_PICKUP",
+        comment: `📱 Relance Telegram : Alerte véhicule prêt pour récupération renvoyée au superviseur terrain par ${body.author || "Agent"}.`,
+        author: body.author || "Système",
+        created_at: new Date().toISOString(),
+      });
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(existingComments) },
+        include: { vehicle: true, driver: true },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim, fieldTask });
     }
 
     const updateData: any = {};
@@ -88,30 +251,65 @@ export async function PATCH(req: Request, context: any) {
       },
     });
 
-    // Integration Logic: If it moved to READY_FOR_PICKUP, create a FieldTask
+    // Integration Logic: If it moved to READY_FOR_PICKUP, create FieldTask AND send Telegram alert!
     if (isStatusChange && updatedClaim.timeline_step === 'READY_FOR_PICKUP') {
-      await prisma.fieldTask.create({
-        data: {
-          task_type: "GARAGE_PICKUP",
-          vehicle_id: updatedClaim.vehicle_id,
-          plate_number: currentClaim.vehicle_id, // We'll look up the actual plate
-          driver_name: updatedClaim.driver_name,
-          driver_phone: updatedClaim.driver_phone,
-          description: `Garage pickup for repaired vehicle (Accident Claim)`,
-          linked_ticket_id: updatedClaim.id, // We use the accident claim ID as the linked ticket
-          status: "PENDING",
-          priority: "Urgent",
-        }
+      const plateNumber = updatedClaim.vehicle?.plate_number || currentClaim.vehicle?.plate_number || "Inconnu";
+      const totalDays = Math.floor(
+        Math.abs(Date.now() - new Date(updatedClaim.created_at).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Check if task already exists
+      const existingTask = await prisma.fieldTask.findFirst({
+        where: { linked_ticket_id: updatedClaim.id, task_type: "GARAGE_PICKUP", status: { not: "COMPLETED" } },
       });
-      
-      // Let's ensure the plate number is correct by updating it after creation
-      const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
-      if (vehicle) {
-        await prisma.fieldTask.updateMany({
-          where: { linked_ticket_id: updatedClaim.id, task_type: "GARAGE_PICKUP" },
-          data: { plate_number: vehicle.plate_number }
+
+      if (!existingTask) {
+        await prisma.fieldTask.create({
+          data: {
+            task_type: "GARAGE_PICKUP",
+            vehicle_id: updatedClaim.vehicle_id,
+            plate_number: plateNumber,
+            driver_name: updatedClaim.driver_name,
+            driver_phone: updatedClaim.driver_phone,
+            description: `Reprise au garage du véhicule réparé (Dossier Sinistre)`,
+            linked_ticket_id: updatedClaim.id,
+            status: "PENDING",
+            priority: "Urgent",
+          },
         });
       }
+
+      // Automatically dispatch Telegram alert to the Field Supervisor group!
+      await sendCarReadyTelegramAlert({
+        plate_number: plateNumber,
+        make_model: updatedClaim.vehicle?.make_model,
+        driver_name: updatedClaim.driver_name,
+        driver_phone: updatedClaim.driver_phone,
+        downtime_days: totalDays,
+        triggered_by: body.author || "Agent Assurance",
+        notes: body.comment || "Véhicule réparé au garage. Prêt pour récupération et convoyage en flotte.",
+      }).catch((err) => console.error("Auto Telegram car ready alert error:", err));
+
+      // Append system comment documenting the telegram notification
+      let existingComments: any[] = [];
+      try {
+        existingComments = updatedClaim.comments ? JSON.parse(updatedClaim.comments) : [];
+      } catch {
+        existingComments = [];
+      }
+
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: "READY_FOR_PICKUP",
+        comment: "🚗 Véhicule réparé et prêt au garage. Alerte Telegram envoyée automatiquement au superviseur terrain.",
+        author: "Système Telegram",
+        created_at: new Date().toISOString(),
+      });
+
+      await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(existingComments) },
+      });
     }
 
     // When vehicle is recovered and back in service (VEHICLE_BACK)

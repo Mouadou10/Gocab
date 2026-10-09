@@ -119,6 +119,8 @@ export default function InsuranceView() {
   const hardCount = activeClaims.filter((c) => c.severity === "HARD").length;
   const softCount = activeClaims.filter((c) => c.severity === "SOFT").length;
   const insuranceDocsCount = activeClaims.filter((c) => c.timeline_step === "INSURANCE_DOCS").length;
+  const readyForPickupCount = activeClaims.filter((c) => c.timeline_step === "READY_FOR_PICKUP").length;
+  const activeTelegramMissionsCount = activeClaims.filter((c) => c.fieldTask && c.fieldTask.status !== "COMPLETED").length;
 
   const totalDowntimeDays = activeClaims.reduce((sum, c) => {
     const diffTime = Math.abs(new Date().getTime() - new Date(c.created_at).getTime());
@@ -214,7 +216,7 @@ export default function InsuranceView() {
       </div>
 
       {/* KPI Summary Metrics Banner */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-6">
         {/* Card 1: Total Active Accidents */}
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
@@ -265,7 +267,32 @@ export default function InsuranceView() {
           <div className="min-w-0">
             <div className="text-2xl font-black text-navy">{insuranceDocsCount}</div>
             <div className="text-xs font-bold text-gray-600 truncate">Attente Assurance</div>
-            <div className="text-3xs text-purple-700 font-semibold">Devis / Expertises en cours</div>
+            <div className="text-3xs text-purple-700 font-semibold">Devis / Expertises</div>
+          </div>
+        </div>
+
+        {/* Card 5: Ready for Pickup & Missions Telegram */}
+        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5 col-span-2 sm:col-span-1">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+            <span className="text-xl">🚗</span>
+          </div>
+          <div className="min-w-0">
+            <div className="text-2xl font-black text-navy flex items-baseline gap-1.5">
+              <span className="text-emerald-600">{readyForPickupCount}</span>
+              {activeTelegramMissionsCount > 0 && (
+                <span
+                  className="text-2xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex items-center gap-0.5"
+                  title={`${activeTelegramMissionsCount} mission(s) terrain Telegram active(s)`}
+                >
+                  <span>📱</span>
+                  <span>{activeTelegramMissionsCount}</span>
+                </span>
+              )}
+            </div>
+            <div className="text-xs font-bold text-gray-600 truncate">Prêts Récupération</div>
+            <div className="text-3xs text-emerald-700 font-semibold truncate">
+              {readyForPickupCount > 0 ? "Alerte Telegram transmise" : "En attente fin garage"}
+            </div>
           </div>
         </div>
       </div>
