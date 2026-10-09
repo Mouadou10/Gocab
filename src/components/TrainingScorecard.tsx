@@ -591,35 +591,35 @@ export default function TrainingScorecard({
           </p>
         </div>
 
-        {/* Card 4: Conversion Rate per Attended (> 20% Target) */}
+        {/* Card 4: Conversion Rate per Convoqués (> 20% Target) */}
         <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-slate-600">Tx Conversion / Présents</span>
+            <span className="text-xs font-bold text-slate-600">Tx Conversion / Convoqués</span>
             <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-              Number(conversionPerAttendedRate) >= 20 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-purple-100 text-purple-800"
+              Number(conversionRate) >= 20 ? "bg-emerald-100 text-emerald-800 font-black" : "bg-purple-100 text-purple-800"
             }`}>
               Cible &gt; 20%
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-2">
             <span className={`text-2xl font-black ${
-              Number(conversionPerAttendedRate) >= 20 ? "text-emerald-700" : "text-purple-700"
-            }`}>{conversionPerAttendedRate}%</span>
+              Number(conversionRate) >= 20 ? "text-emerald-700" : "text-purple-700"
+            }`}>{conversionRate}%</span>
             <span className="text-xs text-slate-500 font-semibold">
-              ({totalConverted} / {attendedCount} présents)
+              ({totalConverted} / {totalInTraining} convoqués)
             </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all duration-500 ${
-                Number(conversionPerAttendedRate) >= 20 ? 'bg-emerald-500' : 'bg-purple-500'
+                Number(conversionRate) >= 20 ? 'bg-emerald-500' : 'bg-purple-500'
               }`}
-              style={{ width: `${Math.min(100, (Number(conversionPerAttendedRate) / 20) * 100)}%` }}
+              style={{ width: `${Math.min(100, (Number(conversionRate) / 20) * 100)}%` }}
             />
           </div>
           <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1.5">
-            <span>{totalConverted} signés sur {attendedCount} présents</span>
-            <span className="font-semibold text-slate-600">({conversionRate}% / convoqués)</span>
+            <span>{totalConverted} signés sur {totalInTraining} convoqués</span>
+            <span className="font-semibold text-slate-600">({conversionPerAttendedRate}% / présents)</span>
           </div>
         </div>
       </div>
