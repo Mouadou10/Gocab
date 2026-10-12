@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import {
   normalizeWhatsAppPhone,
   findOrCreateConversation,
@@ -14,6 +15,9 @@ import {
 export async function GET(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
+
+    const session = await auth();
+    const userRole = ((session?.user as any)?.role || "").toUpperCase();
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.toLowerCase().trim() || "";
@@ -239,13 +243,25 @@ export async function GET(request: NextRequest) {
       c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
       c.contactType === "LEAD";
 
+    // Role-based queue restriction:
+    // - FLEET_PERF_MANAGER only sees Support Flotte
+    // - LEAD_ACQUISITION_JR and BRAND_MANAGER only see Lead Acquisition
+    let restrictedQueue: "FLEET_SUPPORT" | "LEAD_ACQUISITION" | null = null;
+    if (userRole === "FLEET_PERF_MANAGER") {
+      restrictedQueue = "FLEET_SUPPORT";
+      allMapped = allMapped.filter(isFleetSupportConv);
+    } else if (userRole === "LEAD_ACQUISITION_JR" || userRole === "BRAND_MANAGER") {
+      restrictedQueue = "LEAD_ACQUISITION";
+      allMapped = allMapped.filter(isLeadAcquisitionConv);
+    }
+
     const fleetSupportCount = allMapped.filter(isFleetSupportConv).length;
     const leadAcquisitionCount = allMapped.filter(isLeadAcquisitionConv).length;
 
     let results = [...allMapped];
 
     // Apply category filters
-    if (filter === "FLEET_SUPPORT") {
+    if (filter === "FLEET_SUPPORT" || restrictedQueue === "FLEET_SUPPORT") {
       results = results.filter(isFleetSupportConv);
       // Prioritize drivers who explicitly entered their immat via WhatsApp bot at the top
       results.sort((a, b) => {
@@ -254,7 +270,7 @@ export async function GET(request: NextRequest) {
         if (bBot !== aBot) return bBot - aBot;
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
       });
-    } else if (filter === "LEAD_ACQUISITION") {
+    } else if (filter === "LEAD_ACQUISITION" || restrictedQueue === "LEAD_ACQUISITION") {
       results = results.filter(isLeadAcquisitionConv);
       results.sort((a, b) => {
         const aBot = a.workflowState === "ROUTED_LEAD_ACQUISITION" ? 1 : 0;
@@ -262,7 +278,9 @@ export async function GET(request: NextRequest) {
         if (bBot !== aBot) return bBot - aBot;
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
       });
-    } else if (filter === "DRIVERS") {
+    }
+
+    if (filter === "DRIVERS") {
       results = results.filter((c) => c.contactType === "DRIVER" || c.driver !== null);
     } else if (filter === "LEADS") {
       results = results.filter((c) => c.contactType === "LEAD" || c.lead !== null);
@@ -292,6 +310,7 @@ export async function GET(request: NextRequest) {
       totalUnread,
       fleetSupportCount,
       leadAcquisitionCount,
+      restrictedQueue,
     });
   } catch (error: any) {
     console.error("GET /api/whatsapp/conversations error:", error);

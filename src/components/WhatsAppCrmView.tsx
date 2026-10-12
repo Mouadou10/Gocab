@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import {
   MessageCircle,
   Search,
@@ -78,14 +79,25 @@ interface MessageItem {
 }
 
 export default function WhatsAppCrmView() {
+  const { data: session } = useSession();
+  const userRole = ((session?.user as any)?.role || "").toUpperCase();
+
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [filter, setFilter] = useState<
     "ALL" | "FLEET_SUPPORT" | "LEAD_ACQUISITION" | "DRIVERS" | "LEADS" | "ARREARS" | "UNREAD"
   >("ALL");
+  const [restrictedQueue, setRestrictedQueue] = useState<"FLEET_SUPPORT" | "LEAD_ACQUISITION" | null>(null);
   const [fleetSupportCount, setFleetSupportCount] = useState(0);
   const [leadAcquisitionCount, setLeadAcquisitionCount] = useState(0);
+
+  const isFleetSupportOnly =
+    userRole === "FLEET_PERF_MANAGER" || restrictedQueue === "FLEET_SUPPORT";
+  const isLeadAcquisitionOnly =
+    userRole === "LEAD_ACQUISITION_JR" ||
+    userRole === "BRAND_MANAGER" ||
+    restrictedQueue === "LEAD_ACQUISITION";
   const [searchQuery, setSearchQuery] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const [isLoadingList, setIsLoadingList] = useState(true);
@@ -158,6 +170,9 @@ export default function WhatsAppCrmView() {
 
         const list: ConversationItem[] = data.conversations || [];
         setConversations(list);
+        if (data.restrictedQueue !== undefined) {
+          setRestrictedQueue(data.restrictedQueue);
+        }
         if (typeof data.fleetSupportCount === "number") {
           setFleetSupportCount(data.fleetSupportCount);
         }
@@ -165,11 +180,10 @@ export default function WhatsAppCrmView() {
           setLeadAcquisitionCount(data.leadAcquisitionCount);
         }
 
-        // If no conversation is selected, pick the first one
-        if (!preserveSelection || !selectedConvId) {
-          if (list.length > 0 && !selectedConvId) {
-            setSelectedConvId(list[0].id);
-          }
+        // If no conversation is selected or selected conversation is not in list, pick the first one
+        const stillInList = selectedConvId && list.some((c) => c.id === selectedConvId);
+        if (!preserveSelection || !stillInList) {
+          setSelectedConvId(list.length > 0 ? list[0].id : null);
         }
       } catch (err: any) {
         console.error("Failed to load WhatsApp conversations", err);
@@ -555,56 +569,90 @@ export default function WhatsAppCrmView() {
           </div>
 
           {/* Workflow Routing Queues + Filter Chips */}
-          <div className="grid grid-cols-2 gap-1.5 mt-2">
-            <button
-              onClick={() => setFilter(filter === "FLEET_SUPPORT" ? "ALL" : "FLEET_SUPPORT")}
-              className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
-                filter === "FLEET_SUPPORT"
-                  ? "bg-amber-600 text-white border-amber-700 shadow-xs"
-                  : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
-              }`}
-              title="Option 1 : Chauffeurs ayant saisi leur immatriculation pour le Support Performance Flotte"
-            >
-              <span className="truncate">1️⃣ Support Flotte</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+          {isFleetSupportOnly ? (
+            <div className="mt-2">
+              <button
+                onClick={() => setFilter("FLEET_SUPPORT")}
+                className="w-full px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border bg-amber-600 text-white border-amber-700 shadow-xs"
+                title="File dédiée : Support Performance Flotte"
+              >
+                <span className="truncate">1️⃣ Support Flotte (File dédiée)</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-white text-amber-800">
+                  {fleetSupportCount}
+                </span>
+              </button>
+            </div>
+          ) : isLeadAcquisitionOnly ? (
+            <div className="mt-2">
+              <button
+                onClick={() => setFilter("LEAD_ACQUISITION")}
+                className="w-full px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border bg-blue-600 text-white border-blue-700 shadow-xs"
+                title="File dédiée : Lead Acquisition"
+              >
+                <span className="truncate">2️⃣ Lead Acquisition (File dédiée)</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-white text-blue-800">
+                  {leadAcquisitionCount}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5 mt-2">
+              <button
+                onClick={() => setFilter(filter === "FLEET_SUPPORT" ? "ALL" : "FLEET_SUPPORT")}
+                className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
                   filter === "FLEET_SUPPORT"
-                    ? "bg-white text-amber-800"
-                    : "bg-amber-200/80 text-amber-950"
+                    ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                    : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
                 }`}
+                title="Option 1 : Chauffeurs ayant saisi leur immatriculation pour le Support Performance Flotte"
               >
-                {fleetSupportCount}
-              </span>
-            </button>
+                <span className="truncate">1️⃣ Support Flotte</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                    filter === "FLEET_SUPPORT"
+                      ? "bg-white text-amber-800"
+                      : "bg-amber-200/80 text-amber-950"
+                  }`}
+                >
+                  {fleetSupportCount}
+                </span>
+              </button>
 
-            <button
-              onClick={() => setFilter(filter === "LEAD_ACQUISITION" ? "ALL" : "LEAD_ACQUISITION")}
-              className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
-                filter === "LEAD_ACQUISITION"
-                  ? "bg-blue-600 text-white border-blue-700 shadow-xs"
-                  : "bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100"
-              }`}
-              title="Option 2 : Prospects demandant des informations (Lead Acquisition)"
-            >
-              <span className="truncate">2️⃣ Lead Acquisition</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+              <button
+                onClick={() => setFilter(filter === "LEAD_ACQUISITION" ? "ALL" : "LEAD_ACQUISITION")}
+                className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
                   filter === "LEAD_ACQUISITION"
-                    ? "bg-white text-blue-800"
-                    : "bg-blue-200/80 text-blue-950"
+                    ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                    : "bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100"
                 }`}
+                title="Option 2 : Prospects demandant des informations (Lead Acquisition)"
               >
-                {leadAcquisitionCount}
-              </span>
-            </button>
-          </div>
+                <span className="truncate">2️⃣ Lead Acquisition</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                    filter === "LEAD_ACQUISITION"
+                      ? "bg-white text-blue-800"
+                      : "bg-blue-200/80 text-blue-950"
+                  }`}
+                >
+                  {leadAcquisitionCount}
+                </span>
+              </button>
+            </div>
+          )}
 
           <div className="flex items-center gap-1 mt-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-            {[
-              { id: "ALL", label: "Tous" },
-              { id: "ARREARS", label: "⚠️ Impayés" },
-              { id: "UNREAD", label: "Non lus" },
-            ].map((tab) => (
+            {(isLeadAcquisitionOnly
+              ? [
+                  { id: "ALL", label: "Tous" },
+                  { id: "UNREAD", label: "Non lus" },
+                ]
+              : [
+                  { id: "ALL", label: "Tous" },
+                  { id: "ARREARS", label: "⚠️ Impayés" },
+                  { id: "UNREAD", label: "Non lus" },
+                ]
+            ).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setFilter(tab.id as any)}

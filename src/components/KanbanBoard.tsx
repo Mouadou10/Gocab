@@ -80,6 +80,7 @@ interface Lead {
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
+  BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
   ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
   FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
   FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
@@ -90,6 +91,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
   LEAD_ACQUISITION_JR:   "Lead Acquisition Jr",
+  BRAND_MANAGER:         "Brand Manager",
   ONBOARDING_SPECIALIST: "Onboarding Specialist",
   FLEET_PERF_MANAGER:    "Fleet Performance",
   FIELD_SUPERVISOR:      "Field Supervisor",
@@ -100,6 +102,7 @@ const DEFAULT_ROLE_LABELS: Record<string, string> = {
 
 const ROLE_COLORS: Record<string, string> = {
   LEAD_ACQUISITION_JR:   "bg-blue-100 text-blue-700",
+  BRAND_MANAGER:         "bg-indigo-100 text-indigo-700",
   ONBOARDING_SPECIALIST: "bg-emerald-100 text-emerald-800",
   FLEET_PERF_MANAGER:    "bg-amber-100 text-amber-700",
   FIELD_SUPERVISOR:      "bg-green-100 text-green-700",
@@ -113,6 +116,7 @@ type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
   LEAD_ACQUISITION_JR:   "leads",
+  BRAND_MANAGER:         "leads",
   ONBOARDING_SPECIALIST: "training",
   FLEET_PERF_MANAGER:    "fleet",
   FIELD_SUPERVISOR:      "field",
