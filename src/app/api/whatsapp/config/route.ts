@@ -54,11 +54,36 @@ export async function POST(req: NextRequest) {
       action,
     } = body;
 
+    // Helper to register webhook on both 360dialog v2 Cloud API (/waba_webhook) and v1 (/v1/configs/webhook)
+    const registerD360Webhook = async (apiKey: string, baseUrl: string, webhookUrl: string) => {
+      const cleanBase = baseUrl.replace(/\/$/, "");
+      const headers = {
+        "D360-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      };
+      // Try v2 Cloud API endpoint first (/waba_webhook)
+      let res = await fetch(`${cleanBase}/waba_webhook`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url: webhookUrl }),
+      });
+      if (!res.ok) {
+        // Fallback to v1 endpoint (/v1/configs/webhook)
+        res = await fetch(`${cleanBase}/v1/configs/webhook`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ url: webhookUrl }),
+        });
+      }
+      const data = await res.json().catch(() => null);
+      return { ok: res.ok, status: res.status, data };
+    };
+
     // Action: Automatically register webhook with 360dialog
     if (action === "register_360dialog_webhook") {
       const config = await getWhatsAppApiConfig();
       const apiKey = d360ApiKey || config.d360ApiKey;
-      const baseUrl = (d360ApiUrl || config.d360ApiUrl || "https://waba-v2.360dialog.io").replace(/\/$/, "");
+      const baseUrl = d360ApiUrl || config.d360ApiUrl || "https://waba-v2.360dialog.io";
       const host = req.headers.get("host") || "gocab-iota.vercel.app";
       const protocol = host.includes("localhost") ? "http" : "https";
       const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
@@ -68,21 +93,12 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        const d360Res = await fetch(`${baseUrl}/v1/configs/webhook`, {
-          method: "POST",
-          headers: {
-            "D360-API-KEY": apiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url: webhookUrl }),
-        });
-
-        const d360Data = await d360Res.json().catch(() => null);
+        const { ok, data: d360Data } = await registerD360Webhook(apiKey, baseUrl, webhookUrl);
         return NextResponse.json({
-          success: d360Res.ok,
-          message: d360Res.ok
+          success: ok,
+          message: ok
             ? "Webhook 360dialog enregistré avec succès !"
-            : d360Data?.meta?.developer_message || "Échec d'enregistrement du webhook",
+            : d360Data?.meta?.developer_message || d360Data?.detail || "Échec d'enregistrement du webhook",
           d360Response: d360Data,
         });
       } catch (err: any) {
@@ -122,17 +138,10 @@ export async function POST(req: NextRequest) {
       const host = req.headers.get("host") || "gocab-iota.vercel.app";
       const protocol = host.includes("localhost") ? "http" : "https";
       const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
-      const baseUrl = (d360ApiUrl || "https://waba-v2.360dialog.io").replace(/\/$/, "");
+      const baseUrl = d360ApiUrl || "https://waba-v2.360dialog.io";
 
       try {
-        const whRes = await fetch(`${baseUrl}/v1/configs/webhook`, {
-          method: "POST",
-          headers: {
-            "D360-API-KEY": d360ApiKey.trim(),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url: webhookUrl }),
-        });
+        const whRes = await registerD360Webhook(d360ApiKey.trim(), baseUrl, webhookUrl);
         webhookRegistered = whRes.ok;
       } catch (err) {
         console.warn("Auto-register webhook failed:", err);
