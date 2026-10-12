@@ -19,6 +19,7 @@ export interface SendMessageOptions {
   text: string;
   senderName?: string;
   templateKey?: string;
+  interactiveButtons?: Array<{ id: string; title: string }>;
 }
 
 export interface InboundMessagePayload {
@@ -27,6 +28,8 @@ export interface InboundMessagePayload {
   text: string;
   waMessageId?: string;
   mediaUrl?: string;
+  interactiveReplyId?: string;
+  skipBotWorkflow?: boolean;
 }
 
 /**
@@ -139,6 +142,10 @@ export async function ensureWhatsAppTables(): Promise<void> {
         "contact_type" TEXT NOT NULL DEFAULT 'UNKNOWN',
         "driver_id" TEXT,
         "lead_id" TEXT,
+        "workflow_state" TEXT NOT NULL DEFAULT 'NONE',
+        "routed_department" TEXT,
+        "matched_plate" TEXT,
+        "matched_vehicle_id" TEXT,
         "unread_count" INTEGER NOT NULL DEFAULT 0,
         "last_message" TEXT,
         "last_message_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -148,6 +155,27 @@ export async function ensureWhatsAppTables(): Promise<void> {
         "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "WhatsAppConversation" ADD COLUMN "workflow_state" TEXT NOT NULL DEFAULT 'NONE'`
+      );
+    } catch (_) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "WhatsAppConversation" ADD COLUMN "routed_department" TEXT`
+      );
+    } catch (_) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "WhatsAppConversation" ADD COLUMN "matched_plate" TEXT`
+      );
+    } catch (_) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "WhatsAppConversation" ADD COLUMN "matched_vehicle_id" TEXT`
+      );
+    } catch (_) {}
 
     await prisma.$executeRawUnsafe(`
       CREATE UNIQUE INDEX IF NOT EXISTS "WhatsAppConversation_phone_number_key" 
@@ -211,7 +239,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
       where: { phone_number: cleanPhone },
     });
   } catch (err: any) {
-    if (err?.message?.includes("no such table")) {
+    if (err?.message?.includes("no such table") || err?.message?.includes("no such column")) {
       tablesEnsured = false;
       await ensureWhatsAppTables();
       conversation = await getDbConv().findUnique({
@@ -228,23 +256,27 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
 
   // Fast targeted lookup for driver profile
   const shortPhone = cleanPhone.slice(-9);
-  const matchedDriver = await prisma.driverProfile.findFirst({
-    where: {
-      phoneSanitized: { contains: shortPhone },
-    },
-    select: { id: true, fullName: true },
-  }).catch(() => null);
+  const matchedDriver = await prisma.driverProfile
+    .findFirst({
+      where: {
+        phoneSanitized: { contains: shortPhone },
+      },
+      include: { assignedVehicle: true },
+    })
+    .catch(() => null);
 
   // Fast targeted lookup for lead
   let matchedLead: any = null;
   if (!matchedDriver) {
-    matchedLead = await prisma.lead.findFirst({
-      where: {
-        sanitized_phone: { contains: shortPhone },
-        is_archived: false,
-      },
-      select: { id: true, raw_name: true },
-    }).catch(() => null);
+    matchedLead = await prisma.lead
+      .findFirst({
+        where: {
+          sanitized_phone: { contains: shortPhone },
+          is_archived: false,
+        },
+        select: { id: true, raw_name: true },
+      })
+      .catch(() => null);
   }
 
   const finalName =
@@ -263,6 +295,8 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
         driver_id: matchedDriver ? matchedDriver.id : null,
         lead_id: matchedLead ? matchedLead.id : null,
         contact_type: contactType,
+        matched_plate: matchedDriver?.assignedVehicle?.plate_number || null,
+        matched_vehicle_id: matchedDriver?.assignedVehicle?.id || null,
         unread_count: 0,
         last_message: "Conversation initiée",
         last_message_at: new Date(),
@@ -271,7 +305,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
       },
     });
   } catch (err: any) {
-    if (err?.message?.includes("no such table")) {
+    if (err?.message?.includes("no such table") || err?.message?.includes("no such column")) {
       tablesEnsured = false;
       await ensureWhatsAppTables();
       conversation = await getDbConv().create({
@@ -297,7 +331,7 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
 }
 
 /**
- * Sends an outbound WhatsApp message via Meta Cloud API (if configured) and logs to DB
+ * Sends an outbound WhatsApp message via 360dialog / Meta Cloud API and logs to DB
  */
 export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   await ensureWhatsAppTables();
@@ -317,28 +351,66 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   let apiError: string | null = null;
   let deliveryMode = "CRM_LIVE_SIMULATION";
 
+  const buildPayload = (useInteractive: boolean) => {
+    if (useInteractive && opts.interactiveButtons && opts.interactiveButtons.length > 0) {
+      return {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhone,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: opts.text },
+          action: {
+            buttons: opts.interactiveButtons.slice(0, 3).map((b) => ({
+              type: "reply",
+              reply: {
+                id: b.id,
+                title: b.title.slice(0, 20), // Meta enforces max 20 chars on button title
+              },
+            })),
+          },
+        },
+      };
+    }
+    return {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: cleanPhone,
+      type: "text",
+      text: { body: opts.text },
+    };
+  };
+
   // Dispatch live WhatsApp Business API message
   if (config.isLiveConfigured) {
     if (config.provider === "360dialog" && config.d360ApiKey) {
       try {
         const d360Base = config.d360ApiUrl.replace(/\/$/, "");
-        // 360dialog Messaging API Endpoint
-        const d360Res = await fetch(`${d360Base}/messages`, {
+        const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
+        let d360Res = await fetch(`${d360Base}/messages`, {
           method: "POST",
           headers: {
             "D360-API-KEY": config.d360ApiKey,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: cleanPhone,
-            type: "text",
-            text: { body: opts.text },
-          }),
+          body: JSON.stringify(buildPayload(hasInteractive)),
         });
 
-        const d360Data = await d360Res.json().catch(() => null);
+        let d360Data = await d360Res.json().catch(() => null);
+
+        // Fallback to standard text if interactive button payload was rejected
+        if (!d360Res.ok && hasInteractive) {
+          d360Res = await fetch(`${d360Base}/messages`, {
+            method: "POST",
+            headers: {
+              "D360-API-KEY": config.d360ApiKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(buildPayload(false)),
+          });
+          d360Data = await d360Res.json().catch(() => null);
+        }
 
         if (d360Res.ok && d360Data?.messages && d360Data.messages[0]) {
           waMessageId = d360Data.messages[0].id;
@@ -369,6 +441,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
       }
     } else if (config.phoneNumberId && config.accessToken) {
       try {
+        const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
         const metaRes = await fetch(
           `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
           {
@@ -377,13 +450,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
               Authorization: `Bearer ${config.accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              recipient_type: "individual",
-              to: cleanPhone,
-              type: "text",
-              text: { preview_url: false, body: opts.text },
-            }),
+            body: JSON.stringify(buildPayload(hasInteractive)),
           }
         );
 
@@ -439,6 +506,424 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
 }
 
 /**
+ * Sends the 2-option interactive GoCab Welcome Menu (1: Driver Support / 2: Getting Info)
+ */
+export async function sendWhatsAppWelcomeMenu(phoneNumber: string, conversationId?: string) {
+  const cleanPhone = normalizeWhatsAppPhone(phoneNumber);
+  if (!cleanPhone) throw new Error("Numéro de téléphone invalide");
+
+  const conv = conversationId
+    ? await getDbConv().findUnique({ where: { id: conversationId } })
+    : await findOrCreateConversation(cleanPhone);
+
+  if (conv) {
+    await getDbConv().update({
+      where: { id: conv.id },
+      data: { workflow_state: "AWAITING_MENU_CHOICE" },
+    });
+  }
+
+  const menuText =
+    `Bonjour et bienvenue chez *GoCab* ! 🚖\n\n` +
+    `Comment pouvons-nous vous aider aujourd'hui ?\n` +
+    `Choisissez une option ci-dessous (ou répondez *1* ou *2*) :\n\n` +
+    `1️⃣ *Contacter le Support Chauffeur* (Flotte & Assistance)\n` +
+    `2️⃣ *Obtenir des informations* (Devenir Chauffeur GoCab)`;
+
+  return sendOutboundWhatsAppMessage({
+    conversationId: conv?.id,
+    phoneNumber: cleanPhone,
+    senderName: "🤖 Bot GoCab",
+    text: menuText,
+    interactiveButtons: [
+      { id: "FLOW_DRIVER_SUPPORT", title: "1. Support Chauffeur" },
+      { id: "FLOW_GET_INFO", title: "2. Infos GoCab" },
+    ],
+  });
+}
+
+/**
+ * Matches a vehicle and its assigned driver in the database from a free-text immatriculation string
+ */
+export async function matchVehicleByImmat(rawImmat: string) {
+  const cleanAlnum = rawImmat.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "").toUpperCase();
+  const digitsOnly = rawImmat.replace(/\D/g, "");
+
+  if (cleanAlnum.length < 2 && digitsOnly.length < 2) {
+    return { vehicle: null, driver: null, normalizedInput: rawImmat.trim().toUpperCase() };
+  }
+
+  const vehicles = await prisma.vehicle.findMany({
+    where: { is_archived: false },
+    include: { driverProfile: true },
+  });
+
+  // 1. Exact normalized match
+  let matched = vehicles.find(
+    (v) => v.plate_number.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "").toUpperCase() === cleanAlnum
+  );
+
+  // 2. Partial normalized match (e.g., driver wrote "12345A6" or "12345-A")
+  if (!matched && cleanAlnum.length >= 4) {
+    matched = vehicles.find((v) => {
+      const vClean = v.plate_number.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "").toUpperCase();
+      return vClean.includes(cleanAlnum) || cleanAlnum.includes(vClean);
+    });
+  }
+
+  // 3. Digits prefix match (e.g., driver wrote "12345" for "12345-A-6")
+  if (!matched && digitsOnly.length >= 3) {
+    matched = vehicles.find((v) => {
+      const vDigits = v.plate_number.replace(/\D/g, "");
+      return vDigits === digitsOnly || (digitsOnly.length >= 4 && vDigits.startsWith(digitsOnly));
+    });
+  }
+
+  let driver = matched?.driverProfile || null;
+  if (matched && !driver) {
+    driver = await prisma.driverProfile
+      .findFirst({
+        where: { assignedVehicleId: matched.id },
+      })
+      .catch(() => null);
+  }
+
+  return {
+    vehicle: matched || null,
+    driver,
+    normalizedInput: matched ? matched.plate_number : rawImmat.trim().toUpperCase().slice(0, 24),
+  };
+}
+
+/**
+ * Routes a conversation to Fleet Performance Support with the matched vehicle immatriculation
+ */
+export async function routeConversationByImmat(
+  conversationId: string,
+  rawImmat: string,
+  sendBotReply = true
+) {
+  const conv = await getDbConv().findUnique({ where: { id: conversationId } });
+  if (!conv) throw new Error("Conversation introuvable");
+
+  const { vehicle, driver, normalizedInput } = await matchVehicleByImmat(rawImmat);
+  const finalPlate = vehicle ? vehicle.plate_number : normalizedInput;
+  const finalDriverName =
+    driver?.fullName || vehicle?.assigned_driver_name || conv.contact_name;
+
+  const updatedConv = await getDbConv().update({
+    where: { id: conversationId },
+    data: {
+      workflow_state: "ROUTED_DRIVER_SUPPORT",
+      routed_department: "FLEET_SUPPORT",
+      contact_type: "DRIVER",
+      matched_plate: finalPlate,
+      matched_vehicle_id: vehicle ? vehicle.id : null,
+      driver_id: driver ? driver.id : conv.driver_id,
+      contact_name: finalDriverName,
+    },
+  });
+
+  // Also log/sync a VehicleIssue in Journal Flotte / Fleet Performance Support if none is open today for this plate
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const existingIssue = await prisma.vehicleIssue.findFirst({
+      where: {
+        plate_number: finalPlate,
+        status: { in: ["PENDING", "IN_PROGRESS"] },
+        created_at: { gte: startOfToday },
+      },
+    });
+
+    if (!existingIssue) {
+      await prisma.vehicleIssue.create({
+        data: {
+          vehicle_id: vehicle ? vehicle.id : null,
+          plate_number: finalPlate,
+          driver_name: finalDriverName,
+          driver_phone: `+${conv.phone_number}`,
+          category: "CHAUFFEUR",
+          title: `💬 Support WhatsApp — Immat ${finalPlate}`,
+          description: `Le chauffeur (${finalDriverName} / +${conv.phone_number}) a ouvert une session Support sur WhatsApp avec le matricule ${finalPlate}.`,
+          priority: "Urgent",
+          status: "PENDING",
+          reported_by_name: "Bot WhatsApp GoCab",
+          reported_by_role: "WHATSAPP_BOT",
+        },
+      });
+    }
+  } catch (e) {
+    console.warn("Could not auto-create VehicleIssue from WhatsApp immat:", e);
+  }
+
+  if (sendBotReply) {
+    const replyText = vehicle
+      ? `✅ Véhicule *${finalPlate}* (${vehicle.make_model}) identifié !\n` +
+        `👤 Chauffeur : *${finalDriverName}*\n\n` +
+        `Votre discussion est maintenant ouverte auprès de l'équipe *Support & Performance Flotte*.\n` +
+        `✍️ Vous pouvez écrire votre demande ou incident ci-dessous, un responsable vous répond immédiatement.`
+      : `✅ Matricule *${finalPlate}* enregistré !\n\n` +
+        `Votre discussion est maintenant transférée à l'équipe *Support & Performance Flotte*.\n` +
+        `✍️ Décrivez votre demande ou incident ci-dessous, un responsable vous répond immédiatement.`;
+
+    await sendOutboundWhatsAppMessage({
+      conversationId,
+      phoneNumber: conv.phone_number,
+      senderName: "🤖 Bot GoCab",
+      text: replyText,
+    });
+  }
+
+  return { conversation: updatedConv, vehicle, driver, matchedPlate: finalPlate };
+}
+
+/**
+ * Routes a conversation directly to Lead Acquisition and ensures a Lead card exists in NEW_LEADS
+ */
+export async function routeConversationToLeadAcquisition(
+  conversationId: string,
+  contactName?: string,
+  sendBotReply = true
+) {
+  const conv = await getDbConv().findUnique({ where: { id: conversationId } });
+  if (!conv) throw new Error("Conversation introuvable");
+
+  const shortPhone = conv.phone_number.slice(-9);
+  let lead = await prisma.lead
+    .findFirst({
+      where: { sanitized_phone: { contains: shortPhone } },
+    })
+    .catch(() => null);
+
+  const sanitizedForLead = conv.phone_number.startsWith("+")
+    ? conv.phone_number
+    : `+${conv.phone_number}`;
+
+  if (!lead) {
+    try {
+      lead = await prisma.lead.create({
+        data: {
+          raw_name:
+            contactName ||
+            (conv.contact_name && !conv.contact_name.startsWith("Contact +")
+              ? conv.contact_name
+              : `Prospect WhatsApp +${shortPhone}`),
+          sanitized_phone: sanitizedForLead,
+          campaign_source: "WhatsApp Bot (Infos)",
+          board_column: "NEW_LEADS",
+          city: "Casablanca",
+          notes: "Créé automatiquement via le workflow WhatsApp (Option 2 : Obtenir des informations).",
+        },
+      });
+
+      await prisma.leadActivityLog
+        .create({
+          data: {
+            lead_id: lead.id,
+            agent: "Bot WhatsApp",
+            action: "LEAD_CREATED_WHATSAPP",
+            detail: "Prospect redirigé vers Lead Acquisition via Option 2 (Demande d'informations)",
+          },
+        })
+        .catch(() => {});
+    } catch (e) {
+      // Fallback lookup if unique constraint raced
+      lead = await prisma.lead
+        .findFirst({
+          where: { sanitized_phone: { contains: shortPhone } },
+        })
+        .catch(() => null);
+    }
+  } else if (lead.is_archived) {
+    lead = await prisma.lead
+      .update({
+        where: { id: lead.id },
+        data: { is_archived: false },
+      })
+      .catch(() => lead);
+  }
+
+  const updatedConv = await getDbConv().update({
+    where: { id: conversationId },
+    data: {
+      workflow_state: "ROUTED_LEAD_ACQUISITION",
+      routed_department: "LEAD_ACQUISITION",
+      contact_type: "LEAD",
+      lead_id: lead ? lead.id : conv.lead_id,
+    },
+  });
+
+  if (sendBotReply) {
+    const replyText =
+      `👋 Merci pour votre intérêt pour *GoCab* !\n\n` +
+      `Votre demande est transmise directement à notre équipe *Acquisition & Recrutement Chauffeurs*.\n` +
+      `📋 Pour accélérer votre inscription, merci de nous indiquer ci-dessous :\n` +
+      `• Votre *Nom et Prénom*\n` +
+      `• Votre *Ville* (Casablanca, Rabat...)\n` +
+      `• Si vous possédez le *Permis B (+2 ans)*\n\n` +
+      `Un conseiller prend le relais dans cette discussion !`;
+
+    await sendOutboundWhatsAppMessage({
+      conversationId,
+      phoneNumber: conv.phone_number,
+      senderName: "🤖 Bot GoCab",
+      text: replyText,
+    });
+  }
+
+  return { conversation: updatedConv, lead };
+}
+
+/**
+ * Evaluates the automated 2-option WhatsApp workflow on every inbound customer message
+ */
+async function processInboundBotWorkflow(
+  conversation: any,
+  inboundText: string,
+  interactiveReplyId?: string,
+  contactName?: string
+) {
+  const trimmed = (inboundText || "").trim();
+  const lower = trimmed.toLowerCase();
+  const state = conversation.workflow_state || "NONE";
+
+  const isMenuCommand = ["menu", "start", "0", "accueil", "aide", "help", "options"].includes(
+    lower
+  );
+
+  const isOption1 =
+    interactiveReplyId === "FLOW_DRIVER_SUPPORT" ||
+    lower === "1" ||
+    lower === "1️⃣" ||
+    lower === "1. support chauffeur" ||
+    lower === "support chauffeur" ||
+    lower === "contact driver support";
+
+  const isOption2 =
+    interactiveReplyId === "FLOW_GET_INFO" ||
+    lower === "2" ||
+    lower === "2️⃣" ||
+    lower === "2. infos gocab" ||
+    lower === "getting information" ||
+    lower === "obtenir des informations";
+
+  // 1. Explicit menu command resets and sends the 2-option interactive menu
+  if (isMenuCommand) {
+    await sendWhatsAppWelcomeMenu(conversation.phone_number, conversation.id);
+    return;
+  }
+
+  // 2. User clicked or typed Option 1 -> Ask for Immatriculation
+  if (isOption1) {
+    await getDbConv().update({
+      where: { id: conversation.id },
+      data: {
+        workflow_state: "AWAITING_IMMAT",
+        routed_department: "FLEET_SUPPORT",
+      },
+    });
+
+    await sendOutboundWhatsAppMessage({
+      conversationId: conversation.id,
+      phoneNumber: conversation.phone_number,
+      senderName: "🤖 Bot GoCab",
+      text:
+        `🚗 *Support Chauffeur GoCab*\n\n` +
+        `Veuillez saisir le *numéro d'immatriculation (matricule)* de votre véhicule (ex: *12345-A-6* ou *12345*) afin d'ouvrir votre dossier auprès du *Support Performance Flotte* :`,
+    });
+    return;
+  }
+
+  // 3. User clicked or typed Option 2 -> Route directly to Lead Acquisition
+  if (isOption2) {
+    await routeConversationToLeadAcquisition(conversation.id, contactName, true);
+    return;
+  }
+
+  // 4. Conversation is waiting for the driver's immatriculation -> Match Immat & Route to Fleet Support
+  if (state === "AWAITING_IMMAT") {
+    await routeConversationByImmat(conversation.id, trimmed, true);
+    return;
+  }
+
+  // 5. Initial contact (state === "NONE") -> Send the 2-option Welcome Menu automatically
+  if (state === "NONE") {
+    await sendWhatsAppWelcomeMenu(conversation.phone_number, conversation.id);
+    return;
+  }
+
+  // 6. If waiting for menu choice (state === "AWAITING_MENU_CHOICE") and user typed free text
+  if (state === "AWAITING_MENU_CHOICE") {
+    // Check if they typed an immatriculation directly or keywords
+    if (
+      lower.includes("info") ||
+      lower.includes("insta") ||
+      lower.includes("offre") ||
+      lower.includes("inscription") ||
+      lower.includes("travail") ||
+      lower.includes("formule") ||
+      lower.includes("condition")
+    ) {
+      await routeConversationToLeadAcquisition(conversation.id, contactName, true);
+      return;
+    }
+    if (
+      lower.includes("support") ||
+      lower.includes("panne") ||
+      lower.includes("garage") ||
+      lower.includes("accident") ||
+      lower.includes("vidange")
+    ) {
+      await getDbConv().update({
+        where: { id: conversation.id },
+        data: {
+          workflow_state: "AWAITING_IMMAT",
+          routed_department: "FLEET_SUPPORT",
+        },
+      });
+      await sendOutboundWhatsAppMessage({
+        conversationId: conversation.id,
+        phoneNumber: conversation.phone_number,
+        senderName: "🤖 Bot GoCab",
+        text:
+          `🚗 *Support Chauffeur GoCab*\n\n` +
+          `Veuillez saisir le *numéro d'immatriculation (matricule)* de votre véhicule (ex: *12345-A-6* ou *12345*) :`,
+      });
+      return;
+    }
+    // Re-prompt menu options gently
+    await sendWhatsAppWelcomeMenu(conversation.phone_number, conversation.id);
+    return;
+  }
+
+  // 7. If already routed to ROUTED_DRIVER_SUPPORT, append the driver's message to today's pending VehicleIssue if one exists
+  if (state === "ROUTED_DRIVER_SUPPORT" && conversation.matched_plate) {
+    try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const openIssue = await prisma.vehicleIssue.findFirst({
+        where: {
+          plate_number: conversation.matched_plate,
+          reported_by_role: "WHATSAPP_BOT",
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+          created_at: { gte: startOfToday },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      if (openIssue) {
+        await prisma.vehicleIssue.update({
+          where: { id: openIssue.id },
+          data: {
+            description: `${openIssue.description}\n• Message chauffeur : "${trimmed}"`,
+          },
+        });
+      }
+    } catch (_) {}
+  }
+}
+
+/**
  * Handles incoming WhatsApp message (from Webhook or Simulator)
  */
 export async function handleInboundWhatsAppMessage(payload: InboundMessagePayload) {
@@ -478,6 +963,21 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
       unread_count: { increment: 1 },
     },
   });
+
+  // Run automated 2-option routing workflow unless explicitly skipped (e.g., reaction emoji)
+  const isReaction = payload.text.startsWith("Réaction ") || payload.text.includes("[reaction]");
+  if (!payload.skipBotWorkflow && !isReaction) {
+    try {
+      await processInboundBotWorkflow(
+        conversation,
+        payload.text,
+        payload.interactiveReplyId,
+        payload.contactName
+      );
+    } catch (workflowErr) {
+      console.error("WhatsApp bot workflow error:", workflowErr);
+    }
+  }
 
   return { success: true, message, conversationId: conversation.id };
 }

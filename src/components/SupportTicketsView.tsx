@@ -35,6 +35,7 @@ import {
   Flame,
   Check,
   Archive,
+  MessageSquare,
 } from "lucide-react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
@@ -42,6 +43,7 @@ import TicketDrawer, { MaintenanceTicket as BaseMaintenanceTicket } from "./Tick
 import TicketKanbanColumn from "./TicketKanbanColumn";
 import TicketKanbanCard from "./TicketKanbanCard";
 import BonDeCommandeModal from "./BonDeCommandeModal";
+import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 
 // Extend with SLA fields added in Sprint 2
@@ -60,6 +62,31 @@ export default function SupportTicketsView() {
   const [selectedPriority, setSelectedPriority] = useState("");
   const [showBreachedOnly, setShowBreachedOnly] = useState(false);
   const [showArchivedResolved, setShowArchivedResolved] = useState(false);
+  const [whatsappSupportChats, setWhatsappSupportChats] = useState<any[]>([]);
+  const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+
+  const fetchWhatsAppSupportChats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/conversations?filter=FLEET_SUPPORT");
+      if (res.ok) {
+        const data = await res.json();
+        const routed = (data.conversations || []).filter(
+          (c: any) =>
+            c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
+            c.routedDepartment === "FLEET_SUPPORT" ||
+            c.unreadCount > 0
+        );
+        setWhatsappSupportChats(routed.slice(0, 6));
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    fetchWhatsAppSupportChats();
+    const t = setInterval(fetchWhatsAppSupportChats, 8000);
+    return () => clearInterval(t);
+  }, [fetchWhatsAppSupportChats]);
   
   // DND State
   const [activeDragTicket, setActiveDragTicket] = useState<MaintenanceTicket | null>(null);
@@ -698,6 +725,85 @@ export default function SupportTicketsView() {
 
   return (
     <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto">
+      {/* Live WhatsApp Driver Support Chats (Matched by Immatriculation) */}
+      {whatsappSupportChats.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50/90 via-white to-emerald-50/60 p-4 rounded-2xl border border-amber-200/80 shadow-xs space-y-2.5 mb-4 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-emerald-600" />
+                Support Chauffeur WhatsApp — Matricules Identifiés ({whatsappSupportChats.length})
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+              Option 1 · Rattachement Immatriculation Automatique
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {whatsappSupportChats.map((chat) => {
+              const plate =
+                chat.matchedPlate ||
+                (chat.driver?.plateNumber && chat.driver.plateNumber !== "Non assigné"
+                  ? chat.driver.plateNumber
+                  : "Matricule en cours");
+              return (
+                <div
+                  key={chat.id}
+                  className="bg-white p-3 rounded-xl border border-slate-200/80 hover:border-amber-400 transition-all shadow-2xs flex flex-col justify-between gap-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-950 border border-amber-300 rounded-md text-[11px] font-black font-mono">
+                          🚗 {plate}
+                        </span>
+                        <span className="text-xs font-extrabold text-slate-900 truncate">
+                          {chat.contactName}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 truncate mt-1">
+                        {chat.lastMessage || "Demande support ouverte"}
+                      </p>
+                    </div>
+                    {chat.unreadCount > 0 && (
+                      <span className="px-1.5 py-0.5 bg-emerald-600 text-white rounded-full text-[9px] font-black shrink-0 animate-pulse">
+                        {chat.unreadCount} nouv.
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      +{chat.phoneNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDirectWhatsAppTarget({
+                          phoneNumber: chat.phoneNumber,
+                          contactName: chat.contactName,
+                          contactType: "DRIVER",
+                          plateNumber: plate,
+                          arrearsMAD: chat.driver?.currentArrearsMAD || 0,
+                          unpaidDays: chat.driver?.consecutiveUnpaidDays || 0,
+                        });
+                        setIsWhatsAppModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Répondre (Immat {plate})</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 1. Top Header & Search/Filter Toolbar */}
       <div className="flex flex-col gap-4 bg-white p-5 rounded-2xl shadow-xs border border-slate-200/90 mb-4 shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1238,6 +1344,17 @@ export default function SupportTicketsView() {
           initialData={bcInitialData}
         />
       )}
+
+      {/* Direct WhatsApp Chat Modal for Driver Support */}
+      <WhatsAppDirectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => {
+          setIsWhatsAppModalOpen(false);
+          setDirectWhatsAppTarget(null);
+          fetchWhatsAppSupportChats();
+        }}
+        target={directWhatsAppTarget}
+      />
     </div>
   );
 }

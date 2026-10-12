@@ -6,6 +6,9 @@ import {
   ensureWhatsAppTables,
   getDbConv,
   getDbMsg,
+  sendWhatsAppWelcomeMenu,
+  routeConversationByImmat,
+  routeConversationToLeadAcquisition,
 } from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
@@ -14,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.toLowerCase().trim() || "";
-    const filter = searchParams.get("filter") || "ALL"; // ALL, DRIVERS, LEADS, ARREARS, UNREAD
+    const filter = searchParams.get("filter") || "ALL"; // ALL, FLEET_SUPPORT, LEAD_ACQUISITION, DRIVERS, LEADS, ARREARS, UNREAD
 
     // Fetch all conversations from DB
     let conversations: any[] = [];
@@ -24,12 +27,14 @@ export async function GET(request: NextRequest) {
         orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
       });
     } catch (err: any) {
-      if (err?.message?.includes("no such table")) {
+      if (err?.message?.includes("no such table") || err?.message?.includes("no such column")) {
         await ensureWhatsAppTables();
-        conversations = await getDbConv().findMany({
-          where: { is_archived: false },
-          orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
-        }).catch(() => []);
+        conversations = await getDbConv()
+          .findMany({
+            where: { is_archived: false },
+            orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
+          })
+          .catch(() => []);
       } else {
         throw err;
       }
@@ -59,13 +64,14 @@ export async function GET(request: NextRequest) {
               contact_name: d.fullName,
               driver_id: d.id,
               contact_type: "DRIVER",
+              matched_plate: d.assignedVehicle?.plate_number || null,
+              matched_vehicle_id: d.assignedVehicle?.id || null,
               last_message: sampleSnippet,
               last_message_at: new Date(Date.now() - Math.floor(Math.random() * 86400000)),
               unread_count: d.currentArrearsMAD >= 900 ? 1 : 0,
             },
           });
 
-          // Add a sample opening message
           await getDbMsg().create({
             data: {
               conversation_id: conv.id,
@@ -79,7 +85,6 @@ export async function GET(request: NextRequest) {
         } catch (e) {}
       }
 
-      // Add a couple of active leads
       const topLeads = await prisma.lead.findMany({
         take: 5,
         where: { is_archived: false },
@@ -116,18 +121,18 @@ export async function GET(request: NextRequest) {
         } catch (e) {}
       }
 
-      // Re-query after auto-seed
       conversations = await getDbConv().findMany({
         where: { is_archived: false },
         orderBy: [{ is_pinned: "desc" }, { last_message_at: "desc" }],
       });
     }
 
-    // Fetch related driver and lead metadata for all conversations in parallel
+    // Fetch related driver, lead, and matched vehicle metadata for all conversations in parallel
     const driverIds = conversations.map((c) => c.driver_id).filter(Boolean) as string[];
     const leadIds = conversations.map((c) => c.lead_id).filter(Boolean) as string[];
+    const vehicleIds = conversations.map((c) => c.matched_vehicle_id).filter(Boolean) as string[];
 
-    const [drivers, leads] = await Promise.all([
+    const [drivers, leads, vehicles] = await Promise.all([
       driverIds.length > 0
         ? prisma.driverProfile.findMany({
             where: { id: { in: driverIds } },
@@ -139,21 +144,47 @@ export async function GET(request: NextRequest) {
             where: { id: { in: leadIds } },
           })
         : [],
+      vehicleIds.length > 0
+        ? prisma.vehicle.findMany({
+            where: { id: { in: vehicleIds } },
+            include: { driverProfile: true },
+          })
+        : [],
     ]);
 
     const driverMap = new Map(drivers.map((d) => [d.id, d]));
     const leadMap = new Map(leads.map((l) => [l.id, l]));
+    const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
 
     // Attach contextual CRM dossiers to each conversation
-    let results = conversations.map((conv) => {
-      const driver = conv.driver_id ? driverMap.get(conv.driver_id) : null;
+    let allMapped = conversations.map((conv) => {
+      const matchedVehicle = conv.matched_vehicle_id
+        ? vehicleMap.get(conv.matched_vehicle_id)
+        : null;
+      const driverFromMap = conv.driver_id ? driverMap.get(conv.driver_id) : null;
+      const driver = driverFromMap || matchedVehicle?.driverProfile || null;
       const lead = conv.lead_id ? leadMap.get(conv.lead_id) : null;
+
+      const resolvedPlate =
+        conv.matched_plate ||
+        driverFromMap?.assignedVehicle?.plate_number ||
+        matchedVehicle?.plate_number ||
+        null;
+
+      const resolvedModel =
+        driverFromMap?.assignedVehicle?.make_model ||
+        matchedVehicle?.make_model ||
+        "-";
 
       return {
         id: conv.id,
         phoneNumber: conv.phone_number,
         contactName: conv.contact_name,
         contactType: conv.contact_type,
+        workflowState: conv.workflow_state || "NONE",
+        routedDepartment: conv.routed_department || null,
+        matchedPlate: resolvedPlate,
+        matchedVehicleId: conv.matched_vehicle_id || driverFromMap?.assignedVehicle?.id || null,
         lastMessage: conv.last_message || "",
         lastMessageAt: conv.last_message_at,
         unreadCount: conv.unread_count,
@@ -167,8 +198,20 @@ export async function GET(request: NextRequest) {
               currentArrearsMAD: driver.currentArrearsMAD,
               consecutiveUnpaidDays: driver.consecutiveUnpaidDays,
               defaultStage: driver.defaultStage,
-              plateNumber: driver.assignedVehicle?.plate_number || "Non assigné",
-              vehicleModel: driver.assignedVehicle?.make_model || "-",
+              plateNumber: resolvedPlate || "Non assigné",
+              vehicleModel: resolvedModel,
+            }
+          : resolvedPlate
+          ? {
+              id: matchedVehicle?.id || `plate-${resolvedPlate}`,
+              fullName: matchedVehicle?.assigned_driver_name || conv.contact_name,
+              cin: "-",
+              contractType: "DAILY",
+              currentArrearsMAD: 0,
+              consecutiveUnpaidDays: 0,
+              defaultStage: "NOMINAL",
+              plateNumber: resolvedPlate,
+              vehicleModel: resolvedModel,
             }
           : null,
         lead: lead
@@ -184,8 +227,42 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    const isFleetSupportConv = (c: any) =>
+      c.routedDepartment === "FLEET_SUPPORT" ||
+      c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
+      c.workflowState === "AWAITING_IMMAT" ||
+      c.matchedPlate !== null ||
+      c.contactType === "DRIVER";
+
+    const isLeadAcquisitionConv = (c: any) =>
+      c.routedDepartment === "LEAD_ACQUISITION" ||
+      c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
+      c.contactType === "LEAD";
+
+    const fleetSupportCount = allMapped.filter(isFleetSupportConv).length;
+    const leadAcquisitionCount = allMapped.filter(isLeadAcquisitionConv).length;
+
+    let results = [...allMapped];
+
     // Apply category filters
-    if (filter === "DRIVERS") {
+    if (filter === "FLEET_SUPPORT") {
+      results = results.filter(isFleetSupportConv);
+      // Prioritize drivers who explicitly entered their immat via WhatsApp bot at the top
+      results.sort((a, b) => {
+        const aBot = a.workflowState === "ROUTED_DRIVER_SUPPORT" ? 1 : 0;
+        const bBot = b.workflowState === "ROUTED_DRIVER_SUPPORT" ? 1 : 0;
+        if (bBot !== aBot) return bBot - aBot;
+        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      });
+    } else if (filter === "LEAD_ACQUISITION") {
+      results = results.filter(isLeadAcquisitionConv);
+      results.sort((a, b) => {
+        const aBot = a.workflowState === "ROUTED_LEAD_ACQUISITION" ? 1 : 0;
+        const bBot = b.workflowState === "ROUTED_LEAD_ACQUISITION" ? 1 : 0;
+        if (bBot !== aBot) return bBot - aBot;
+        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      });
+    } else if (filter === "DRIVERS") {
       results = results.filter((c) => c.contactType === "DRIVER" || c.driver !== null);
     } else if (filter === "LEADS") {
       results = results.filter((c) => c.contactType === "LEAD" || c.lead !== null);
@@ -201,6 +278,7 @@ export async function GET(request: NextRequest) {
         (c) =>
           c.contactName.toLowerCase().includes(search) ||
           c.phoneNumber.includes(search) ||
+          (c.matchedPlate && c.matchedPlate.toLowerCase().includes(search)) ||
           (c.driver?.plateNumber && c.driver.plateNumber.toLowerCase().includes(search)) ||
           c.lastMessage.toLowerCase().includes(search)
       );
@@ -212,6 +290,8 @@ export async function GET(request: NextRequest) {
       conversations: results,
       totalCount: results.length,
       totalUnread,
+      fleetSupportCount,
+      leadAcquisitionCount,
     });
   } catch (error: any) {
     console.error("GET /api/whatsapp/conversations error:", error);
@@ -226,7 +306,42 @@ export async function POST(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
     const body = await request.json();
-    const { phoneNumber, contactName } = body;
+    const { action, conversationId, phoneNumber, contactName, immat, sendBotReply } = body;
+
+    if (action === "send_welcome_menu") {
+      if (!phoneNumber) {
+        return NextResponse.json({ error: "Numéro requis" }, { status: 400 });
+      }
+      const res = await sendWhatsAppWelcomeMenu(phoneNumber, conversationId);
+      return NextResponse.json({ success: res.success, result: res });
+    }
+
+    if (action === "match_immat") {
+      if (!conversationId || !immat) {
+        return NextResponse.json(
+          { error: "Conversation et immatriculation requises" },
+          { status: 400 }
+        );
+      }
+      const res = await routeConversationByImmat(
+        conversationId,
+        immat,
+        sendBotReply !== undefined ? Boolean(sendBotReply) : true
+      );
+      return NextResponse.json({ success: true, ...res });
+    }
+
+    if (action === "route_lead_acquisition") {
+      if (!conversationId) {
+        return NextResponse.json({ error: "Conversation requise" }, { status: 400 });
+      }
+      const res = await routeConversationToLeadAcquisition(
+        conversationId,
+        contactName,
+        sendBotReply !== undefined ? Boolean(sendBotReply) : true
+      );
+      return NextResponse.json({ success: true, ...res });
+    }
 
     if (!phoneNumber) {
       return NextResponse.json({ error: "Numéro de téléphone requis" }, { status: 400 });
@@ -238,7 +353,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("POST /api/whatsapp/conversations error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to create conversation" },
+      { error: error?.message || "Failed to process conversation action" },
       { status: 500 }
     );
   }

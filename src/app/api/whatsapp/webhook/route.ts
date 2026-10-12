@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
           msg.interactive?.list_reply?.title ||
           "Réponse interactive"
         );
+      } else if (msg.type === "button") {
+        return msg.button?.text || msg.button?.payload || "Bouton sélectionné";
       } else if (msg.type === "reaction") {
         return `Réaction ${msg.reaction?.emoji || "👍"}`;
       }
@@ -87,11 +89,17 @@ export async function POST(req: NextRequest) {
     const processMessages = async (messages: any[], contactName?: string) => {
       for (const msg of messages) {
         const messageText = extractMessageText(msg);
+        const interactiveReplyId =
+          msg.interactive?.button_reply?.id ||
+          msg.interactive?.list_reply?.id ||
+          msg.button?.payload ||
+          undefined;
         await handleInboundWhatsAppMessage({
           fromPhone: msg.from,
           contactName: contactName,
           text: messageText,
           waMessageId: msg.id,
+          interactiveReplyId,
         });
       }
     };

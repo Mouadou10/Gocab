@@ -432,25 +432,30 @@ model AuditLog {
 
 /// A WhatsApp CRM conversation thread with a driver, lead, or prospect.
 model WhatsAppConversation {
-  id              String            @id @default(uuid())
-  phone_number    String            @unique
-  contact_name    String
-  driver_id       String?
-  lead_id         String?
-  contact_type    String            @default("UNKNOWN") // DRIVER, LEAD, UNKNOWN
-  last_message    String?
-  last_message_at DateTime          @default(now())
-  unread_count    Int               @default(0)
-  is_pinned       Boolean           @default(false)
-  is_archived     Boolean           @default(false)
-  created_at      DateTime          @default(now())
-  updated_at      DateTime          @updatedAt
+  id                 String            @id @default(uuid())
+  phone_number       String            @unique
+  contact_name       String
+  driver_id          String?
+  lead_id            String?
+  contact_type       String            @default("UNKNOWN") // DRIVER, LEAD, UNKNOWN
+  workflow_state     String            @default("NONE") // NONE, AWAITING_MENU_CHOICE, AWAITING_IMMAT, ROUTED_DRIVER_SUPPORT, ROUTED_LEAD_ACQUISITION
+  routed_department  String?           // FLEET_SUPPORT, LEAD_ACQUISITION
+  matched_plate      String?           // Vehicle immatriculation matched/entered by driver
+  matched_vehicle_id String?           // Vehicle ID matched in Fleet DB
+  last_message       String?
+  last_message_at    DateTime          @default(now())
+  unread_count       Int               @default(0)
+  is_pinned          Boolean           @default(false)
+  is_archived        Boolean           @default(false)
+  created_at         DateTime          @default(now())
+  updated_at         DateTime          @updatedAt
 
-  messages        WhatsAppMessage[]
+  messages           WhatsAppMessage[]
 
   @@index([phone_number])
   @@index([last_message_at])
   @@index([contact_type])
+  @@index([routed_department])
 }
 
 /// An individual message in a WhatsApp conversation thread.

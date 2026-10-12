@@ -164,6 +164,30 @@ export default function FleetPerformanceView() {
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [whatsappSupportChats, setWhatsappSupportChats] = useState<any[]>([]);
+
+  // Fetch active WhatsApp conversations routed to Fleet Performance Support via Immatriculation
+  const fetchWhatsAppSupportChats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/conversations?filter=FLEET_SUPPORT");
+      if (res.ok) {
+        const data = await res.json();
+        const routed = (data.conversations || []).filter(
+          (c: any) =>
+            c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
+            c.routedDepartment === "FLEET_SUPPORT" ||
+            c.unreadCount > 0
+        );
+        setWhatsappSupportChats(routed.slice(0, 6));
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    fetchWhatsAppSupportChats();
+    const t = setInterval(fetchWhatsAppSupportChats, 8000);
+    return () => clearInterval(t);
+  }, [fetchWhatsAppSupportChats]);
 
   // Recovery trigger state & active recovery tracking
   const [triggeringRecoveryId, setTriggeringRecoveryId] = useState<string | null>(null);
@@ -774,6 +798,85 @@ export default function FleetPerformanceView() {
           </p>
         </div>
       </div>
+
+      {/* Live WhatsApp Driver Support Chats (Matched by Immatriculation) */}
+      {whatsappSupportChats.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50/90 via-white to-emerald-50/60 p-4 rounded-2xl border border-amber-200/80 shadow-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-emerald-600" />
+                Support Chauffeur WhatsApp — Matricules Identifiés ({whatsappSupportChats.length})
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+              Option 1 · Rattachement Immatriculation Automatique
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {whatsappSupportChats.map((chat) => {
+              const plate =
+                chat.matchedPlate ||
+                (chat.driver?.plateNumber && chat.driver.plateNumber !== "Non assigné"
+                  ? chat.driver.plateNumber
+                  : "Matricule en cours");
+              return (
+                <div
+                  key={chat.id}
+                  className="bg-white p-3 rounded-xl border border-gray-200/80 hover:border-amber-400 transition-all shadow-2xs flex flex-col justify-between gap-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-950 border border-amber-300 rounded-md text-[11px] font-black font-mono">
+                          🚗 {plate}
+                        </span>
+                        <span className="text-xs font-extrabold text-gray-900 truncate">
+                          {chat.contactName}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-600 truncate mt-1">
+                        {chat.lastMessage || "Demande support ouverte"}
+                      </p>
+                    </div>
+                    {chat.unreadCount > 0 && (
+                      <span className="px-1.5 py-0.5 bg-emerald-600 text-white rounded-full text-[9px] font-black shrink-0 animate-pulse">
+                        {chat.unreadCount} nouv.
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      +{chat.phoneNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDirectWhatsAppTarget({
+                          phoneNumber: chat.phoneNumber,
+                          contactName: chat.contactName,
+                          contactType: "DRIVER",
+                          plateNumber: plate,
+                          arrearsMAD: chat.driver?.currentArrearsMAD || 0,
+                          unpaidDays: chat.driver?.consecutiveUnpaidDays || 0,
+                        });
+                        setIsWhatsAppModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Répondre (Immat {plate})</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">

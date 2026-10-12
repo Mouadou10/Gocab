@@ -52,6 +52,10 @@ interface ConversationItem {
   phoneNumber: string;
   contactName: string;
   contactType: "DRIVER" | "LEAD" | "UNKNOWN";
+  workflowState?: string;
+  routedDepartment?: "FLEET_SUPPORT" | "LEAD_ACQUISITION" | null;
+  matchedPlate?: string | null;
+  matchedVehicleId?: string | null;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -77,7 +81,11 @@ export default function WhatsAppCrmView() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [filter, setFilter] = useState<"ALL" | "DRIVERS" | "LEADS" | "ARREARS" | "UNREAD">("ALL");
+  const [filter, setFilter] = useState<
+    "ALL" | "FLEET_SUPPORT" | "LEAD_ACQUISITION" | "DRIVERS" | "LEADS" | "ARREARS" | "UNREAD"
+  >("ALL");
+  const [fleetSupportCount, setFleetSupportCount] = useState(0);
+  const [leadAcquisitionCount, setLeadAcquisitionCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const [isLoadingList, setIsLoadingList] = useState(true);
@@ -85,6 +93,8 @@ export default function WhatsAppCrmView() {
   const [isSending, setIsSending] = useState(false);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showImmatModal, setShowImmatModal] = useState(false);
+  const [manualImmatInput, setManualImmatInput] = useState("");
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
   const [showRightDossier, setShowRightDossier] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState("");
@@ -117,7 +127,7 @@ export default function WhatsAppCrmView() {
       .catch(() => {});
   }, []);
 
-  // Check for target phone requested from Lead Drawer
+  // Check for target phone or filter requested from Fleet Performance / Lead Drawer
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -125,6 +135,11 @@ export default function WhatsAppCrmView() {
       if (targetPhone) {
         setSearchQuery(targetPhone);
         localStorage.removeItem("gocab_target_whatsapp_phone");
+      }
+      const targetFilter = localStorage.getItem("gocab_target_whatsapp_filter");
+      if (targetFilter === "FLEET_SUPPORT" || targetFilter === "LEAD_ACQUISITION") {
+        setFilter(targetFilter);
+        localStorage.removeItem("gocab_target_whatsapp_filter");
       }
     } catch (e) {}
   }, []);
@@ -143,6 +158,12 @@ export default function WhatsAppCrmView() {
 
         const list: ConversationItem[] = data.conversations || [];
         setConversations(list);
+        if (typeof data.fleetSupportCount === "number") {
+          setFleetSupportCount(data.fleetSupportCount);
+        }
+        if (typeof data.leadAcquisitionCount === "number") {
+          setLeadAcquisitionCount(data.leadAcquisitionCount);
+        }
 
         // If no conversation is selected, pick the first one
         if (!preserveSelection || !selectedConvId) {
@@ -319,6 +340,93 @@ export default function WhatsAppCrmView() {
     textareaRef.current?.focus();
   };
 
+  // Send the 2-option Welcome Menu (1: Driver Support / 2: Getting Info) to active contact
+  const handleSendWelcomeMenu = async () => {
+    if (!activeConversation) return;
+    try {
+      const res = await fetch("/api/whatsapp/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_welcome_menu",
+          conversationId: activeConversation.id,
+          phoneNumber: activeConversation.phoneNumber,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("🤖 Menu interactif (1: Support / 2: Infos) envoyé sur WhatsApp !");
+        fetchMessages(activeConversation.id);
+        fetchConversations(true);
+      } else {
+        toast.error(data.error || "Erreur lors de l'envoi du menu");
+      }
+    } catch (e) {
+      toast.error("Erreur réseau");
+    }
+  };
+
+  // Manually match / assign a vehicle immatriculation to route to Fleet Performance Support
+  const handleMatchImmat = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeConversation || !manualImmatInput.trim()) return;
+    try {
+      const res = await fetch("/api/whatsapp/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "match_immat",
+          conversationId: activeConversation.id,
+          immat: manualImmatInput.trim(),
+          sendBotReply: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(
+          data.vehicle
+            ? `✅ Véhicule ${data.matchedPlate} (${data.vehicle.make_model}) identifié et transféré au Support Flotte !`
+            : `✅ Matricule ${data.matchedPlate} enregistré et transféré au Support Flotte !`
+        );
+        setShowImmatModal(false);
+        setManualImmatInput("");
+        fetchMessages(activeConversation.id);
+        fetchConversations(true);
+      } else {
+        toast.error(data.error || "Impossible d'associer le matricule");
+      }
+    } catch (e) {
+      toast.error("Erreur réseau");
+    }
+  };
+
+  // Manually route conversation to Lead Acquisition
+  const handleRouteLeadAcquisition = async () => {
+    if (!activeConversation) return;
+    try {
+      const res = await fetch("/api/whatsapp/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "route_lead_acquisition",
+          conversationId: activeConversation.id,
+          contactName: activeConversation.contactName,
+          sendBotReply: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("🎯 Conversation transférée à Lead Acquisition (Fiche Prospect créée) !");
+        fetchMessages(activeConversation.id);
+        fetchConversations(true);
+      } else {
+        toast.error(data.error || "Erreur de transfert");
+      }
+    } catch (e) {
+      toast.error("Erreur réseau");
+    }
+  };
+
   // Simulate incoming driver response
   const handleSimulateInbound = async (textToSimulate: string) => {
     if (!activeConversation) return;
@@ -446,12 +554,54 @@ export default function WhatsAppCrmView() {
             )}
           </div>
 
-          {/* Filter Chips */}
-          <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-0.5 scrollbar-none">
+          {/* Workflow Routing Queues + Filter Chips */}
+          <div className="grid grid-cols-2 gap-1.5 mt-2">
+            <button
+              onClick={() => setFilter(filter === "FLEET_SUPPORT" ? "ALL" : "FLEET_SUPPORT")}
+              className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
+                filter === "FLEET_SUPPORT"
+                  ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                  : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+              }`}
+              title="Option 1 : Chauffeurs ayant saisi leur immatriculation pour le Support Performance Flotte"
+            >
+              <span className="truncate">1️⃣ Support Flotte</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                  filter === "FLEET_SUPPORT"
+                    ? "bg-white text-amber-800"
+                    : "bg-amber-200/80 text-amber-950"
+                }`}
+              >
+                {fleetSupportCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setFilter(filter === "LEAD_ACQUISITION" ? "ALL" : "LEAD_ACQUISITION")}
+              className={`px-2 py-1.5 rounded-xl text-[10px] font-black flex items-center justify-between transition-all cursor-pointer border ${
+                filter === "LEAD_ACQUISITION"
+                  ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                  : "bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100"
+              }`}
+              title="Option 2 : Prospects demandant des informations (Lead Acquisition)"
+            >
+              <span className="truncate">2️⃣ Lead Acquisition</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                  filter === "LEAD_ACQUISITION"
+                    ? "bg-white text-blue-800"
+                    : "bg-blue-200/80 text-blue-950"
+                }`}
+              >
+                {leadAcquisitionCount}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 mt-1.5 overflow-x-auto pb-0.5 scrollbar-none">
             {[
               { id: "ALL", label: "Tous" },
-              { id: "DRIVERS", label: "Chauffeurs" },
-              { id: "LEADS", label: "Leads" },
               { id: "ARREARS", label: "⚠️ Impayés" },
               { id: "UNREAD", label: "Non lus" },
             ].map((tab) => (
@@ -490,6 +640,11 @@ export default function WhatsAppCrmView() {
               const isSelected = conv.id === selectedConvId;
               const hasArrears = (conv.driver?.currentArrearsMAD || 0) > 0;
               const formattedPhone = formatDisplayPhone(conv.phoneNumber);
+              const displayPlate =
+                conv.matchedPlate ||
+                (conv.driver?.plateNumber && conv.driver.plateNumber !== "Non assigné"
+                  ? conv.driver.plateNumber
+                  : null);
 
               return (
                 <div
@@ -555,9 +710,9 @@ export default function WhatsAppCrmView() {
                       <span className="font-mono text-gray-400">
                         {formattedPhone}
                       </span>
-                      {conv.driver?.plateNumber && (
-                        <span className="px-1 py-0.2 bg-gray-100 text-gray-700 text-[9px] font-bold rounded border border-gray-200">
-                          {conv.driver.plateNumber}
+                      {displayPlate && (
+                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-950 text-[9px] font-black rounded border border-amber-300 font-mono">
+                          🚗 {displayPlate}
                         </span>
                       )}
                     </div>
@@ -566,8 +721,23 @@ export default function WhatsAppCrmView() {
                       {conv.lastMessage || "Pas de message récent"}
                     </p>
 
-                    {/* Metadata tags */}
-                    <div className="flex items-center gap-1 mt-1">
+                    {/* Metadata & Bot Workflow tags */}
+                    <div className="flex items-center flex-wrap gap-1 mt-1">
+                      {conv.workflowState === "ROUTED_DRIVER_SUPPORT" && (
+                        <span className="px-1.5 py-0.2 bg-amber-600 text-white text-[9px] font-extrabold rounded-md">
+                          1️⃣ Support Flotte
+                        </span>
+                      )}
+                      {conv.workflowState === "AWAITING_IMMAT" && (
+                        <span className="px-1.5 py-0.2 bg-orange-100 text-orange-800 border border-orange-300 text-[9px] font-extrabold rounded-md animate-pulse">
+                          ⏳ Saisie Matricule...
+                        </span>
+                      )}
+                      {conv.workflowState === "ROUTED_LEAD_ACQUISITION" && (
+                        <span className="px-1.5 py-0.2 bg-blue-600 text-white text-[9px] font-extrabold rounded-md">
+                          2️⃣ Acquisition
+                        </span>
+                      )}
                       {hasArrears && (
                         <span className="px-1.5 py-0.2 bg-red-100 text-red-800 text-[9px] font-extrabold rounded-md flex items-center gap-0.5">
                           ⚠️ {conv.driver?.currentArrearsMAD} MAD
@@ -619,7 +789,7 @@ export default function WhatsAppCrmView() {
                 </div>
 
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-black text-gray-900 truncate">
                       {activeConversation.contactName}
                     </h3>
@@ -633,11 +803,31 @@ export default function WhatsAppCrmView() {
                       }`}
                     >
                       {activeConversation.contactType === "DRIVER"
-                        ? "🚖 Chauffeur"
+                        ? "🚖 Support Chauffeur"
                         : activeConversation.contactType === "LEAD"
-                        ? "💼 Lead Candidat"
+                        ? "💼 Lead Acquisition"
                         : "Contact"}
                     </span>
+                    {(activeConversation.matchedPlate || activeConversation.driver?.plateNumber) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualImmatInput(
+                            activeConversation.matchedPlate ||
+                              activeConversation.driver?.plateNumber ||
+                              ""
+                          );
+                          setShowImmatModal(true);
+                        }}
+                        className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 rounded-lg text-[11px] font-black font-mono flex items-center gap-1 cursor-pointer transition-all"
+                        title="Immatriculation rattachée (Cliquer pour modifier)"
+                      >
+                        <Car className="w-3 h-3 text-amber-700" />
+                        <span>
+                          {activeConversation.matchedPlate || activeConversation.driver?.plateNumber}
+                        </span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 text-xs text-gray-500 font-mono mt-0.5">
@@ -663,12 +853,43 @@ export default function WhatsAppCrmView() {
               </div>
 
               {/* Action Buttons & Dossier Toggle */}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Official verified badge */}
-                <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-[11px] font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>+212 6 62 14 51 09 · Vérifié</span>
-                </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Send 2-option Bot Welcome Menu */}
+                <button
+                  onClick={handleSendWelcomeMenu}
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Envoyer le menu interactif WhatsApp (1: Support Chauffeur / 2: Obtenir des informations)"
+                >
+                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="hidden lg:inline">Menu (1/2)</span>
+                </button>
+
+                {/* Match Immatriculation Button */}
+                <button
+                  onClick={() => {
+                    setManualImmatInput(
+                      activeConversation.matchedPlate ||
+                        activeConversation.driver?.plateNumber ||
+                        ""
+                    );
+                    setShowImmatModal(true);
+                  }}
+                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Identifier le matricule du véhicule et transférer au Support Flotte"
+                >
+                  <Car className="w-3.5 h-3.5 text-amber-700" />
+                  <span className="hidden md:inline">Immat</span>
+                </button>
+
+                {/* Route to Lead Acquisition Button */}
+                <button
+                  onClick={handleRouteLeadAcquisition}
+                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Envoyer vers Lead Acquisition (Créer fiche Prospect)"
+                >
+                  <span className="text-xs">🎯</span>
+                  <span className="hidden xl:inline">Vers Acquisition</span>
+                </button>
 
                 <a
                   href={`tel:${activeConversation.phoneNumber}`}
@@ -1092,21 +1313,25 @@ export default function WhatsAppCrmView() {
             </p>
 
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold text-gray-400 uppercase">Réponses types :</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase">
+                Tester le Workflow Bot (1: Support Chauffeur / 2: Infos) :
+              </span>
               <div className="flex flex-wrap gap-1.5">
                 {[
-                  "J'ai effectué le versement de 300 MAD ce matin",
-                  "Je suis en route pour la formation",
+                  "menu",
+                  "1",
+                  "12345-A-6",
+                  "2",
                   "Mon véhicule a un voyant moteur allumé",
-                  "Voici la photo de ma CIN recto/verso",
+                  "Je veux des informations sur vos formules",
                 ].map((txt, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setSimulateText(txt)}
-                    className="text-[11px] bg-purple-50 text-purple-800 hover:bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200 text-left transition-all cursor-pointer"
+                    className="text-[11px] bg-purple-50 text-purple-800 hover:bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200 text-left transition-all cursor-pointer font-semibold"
                   >
-                    &quot;{txt.slice(0, 36)}…&quot;
+                    &quot;{txt.slice(0, 38)}&quot;
                   </button>
                 ))}
               </div>
@@ -1139,6 +1364,69 @@ export default function WhatsAppCrmView() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MATCH IMMATRICULATION MODAL (FLEET PERFORMANCE SUPPORT)  */}
+      {/* ======================================================== */}
+      {showImmatModal && activeConversation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/60 backdrop-blur-xs animate-fadeIn">
+          <form
+            onSubmit={handleMatchImmat}
+            className="bg-white rounded-3xl shadow-2xl border border-amber-200 max-w-md w-full p-5 space-y-3.5"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-amber-800 font-black text-sm">
+                <Car className="w-4 h-4 text-amber-600" />
+                <span>Rattacher Matricule — Support Flotte</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImmatModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Saisissez l&apos;immatriculation du véhicule pour rattacher{" "}
+              <strong>{activeConversation.contactName}</strong> au véhicule correspondant dans la Flotte et afficher la discussion au Support Performance Flotte :
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Numéro d&apos;immatriculation (ex: 12345-A-6)
+              </label>
+              <input
+                type="text"
+                required
+                value={manualImmatInput}
+                onChange={(e) => setManualImmatInput(e.target.value)}
+                placeholder="12345-A-6"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono uppercase focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowImmatModal(false)}
+                className="px-3.5 py-1.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={!manualImmatInput.trim()}
+                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Valider &amp; Transférer au Support</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
