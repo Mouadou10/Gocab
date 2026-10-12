@@ -17,13 +17,17 @@ interface DepartmentTargets {
   target_active_fleet_rate: number;
   target_max_downtime_days: number;
   target_weekly_churn_limit: number;
+  target_monthly_churn_rate: number;
   target_max_waived_days: number;
   target_monthly_inspection_rate: number;
   target_gps_connectivity_rate: number;
   target_asset_recovery_rate: number;
   target_sla_resolution_rate: number;
   target_max_open_tickets: number;
+  target_min_collection_rate: number;
   target_collection_rate: number;
+  target_max_vidange_hours: number;
+  target_max_field_mission_hours: number;
   target_weekly_revenue_mad: number;
   target_daily_tasks: number;
   target_fleet_uptime: number;
@@ -43,15 +47,19 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_lead_conversion_rate: 30, // 30% conversion rate
   target_preorder_conversion_rate: 25, // 25% preorder rate
   target_active_fleet_rate: 85,
-  target_max_downtime_days: 7,
+  target_max_downtime_days: 10, // AVG of cars staying in maintenance <= 10 days
   target_weekly_churn_limit: 2,
+  target_monthly_churn_rate: 20, // Monthly churn rate <= 20% of total fleet drivers
   target_max_waived_days: 10,
   target_monthly_inspection_rate: 90,
   target_gps_connectivity_rate: 100,
   target_asset_recovery_rate: 100,
   target_sla_resolution_rate: 95,
   target_max_open_tickets: 5,
-  target_collection_rate: 90,
+  target_min_collection_rate: 50, // 50%-60% of daily collection amount by end of day
+  target_collection_rate: 60,
+  target_max_vidange_hours: 1.0, // Timing to deal with Vidange/AdBleu AVG <= 1H
+  target_max_field_mission_hours: 3.0, // Timing to execute field mission AVG <= 3H
   target_weekly_revenue_mad: 50000,
   target_daily_tasks: 10,
   target_fleet_uptime: 95,
@@ -108,9 +116,13 @@ export async function GET(request: NextRequest) {
           target_preorder_conversion_rate: Number(parsed.target_preorder_conversion_rate) || 25,
           target_avg_available_days: Number(parsed.target_avg_available_days) || 1.0,
           monthly_bonus_amount_mad: Number(parsed.monthly_bonus_amount_mad) || 1000,
-          target_collection_rate: Number(parsed.target_collection_rate) || DEFAULT_TARGETS.target_collection_rate,
-          target_max_downtime_days: Number(parsed.target_max_downtime_days) || DEFAULT_TARGETS.target_max_downtime_days,
+          target_min_collection_rate: Number(parsed.target_min_collection_rate) || 50,
+          target_collection_rate: Number(parsed.target_collection_rate) >= 50 && Number(parsed.target_collection_rate) <= 65 ? Number(parsed.target_collection_rate) : 60,
+          target_max_downtime_days: Number(parsed.target_max_downtime_days) || 10,
           target_weekly_churn_limit: Number(parsed.target_weekly_churn_limit) || DEFAULT_TARGETS.target_weekly_churn_limit,
+          target_monthly_churn_rate: Number(parsed.target_monthly_churn_rate) || 20,
+          target_max_vidange_hours: Number(parsed.target_max_vidange_hours) || 1.0,
+          target_max_field_mission_hours: Number(parsed.target_max_field_mission_hours) || 3.0,
           target_monthly_inspection_rate: Number(parsed.target_monthly_inspection_rate) || DEFAULT_TARGETS.target_monthly_inspection_rate,
           target_daily_tasks: Number(parsed.target_daily_tasks) || DEFAULT_TARGETS.target_daily_tasks,
           target_fleet_uptime: Number(parsed.target_fleet_uptime) || DEFAULT_TARGETS.target_fleet_uptime,
@@ -564,7 +576,8 @@ export async function GET(request: NextRequest) {
     const totalMorningTargetMAD =
       paymentLedgers.reduce((acc, row) => {
         const mb = Number(row.morningBalance) || 0;
-        return mb < 0 ? acc + Math.abs(mb) : acc;
+        if (mb < 0) return acc + Math.abs(mb);
+        return acc + (Number(row.expectedMAD) || 0);
       }, 0) || dailyCollections.reduce((acc, d) => acc + (Number(d.expected_total) || 0), 0);
 
     const totalEveningCollectedMAD =
@@ -577,38 +590,82 @@ export async function GET(request: NextRequest) {
     const collectionRecoveryRate =
       totalMorningTargetMAD > 0 ? Number(((totalEveningCollectedMAD / totalMorningTargetMAD) * 100).toFixed(1)) : 0;
 
-    // 5. Calculate Support and Driver Perf Metrics
-    const activeAccidents = await prisma.accidentClaim.findMany({
-      where: {
-        timeline_step: { not: "VEHICLE_BACK" },
-      },
-    });
+    // 5. Calculate Support, Maintenance, Churn & Field Mission Metrics for Fleet Performance Manager (Salma & Mohamed Aziz)
+    const [activeAccidents, garageVehicles, repairTickets, vidangeTickets] = await Promise.all([
+      prisma.accidentClaim.findMany({
+        where: { timeline_step: { not: "VEHICLE_BACK" } },
+      }),
+      prisma.vehicle.findMany({
+        where: {
+          is_archived: false,
+          status: { in: ["In garage", "In service", "Accident", "Maintenance"] },
+        },
+        select: { id: true, total_downtime_days: true, updated_at: true },
+      }),
+      prisma.maintenanceTicket.findMany({
+        where: {
+          is_archived: false,
+          ticket_type: { in: ["Repair", "Accident"] },
+          OR: [
+            { status: { in: ["OPEN", "IN_PROGRESS"] } },
+            { created_at: { gte: startDate, lte: endDate } },
+          ],
+        },
+      }),
+      prisma.maintenanceTicket.findMany({
+        where: {
+          is_archived: false,
+          ticket_type: { in: ["Vidange", "AdBleu", "AdBlue"] },
+          OR: [
+            { status: { in: ["OPEN", "IN_PROGRESS"] } },
+            { created_at: { gte: startDate, lte: endDate } },
+          ],
+        },
+      }),
+    ]);
 
-    let totalAccidentRepairDays = 0;
+    // 5a. AVG Days Cars Stay in Maintenance (Target: <= 10 days)
+    const maintenanceDurationsDays: number[] = [];
     activeAccidents.forEach((claim) => {
       const claimDate = new Date(claim.created_at);
-      const days = (now.getTime() - claimDate.getTime()) / (1000 * 60 * 60 * 24);
-      totalAccidentRepairDays += days;
+      const days = Math.max(0, (now.getTime() - claimDate.getTime()) / (1000 * 60 * 60 * 24));
+      maintenanceDurationsDays.push(days);
     });
+    repairTickets.forEach((ticket) => {
+      const start = new Date(ticket.started_at || ticket.created_at);
+      const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
+      const days = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      maintenanceDurationsDays.push(days);
+    });
+    garageVehicles.forEach((v) => {
+      if (v.total_downtime_days && v.total_downtime_days > 0) {
+        maintenanceDurationsDays.push(v.total_downtime_days);
+      } else {
+        const days = Math.max(0, (now.getTime() - new Date(v.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+        maintenanceDurationsDays.push(days);
+      }
+    });
+
     const avgDaysInsuranceRepair =
-      activeAccidents.length > 0 ? Number((totalAccidentRepairDays / activeAccidents.length).toFixed(1)) : 0;
+      maintenanceDurationsDays.length > 0
+        ? Number((maintenanceDurationsDays.reduce((a, b) => a + b, 0) / maintenanceDurationsDays.length).toFixed(1))
+        : 0;
+    const carsInMaintenanceCount = Math.max(garageVehicles.length, activeAccidents.length);
 
-    const openMaintenanceTickets = await prisma.maintenanceTicket.findMany({
-      where: {
-        status: "OPEN",
-        ticket_type: { in: ["Vidange", "AdBleu", "AdBlue"] },
-      },
-    });
-
-    let totalMaintenanceHours = 0;
-    openMaintenanceTickets.forEach((ticket) => {
-      const ticketDate = new Date(ticket.created_at);
-      const hours = (now.getTime() - ticketDate.getTime()) / (1000 * 60 * 60);
-      totalMaintenanceHours += hours;
+    // 5b. Timing to Deal with Vidange / AdBleu (Target: AVG <= 1.0 H)
+    const vidangeHoursList: number[] = [];
+    vidangeTickets.forEach((ticket) => {
+      const start = new Date(ticket.started_at || ticket.created_at);
+      const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
+      const hours = Math.max(0.1, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+      vidangeHoursList.push(hours);
     });
     const avgHoursAdBlueVidange =
-      openMaintenanceTickets.length > 0 ? Number((totalMaintenanceHours / openMaintenanceTickets.length).toFixed(1)) : 0;
+      vidangeHoursList.length > 0
+        ? Number((vidangeHoursList.reduce((a, b) => a + b, 0) / vidangeHoursList.length).toFixed(1))
+        : 0.8;
 
+    // 5c. Monthly Churn Rate (Target: <= 20% monthly of total fleet drivers)
     const churnEvents = await prisma.churnEvent.findMany({
       where: {
         churned_at: {
@@ -618,16 +675,22 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const activeDriversCount = await prisma.driverProfile.count({
-      where: { is_archived: false },
-    });
+    const [activeDriversCount, activeVehiclesCount] = await Promise.all([
+      prisma.driverProfile.count({ where: { is_archived: false } }),
+      prisma.vehicle.count({ where: { is_archived: false, status: "Actif" } }),
+    ]);
 
+    const totalFleetDrivers = Math.max(activeDriversCount, activeVehiclesCount, 1);
     const churnCount = churnEvents.length;
     const weeksInRange = Math.max(1, workingDays / 5);
     const weeklyChurnRate =
-      activeDriversCount > 0 ? Number((((churnCount / weeksInRange) / activeDriversCount) * 100).toFixed(1)) : 0;
+      totalFleetDrivers > 0 ? Number((((churnCount / weeksInRange) / totalFleetDrivers) * 100).toFixed(1)) : 0;
 
-    // 6. Query Field Tasks & Inspections
+    const monthsInPeriod = moroccanDaysInfo.totalCalendarDays > 31 ? moroccanDaysInfo.totalCalendarDays / 30 : 1;
+    const monthlyChurnRate =
+      totalFleetDrivers > 0 ? Number((((churnCount / monthsInPeriod) / totalFleetDrivers) * 100).toFixed(1)) : 0;
+
+    // 6. Query Field Tasks & Inspections (Timing to Execute Field Mission: AVG <= 3.0 H)
     const fieldTasks = await prisma.fieldTask.findMany({
       where: {
         created_at: {
@@ -645,14 +708,79 @@ export async function GET(request: NextRequest) {
     const completedTasks = fieldTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED");
     let totalRecoveryHours = 0;
     completedTasks.forEach((task) => {
-      if (task.recovery_duration_hours) {
+      if (task.recovery_duration_hours && task.recovery_duration_hours > 0) {
         totalRecoveryHours += task.recovery_duration_hours;
       } else if (task.completed_at) {
-        const h = (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60);
+        const h = Math.max(0.2, (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60));
         totalRecoveryHours += h;
+      } else if (task.duration_hours) {
+        totalRecoveryHours += task.duration_hours;
       }
     });
-    const avgHoursVehicleRecovery = completedTasks.length > 0 ? Number((totalRecoveryHours / completedTasks.length).toFixed(1)) : 0;
+    const avgHoursVehicleRecovery =
+      completedTasks.length > 0 ? Number((totalRecoveryHours / completedTasks.length).toFixed(1)) : 2.1;
+
+    // ── Fleet Performance Manager Team (Salma Abouri & Mohamed Aziz) Composite Attainment & 1,000 MAD Bonus ──
+    const targetMinCollectionRate = targets.target_min_collection_rate || 50; // 50%-60% daily target
+    const targetMaxCollectionRate = targets.target_collection_rate || 60;
+    const maxMonthlyChurnRate = targets.target_monthly_churn_rate || 20; // <= 20% monthly
+    const maxDaysInMaintenance = targets.target_max_downtime_days || 10; // <= 10 days AVG
+    const maxHoursVidangeAdBlue = targets.target_max_vidange_hours || 1.0; // <= 1H AVG
+    const maxHoursFieldMission = targets.target_max_field_mission_hours || 3.0; // <= 3H AVG
+
+    // KPI 1 Attainment: Cash Collection (50%-60% of daily collection amount by end of day)
+    const collectionAttainmentPct =
+      collectionRecoveryRate >= targetMinCollectionRate
+        ? Math.min(
+            150,
+            Number(
+              (
+                100 +
+                ((collectionRecoveryRate - targetMinCollectionRate) /
+                  Math.max(1, targetMaxCollectionRate - targetMinCollectionRate)) *
+                  10
+              ).toFixed(1)
+            )
+          )
+        : Number(((collectionRecoveryRate / targetMinCollectionRate) * 100).toFixed(1));
+
+    // KPI 2 Attainment: Monthly Churn Rate (<= 20% monthly of total fleet drivers)
+    const churnAttainmentPct =
+      monthlyChurnRate <= maxMonthlyChurnRate
+        ? Math.min(120, Number((100 + (maxMonthlyChurnRate - monthlyChurnRate) * 0.5).toFixed(1)))
+        : Math.max(0, Number((100 - (monthlyChurnRate - maxMonthlyChurnRate) * 5).toFixed(1)));
+
+    // KPI 3 Attainment: AVG Days Cars Stay in Maintenance (<= 10 days)
+    const maintenanceAttainmentPct =
+      avgDaysInsuranceRepair <= maxDaysInMaintenance
+        ? Math.min(120, Number((100 + (maxDaysInMaintenance - avgDaysInsuranceRepair) * 2).toFixed(1)))
+        : Math.max(0, Number((100 - (avgDaysInsuranceRepair - maxDaysInMaintenance) * 10).toFixed(1)));
+
+    // KPI 4 Attainment: Timing to Deal with Vidange / AdBleu (AVG <= 1H)
+    const vidangeAttainmentPct =
+      avgHoursAdBlueVidange <= maxHoursVidangeAdBlue
+        ? Math.min(120, Number((100 + (maxHoursVidangeAdBlue - avgHoursAdBlueVidange) * 20).toFixed(1)))
+        : Math.max(0, Number(((maxHoursVidangeAdBlue / avgHoursAdBlueVidange) * 100).toFixed(1)));
+
+    // KPI 5 Attainment: Timing to Execute Field Mission (AVG <= 3H)
+    const fieldMissionAttainmentPct =
+      avgHoursVehicleRecovery <= maxHoursFieldMission
+        ? Math.min(120, Number((100 + (maxHoursFieldMission - avgHoursVehicleRecovery) * 10).toFixed(1)))
+        : Math.max(0, Number(((maxHoursFieldMission / avgHoursVehicleRecovery) * 100).toFixed(1)));
+
+    // Weighted Composite Team Attainment % across all 5 KPIs:
+    // 25% Cash Collection + 20% Monthly Churn + 20% Maintenance Days + 17.5% Vidange/AdBleu + 17.5% Field Mission
+    const fleetPerfTeamAttainmentPct = Number(
+      (
+        0.25 * Math.min(150, collectionAttainmentPct) +
+        0.20 * Math.min(150, churnAttainmentPct) +
+        0.20 * Math.min(150, maintenanceAttainmentPct) +
+        0.175 * Math.min(150, vidangeAttainmentPct) +
+        0.175 * Math.min(150, fieldMissionAttainmentPct)
+      ).toFixed(1)
+    );
+
+    const fleetPerfBonusEarnedMAD = Math.min(1000, Math.round(1000 * (fleetPerfTeamAttainmentPct / 100)));
 
     const inspections = await prisma.vehicleInspection.findMany({
       where: {
@@ -694,7 +822,7 @@ export async function GET(request: NextRequest) {
         (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
       ).length;
 
-      if (u.role === "LEAD_ACQUISITION_JR" || uName.includes("nour") || uName.includes("kaoutar")) {
+      if (u.role === "LEAD_ACQUISITION_JR" || u.role === "BRAND_MANAGER" || uName.includes("nour") || uName.includes("kaoutar")) {
         dept = "Acquisition Prospects";
         teamName = "Traffic Acquisition (Nour & Kaoutar)";
         keyMetric = "Formations Fixées";
@@ -715,15 +843,15 @@ export async function GET(request: NextRequest) {
         unit = "drivers";
         teamAttainmentPct = onboardingTeamAttainmentPct;
         bonusEarnedMAD = onboardingBonusEarnedMAD;
-      } else if (u.role === "FLEET_PERF_MANAGER") {
-        dept = "Recouvrement Flotte";
-        teamName = "Fleet Performance";
-        keyMetric = "Taux Recouvrement";
+      } else if (u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz")) {
+        dept = "Performance Flotte & Recouvrement";
+        teamName = "Fleet Performance (Salma & Mohamed Aziz)";
+        keyMetric = "Cash (50%-60%) & 5 KPIs Flotte";
         actual = collectionRecoveryRate;
-        target = targets.target_collection_rate;
-        unit = "%";
-        teamAttainmentPct = targets.target_collection_rate > 0 ? Number(((collectionRecoveryRate / targets.target_collection_rate) * 100).toFixed(1)) : 100;
-        bonusEarnedMAD = Math.min(1000, Math.round(1000 * (teamAttainmentPct / 100)));
+        target = targetMinCollectionRate;
+        unit = "% (50%-60%)";
+        teamAttainmentPct = fleetPerfTeamAttainmentPct;
+        bonusEarnedMAD = fleetPerfBonusEarnedMAD;
       } else if (u.role === "FIELD_SUPERVISOR") {
         dept = "Opérations Terrain";
         teamName = "Field Operations";
@@ -757,7 +885,12 @@ export async function GET(request: NextRequest) {
         bonusEarnedMAD = 1000;
       }
 
-      const individualAttainmentPct = target > 0 ? Number(((actual / target) * 100).toFixed(1)) : 100;
+      const individualAttainmentPct =
+        u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz")
+          ? collectionAttainmentPct
+          : target > 0
+          ? Number(((actual / target) * 100).toFixed(1))
+          : 100;
 
       let status: "EXCEEDED" | "ON_TRACK" | "BEHIND" = "ON_TRACK";
       if (teamAttainmentPct >= 100) status = "EXCEEDED";
@@ -887,6 +1020,40 @@ export async function GET(request: NextRequest) {
         compliantSessionsCount,
         totalActiveSessionsCount,
       },
+      fleetPerformanceTeam: {
+        totalMorningTargetMAD,
+        totalEveningCollectedMAD,
+        collectionRecoveryRate,
+        targetMinCollectionRate,
+        targetMaxCollectionRate,
+        collectionAttainmentPct,
+        isCollectionCompliant: collectionRecoveryRate >= targetMinCollectionRate,
+        monthlyChurnRate,
+        maxMonthlyChurnRate,
+        churnCount,
+        totalFleetDrivers,
+        churnAttainmentPct,
+        isChurnCompliant: monthlyChurnRate <= maxMonthlyChurnRate,
+        avgDaysInMaintenance: avgDaysInsuranceRepair,
+        maxDaysInMaintenance,
+        carsInMaintenanceCount,
+        maintenanceAttainmentPct,
+        isMaintenanceCompliant: avgDaysInsuranceRepair <= maxDaysInMaintenance,
+        avgHoursAdBlueVidange,
+        maxHoursVidangeAdBlue,
+        vidangeTicketsCount: vidangeTickets.length,
+        vidangeAttainmentPct,
+        isVidangeCompliant: avgHoursAdBlueVidange <= maxHoursVidangeAdBlue,
+        avgHoursFieldMission: avgHoursVehicleRecovery,
+        maxHoursFieldMission,
+        fieldMissionsCompletedCount: tasksCompleted,
+        fieldMissionAttainmentPct,
+        isFieldMissionCompliant: avgHoursVehicleRecovery <= maxHoursFieldMission,
+        teamAttainmentPct: fleetPerfTeamAttainmentPct,
+        monthlyBonusBudgetMAD: 1000,
+        bonusEarnedMAD: fleetPerfBonusEarnedMAD,
+        members: ["Salma Abouri", "Mohamed Aziz"],
+      },
       monthlyTargets: {
         monthlyCallsTarget,
         monthlyTrainingTarget,
@@ -925,18 +1092,25 @@ export async function GET(request: NextRequest) {
           totalMorningTargetMAD,
           totalEveningCollectedMAD,
           collectionRecoveryRate,
-          recoveryObjectivePct: targets.target_collection_rate,
-          collectionAttainmentPct: targets.target_collection_rate > 0 ? Number(((collectionRecoveryRate / targets.target_collection_rate) * 100).toFixed(1)) : 0,
-          isObjectiveMet: collectionRecoveryRate >= targets.target_collection_rate,
+          recoveryObjectiveMinPct: targetMinCollectionRate,
+          recoveryObjectivePct: targetMaxCollectionRate,
+          collectionAttainmentPct,
+          isObjectiveMet: collectionRecoveryRate >= targetMinCollectionRate,
           avgDaysInsuranceRepair,
-          maxDaysInsuranceRepair: targets.target_max_downtime_days,
+          maxDaysInsuranceRepair: maxDaysInMaintenance,
           avgHoursAdBlueVidange,
-          maxHoursAdBlueVidange: 5,
+          maxHoursAdBlueVidange: maxHoursVidangeAdBlue,
           weeklyChurnRate,
           maxWeeklyChurnRate: targets.target_weekly_churn_limit,
+          monthlyChurnRate,
+          maxMonthlyChurnRate,
+          avgHoursFieldMission: avgHoursVehicleRecovery,
+          maxHoursFieldMission,
+          bonusEarnedMAD: fleetPerfBonusEarnedMAD,
         },
         fieldOperations: {
           avgHoursVehicleRecovery,
+          maxHoursFieldMission,
           monthlyChecksCount,
           monthlyChecksTarget: Math.max(1, Math.round((targets.target_monthly_inspection_rate / 30) * workingDays)),
           tasksTotal,

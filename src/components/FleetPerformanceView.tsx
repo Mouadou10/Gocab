@@ -628,23 +628,24 @@ export default function FleetPerformanceView() {
           </p>
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
             <span className={summary?.hasMorningCsv || isRangeMode ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
-              🎯 Objectif 60% :
+              🎯 Objectif 50%–60% :
             </span>
             <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
               {summary?.hasMorningCsv || isRangeMode
-                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.6).toLocaleString()} MAD`
+                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.5).toLocaleString()} – ${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.6).toLocaleString()} MAD`
                 : "—"}
             </span>
           </div>
         </div>
 
-        {/* Collected Today / in Period with 60% Target Progress */}
+        {/* Collected Today / in Period with 50%–60% Target Progress */}
         {(() => {
           const hasCsv = summary?.hasMorningCsv ?? false;
           const target = (summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0);
           const cleared = summary?.totalClearedTodayMAD || 0;
           const pct = target > 0 ? (cleared / target) * 100 : 0;
-          const isTargetAchieved = pct >= 60;
+          const isMinTargetAchieved = pct >= 50;
+          const isMaxTargetAchieved = pct >= 60;
 
           return (
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
@@ -656,14 +657,16 @@ export default function FleetPerformanceView() {
                   className={`text-3xs font-black px-2 py-0.5 rounded-full ${
                     target === 0 && cleared === 0
                       ? "bg-gray-100 text-gray-400"
-                      : isTargetAchieved
+                      : isMaxTargetAchieved
                       ? "bg-emerald-100 text-emerald-800 animate-pulse-subtle"
+                      : isMinTargetAchieved
+                      ? "bg-teal-100 text-teal-800"
                       : pct >= 30
                       ? "bg-amber-100 text-amber-800"
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {`${pct.toFixed(1)}% / 60%`}
+                  {`${pct.toFixed(1)}% / 50–60%`}
                 </span>
               </div>
               <p className="text-2xl font-black text-emerald-600 mt-1">
@@ -676,12 +679,15 @@ export default function FleetPerformanceView() {
                 )}
               </p>
               <div className="relative w-full h-2.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                {/* 60% Goal Line Marker */}
-                <div className="absolute left-[60%] top-0 bottom-0 w-0.5 bg-gray-400 z-10" title="Cible 60%" />
+                {/* 50%–60% Goal Zone Markers */}
+                <div className="absolute left-[50%] top-0 bottom-0 w-0.5 bg-amber-500 z-10" title="Seuil Min 50%" />
+                <div className="absolute left-[60%] top-0 bottom-0 w-0.5 bg-emerald-600 z-10" title="Cible Max 60%" />
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    isTargetAchieved
+                    isMaxTargetAchieved
                       ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                      : isMinTargetAchieved
+                      ? "bg-gradient-to-r from-teal-400 to-emerald-500"
                       : pct >= 30
                       ? "bg-gradient-to-r from-amber-400 to-emerald-500"
                       : "bg-blue-500"
@@ -695,11 +701,13 @@ export default function FleetPerformanceView() {
                 <span>
                   {!hasCsv && !isRangeMode && target === 0
                     ? "En attente du CSV matin pour fixer l'objectif"
-                    : isTargetAchieved
-                    ? "🎉 Objectif 60% Atteint !"
-                    : `Reste ${Math.max(0, Math.round(target * 0.6) - cleared).toLocaleString()} MAD pour 60%`}
+                    : isMaxTargetAchieved
+                    ? "🎉 Objectif 60% Atteint (100% KPI) !"
+                    : isMinTargetAchieved
+                    ? `✅ Seuil 50% atteint ! Reste ${Math.max(0, Math.round(target * 0.6) - cleared).toLocaleString()} MAD pour 60%`
+                    : `Reste ${Math.max(0, Math.round(target * 0.5) - cleared).toLocaleString()} MAD pour 50%`}
                 </span>
-                <span className="font-bold text-gray-400">Objectif: 60%</span>
+                <span className="font-bold text-gray-400">Objectif: 50%–60%</span>
               </p>
             </div>
           );

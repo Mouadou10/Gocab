@@ -66,6 +66,10 @@ interface DepartmentTargets {
   target_active_fleet_rate: number;
   target_max_downtime_days: number;
   target_weekly_churn_limit: number;
+  target_monthly_churn_rate?: number;
+  target_max_vidange_hours?: number;
+  target_max_field_mission_hours?: number;
+  target_min_collection_rate?: number;
   target_max_waived_days: number;
   target_monthly_inspection_rate: number;
   target_gps_connectivity_rate: number;
@@ -89,15 +93,19 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_lead_conversion_rate: 30,
   target_preorder_conversion_rate: 25,
   target_active_fleet_rate: 85,
-  target_max_downtime_days: 7,
+  target_max_downtime_days: 10,
   target_weekly_churn_limit: 2,
+  target_monthly_churn_rate: 20,
+  target_max_vidange_hours: 1.0,
+  target_max_field_mission_hours: 3.0,
+  target_min_collection_rate: 50,
   target_max_waived_days: 10,
   target_monthly_inspection_rate: 90,
   target_gps_connectivity_rate: 100,
   target_asset_recovery_rate: 100,
   target_sla_resolution_rate: 95,
   target_max_open_tickets: 5,
-  target_collection_rate: 90,
+  target_collection_rate: 60,
   target_weekly_revenue_mad: 50000,
   target_avg_available_days: 1.0,
   monthly_bonus_amount_mad: 1000,
@@ -1101,60 +1109,140 @@ export default function SettingsView() {
                 </div>
               </div>
 
-              {/* Pillar 2: Fleet Performance */}
-              <div className="border border-amber-100 bg-amber-50/40 rounded-2xl p-5 space-y-4">
-                <div className="flex items-center gap-2 text-amber-900">
-                  <span className="text-lg">🚗</span>
-                  <h4 className="font-bold text-sm">Fleet Performance & Churn</h4>
+              {/* Pillar 2: Fleet Performance (Salma Abouri & Mohamed Aziz) */}
+              <div className="border-2 border-amber-200 bg-gradient-to-br from-amber-50/70 via-white to-orange-50/30 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-900">
+                    <span className="text-lg">🚗</span>
+                    <div>
+                      <h4 className="font-bold text-sm">Équipe 3 : Fleet Performance</h4>
+                      <p className="text-3xs text-amber-600 font-semibold">Salma Abouri &amp; Mohamed Aziz</p>
+                    </div>
+                  </div>
+                  <span className="text-3xs font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
+                    💰 1 000 DH / mois
+                  </span>
                 </div>
 
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Active Fleet Utilization Rate
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={targets.target_active_fleet_rate}
-                        onChange={(e) => setTargets({ ...targets, target_active_fleet_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>Cash Collect Min</span>
+                        <span className="text-3xs text-amber-700 font-bold">50%</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={targets.target_min_collection_rate ?? 50}
+                          onChange={(e) => setTargets({ ...targets, target_min_collection_rate: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>Cash Collect Max</span>
+                        <span className="text-3xs text-emerald-700 font-bold">60%</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={targets.target_collection_rate || 60}
+                          onChange={(e) => setTargets({ ...targets, target_collection_rate: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Max Allowed Avg Downtime
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={1}
-                        value={targets.target_max_downtime_days}
-                        onChange={(e) => setTargets({ ...targets, target_max_downtime_days: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">days</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>Churn Max Mensuel</span>
+                        <span className="text-3xs text-amber-700 font-bold">&le; 20%</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={targets.target_monthly_churn_rate ?? 20}
+                          onChange={(e) => setTargets({ ...targets, target_monthly_churn_rate: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%/mois</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>Immobilisation Garage</span>
+                        <span className="text-3xs text-amber-700 font-bold">&le; 10j</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          value={targets.target_max_downtime_days || 10}
+                          onChange={(e) => setTargets({ ...targets, target_max_downtime_days: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">jours</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Weekly Churn Limit (Max)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        value={targets.target_weekly_churn_limit}
-                        onChange={(e) => setTargets({ ...targets, target_weekly_churn_limit: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">contracts/wk</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>SLA Vidange / AdBleu</span>
+                        <span className="text-3xs text-emerald-700 font-bold">&le; 1h</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step={0.5}
+                          min={0.5}
+                          value={targets.target_max_vidange_hours ?? 1.0}
+                          onChange={(e) => setTargets({ ...targets, target_max_vidange_hours: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                        <span>SLA Mission Terrain</span>
+                        <span className="text-3xs text-emerald-700 font-bold">&le; 3h</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step={0.5}
+                          min={0.5}
+                          value={targets.target_max_field_mission_hours ?? 3.0}
+                          onChange={(e) => setTargets({ ...targets, target_max_field_mission_hours: Number(e.target.value) })}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1.5 text-2xs">
+                    <div className="flex justify-between text-gray-600">
+                      <span>5 KPIs Pondérés :</span>
+                      <strong className="text-gray-900 font-mono">20% Cash · 20% Churn · 20% Garage · 20% Vidange · 20% Terrain</strong>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-gray-100 text-amber-700 font-bold">
+                      <span>Prime Mensuelle Équipe :</span>
+                      <span>💰 1 000 DH (Option 2 Prop. pur)</span>
                     </div>
                   </div>
                 </div>
