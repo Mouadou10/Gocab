@@ -445,6 +445,16 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
   const cleanPhone = normalizeWhatsAppPhone(payload.fromPhone);
   if (!cleanPhone) throw new Error("Numéro de téléphone expéditeur invalide");
 
+  // Deduplicate if Meta retries the same webhook event
+  if (payload.waMessageId) {
+    const existing = await getDbMsg().findFirst({
+      where: { wa_message_id: payload.waMessageId },
+    });
+    if (existing) {
+      return { success: true, message: existing, conversationId: existing.conversation_id };
+    }
+  }
+
   const conversation = await findOrCreateConversation(cleanPhone, payload.contactName);
 
   const message = await getDbMsg().create({
@@ -466,6 +476,53 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
       last_message: payload.text,
       last_message_at: new Date(),
       unread_count: { increment: 1 },
+    },
+  });
+
+  return { success: true, message, conversationId: conversation.id };
+}
+
+/**
+ * Handles outbound message echoes sent from the WhatsApp Business Mobile App in COEX (Coexistence) mode
+ */
+export async function handleEchoWhatsAppMessage(payload: {
+  toPhone: string;
+  text: string;
+  waMessageId?: string;
+  mediaUrl?: string;
+}) {
+  const cleanPhone = normalizeWhatsAppPhone(payload.toPhone);
+  if (!cleanPhone) return { success: false };
+
+  if (payload.waMessageId) {
+    const existing = await getDbMsg().findFirst({
+      where: { wa_message_id: payload.waMessageId },
+    });
+    if (existing) {
+      return { success: true, message: existing, conversationId: existing.conversation_id };
+    }
+  }
+
+  const conversation = await findOrCreateConversation(cleanPhone);
+
+  const message = await getDbMsg().create({
+    data: {
+      conversation_id: conversation.id,
+      direction: "OUTBOUND",
+      sender_type: "AGENT",
+      sender_name: "GoCab Mobile (COEX)",
+      text: payload.text,
+      status: "SENT",
+      wa_message_id: payload.waMessageId || `echo-${Date.now()}`,
+      media_url: payload.mediaUrl || null,
+    },
+  });
+
+  await getDbConv().update({
+    where: { id: conversation.id },
+    data: {
+      last_message: payload.text,
+      last_message_at: new Date(),
     },
   });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getWhatsAppApiConfig,
   handleInboundWhatsAppMessage,
+  handleEchoWhatsAppMessage,
   getDbMsg,
 } from "@/lib/services/whatsappApiService";
 
@@ -57,35 +58,54 @@ export async function POST(req: NextRequest) {
 
     const body = JSON.parse(rawBody);
 
-    // Helper to process messages
+    const extractMessageText = (msg: any): string => {
+      if (msg.type === "text" && msg.text?.body) {
+        return msg.text.body;
+      } else if (msg.type === "image") {
+        return msg.image?.caption || "📷 Photo reçue";
+      } else if (msg.type === "document") {
+        return msg.document?.caption || `📄 Document reçu (${msg.document?.filename || "fichier"})`;
+      } else if (msg.type === "audio" || msg.type === "voice") {
+        return "🎙️ Message vocal reçu";
+      } else if (msg.type === "video") {
+        return msg.video?.caption || "🎥 Vidéo reçue";
+      } else if (msg.type === "location") {
+        return `📍 Position partagée: ${msg.location?.latitude}, ${msg.location?.longitude}`;
+      } else if (msg.type === "interactive") {
+        return (
+          msg.interactive?.button_reply?.title ||
+          msg.interactive?.list_reply?.title ||
+          "Réponse interactive"
+        );
+      } else if (msg.type === "reaction") {
+        return `Réaction ${msg.reaction?.emoji || "👍"}`;
+      }
+      return `Message [${msg.type || "inconnu"}]`;
+    };
+
+    // Helper to process inbound messages
     const processMessages = async (messages: any[], contactName?: string) => {
       for (const msg of messages) {
-        let messageText = "";
-
-        if (msg.type === "text" && msg.text?.body) {
-          messageText = msg.text.body;
-        } else if (msg.type === "image") {
-          messageText = msg.image?.caption || "📷 Photo reçue";
-        } else if (msg.type === "document") {
-          messageText = msg.document?.caption || `📄 Document reçu (${msg.document?.filename || "fichier"})`;
-        } else if (msg.type === "audio" || msg.type === "voice") {
-          messageText = "🎙️ Message vocal reçu";
-        } else if (msg.type === "location") {
-          messageText = `📍 Position partagée: ${msg.location?.latitude}, ${msg.location?.longitude}`;
-        } else if (msg.type === "interactive") {
-          messageText =
-            msg.interactive?.button_reply?.title ||
-            msg.interactive?.list_reply?.title ||
-            "Réponse interactive";
-        } else {
-          messageText = `Message de type [${msg.type || "inconnu"}] reçu`;
-        }
-
+        const messageText = extractMessageText(msg);
         await handleInboundWhatsAppMessage({
           fromPhone: msg.from,
           contactName: contactName,
           text: messageText,
           waMessageId: msg.id,
+        });
+      }
+    };
+
+    // Helper to process COEX outbound echoes from WhatsApp Business Mobile App
+    const processEchoes = async (echoes: any[]) => {
+      for (const echo of echoes) {
+        const toPhone = echo.to;
+        if (!toPhone) continue;
+        const messageText = extractMessageText(echo);
+        await handleEchoWhatsAppMessage({
+          toPhone,
+          text: messageText,
+          waMessageId: echo.id,
         });
       }
     };
@@ -106,10 +126,29 @@ export async function POST(req: NextRequest) {
             ? "FAILED"
             : statusObj.status;
 
+        let errorMessage: string | undefined = undefined;
+        if (newStatus === "FAILED" && Array.isArray(statusObj.errors) && statusObj.errors.length > 0) {
+          const err = statusObj.errors[0];
+          const code = err.code;
+          const details = err.error_data?.details || err.message || err.title || "";
+          if (code === 131047) {
+            errorMessage =
+              "Fenêtre 24h fermée (Code 131047) : ce contact ne vous a pas écrit durant les dernières 24h. Envoyez-lui d'abord un message depuis l'application mobile WhatsApp Business (COEX) ou attendez sa réponse.";
+          } else if (code === 131026) {
+            errorMessage =
+              "Message non distribuable (Code 131026) : numéro non enregistré sur WhatsApp ou fenêtre de conversation inactive.";
+          } else {
+            errorMessage = `Erreur WhatsApp (${code || "Meta"}) : ${details}`;
+          }
+        }
+
         if (waMsgId && newStatus) {
           await getDbMsg().updateMany({
             where: { wa_message_id: waMsgId },
-            data: { status: newStatus },
+            data: {
+              status: newStatus,
+              ...(errorMessage ? { error_message: errorMessage } : {}),
+            },
           });
         }
       }
@@ -119,6 +158,9 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.messages) && body.messages.length > 0) {
       const contactName = body.contacts?.[0]?.profile?.name;
       await processMessages(body.messages, contactName);
+    }
+    if (Array.isArray(body.message_echoes) && body.message_echoes.length > 0) {
+      await processEchoes(body.message_echoes);
     }
     if (Array.isArray(body.statuses) && body.statuses.length > 0) {
       await processStatuses(body.statuses);
@@ -135,6 +177,10 @@ export async function POST(req: NextRequest) {
         if (value.messages && Array.isArray(value.messages)) {
           const contactName = value.contacts?.[0]?.profile?.name;
           await processMessages(value.messages, contactName);
+        }
+
+        if (value.message_echoes && Array.isArray(value.message_echoes)) {
+          await processEchoes(value.message_echoes);
         }
 
         if (value.statuses && Array.isArray(value.statuses)) {
