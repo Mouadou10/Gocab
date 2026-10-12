@@ -63,7 +63,7 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_weekly_revenue_mad: 50000,
   target_daily_tasks: 10,
   target_fleet_uptime: 95,
-  target_ticket_resolution_rate: 85,
+  target_ticket_resolution_rate: 95, // % of tickets resolved >= 95%
   target_avg_available_days: 1.0,
   monthly_bonus_amount_mad: 1000,
 };
@@ -123,10 +123,11 @@ export async function GET(request: NextRequest) {
           target_monthly_churn_rate: Number(parsed.target_monthly_churn_rate) || 20,
           target_max_vidange_hours: Number(parsed.target_max_vidange_hours) || 1.0,
           target_max_field_mission_hours: Number(parsed.target_max_field_mission_hours) || 3.0,
-          target_monthly_inspection_rate: Number(parsed.target_monthly_inspection_rate) || DEFAULT_TARGETS.target_monthly_inspection_rate,
+          target_monthly_inspection_rate: Number(parsed.target_monthly_inspection_rate) || 90,
+          target_sla_resolution_rate: Number(parsed.target_sla_resolution_rate) || 95,
           target_daily_tasks: Number(parsed.target_daily_tasks) || DEFAULT_TARGETS.target_daily_tasks,
           target_fleet_uptime: Number(parsed.target_fleet_uptime) || DEFAULT_TARGETS.target_fleet_uptime,
-          target_ticket_resolution_rate: Number(parsed.target_ticket_resolution_rate) || DEFAULT_TARGETS.target_ticket_resolution_rate,
+          target_ticket_resolution_rate: Number(parsed.target_ticket_resolution_rate) || Number(parsed.target_sla_resolution_rate) || 95,
         };
       }
     } catch (err) {
@@ -782,20 +783,132 @@ export async function GET(request: NextRequest) {
 
     const fleetPerfBonusEarnedMAD = Math.min(1000, Math.round(1000 * (fleetPerfTeamAttainmentPct / 100)));
 
-    const inspections = await prisma.vehicleInspection.findMany({
-      where: {
-        inspection_date: {
-          gte: startDate,
-          lte: endDate,
+    const [inspections, attestationVehicles, allPeriodTickets] = await Promise.all([
+      prisma.vehicleInspection.findMany({
+        where: {
+          inspection_date: {
+            gte: startDate,
+            lte: endDate,
+          },
         },
-      },
-    });
+      }),
+      prisma.vehicle.findMany({
+        where: {
+          is_archived: false,
+          OR: [
+            { autorisation_expiry_date: { not: null } },
+            { status: "Actif" },
+          ],
+        },
+        select: {
+          id: true,
+          plate_number: true,
+          status: true,
+          assigned_driver_name: true,
+          autorisation_expiry_date: true,
+        },
+      }),
+      prisma.maintenanceTicket.findMany({
+        where: {
+          is_archived: false,
+          status: { not: "CANCELLED" },
+          OR: [
+            { created_at: { gte: startDate, lte: endDate } },
+            { resolved_at: { gte: startDate, lte: endDate } },
+            { status: { in: ["OPEN", "IN_PROGRESS"] } },
+          ],
+        },
+        select: {
+          id: true,
+          status: true,
+          field_status: true,
+          ticket_type: true,
+          created_at: true,
+          resolved_at: true,
+        },
+      }),
+    ]);
+
     const monthlyChecksCount = inspections.length;
 
     const avgHealthScore =
       inspections.length > 0
         ? Number((inspections.reduce((acc, i) => acc + Number(i.health_score), 0) / inspections.length).toFixed(1))
         : 5.0;
+
+    // ── Field Supervisor Team (Hamza Rassid & Ayoub Rassid) 3 KPIs & 1,000 MAD Bonus ──
+    // KPI 1: AVG Time to Complete Missions (Target: <= 3.0 H AVG)
+    const avgHoursMissionCompletion = avgHoursVehicleRecovery;
+    const targetMaxMissionHours = targets.target_max_field_mission_hours || 3.0;
+    const missionTimeAttainmentPct = fieldMissionAttainmentPct;
+
+    // KPI 2: % of Persons / Drivers Generated the Attestation de Location in Time (Target: >= 90%)
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const inspectedVehicleIdsInPeriod = new Set(inspections.map((i) => i.vehicle_id));
+    const vehiclesWithConfiguredAttestation = attestationVehicles.filter(
+      (v) => v.autorisation_expiry_date !== null || inspectedVehicleIdsInPeriod.has(v.id)
+    );
+    const attestationTrackedPool =
+      vehiclesWithConfiguredAttestation.length > 0 ? vehiclesWithConfiguredAttestation : attestationVehicles;
+
+    const attestationTotalPersons = attestationTrackedPool.length;
+    const attestationOnTimeCount = attestationTrackedPool.filter((v) => {
+      if (inspectedVehicleIdsInPeriod.has(v.id)) return true;
+      if (v.autorisation_expiry_date) {
+        const exp = new Date(v.autorisation_expiry_date);
+        const expDay = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate());
+        return expDay.getTime() >= todayMidnight.getTime();
+      }
+      return false;
+    }).length;
+
+    const attestationOnTimeRate =
+      attestationTotalPersons > 0
+        ? Number(((attestationOnTimeCount / attestationTotalPersons) * 100).toFixed(1))
+        : 100;
+    const targetAttestationOnTimeRate = targets.target_monthly_inspection_rate || 90;
+    const attestationAttainmentPct = Number(
+      Math.min(150, (attestationOnTimeRate / targetAttestationOnTimeRate) * 100).toFixed(1)
+    );
+
+    // KPI 3: % of Tickets Resolved (Target: >= 95%)
+    const unlinkedFieldTasks = fieldTasks.filter(
+      (ft) => !ft.linked_ticket_id && ft.status !== "FAILED" && ft.status !== "Failed"
+    );
+    const resolvedMaintenanceTickets = allPeriodTickets.filter(
+      (t) =>
+        t.status === "RESOLVED" ||
+        t.field_status === "COMPLETED" ||
+        t.field_status === "PICKED_UP"
+    ).length;
+    const resolvedUnlinkedTasks = unlinkedFieldTasks.filter(
+      (ft) => ft.status === "COMPLETED" || ft.status === "Completed"
+    ).length;
+
+    const ticketsTotalCount = allPeriodTickets.length + unlinkedFieldTasks.length;
+    const ticketsResolvedCount = resolvedMaintenanceTickets + resolvedUnlinkedTasks;
+    const ticketResolutionRate =
+      ticketsTotalCount > 0
+        ? Number(((ticketsResolvedCount / ticketsTotalCount) * 100).toFixed(1))
+        : 100;
+    const targetTicketResolutionRate = targets.target_ticket_resolution_rate || targets.target_sla_resolution_rate || 95;
+    const ticketResolutionAttainmentPct = Number(
+      Math.min(150, (ticketResolutionRate / targetTicketResolutionRate) * 100).toFixed(1)
+    );
+
+    // Composite Team Attainment % across all 3 KPIs (Equal 1/3 weight each)
+    const fieldSupervisorTeamAttainmentPct = Number(
+      (
+        (Math.min(150, missionTimeAttainmentPct) +
+          Math.min(150, attestationAttainmentPct) +
+          Math.min(150, ticketResolutionAttainmentPct)) /
+        3
+      ).toFixed(1)
+    );
+    const fieldSupervisorBonusEarnedMAD = Math.min(
+      1000,
+      Math.round(1000 * (fieldSupervisorTeamAttainmentPct / 100))
+    );
 
     // 7. Build Team Leaderboard with individual & team attribution
     const leaderboard = users.map((u) => {
@@ -852,19 +965,15 @@ export async function GET(request: NextRequest) {
         unit = "% (50%-60%)";
         teamAttainmentPct = fleetPerfTeamAttainmentPct;
         bonusEarnedMAD = fleetPerfBonusEarnedMAD;
-      } else if (u.role === "FIELD_SUPERVISOR") {
+      } else if (u.role === "FIELD_SUPERVISOR" || uName.includes("hamza") || uName.includes("ayoub rassid")) {
         dept = "Opérations Terrain";
-        teamName = "Field Operations";
-        keyMetric = "Tâches Réalisées";
-        const userTasks = fieldTasks.filter((t) =>
-          (t.assigned_to && t.assigned_to.toLowerCase().includes(uName)) ||
-          (u.fullName && t.assigned_to?.toLowerCase().includes(u.fullName.toLowerCase()))
-        );
-        actual = userTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED").length || tasksCompleted;
-        target = scaledTasksTarget;
-        unit = "tâches";
-        teamAttainmentPct = scaledTasksTarget > 0 ? Number(((actual / scaledTasksTarget) * 100).toFixed(1)) : 100;
-        bonusEarnedMAD = Math.min(1000, Math.round(1000 * (teamAttainmentPct / 100)));
+        teamName = "Field Supervisor (Hamza & Ayoub Rassid)";
+        keyMetric = "Missions (≤3h) · Attest. (90%) · Tickets (95%)";
+        actual = ticketResolutionRate;
+        target = targetTicketResolutionRate;
+        unit = "% résolus";
+        teamAttainmentPct = fieldSupervisorTeamAttainmentPct;
+        bonusEarnedMAD = fieldSupervisorBonusEarnedMAD;
       } else if (u.role === "OPS_MANAGER" || u.role === "ADMIN") {
         dept = "Direction des Opérations";
         teamName = "Executive";
@@ -888,6 +997,8 @@ export async function GET(request: NextRequest) {
       const individualAttainmentPct =
         u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz")
           ? collectionAttainmentPct
+          : u.role === "FIELD_SUPERVISOR" || uName.includes("hamza") || uName.includes("ayoub rassid")
+          ? fieldSupervisorTeamAttainmentPct
           : target > 0
           ? Number(((actual / target) * 100).toFixed(1))
           : 100;
@@ -1054,6 +1165,30 @@ export async function GET(request: NextRequest) {
         bonusEarnedMAD: fleetPerfBonusEarnedMAD,
         members: ["Salma Abouri", "Mohamed Aziz"],
       },
+      fieldSupervisorTeam: {
+        avgHoursMissionCompletion,
+        targetMaxMissionHours,
+        missionsCompletedCount: tasksCompleted,
+        missionsTotalCount: tasksTotal,
+        missionTimeAttainmentPct,
+        isMissionTimeCompliant: avgHoursMissionCompletion <= targetMaxMissionHours,
+        attestationOnTimeRate,
+        targetAttestationOnTimeRate,
+        attestationOnTimeCount,
+        attestationTotalPersons,
+        attestationAttainmentPct,
+        isAttestationCompliant: attestationOnTimeRate >= targetAttestationOnTimeRate,
+        ticketResolutionRate,
+        targetTicketResolutionRate,
+        ticketsResolvedCount,
+        ticketsTotalCount,
+        ticketResolutionAttainmentPct,
+        isTicketResolutionCompliant: ticketResolutionRate >= targetTicketResolutionRate,
+        teamAttainmentPct: fieldSupervisorTeamAttainmentPct,
+        monthlyBonusBudgetMAD: 1000,
+        bonusEarnedMAD: fieldSupervisorBonusEarnedMAD,
+        members: ["Hamza Rassid", "Ayoub Rassid"],
+      },
       monthlyTargets: {
         monthlyCallsTarget,
         monthlyTrainingTarget,
@@ -1113,6 +1248,14 @@ export async function GET(request: NextRequest) {
           maxHoursFieldMission,
           monthlyChecksCount,
           monthlyChecksTarget: Math.max(1, Math.round((targets.target_monthly_inspection_rate / 30) * workingDays)),
+          attestationOnTimeRate,
+          targetAttestationOnTimeRate,
+          attestationOnTimeCount,
+          attestationTotalPersons,
+          ticketResolutionRate,
+          targetTicketResolutionRate,
+          ticketsResolvedCount,
+          ticketsTotalCount,
           tasksTotal,
           tasksCompleted,
           tasksFailed,
@@ -1120,6 +1263,7 @@ export async function GET(request: NextRequest) {
           tasksAttainmentPct: scaledTasksTarget > 0 ? Number(((tasksCompleted / scaledTasksTarget) * 100).toFixed(1)) : 0,
           taskCompletionRate,
           avgHealthScore,
+          bonusEarnedMAD: fieldSupervisorBonusEarnedMAD,
         },
       },
       leaderboard,

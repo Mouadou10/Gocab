@@ -15,6 +15,8 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
+  ReferenceLine,
+  LabelList,
 } from "recharts";
 
 interface PerformanceData {
@@ -139,6 +141,30 @@ interface PerformanceData {
     bonusEarnedMAD: number;
     members: string[];
   };
+  fieldSupervisorTeam?: {
+    avgHoursMissionCompletion: number;
+    targetMaxMissionHours: number;
+    missionsCompletedCount: number;
+    missionsTotalCount: number;
+    missionTimeAttainmentPct: number;
+    isMissionTimeCompliant: boolean;
+    attestationOnTimeRate: number;
+    targetAttestationOnTimeRate: number;
+    attestationOnTimeCount: number;
+    attestationTotalPersons: number;
+    attestationAttainmentPct: number;
+    isAttestationCompliant: boolean;
+    ticketResolutionRate: number;
+    targetTicketResolutionRate: number;
+    ticketsResolvedCount: number;
+    ticketsTotalCount: number;
+    ticketResolutionAttainmentPct: number;
+    isTicketResolutionCompliant: boolean;
+    teamAttainmentPct: number;
+    monthlyBonusBudgetMAD: number;
+    bonusEarnedMAD: number;
+    members: string[];
+  };
   monthlyTargets?: {
     monthlyCallsTarget: number;
     monthlyTrainingTarget: number;
@@ -197,6 +223,14 @@ interface PerformanceData {
       maxHoursFieldMission?: number;
       monthlyChecksCount: number;
       monthlyChecksTarget?: number;
+      attestationOnTimeRate?: number;
+      targetAttestationOnTimeRate?: number;
+      attestationOnTimeCount?: number;
+      attestationTotalPersons?: number;
+      ticketResolutionRate?: number;
+      targetTicketResolutionRate?: number;
+      ticketsResolvedCount?: number;
+      ticketsTotalCount?: number;
       tasksTotal: number;
       tasksCompleted: number;
       tasksFailed: number;
@@ -204,6 +238,7 @@ interface PerformanceData {
       tasksAttainmentPct: number;
       taskCompletionRate: number;
       avgHealthScore: number;
+      bonusEarnedMAD?: number;
     };
   };
   leaderboard: {
@@ -254,7 +289,7 @@ const DEPARTMENTS = [
   { id: "LEAD_ACQUISITION_JR", label: "📞 Traffic Acquisition (Nour & Kaoutar)" },
   { id: "TRAINING", label: "🎓 Onboarding (Ayoub Gsaib)" },
   { id: "FLEET_PERF_MANAGER", label: "🚗 Fleet Performance (Salma & Mohamed Aziz)" },
-  { id: "FIELD_SUPERVISOR", label: "🛡️ Opérations Terrain" },
+  { id: "FIELD_SUPERVISOR", label: "🛡️ Field Supervisor (Hamza & Ayoub Rassid)" },
   { id: "GARAGE", label: "🔧 Maintenance & Garage" },
 ];
 
@@ -352,6 +387,7 @@ export default function PowerBiDashboardView() {
   const traffic = data?.trafficAcquisitionTeam;
   const onboarding = data?.onboardingSpecialistTeam;
   const fleetPerf = data?.fleetPerformanceTeam;
+  const fieldSup = data?.fieldSupervisorTeam;
   const callResults = data?.callResultsBreakdown;
 
   // ── Chart 1 Data: Call Distribution Donut ────────────────────────
@@ -485,6 +521,37 @@ export default function PowerBiDashboardView() {
       },
     ];
   }, [fleetPerf]);
+
+  // ── Chart 4c Data: Field Supervisor 3 KPIs Attainment ────────────
+  const fieldSupAttainmentData = useMemo(() => {
+    if (!fieldSup) return [];
+    return [
+      {
+        name: "1. Missions Terrain (≤3h)",
+        Attainment: Math.min(130, fieldSup.missionTimeAttainmentPct),
+        Cible: 100,
+        actualLabel: `${fieldSup.avgHoursMissionCompletion} h`,
+        targetLabel: "AVG ≤ 3h",
+        isCompliant: fieldSup.isMissionTimeCompliant,
+      },
+      {
+        name: "2. Attestations à temps (≥90%)",
+        Attainment: Math.min(130, fieldSup.attestationAttainmentPct),
+        Cible: 100,
+        actualLabel: `${fieldSup.attestationOnTimeRate}% (${fieldSup.attestationOnTimeCount}/${fieldSup.attestationTotalPersons})`,
+        targetLabel: "≥ 90%",
+        isCompliant: fieldSup.isAttestationCompliant,
+      },
+      {
+        name: "3. Tickets Résolus (≥95%)",
+        Attainment: Math.min(130, fieldSup.ticketResolutionAttainmentPct),
+        Cible: 100,
+        actualLabel: `${fieldSup.ticketResolutionRate}% (${fieldSup.ticketsResolvedCount}/${fieldSup.ticketsTotalCount})`,
+        targetLabel: "≥ 95%",
+        isCompliant: fieldSup.isTicketResolutionCompliant,
+      },
+    ];
+  }, [fieldSup]);
 
   // ── Chart 5 Data: Daily Activity Trends ──────────────────────────
   const timelineData = useMemo(() => {
@@ -1864,85 +1931,339 @@ export default function PowerBiDashboardView() {
               </div>
 
               {/* ══════════════════════════════════════════════════════════════
-                  SECTION 4: FIELD OPERATIONS OVERVIEW
+                  SECTION 4: FIELD SUPERVISOR TEAM (HAMZA & AYOUB RASSID)
                  ══════════════════════════════════════════════════════════════ */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Cash Collections Summary Card */}
-                <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-3xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full inline-block">
-                        💸 Synthèse Encaissements & SLA
-                      </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1 font-mono">
-                        {kpis.fleetCollections.collectionRecoveryRate}%{" "}
-                        <span className="text-xs text-gray-500 font-normal">
-                          / Cible 50%–60%
-                        </span>
-                      </h3>
-                      <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Encaissé : <strong>{kpis.fleetCollections.totalEveningCollectedMAD.toLocaleString()} MAD</strong> sur{" "}
-                        <strong>{kpis.fleetCollections.totalMorningTargetMAD.toLocaleString()} MAD</strong>
-                      </p>
+              <div className="bg-white border border-green-200/80 rounded-3xl p-6 shadow-sm space-y-5 relative overflow-hidden">
+                <div className="absolute -right-8 -top-8 w-40 h-40 bg-green-50 rounded-full pointer-events-none" />
+
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-100 pb-4 relative z-10">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-3xs font-black uppercase tracking-wider text-green-800 bg-green-50 px-2.5 py-0.5 rounded-full border border-green-200">
+                        🛡️ ÉQUIPE 4 : FIELD SUPERVISOR
+                      </span>
+                      <span className="text-3xs font-bold text-gray-500">
+                        Hamza Rassid &amp; Ayoub Rassid
+                      </span>
                     </div>
-                    <span className="text-2xl">💰</span>
+                    <h3 className="text-lg font-black text-navy mt-1">
+                      Opérations Terrain, Attestations de Location &amp; Résolution Tickets
+                    </h3>
+                    <p className="text-2xs text-gray-500">
+                      Objectifs SLA : <strong>AVG &le; 3h</strong> Exécution Missions · <strong>&ge; 90%</strong> Attestations de Location à temps · <strong>&ge; 95%</strong> Tickets Résolus
+                    </p>
                   </div>
 
-                  <div className="space-y-1.5 pt-1 text-3xs font-bold">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Voitures en maintenance (AVG jours) :</span>
-                      <span className={kpis.fleetCollections.avgDaysInsuranceRepair <= (kpis.fleetCollections.maxDaysInsuranceRepair || 10) ? "text-emerald-700" : "text-red-700"}>
-                        {kpis.fleetCollections.avgDaysInsuranceRepair} j (Max Obj : {kpis.fleetCollections.maxDaysInsuranceRepair || 10}j)
+                  {/* Bonus 1000 DH Card (Option 2: Proportionnel pur) */}
+                  <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-2xl px-5 py-3 flex items-center gap-4 shadow-2xs">
+                    <div className="text-3xl">💰</div>
+                    <div>
+                      <p className="text-3xs font-black uppercase tracking-wider text-emerald-800">
+                        Prime Mensuelle Équipe (Option 2 : Proportionnel pur)
+                      </p>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-2xl font-black text-emerald-700 font-mono">
+                          {fieldSup?.bonusEarnedMAD ?? kpis.fieldOperations.bonusEarnedMAD ?? 0} DH
+                        </span>
+                        <span className="text-2xs font-bold text-gray-500">/ 1 000 DH max</span>
+                      </div>
+                      <p className="text-3xs text-emerald-700 font-semibold mt-0.5">
+                        Atteinte Globale (3 KPIs) : <strong>{fieldSup?.teamAttainmentPct ?? 100}%</strong>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3 KPIs Cards for Field Supervisor Team */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+                  {/* KPI 1: AVG Time to Complete Missions (<= 3h AVG) */}
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-3xs font-black text-gray-500 uppercase">1. Temps Moyen Missions Terrain</span>
+                      <span
+                        className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                          (fieldSup?.avgHoursMissionCompletion ?? kpis.fieldOperations.avgHoursVehicleRecovery) <=
+                          (fieldSup?.targetMaxMissionHours || 3.0)
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        AVG : &le; {fieldSup?.targetMaxMissionHours || 3}h
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">AdBlue/Vidange (AVG heures) :</span>
-                      <span className={kpis.fleetCollections.avgHoursAdBlueVidange <= (kpis.fleetCollections.maxHoursAdBlueVidange || 1) ? "text-emerald-700" : "text-amber-700"}>
-                        {kpis.fleetCollections.avgHoursAdBlueVidange} h (Max Obj : {kpis.fleetCollections.maxHoursAdBlueVidange || 1}h)
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-navy font-mono">
+                        {fieldSup?.avgHoursMissionCompletion ?? kpis.fieldOperations.avgHoursVehicleRecovery} h
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">
+                        / max {fieldSup?.targetMaxMissionHours || 3}h
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Taux de Churn mensuel :</span>
-                      <span className={(kpis.fleetCollections.monthlyChurnRate ?? 0) <= (kpis.fleetCollections.maxMonthlyChurnRate || 20) ? "text-emerald-600" : "text-red-600"}>
-                        {kpis.fleetCollections.monthlyChurnRate ?? 0}% (Max Obj : {kpis.fleetCollections.maxMonthlyChurnRate || 20}%)
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (fieldSup?.avgHoursMissionCompletion ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
+                            ? "bg-emerald-500"
+                            : "bg-red-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, fieldSup?.missionTimeAttainmentPct || 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-bold pt-0.5">
+                      <span className="text-gray-500">
+                        {fieldSup?.missionsCompletedCount ?? kpis.fieldOperations.tasksCompleted} /{" "}
+                        {fieldSup?.missionsTotalCount ?? kpis.fieldOperations.tasksTotal} missions complétées
+                      </span>
+                      <span
+                        className={
+                          (fieldSup?.avgHoursMissionCompletion ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
+                            ? "text-emerald-700"
+                            : "text-red-700"
+                        }
+                      >
+                        {(fieldSup?.avgHoursMissionCompletion ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
+                          ? "✓ SLA ≤ 3h respecté"
+                          : "⚠️ Dépassement > 3h"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* KPI 2: % Persons Generated Attestation de Location in Time (>= 90%) */}
+                  <div className="bg-blue-50/40 border border-blue-200/80 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-3xs font-black text-blue-900 uppercase">
+                        2. Attestations de Location à Temps
+                      </span>
+                      <span
+                        className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                          (fieldSup?.attestationOnTimeRate ?? 100) >= (fieldSup?.targetAttestationOnTimeRate || 90)
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        Cible : &ge; {fieldSup?.targetAttestationOnTimeRate || 90}%
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-blue-900 font-mono">
+                        {fieldSup?.attestationOnTimeRate ?? kpis.fieldOperations.attestationOnTimeRate ?? 100}%
+                      </span>
+                      <span className="text-xs text-gray-500 font-mono">
+                        ({fieldSup?.attestationOnTimeCount ?? 0}/{fieldSup?.attestationTotalPersons ?? 0} chauffeurs)
+                      </span>
+                    </div>
+                    <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (fieldSup?.attestationOnTimeRate ?? 100) >= (fieldSup?.targetAttestationOnTimeRate || 90)
+                            ? "bg-emerald-500"
+                            : "bg-amber-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, fieldSup?.attestationOnTimeRate ?? 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-bold pt-0.5">
+                      <span className="text-gray-500">
+                        Renouvellement mensuel (1 mois)
+                      </span>
+                      <span
+                        className={
+                          (fieldSup?.attestationOnTimeRate ?? 100) >= (fieldSup?.targetAttestationOnTimeRate || 90)
+                            ? "text-emerald-700"
+                            : "text-amber-700"
+                        }
+                      >
+                        {(fieldSup?.attestationOnTimeRate ?? 100) >= (fieldSup?.targetAttestationOnTimeRate || 90)
+                          ? "✓ Conformité ≥ 90%"
+                          : "⚠️ Attestations échues"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* KPI 3: % of Tickets Resolved (>= 95%) */}
+                  <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-3xs font-black text-emerald-900 uppercase">
+                        3. Taux deTickets Résolus
+                      </span>
+                      <span
+                        className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                          (fieldSup?.ticketResolutionRate ?? 100) >= (fieldSup?.targetTicketResolutionRate || 95)
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        Cible : &ge; {fieldSup?.targetTicketResolutionRate || 95}%
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-emerald-800 font-mono">
+                        {fieldSup?.ticketResolutionRate ?? kpis.fieldOperations.ticketResolutionRate ?? 100}%
+                      </span>
+                      <span className="text-xs text-gray-500 font-mono">
+                        ({fieldSup?.ticketsResolvedCount ?? 0}/{fieldSup?.ticketsTotalCount ?? 0} tickets)
+                      </span>
+                    </div>
+                    <div className="w-full bg-emerald-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (fieldSup?.ticketResolutionRate ?? 100) >= (fieldSup?.targetTicketResolutionRate || 95)
+                            ? "bg-emerald-600"
+                            : "bg-amber-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, fieldSup?.ticketResolutionRate ?? 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-bold pt-0.5">
+                      <span className="text-gray-500">
+                        Tickets &amp; Interventions clôturés
+                      </span>
+                      <span
+                        className={
+                          (fieldSup?.ticketResolutionRate ?? 100) >= (fieldSup?.targetTicketResolutionRate || 95)
+                            ? "text-emerald-700"
+                            : "text-amber-700"
+                        }
+                      >
+                        {(fieldSup?.ticketResolutionRate ?? 100) >= (fieldSup?.targetTicketResolutionRate || 95)
+                          ? "✓ Objectif ≥ 95% atteint"
+                          : "⚠️ En cours de résolution"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Field Operations */}
-                <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-3xs font-black uppercase tracking-wider text-green-800 bg-green-50 px-2 py-0.5 rounded-full inline-block">
-                        🛡️ Opérations Terrain
-                      </p>
-                      <h3 className="text-2xl font-black text-gray-900 mt-1 font-mono">
-                        {kpis.fieldOperations.tasksCompleted} / {kpis.fieldOperations.tasksTarget} Tâches
-                      </h3>
-                      <p className="text-2xs text-gray-500 font-medium mt-0.5">
-                        Taux de réalisation : <strong>{kpis.fieldOperations.taskCompletionRate}%</strong>
-                      </p>
+                {/* Field Supervisor Charts & 3-Objective Compliance Matrix */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 relative z-10">
+                  {/* Left: Attainment BarChart */}
+                  <div className="lg:col-span-7 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 mb-2">
+                      <div>
+                        <h4 className="text-xs font-black text-navy uppercase tracking-wider flex items-center gap-1.5">
+                          <span>📊</span>
+                          <span>Score d&apos;Atteinte par KPI — Field Supervisor</span>
+                        </h4>
+                        <p className="text-3xs text-gray-500">
+                          Comparaison par rapport à la cible 100% (Missions ≤3h, Attestations ≥90%, Tickets ≥95%)
+                        </p>
+                      </div>
+                      <span className="text-3xs font-bold px-2 py-0.5 bg-green-100 text-green-900 rounded-md">
+                        Moyenne : {fieldSup?.teamAttainmentPct ?? 100}%
+                      </span>
                     </div>
-                    <span className="text-2xl">⚡</span>
+
+                    <div className="h-52 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={fieldSupAttainmentData}
+                          margin={{ top: 15, right: 16, left: -15, bottom: 5 }}
+                          barCategoryGap="28%"
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 10, fontWeight: 700, fill: "#334155" }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            domain={[0, 130]}
+                            tick={{ fontSize: 10, fill: "#64748b" }}
+                            axisLine={false}
+                            tickLine={false}
+                            unit="%"
+                          />
+                          <Tooltip
+                            formatter={(val: any, _name: any, props: any) => [
+                              `${val}% (Réel: ${props?.payload?.actualLabel} | Cible: ${props?.payload?.targetLabel})`,
+                              "Atteinte KPI",
+                            ]}
+                            contentStyle={{
+                              backgroundColor: "#ffffff",
+                              borderRadius: "12px",
+                              border: "1px solid #e2e8f0",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                            }}
+                          />
+                          <ReferenceLine
+                            y={100}
+                            stroke="#10b981"
+                            strokeDasharray="4 4"
+                            label={{
+                              value: "Cible 100%",
+                              position: "right",
+                              fill: "#047857",
+                              fontSize: 9,
+                              fontWeight: 800,
+                            }}
+                          />
+                          <Bar dataKey="Attainment" radius={[8, 8, 0, 0]}>
+                            {fieldSupAttainmentData.map((entry, idx) => (
+                              <Cell
+                                key={`cell-fs-${idx}`}
+                                fill={entry.isCompliant ? "#10b981" : entry.Attainment >= 80 ? "#f59e0b" : "#ef4444"}
+                              />
+                            ))}
+                            <LabelList
+                              dataKey="actualLabel"
+                              position="top"
+                              style={{ fontSize: "10px", fontWeight: 800, fill: "#0f172a" }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5 pt-1 text-3xs font-bold">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Temps exécution mission terrain (AVG) :</span>
-                      <span className={kpis.fieldOperations.avgHoursVehicleRecovery <= 3.0 ? "text-emerald-700" : "text-amber-700"}>
-                        {kpis.fieldOperations.avgHoursVehicleRecovery} h (Cible : &le; 3h)
+                  {/* Right: 3-Objective Compliance Summary Table */}
+                  <div className="lg:col-span-5 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/40 border border-green-200/70 rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="border-b border-green-100 pb-2.5 mb-2 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-black text-navy uppercase tracking-wider">
+                          🎯 Matrice de Conformité — Hamza &amp; Ayoub Rassid
+                        </h4>
+                        <p className="text-3xs text-gray-500">
+                           Pondération : 1/3 Missions · 1/3 Attestations · 1/3 Tickets
+                        </p>
+                      </div>
+                      <span className="text-3xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        {fieldSupAttainmentData.filter((x) => x.isCompliant).length} / 3 conformes
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Contrôles Mensuels (Checks) :</span>
-                      <span className="text-green-800">
-                        {kpis.fieldOperations.monthlyChecksCount} / {kpis.fieldOperations.monthlyChecksTarget || 30} réalisés
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Score Santé Moyen Flotte :</span>
-                      <span className="text-gray-900">⭐ {kpis.fieldOperations.avgHealthScore} / 5.0</span>
+
+                    <div className="space-y-2.5 text-xs">
+                      {fieldSupAttainmentData.map((item) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-green-200/60"
+                        >
+                          <div>
+                            <p className="font-bold text-gray-900 text-2xs">{item.name}</p>
+                            <p className="text-3xs text-gray-500">Objectif : {item.targetLabel}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-black font-mono text-gray-900 text-xs block">
+                              {item.actualLabel}
+                            </span>
+                            <span
+                              className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                                item.isCompliant
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              {item.isCompliant ? "✅ Conforme" : "⚠️ Sous cible"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

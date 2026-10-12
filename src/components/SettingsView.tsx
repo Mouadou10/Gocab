@@ -1248,62 +1248,84 @@ export default function SettingsView() {
                 </div>
               </div>
 
-              {/* Pillar 3: Field Operations */}
-              <div className="border border-green-100 bg-green-50/40 rounded-2xl p-5 space-y-4">
-                <div className="flex items-center gap-2 text-green-900">
-                  <span className="text-lg">🛡️</span>
-                  <h4 className="font-bold text-sm">Field Operations & Recovery</h4>
+              {/* Pillar 3: Field Supervisor (Hamza Rassid & Ayoub Rassid) */}
+              <div className="border-2 border-green-200 bg-gradient-to-br from-green-50/70 via-white to-emerald-50/30 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-green-900">
+                    <span className="text-lg">🛡️</span>
+                    <div>
+                      <h4 className="font-bold text-sm">Équipe 4 : Field Supervisor</h4>
+                      <p className="text-3xs text-green-700 font-semibold">Hamza Rassid &amp; Ayoub Rassid</p>
+                    </div>
+                  </div>
+                  <span className="text-3xs font-black px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                    💰 1 000 DH / mois
+                  </span>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Monthly Physical Inspection Rate
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>1. Temps Moyen d&apos;Exécution Mission</span>
+                      <span className="text-3xs text-emerald-700 font-bold">AVG &le; 3h</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0.5}
+                        value={targets.target_max_field_mission_hours ?? 3.0}
+                        onChange={(e) => setTargets({ ...targets, target_max_field_mission_hours: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">heures moy</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>2. % Attestations de Location Générées à Temps</span>
+                      <span className="text-3xs text-emerald-700 font-bold">&ge; 90%</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min={1}
                         max={100}
-                        value={targets.target_monthly_inspection_rate}
+                        value={targets.target_monthly_inspection_rate || 90}
                         onChange={(e) => setTargets({ ...targets, target_monthly_inspection_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">% chauffeurs</span>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      GPS Telematics Active Rate
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                      <span>3. % de Tickets Résolus</span>
+                      <span className="text-3xs text-emerald-700 font-bold">&ge; 95%</span>
                     </label>
                     <div className="relative">
                       <input
                         type="number"
                         min={1}
                         max={100}
-                        value={targets.target_gps_connectivity_rate}
-                        onChange={(e) => setTargets({ ...targets, target_gps_connectivity_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
+                        value={targets.target_sla_resolution_rate || 95}
+                        onChange={(e) => setTargets({ ...targets, target_sla_resolution_rate: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-2xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">% résolus</span>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                      Asset Recovery Rate
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={targets.target_asset_recovery_rate}
-                        onChange={(e) => setTargets({ ...targets, target_asset_recovery_rate: Number(e.target.value) })}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                  <div className="p-3 bg-white rounded-xl border border-green-100 space-y-1.5 text-2xs">
+                    <div className="flex justify-between text-gray-600">
+                      <span>3 KPIs Pondérés :</span>
+                      <strong className="text-gray-900 font-mono">1/3 Missions (≤3h) · 1/3 Attest. (90%) · 1/3 Tickets (95%)</strong>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-gray-100 text-green-700 font-bold">
+                      <span>Prime Mensuelle Équipe :</span>
+                      <span>💰 1 000 DH (Option 2 Prop. pur)</span>
                     </div>
                   </div>
                 </div>
