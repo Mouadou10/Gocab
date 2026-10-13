@@ -17,7 +17,6 @@ import {
 export async function GET(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
-    await syncAllWhatsAppConversations();
 
     const session = await auth();
     const userRole = ((session?.user as any)?.role || "").toUpperCase();
@@ -71,6 +70,8 @@ export async function GET(request: NextRequest) {
               contact_name: d.fullName,
               driver_id: d.id,
               contact_type: "DRIVER",
+              workflow_state: "ROUTED_DRIVER_SUPPORT",
+              routed_department: "FLEET_SUPPORT",
               matched_plate: d.assignedVehicle?.plate_number || null,
               matched_vehicle_id: d.assignedVehicle?.id || null,
               last_message: sampleSnippet,
@@ -109,6 +110,8 @@ export async function GET(request: NextRequest) {
               contact_name: l.raw_name,
               lead_id: l.id,
               contact_type: "LEAD",
+              workflow_state: "ROUTED_LEAD_ACQUISITION",
+              routed_department: "LEAD_ACQUISITION",
               last_message: `Candidature GoCab (${l.board_column})`,
               last_message_at: new Date(Date.now() - 3600000),
               unread_count: 0,
@@ -134,34 +137,45 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch related driver, lead, and matched vehicle metadata for all conversations in parallel
+    // Fast indexed metadata lookup for conversations in parallel
     const driverIds = conversations.map((c) => c.driver_id).filter(Boolean) as string[];
     const leadIds = conversations.map((c) => c.lead_id).filter(Boolean) as string[];
     const vehicleIds = conversations.map((c) => c.matched_vehicle_id).filter(Boolean) as string[];
-    const shortPhones = conversations
+
+    // Only search phones for the few conversations that are not linked yet (to avoid slow full-table scans)
+    const unlinkedShortPhones = conversations
+      .filter((c) => !c.driver_id && !c.lead_id)
       .map((c) => normalizeWhatsAppPhone(c.phone_number).slice(-9))
       .filter((sp) => sp.length >= 8);
 
     const [drivers, leads, vehicles] = await Promise.all([
-      prisma.driverProfile.findMany({
-        where: {
-          is_archived: false,
-          OR: [
-            ...(driverIds.length > 0 ? [{ id: { in: driverIds } }] : []),
-            ...shortPhones.map((sp) => ({ phoneSanitized: { contains: sp } })),
-          ],
-        },
-        include: { assignedVehicle: true },
-      }),
-      prisma.lead.findMany({
-        where: {
-          is_archived: false,
-          OR: [
-            ...(leadIds.length > 0 ? [{ id: { in: leadIds } }] : []),
-            ...shortPhones.map((sp) => ({ sanitized_phone: { contains: sp } })),
-          ],
-        },
-      }),
+      driverIds.length > 0 || unlinkedShortPhones.length > 0
+        ? prisma.driverProfile.findMany({
+            where: {
+              is_archived: false,
+              OR: [
+                ...(driverIds.length > 0 ? [{ id: { in: driverIds } }] : []),
+                ...(unlinkedShortPhones.length > 0
+                  ? unlinkedShortPhones.map((sp) => ({ phoneSanitized: { contains: sp } }))
+                  : []),
+              ],
+            },
+            include: { assignedVehicle: true },
+          })
+        : [],
+      leadIds.length > 0 || unlinkedShortPhones.length > 0
+        ? prisma.lead.findMany({
+            where: {
+              is_archived: false,
+              OR: [
+                ...(leadIds.length > 0 ? [{ id: { in: leadIds } }] : []),
+                ...(unlinkedShortPhones.length > 0
+                  ? unlinkedShortPhones.map((sp) => ({ sanitized_phone: { contains: sp } }))
+                  : []),
+              ],
+            },
+          })
+        : [],
       vehicleIds.length > 0
         ? prisma.vehicle.findMany({
             where: { id: { in: vehicleIds } },
