@@ -46,6 +46,9 @@ interface LeadSummary {
   city: string;
   hasCin: boolean;
   hasPermis: boolean;
+  trainingStatus?: string | null;
+  presenceConfirmed?: boolean;
+  notes?: string | null;
 }
 
 interface ConversationItem {
@@ -1294,6 +1297,28 @@ export default function WhatsAppCrmView() {
                   <span className="text-gray-500">Ville :</span>
                   <span className="font-bold text-gray-800">{activeConversation.lead.city}</span>
                 </div>
+                {activeConversation.lead.trainingStatus && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Formation :</span>
+                    <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                      🎓 {activeConversation.lead.trainingStatus}
+                    </span>
+                  </div>
+                )}
+                {activeConversation.lead.presenceConfirmed !== undefined && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Présence :</span>
+                    <span
+                      className={`font-bold ${
+                        activeConversation.lead.presenceConfirmed
+                          ? "text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
+                          : "text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded"
+                      }`}
+                    >
+                      {activeConversation.lead.presenceConfirmed ? "✅ Confirmée" : "⏳ Non confirmée"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Carte CIN :</span>
                   <span className={`font-bold ${activeConversation.lead.hasCin ? "text-emerald-600" : "text-amber-600"}`}>
@@ -1306,6 +1331,14 @@ export default function WhatsAppCrmView() {
                     {activeConversation.lead.hasPermis ? "✅ Validé" : "⏳ En attente"}
                   </span>
                 </div>
+                {activeConversation.lead.notes && (
+                  <div className="pt-1.5 border-t border-gray-200/60 mt-1">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block mb-0.5">Notes :</span>
+                    <p className="text-[11px] text-gray-600 italic bg-white p-2 rounded-lg border border-gray-100">
+                      {activeConversation.lead.notes}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5 pt-1">

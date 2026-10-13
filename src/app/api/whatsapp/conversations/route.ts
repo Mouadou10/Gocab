@@ -10,11 +10,14 @@ import {
   sendWhatsAppWelcomeMenu,
   routeConversationByImmat,
   routeConversationToLeadAcquisition,
+  resolveContactByPhone,
+  syncAllWhatsAppConversations,
 } from "@/lib/services/whatsappApiService";
 
 export async function GET(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
+    await syncAllWhatsAppConversations();
 
     const session = await auth();
     const userRole = ((session?.user as any)?.role || "").toUpperCase();
@@ -135,19 +138,30 @@ export async function GET(request: NextRequest) {
     const driverIds = conversations.map((c) => c.driver_id).filter(Boolean) as string[];
     const leadIds = conversations.map((c) => c.lead_id).filter(Boolean) as string[];
     const vehicleIds = conversations.map((c) => c.matched_vehicle_id).filter(Boolean) as string[];
+    const shortPhones = conversations
+      .map((c) => normalizeWhatsAppPhone(c.phone_number).slice(-9))
+      .filter((sp) => sp.length >= 8);
 
     const [drivers, leads, vehicles] = await Promise.all([
-      driverIds.length > 0
-        ? prisma.driverProfile.findMany({
-            where: { id: { in: driverIds } },
-            include: { assignedVehicle: true },
-          })
-        : [],
-      leadIds.length > 0
-        ? prisma.lead.findMany({
-            where: { id: { in: leadIds } },
-          })
-        : [],
+      prisma.driverProfile.findMany({
+        where: {
+          is_archived: false,
+          OR: [
+            ...(driverIds.length > 0 ? [{ id: { in: driverIds } }] : []),
+            ...shortPhones.map((sp) => ({ phoneSanitized: { contains: sp } })),
+          ],
+        },
+        include: { assignedVehicle: true },
+      }),
+      prisma.lead.findMany({
+        where: {
+          is_archived: false,
+          OR: [
+            ...(leadIds.length > 0 ? [{ id: { in: leadIds } }] : []),
+            ...shortPhones.map((sp) => ({ sanitized_phone: { contains: sp } })),
+          ],
+        },
+      }),
       vehicleIds.length > 0
         ? prisma.vehicle.findMany({
             where: { id: { in: vehicleIds } },
@@ -162,12 +176,26 @@ export async function GET(request: NextRequest) {
 
     // Attach contextual CRM dossiers to each conversation
     let allMapped = conversations.map((conv) => {
+      const cleanPhone = normalizeWhatsAppPhone(conv.phone_number);
+      const shortPhone = cleanPhone.slice(-9);
+
       const matchedVehicle = conv.matched_vehicle_id
         ? vehicleMap.get(conv.matched_vehicle_id)
         : null;
-      const driverFromMap = conv.driver_id ? driverMap.get(conv.driver_id) : null;
-      const driver = driverFromMap || matchedVehicle?.driverProfile || null;
-      const lead = conv.lead_id ? leadMap.get(conv.lead_id) : null;
+      let driverFromMap: any = conv.driver_id ? driverMap.get(conv.driver_id) : null;
+      if (!driverFromMap) {
+        driverFromMap =
+          drivers.find((d) => d.phoneSanitized && d.phoneSanitized.includes(shortPhone)) ||
+          matchedVehicle?.driverProfile ||
+          null;
+      }
+      const driver: any = driverFromMap || matchedVehicle?.driverProfile || null;
+
+      let lead = conv.lead_id ? leadMap.get(conv.lead_id) : null;
+      if (!lead) {
+        lead =
+          leads.find((l) => l.sanitized_phone && l.sanitized_phone.includes(shortPhone)) || null;
+      }
 
       const resolvedPlate =
         conv.matched_plate ||
@@ -180,13 +208,25 @@ export async function GET(request: NextRequest) {
         matchedVehicle?.make_model ||
         "-";
 
+      const resolvedContactType = driver ? "DRIVER" : lead ? "LEAD" : conv.contact_type;
+      const resolvedDepartment = driver
+        ? "FLEET_SUPPORT"
+        : lead
+        ? "LEAD_ACQUISITION"
+        : conv.routed_department || null;
+      const resolvedWorkflowState = driver
+        ? "ROUTED_DRIVER_SUPPORT"
+        : lead
+        ? "ROUTED_LEAD_ACQUISITION"
+        : conv.workflow_state || "NONE";
+
       return {
         id: conv.id,
         phoneNumber: conv.phone_number,
-        contactName: conv.contact_name,
-        contactType: conv.contact_type,
-        workflowState: conv.workflow_state || "NONE",
-        routedDepartment: conv.routed_department || null,
+        contactName: driver?.fullName || lead?.raw_name || conv.contact_name,
+        contactType: resolvedContactType,
+        workflowState: resolvedWorkflowState,
+        routedDepartment: resolvedDepartment,
         matchedPlate: resolvedPlate,
         matchedVehicleId: conv.matched_vehicle_id || driverFromMap?.assignedVehicle?.id || null,
         lastMessage: conv.last_message || "",
@@ -226,6 +266,9 @@ export async function GET(request: NextRequest) {
               city: lead.city || "Casablanca",
               hasCin: lead.has_cin,
               hasPermis: lead.has_permis,
+              trainingStatus: lead.training_status || null,
+              presenceConfirmed: lead.presence_confirmed || false,
+              notes: lead.notes || null,
             }
           : null,
       };
@@ -236,12 +279,14 @@ export async function GET(request: NextRequest) {
       c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
       c.workflowState === "AWAITING_IMMAT" ||
       c.matchedPlate !== null ||
-      c.contactType === "DRIVER";
+      c.contactType === "DRIVER" ||
+      c.driver !== null;
 
     const isLeadAcquisitionConv = (c: any) =>
       c.routedDepartment === "LEAD_ACQUISITION" ||
       c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
-      c.contactType === "LEAD";
+      c.contactType === "LEAD" ||
+      c.lead !== null;
 
     // Role-based queue restriction:
     // - FLEET_PERF_MANAGER only sees Support Flotte

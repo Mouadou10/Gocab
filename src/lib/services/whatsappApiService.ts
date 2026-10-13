@@ -224,6 +224,213 @@ export async function ensureWhatsAppTables(): Promise<void> {
   }
 }
 
+export interface ResolvedContactInfo {
+  type: "DRIVER" | "LEAD" | "UNKNOWN";
+  name: string | null;
+  department: "FLEET_SUPPORT" | "LEAD_ACQUISITION" | null;
+  workflowState: "ROUTED_DRIVER_SUPPORT" | "ROUTED_LEAD_ACQUISITION" | "NONE";
+  driver: any | null;
+  lead: any | null;
+  vehicle: any | null;
+  plate: string | null;
+  vehicleId: string | null;
+  model: string | null;
+}
+
+/**
+ * Robust phone-based entity resolution across Fleet Drivers and Leads/Training Pipeline.
+ * Checks Drivers first, then Leads/Training candidates, before declaring a contact UNKNOWN.
+ */
+export async function resolveContactByPhone(phoneNumber: string): Promise<ResolvedContactInfo> {
+  const cleanPhone = normalizeWhatsAppPhone(phoneNumber);
+  if (!cleanPhone) {
+    return {
+      type: "UNKNOWN",
+      name: null,
+      department: null,
+      workflowState: "NONE",
+      driver: null,
+      lead: null,
+      vehicle: null,
+      plate: null,
+      vehicleId: null,
+      model: null,
+    };
+  }
+
+  const short9 = cleanPhone.slice(-9);
+  const plusPhone = `+${cleanPhone}`;
+  const localPhone = `0${short9}`;
+  const phoneVariants = [cleanPhone, plusPhone, localPhone, short9];
+
+  // 1. Check DriverProfile (Active Fleet Drivers)
+  let matchedDriver: any = null;
+  try {
+    matchedDriver = await prisma.driverProfile.findFirst({
+      where: {
+        is_archived: false,
+        OR: [
+          { phoneSanitized: { in: phoneVariants } },
+          { phoneSanitized: { contains: short9 } },
+        ],
+      },
+      include: { assignedVehicle: true },
+    });
+  } catch (err) {
+    console.warn("Driver lookup warning:", err);
+  }
+
+  if (matchedDriver) {
+    const plate = matchedDriver.assignedVehicle?.plate_number || null;
+    const vehicleId = matchedDriver.assignedVehicle?.id || null;
+    const model = matchedDriver.assignedVehicle?.make_model || null;
+    return {
+      type: "DRIVER",
+      name: matchedDriver.fullName,
+      department: "FLEET_SUPPORT",
+      workflowState: "ROUTED_DRIVER_SUPPORT",
+      driver: matchedDriver,
+      lead: null,
+      vehicle: matchedDriver.assignedVehicle || null,
+      plate,
+      vehicleId,
+      model,
+    };
+  }
+
+  // Also check if any vehicle has this driver phone assigned
+  try {
+    const matchedVehicle = await prisma.vehicle.findFirst({
+      where: {
+        is_archived: false,
+        driverProfile: {
+          phoneSanitized: { contains: short9 },
+        },
+      },
+      include: { driverProfile: true },
+    });
+    if (matchedVehicle && matchedVehicle.driverProfile) {
+      return {
+        type: "DRIVER",
+        name: matchedVehicle.driverProfile.fullName,
+        department: "FLEET_SUPPORT",
+        workflowState: "ROUTED_DRIVER_SUPPORT",
+        driver: matchedVehicle.driverProfile,
+        lead: null,
+        vehicle: matchedVehicle,
+        plate: matchedVehicle.plate_number,
+        vehicleId: matchedVehicle.id,
+        model: matchedVehicle.make_model,
+      };
+    }
+  } catch (_) {}
+
+  // 2. Check Lead (All Leads & Training Candidates)
+  let matchedLead: any = null;
+  try {
+    matchedLead = await prisma.lead.findFirst({
+      where: {
+        is_archived: false,
+        OR: [
+          { sanitized_phone: { in: phoneVariants } },
+          { sanitized_phone: { contains: short9 } },
+        ],
+      },
+      orderBy: { updated_at: "desc" },
+    });
+  } catch (err) {
+    console.warn("Lead lookup warning:", err);
+  }
+
+  if (matchedLead) {
+    return {
+      type: "LEAD",
+      name: matchedLead.raw_name,
+      department: "LEAD_ACQUISITION",
+      workflowState: "ROUTED_LEAD_ACQUISITION",
+      driver: null,
+      lead: matchedLead,
+      vehicle: null,
+      plate: null,
+      vehicleId: null,
+      model: null,
+    };
+  }
+
+  // 3. Unknown Contact
+  return {
+    type: "UNKNOWN",
+    name: null,
+    department: null,
+    workflowState: "NONE",
+    driver: null,
+    lead: null,
+    vehicle: null,
+    plate: null,
+    vehicleId: null,
+    model: null,
+  };
+}
+
+/**
+ * Automatically syncs and repairs any existing WhatsApp conversations in the DB:
+ * - Drivers are moved to FLEET_SUPPORT / ROUTED_DRIVER_SUPPORT with plate & driver_id.
+ * - Leads (including Training candidates) are moved to LEAD_ACQUISITION / ROUTED_LEAD_ACQUISITION with lead_id.
+ */
+export async function syncAllWhatsAppConversations(): Promise<void> {
+  await ensureWhatsAppTables();
+  try {
+    const convs = await getDbConv().findMany({
+      where: { is_archived: false },
+    });
+    for (const c of convs) {
+      const info = await resolveContactByPhone(c.phone_number);
+      if (info.type === "DRIVER") {
+        if (
+          c.contact_type !== "DRIVER" ||
+          c.routed_department !== "FLEET_SUPPORT" ||
+          c.workflow_state !== "ROUTED_DRIVER_SUPPORT" ||
+          !c.driver_id ||
+          (!c.matched_plate && info.plate)
+        ) {
+          await getDbConv().update({
+            where: { id: c.id },
+            data: {
+              contact_type: "DRIVER",
+              routed_department: "FLEET_SUPPORT",
+              workflow_state: "ROUTED_DRIVER_SUPPORT",
+              driver_id: info.driver?.id || c.driver_id,
+              matched_plate: info.plate || c.matched_plate,
+              matched_vehicle_id: info.vehicleId || c.matched_vehicle_id,
+              contact_name: info.name || c.contact_name,
+            },
+          }).catch(() => {});
+        }
+      } else if (info.type === "LEAD") {
+        if (
+          c.contact_type !== "LEAD" ||
+          c.routed_department !== "LEAD_ACQUISITION" ||
+          c.workflow_state !== "ROUTED_LEAD_ACQUISITION" ||
+          !c.lead_id
+        ) {
+          await getDbConv().update({
+            where: { id: c.id },
+            data: {
+              contact_type: "LEAD",
+              routed_department: "LEAD_ACQUISITION",
+              workflow_state: "ROUTED_LEAD_ACQUISITION",
+              lead_id: info.lead?.id || c.lead_id,
+              contact_name: info.name || c.contact_name,
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("syncAllWhatsAppConversations warning:", err);
+  }
+}
+
 /**
  * Finds or creates a WhatsApp conversation, auto-linking to GoCab Drivers or Leads
  */
@@ -232,6 +439,8 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   if (!cleanPhone) throw new Error("Numéro de téléphone invalide");
 
   await ensureWhatsAppTables();
+
+  const contactInfo = await resolveContactByPhone(cleanPhone);
 
   let conversation: any = null;
   try {
@@ -251,52 +460,75 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   }
 
   if (conversation) {
+    // If contact exists in DB, ensure it is properly classified and linked
+    let updateData: any = null;
+    if (contactInfo.type === "DRIVER") {
+      const needsUpdate =
+        conversation.contact_type !== "DRIVER" ||
+        conversation.routed_department !== "FLEET_SUPPORT" ||
+        conversation.workflow_state !== "ROUTED_DRIVER_SUPPORT" ||
+        !conversation.driver_id ||
+        (!conversation.matched_plate && contactInfo.plate);
+
+      if (needsUpdate) {
+        updateData = {
+          contact_type: "DRIVER",
+          routed_department: "FLEET_SUPPORT",
+          workflow_state: "ROUTED_DRIVER_SUPPORT",
+          driver_id: contactInfo.driver?.id || conversation.driver_id,
+          matched_plate: contactInfo.plate || conversation.matched_plate,
+          matched_vehicle_id: contactInfo.vehicleId || conversation.matched_vehicle_id,
+          contact_name: contactInfo.name || conversation.contact_name,
+        };
+      }
+    } else if (contactInfo.type === "LEAD") {
+      const needsUpdate =
+        conversation.contact_type !== "LEAD" ||
+        conversation.routed_department !== "LEAD_ACQUISITION" ||
+        conversation.workflow_state !== "ROUTED_LEAD_ACQUISITION" ||
+        !conversation.lead_id;
+
+      if (needsUpdate) {
+        updateData = {
+          contact_type: "LEAD",
+          routed_department: "LEAD_ACQUISITION",
+          workflow_state: "ROUTED_LEAD_ACQUISITION",
+          lead_id: contactInfo.lead?.id || conversation.lead_id,
+          contact_name: contactInfo.name || conversation.contact_name,
+        };
+      }
+    }
+
+    if (updateData) {
+      try {
+        conversation = await getDbConv().update({
+          where: { id: conversation.id },
+          data: updateData,
+        });
+      } catch (_) {}
+    }
+
     return conversation;
   }
 
-  // Fast targeted lookup for driver profile
-  const shortPhone = cleanPhone.slice(-9);
-  const matchedDriver = await prisma.driverProfile
-    .findFirst({
-      where: {
-        phoneSanitized: { contains: shortPhone },
-      },
-      include: { assignedVehicle: true },
-    })
-    .catch(() => null);
-
-  // Fast targeted lookup for lead
-  let matchedLead: any = null;
-  if (!matchedDriver) {
-    matchedLead = await prisma.lead
-      .findFirst({
-        where: {
-          sanitized_phone: { contains: shortPhone },
-          is_archived: false,
-        },
-        select: { id: true, raw_name: true },
-      })
-      .catch(() => null);
-  }
-
+  // Create new conversation pre-routed to the correct department
   const finalName =
     contactName ||
-    matchedDriver?.fullName ||
-    matchedLead?.raw_name ||
+    contactInfo.name ||
     `Contact +${cleanPhone}`;
-
-  const contactType = matchedDriver ? "DRIVER" : matchedLead ? "LEAD" : "UNKNOWN";
 
   try {
     conversation = await getDbConv().create({
       data: {
         phone_number: cleanPhone,
         contact_name: finalName,
-        driver_id: matchedDriver ? matchedDriver.id : null,
-        lead_id: matchedLead ? matchedLead.id : null,
-        contact_type: contactType,
-        matched_plate: matchedDriver?.assignedVehicle?.plate_number || null,
-        matched_vehicle_id: matchedDriver?.assignedVehicle?.id || null,
+        driver_id: contactInfo.type === "DRIVER" ? contactInfo.driver?.id : null,
+        lead_id: contactInfo.type === "LEAD" ? contactInfo.lead?.id : null,
+        contact_type: contactInfo.type,
+        workflow_state: contactInfo.workflowState,
+        routed_department: contactInfo.department,
+        matched_plate: contactInfo.plate,
+        matched_vehicle_id: contactInfo.vehicleId,
         unread_count: 0,
         last_message: "Conversation initiée",
         last_message_at: new Date(),
@@ -312,9 +544,13 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
         data: {
           phone_number: cleanPhone,
           contact_name: finalName,
-          driver_id: matchedDriver ? matchedDriver.id : null,
-          lead_id: matchedLead ? matchedLead.id : null,
-          contact_type: contactType,
+          driver_id: contactInfo.type === "DRIVER" ? contactInfo.driver?.id : null,
+          lead_id: contactInfo.type === "LEAD" ? contactInfo.lead?.id : null,
+          contact_type: contactInfo.type,
+          workflow_state: contactInfo.workflowState,
+          routed_department: contactInfo.department,
+          matched_plate: contactInfo.plate,
+          matched_vehicle_id: contactInfo.vehicleId,
           unread_count: 0,
           last_message: "Conversation initiée",
           last_message_at: new Date(),
@@ -786,6 +1022,96 @@ async function processInboundBotWorkflow(
 ) {
   const trimmed = (inboundText || "").trim();
   const lower = trimmed.toLowerCase();
+
+  // =========================================================================
+  // CRITICAL PRE-CHECK: VERIFY NUMBER IN DRIVERS LIST OR LEADS/TRAINING PAGE
+  // =========================================================================
+  const contactInfo = await resolveContactByPhone(conversation.phone_number);
+
+  // CASE 1: Number exists in Drivers list
+  // -> Transfer directly to Support Flotte discussion with all driver & vehicle info
+  // -> NEVER ask "Contacter le Support Chauffeur" or "Obtenir des informations"!
+  if (contactInfo.type === "DRIVER") {
+    if (
+      conversation.workflow_state !== "ROUTED_DRIVER_SUPPORT" ||
+      conversation.routed_department !== "FLEET_SUPPORT" ||
+      conversation.contact_type !== "DRIVER" ||
+      !conversation.driver_id ||
+      (!conversation.matched_plate && contactInfo.plate)
+    ) {
+      await getDbConv().update({
+        where: { id: conversation.id },
+        data: {
+          workflow_state: "ROUTED_DRIVER_SUPPORT",
+          routed_department: "FLEET_SUPPORT",
+          contact_type: "DRIVER",
+          driver_id: contactInfo.driver?.id || conversation.driver_id,
+          matched_plate: contactInfo.plate || conversation.matched_plate,
+          matched_vehicle_id: contactInfo.vehicleId || conversation.matched_vehicle_id,
+          contact_name: contactInfo.name || conversation.contact_name,
+        },
+      });
+    }
+
+    // If driver has a plate, append message to today's open vehicle issue if one exists
+    if (contactInfo.plate) {
+      try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const openIssue = await prisma.vehicleIssue.findFirst({
+          where: {
+            plate_number: contactInfo.plate,
+            reported_by_role: "WHATSAPP_BOT",
+            status: { in: ["PENDING", "IN_PROGRESS"] },
+            created_at: { gte: startOfToday },
+          },
+          orderBy: { created_at: "desc" },
+        });
+        if (openIssue) {
+          await prisma.vehicleIssue.update({
+            where: { id: openIssue.id },
+            data: {
+              description: `${openIssue.description}\n• Message chauffeur : "${trimmed}"`,
+            },
+          });
+        }
+      } catch (_) {}
+    }
+
+    // Direct routing: do NOT show welcome menu to registered drivers
+    return;
+  }
+
+  // CASE 2: Number exists in Training or Leads page
+  // -> Directly route to Lead Acquisition WhatsApp queue with all info
+  // -> NEVER ask "Contacter le Support Chauffeur" or "Obtenir des informations"!
+  if (contactInfo.type === "LEAD") {
+    if (
+      conversation.workflow_state !== "ROUTED_LEAD_ACQUISITION" ||
+      conversation.routed_department !== "LEAD_ACQUISITION" ||
+      conversation.contact_type !== "LEAD" ||
+      !conversation.lead_id
+    ) {
+      await getDbConv().update({
+        where: { id: conversation.id },
+        data: {
+          workflow_state: "ROUTED_LEAD_ACQUISITION",
+          routed_department: "LEAD_ACQUISITION",
+          contact_type: "LEAD",
+          lead_id: contactInfo.lead?.id || conversation.lead_id,
+          contact_name: contactInfo.name || conversation.contact_name,
+        },
+      });
+    }
+
+    // Direct routing: do NOT show welcome menu to registered leads / training candidates
+    return;
+  }
+
+  // =========================================================================
+  // CASE 3: NUMBER IS TRULY UNKNOWN (NEITHER DRIVER NOR LEAD)
+  // Only for unknown contacts should the 2-option bot menu interact
+  // =========================================================================
   const state = conversation.workflow_state || "NONE";
 
   const isMenuCommand = ["menu", "start", "0", "accueil", "aide", "help", "options"].includes(
