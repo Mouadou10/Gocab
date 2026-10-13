@@ -39,6 +39,81 @@ interface Lead {
   presence_confirmed_at?: string | null;
 }
 
+const getTrainingStatusBadge = (status: string | null, boardColumn?: string) => {
+  const norm = (status || "").toLowerCase();
+
+  if (norm === "assign vehicle" || norm === "accept offer" || boardColumn === "VEHICLE_ASSIGNMENT") {
+    return {
+      text: "🚗 Affectation (Offre acceptée)",
+      className: "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold",
+    };
+  }
+  if (norm === "preorder") {
+    return {
+      text: "💵 Précommande",
+      className: "bg-purple-100 text-purple-800 border-purple-300 font-bold",
+    };
+  }
+  if (norm === "attended") {
+    return {
+      text: "✅ Présent (Attended)",
+      className: "bg-teal-100 text-teal-800 border-teal-300 font-bold",
+    };
+  }
+  if (norm === "attended and not interested") {
+    return {
+      text: "🚫 Présent (Non intéressé)",
+      className: "bg-orange-100 text-orange-800 border-orange-300 font-bold",
+    };
+  }
+  if (norm === "pending") {
+    return {
+      text: "⏳ En attente (Pending)",
+      className: "bg-amber-100 text-amber-800 border-amber-300 font-bold",
+    };
+  }
+  if (norm === "not attended") {
+    return {
+      text: "⚠️ Absent (Not attended)",
+      className: "bg-rose-100 text-rose-800 border-rose-300 font-bold",
+    };
+  }
+  if (norm === "refused the offer") {
+    return {
+      text: "❌ Offre refusée",
+      className: "bg-red-100 text-red-800 border-red-300 font-bold",
+    };
+  }
+  if (norm === "no response") {
+    return {
+      text: "📞 Injoignable",
+      className: "bg-slate-100 text-slate-700 border-slate-300 font-medium",
+    };
+  }
+  if (norm === "scheduled") {
+    return {
+      text: "📅 Programmé (Scheduled)",
+      className: "bg-blue-50 text-blue-700 border-blue-200 font-medium",
+    };
+  }
+
+  if (status) {
+    return {
+      text: status,
+      className: "bg-blue-50 text-blue-700 border-blue-200 font-medium",
+    };
+  }
+
+  if (boardColumn === "TRAINING_PIPELINE") {
+    return {
+      text: "📅 Programmé (Scheduled)",
+      className: "bg-blue-50 text-blue-700 border-blue-200 font-medium",
+    };
+  }
+
+  return null;
+};
+
 interface LeadCardProps {
   lead: Lead;
   onClick: () => void;
@@ -100,7 +175,10 @@ export default function LeadCard({
   }
 
   const isAccepted = lead.training_status === "Assign vehicle" || lead.training_status === "Accept offer" || lead.board_column === "VEHICLE_ASSIGNMENT";
-  const isTrainingFixed = lead.brand_status === "Training fixed";
+  const isTrainingFixed =
+    lead.brand_status === "Training fixed" ||
+    lead.board_column === "TRAINING_PIPELINE" ||
+    lead.board_column === "VEHICLE_ASSIGNMENT";
 
   const kycCount = [
     lead.has_cin,
@@ -190,7 +268,7 @@ export default function LeadCard({
               📍 {lead.city}
             </span>
           )}
-          {lead.brand_status && (
+          {(lead.brand_status || (isTrainingFixed ? "Training fixed" : null)) && (
             <span
               className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
                 isTrainingFixed
@@ -198,27 +276,34 @@ export default function LeadCard({
                   : "bg-slate-100 text-slate-700 border-slate-200"
               }`}
             >
-              {lead.brand_status}
+              {lead.brand_status || "Training fixed"}
             </span>
           )}
-          {lead.training_status && (
-            <span
-              className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
-                isAccepted
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-blue-50 text-blue-700 border-blue-200"
-              }`}
-            >
-              {lead.training_status}
-            </span>
-          )}
+          {(() => {
+            const trainingBadge = getTrainingStatusBadge(lead.training_status, lead.board_column);
+            if (!trainingBadge) return null;
+            return (
+              <span
+                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border ${trainingBadge.className}`}
+                title={`Statut Formation : ${trainingBadge.text}`}
+              >
+                {trainingBadge.text}
+              </span>
+            );
+          })()}
           {(() => {
             if (!lead.reminder_date) return null;
             try {
               const d = new Date(lead.reminder_date);
               if (isNaN(d.getTime())) return null;
 
-              if (lead.brand_status === "Training fixed" || lead.training_status === "Scheduled") {
+              if (
+                isTrainingFixed ||
+                lead.brand_status === "Training fixed" ||
+                lead.training_status === "Scheduled" ||
+                lead.board_column === "TRAINING_PIPELINE" ||
+                lead.board_column === "VEHICLE_ASSIGNMENT"
+              ) {
                 return (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-900 bg-teal-100/90 px-1.5 py-0.5 rounded-md border border-teal-200">
                     📅 {d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}

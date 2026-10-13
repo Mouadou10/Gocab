@@ -604,8 +604,9 @@ export default function KanbanBoard() {
     const countsByDate = new Map<string, number>();
     leads.forEach((l) => {
       const isTrainingFixed =
-        (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
-        (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        (l.brand_status || "").toLowerCase() === "training fixed";
       if (!isTrainingFixed) return;
 
       // Only index by reminder_date (the actual training session date).
@@ -637,8 +638,9 @@ export default function KanbanBoard() {
   const totalTrainingFixedCount = useMemo(() => {
     return leads.filter((l) => {
       return (
-        (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
-        (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        (l.brand_status || "").toLowerCase() === "training fixed"
       );
     }).length;
   }, [leads]);
@@ -751,7 +753,12 @@ export default function KanbanBoard() {
 
     const matched = leads.filter((l) => doesLeadMatchSearch(l, cleanQuery));
     const inLeadsTab = matched.filter(
-      (l) => l.board_column === "NEW_LEADS" || l.board_column === "BRAND_PRE_FILTER"
+      (l) =>
+        l.board_column === "NEW_LEADS" ||
+        l.board_column === "BRAND_PRE_FILTER" ||
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        (l.brand_status || "").toLowerCase() === "training fixed"
     ).length;
     const inTrainingTab = matched.filter(
       (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
@@ -871,8 +878,9 @@ export default function KanbanBoard() {
       if (column === "Training fixed") {
         return filteredLeads.filter((l) => {
           const isMatch =
-            (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
-            (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled");
+            l.board_column === "TRAINING_PIPELINE" ||
+            l.board_column === "VEHICLE_ASSIGNMENT" ||
+            (l.brand_status || "").toLowerCase() === "training fixed";
           if (!isMatch) return false;
           if (isSearching) return true;
           return isLeadTrainingDateMatch(l, trainingDateFilter);
@@ -1060,19 +1068,23 @@ export default function KanbanBoard() {
           fetchLeads();
         }
       } else if (targetColumn === "Training fixed") {
-        // Move to Training Pipeline immediately, and open drawer to prompt for date
+        // Move to Training Pipeline, preserve existing training status if already progressed
+        const targetTrainingStatus = lead.training_status || "Scheduled";
+        const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
         setLeads((prev) =>
           prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", brand_status: targetColumn, training_status: "Scheduled" } : l
+            l.id === leadId ? { ...l, board_column: targetBoardColumn, brand_status: targetColumn, training_status: targetTrainingStatus } : l
           )
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "TRAINING_PIPELINE", brand_status: targetColumn, training_status: "Scheduled" }),
+            body: JSON.stringify({ board_column: targetBoardColumn, brand_status: targetColumn, training_status: targetTrainingStatus }),
           });
-          setSelectedLead({ ...lead, brand_status: "Training fixed" });
+          if (!lead.reminder_date) {
+            setSelectedLead({ ...lead, brand_status: "Training fixed", training_status: targetTrainingStatus });
+          }
         } catch (err) {
           fetchLeads();
         }
@@ -1206,7 +1218,17 @@ export default function KanbanBoard() {
     const overLead = leads.find((l) => l.id === over.id);
     if (overLead) {
       if (activeTab === "leads") {
-        targetColumn = overLead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (overLead.brand_status || "NEW_LEADS");
+        if (overLead.board_column === "NEW_LEADS") {
+          targetColumn = "NEW_LEADS";
+        } else if (
+          overLead.board_column === "TRAINING_PIPELINE" ||
+          overLead.board_column === "VEHICLE_ASSIGNMENT" ||
+          (overLead.brand_status || "").toLowerCase() === "training fixed"
+        ) {
+          targetColumn = "Training fixed";
+        } else {
+          targetColumn = overLead.brand_status || "NEW_LEADS";
+        }
       } else {
         targetColumn = overLead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : (overLead.training_status || "Scheduled");
       }
@@ -1225,10 +1247,15 @@ export default function KanbanBoard() {
             );
           }
         } else if (targetColumn === "Training fixed") {
-          if (lead.brand_status !== "Training fixed" || lead.board_column !== "TRAINING_PIPELINE") {
+          const targetTrainingStatus = lead.training_status || "Scheduled";
+          const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
+          const isAlreadyInTrainingFixed =
+            (lead.board_column === "TRAINING_PIPELINE" || lead.board_column === "VEHICLE_ASSIGNMENT") &&
+            lead.brand_status === "Training fixed";
+          if (!isAlreadyInTrainingFixed) {
             setLeads((prev) =>
               prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", brand_status: "Training fixed", training_status: "Scheduled" } : l
+                l.id === leadId ? { ...l, board_column: targetBoardColumn, brand_status: "Training fixed", training_status: targetTrainingStatus } : l
               )
             );
           }
@@ -1269,7 +1296,12 @@ export default function KanbanBoard() {
 
   // Tab count indicators
   const leadsCount = leads.filter(
-    (l) => l.board_column === "NEW_LEADS" || l.board_column === "BRAND_PRE_FILTER"
+    (l) =>
+      l.board_column === "NEW_LEADS" ||
+      l.board_column === "BRAND_PRE_FILTER" ||
+      l.board_column === "TRAINING_PIPELINE" ||
+      l.board_column === "VEHICLE_ASSIGNMENT" ||
+      (l.brand_status || "").toLowerCase() === "training fixed"
   ).length;
   const trainingCount = leads.filter(
     (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
@@ -1935,7 +1967,9 @@ export default function KanbanBoard() {
                       trainingDateFilter={trainingDateFilter}
                       onTrainingDateFilterChange={setTrainingDateFilter}
                       availableTrainingDates={availableTrainingDates}
-                      totalTrainingFixedCount={totalTrainingFixedCount}
+                      totalTrainingFixedCount={
+                        activeTab === "leads" ? totalTrainingFixedCount : allScheduledCount
+                      }
                     />
                   ))}
                 </SortableContext>

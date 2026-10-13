@@ -500,9 +500,9 @@ export default function LeadDrawer({
           payload.board_column = "NEW_LEADS";
           payload.brand_status = null;
         } else if (brandStatus === "Training fixed") {
-          // Move from leads page to training page
-          payload.board_column = "TRAINING_PIPELINE";
-          payload.training_status = "Scheduled"; // first status for moved leads
+          // Move from leads page to training page (preserve existing training status if already progressed)
+          payload.board_column = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
+          payload.training_status = lead.training_status || "Scheduled";
           payload.brand_status = "Training fixed";
 
           if (trainingDate) {
@@ -809,6 +809,21 @@ export default function LeadDrawer({
                   ))}
                 </select>
               </div>
+
+              {/* Display current training status if lead progressed into training */}
+              {(lead.training_status || lead.board_column === "TRAINING_PIPELINE" || lead.board_column === "VEHICLE_ASSIGNMENT") && (
+                <div className="p-3 bg-teal-50/70 border border-teal-200/80 rounded-2xl flex items-center justify-between">
+                  <div className="text-xs">
+                    <span className="text-slate-500 font-medium">Statut actuel en formation :</span>
+                    <span className="ml-1.5 font-bold text-teal-900">
+                      {lead.training_status || "Scheduled"}
+                    </span>
+                  </div>
+                  <span className="text-3xs font-bold uppercase tracking-wider px-2 py-0.5 bg-teal-200/80 text-teal-900 rounded-full">
+                    Étape Formation
+                  </span>
+                </div>
+              )}
 
               {/* Conditional Date Picker for Training fixed */}
               {showDatePicker && (
