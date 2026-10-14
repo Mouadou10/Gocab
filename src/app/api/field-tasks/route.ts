@@ -106,38 +106,55 @@ async function syncRecoveryTasksAndOrphans() {
       }
     }
 
-    // 3. Bi-directional sync: Auto-create MaintenanceTicket on the Ticket page for any active VEHICLE_RECOVERY FieldTask missing linked_ticket_id
-    const unlinkedRecoveryTasks = await prisma.fieldTask.findMany({
+    // 3. Bi-directional sync: Ensure any active VEHICLE_RECOVERY FieldTask is mirrored and open on the Ticket Page
+    const activeRecoveryTasks = await prisma.fieldTask.findMany({
       where: {
         task_type: "VEHICLE_RECOVERY",
         status: { in: ["PENDING", "IN_PROGRESS"] },
-        linked_ticket_id: null,
       },
     });
 
-    for (const ft of unlinkedRecoveryTasks) {
-      const slaDeadline = new Date(new Date(ft.created_at).getTime() + 24 * 60 * 60 * 1000);
-      const createdTicket = await prisma.maintenanceTicket.create({
-        data: {
-          vehicle_id: ft.vehicle_id || "UNASSIGNED",
-          plate_number: ft.plate_number || "Véhicule non assigné",
-          driver_name: ft.driver_name,
-          driver_phone: ft.driver_phone,
-          ticket_type: "VEHICLE_RECOVERY",
-          description: ft.description || "Véhicule bloqué / Récupération terrain",
-          priority: ft.priority || "Critical",
-          status: ft.status === "IN_PROGRESS" ? "IN_PROGRESS" : "OPEN",
-          sla_deadline: slaDeadline,
-          is_archived: false,
-          created_at: ft.created_at,
-        },
-      }).catch(() => null);
+    for (const ft of activeRecoveryTasks) {
+      if (!ft.linked_ticket_id) {
+        const slaDeadline = new Date(new Date(ft.created_at).getTime() + 24 * 60 * 60 * 1000);
+        const createdTicket = await prisma.maintenanceTicket.create({
+          data: {
+            vehicle_id: ft.vehicle_id || "UNASSIGNED",
+            plate_number: ft.plate_number || "Véhicule non assigné",
+            driver_name: ft.driver_name,
+            driver_phone: ft.driver_phone,
+            ticket_type: "VEHICLE_RECOVERY",
+            description: ft.description || "Véhicule bloqué / Récupération terrain",
+            priority: ft.priority || "Critical",
+            status: ft.status === "IN_PROGRESS" ? "IN_PROGRESS" : "OPEN",
+            sla_deadline: slaDeadline,
+            is_archived: false,
+            created_at: ft.created_at,
+          },
+        }).catch(() => null);
 
-      if (createdTicket) {
-        await prisma.fieldTask.update({
-          where: { id: ft.id },
-          data: { linked_ticket_id: createdTicket.id },
-        }).catch(() => {});
+        if (createdTicket) {
+          await prisma.fieldTask.update({
+            where: { id: ft.id },
+            data: { linked_ticket_id: createdTicket.id },
+          }).catch(() => {});
+        }
+      } else {
+        const linkedTicket = await prisma.maintenanceTicket.findUnique({
+          where: { id: ft.linked_ticket_id },
+        }).catch(() => null);
+
+        if (linkedTicket && linkedTicket.status === "RESOLVED") {
+          await prisma.maintenanceTicket.update({
+            where: { id: linkedTicket.id },
+            data: {
+              status: ft.status === "IN_PROGRESS" ? "IN_PROGRESS" : "OPEN",
+              resolved_at: null,
+              resolution_notes: null,
+              is_archived: false,
+            },
+          }).catch(() => {});
+        }
       }
     }
   } catch (err: any) {

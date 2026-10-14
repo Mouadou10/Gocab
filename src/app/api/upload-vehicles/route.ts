@@ -802,7 +802,10 @@ export async function POST(request: NextRequest) {
                 }
               }
             } else if (item.status === "Actif" || item.status === "Available") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const allOpenTicketsForVehicle = openTicketsByVehicleId.get(vehicleId) || [];
+              const openTickets = allOpenTicketsForVehicle.filter(
+                (t) => t.ticket_type !== "VEHICLE_RECOVERY" && t.ticket_type !== "Vehicle Recovery"
+              );
               if (openTickets.length > 0) {
                 await prisma.maintenanceTicket.updateMany({
                   where: { id: { in: openTickets.map((t) => t.id) } },
@@ -813,7 +816,12 @@ export async function POST(request: NextRequest) {
                   },
                 }).catch(() => {});
                 tickets_resolved += openTickets.length;
-                openTicketsByVehicleId.delete(vehicleId);
+                openTicketsByVehicleId.set(
+                  vehicleId,
+                  allOpenTicketsForVehicle.filter(
+                    (t) => t.ticket_type === "VEHICLE_RECOVERY" || t.ticket_type === "Vehicle Recovery"
+                  )
+                );
               }
 
               const vClaims = claimsByVehicleId.get(vehicleId) || [];
