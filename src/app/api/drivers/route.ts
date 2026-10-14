@@ -8,14 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
 
+import { getDriverCache, setDriverCache, invalidateDriverCache } from "@/lib/driverCache";
+
 export const dynamic = "force-dynamic";
-
-// Server-side cache for unfiltered GET /api/drivers
-let driverCache: { data: any; timestamp: number } | null = null;
-
-function invalidateDriverCache() {
-  driverCache = null;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,9 +27,10 @@ export async function GET(request: NextRequest) {
     const isSimpleFetch = !unassignedOnly && !currentVehicleId && !query && !stage;
 
     // Return from in-memory server cache if fresh (5s TTL)
-    if (isSimpleFetch && driverCache && Date.now() - driverCache.timestamp < 5000) {
+    const cached = getDriverCache();
+    if (isSimpleFetch && cached && Date.now() - cached.timestamp < 5000) {
       return NextResponse.json(
-        { drivers: driverCache.data },
+        { drivers: cached.data },
         {
           headers: {
             "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
@@ -60,6 +56,11 @@ export async function GET(request: NextRequest) {
       where.defaultStage = stage;
     }
 
+    const flaggedParam = searchParams.get("flagged");
+    if (flaggedParam === "true") {
+      where.isRedFlagged = true;
+    }
+
     if (query) {
       where.OR = [
         { fullName: { contains: query } },
@@ -79,12 +80,20 @@ export async function GET(request: NextRequest) {
             status: true,
           },
         },
+        comments: {
+          orderBy: { createdAt: "desc" },
+        },
+        _count: {
+          select: {
+            comments: true,
+          },
+        },
       },
       orderBy: { fullName: "asc" }
     });
 
     if (isSimpleFetch) {
-      driverCache = { data: drivers, timestamp: Date.now() };
+      setDriverCache(drivers);
     }
 
     return NextResponse.json(

@@ -281,6 +281,10 @@ model DriverProfile {
   lastPaymentDate       DateTime?
   lastDailyChargeDate   DateTime?
   is_archived           Boolean       @default(false)
+  isRedFlagged          Boolean       @default(false)
+  redFlagReason         String?
+  redFlaggedAt          DateTime?
+  redFlaggedBy          String?
   
   assignedVehicleId     String?       @unique
   assignedVehicle       Vehicle?      @relation(fields: [assignedVehicleId], references: [id])
@@ -288,6 +292,20 @@ model DriverProfile {
   tickets               SupportTicket[]
   payments              PaymentLedger[]
   accidentClaims        AccidentClaim[]
+  comments              DriverComment[]
+}
+
+model DriverComment {
+  id          String        @id @default(uuid())
+  driverId    String
+  driver      DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  authorName  String
+  authorRole  String?
+  content     String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([driverId])
 }
 
 model SupportTicket {

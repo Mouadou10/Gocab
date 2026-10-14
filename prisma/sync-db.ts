@@ -76,6 +76,21 @@ async function syncSchema() {
       "ALTER TABLE FieldTask ADD COLUMN duration_hours REAL DEFAULT 1.0",
       "ALTER TABLE Vehicle ADD COLUMN historical_driver_name TEXT",
       "ALTER TABLE Vehicle ADD COLUMN historical_driver_phone TEXT",
+      "ALTER TABLE DriverProfile ADD COLUMN isRedFlagged BOOLEAN NOT NULL DEFAULT 0",
+      "ALTER TABLE DriverProfile ADD COLUMN redFlagReason TEXT",
+      "ALTER TABLE DriverProfile ADD COLUMN redFlaggedAt DATETIME",
+      "ALTER TABLE DriverProfile ADD COLUMN redFlaggedBy TEXT",
+      `CREATE TABLE IF NOT EXISTS "DriverComment" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "driverId" TEXT NOT NULL,
+        "authorName" TEXT NOT NULL,
+        "authorRole" TEXT,
+        "content" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "DriverComment_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "DriverProfile" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX IF NOT EXISTS "DriverComment_driverId_idx" ON "DriverComment"("driverId")`,
     ];
 
     for (const migration of migrations) {

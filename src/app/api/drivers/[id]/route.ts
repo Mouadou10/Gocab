@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
 import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
 import { touchSyncState } from "@/lib/sync";
+import { invalidateDriverCache } from "@/lib/driverCache";
 
 export async function GET(
   request: NextRequest,
@@ -28,6 +29,9 @@ export async function GET(
         tickets: true,
         payments: true,
         accidentClaims: true,
+        comments: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
@@ -64,6 +68,8 @@ export async function PATCH(
       currentArrearsMAD,
       isKycVerified,
       defaultStage,
+      isRedFlagged,
+      redFlagReason,
     } = body;
 
     const currentDriver = await prisma.driverProfile.findUnique({
@@ -98,6 +104,23 @@ export async function PATCH(
       updateData.cinNumber = cinNumber.trim().toUpperCase();
     }
 
+    if (isRedFlagged !== undefined) {
+      const willBeFlagged = Boolean(isRedFlagged);
+      updateData.isRedFlagged = willBeFlagged;
+      if (willBeFlagged) {
+        updateData.redFlagReason = redFlagReason ? String(redFlagReason).trim() : (currentDriver.redFlagReason || "Signalé par le gestionnaire de flotte");
+        updateData.redFlaggedAt = new Date();
+        const userObj = "user" in authResult ? (authResult as any).user : null;
+        updateData.redFlaggedBy = userObj?.name || userObj?.fullName || userObj?.email || "Gestionnaire Flotte";
+      } else {
+        updateData.redFlagReason = null;
+        updateData.redFlaggedAt = null;
+        updateData.redFlaggedBy = null;
+      }
+    } else if (redFlagReason !== undefined && currentDriver.isRedFlagged) {
+      updateData.redFlagReason = redFlagReason ? String(redFlagReason).trim() : null;
+    }
+
     // Vehicle Assignment Change Handling
     const oldVehicleId = currentDriver.assignedVehicleId;
     const newVehicleId = assignedVehicleId !== undefined ? assignedVehicleId : oldVehicleId;
@@ -111,6 +134,9 @@ export async function PATCH(
       data: updateData,
       include: {
         assignedVehicle: true,
+        comments: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
@@ -150,6 +176,7 @@ export async function PATCH(
       await touchSyncState("leads").catch(() => {});
     }
 
+    invalidateDriverCache();
     return NextResponse.json({ driver: updatedDriver });
   } catch (error: any) {
     console.error("PATCH /api/drivers/[id] error:", error);
@@ -190,6 +217,7 @@ export async function DELETE(
       where: { id },
     });
 
+    invalidateDriverCache();
     return NextResponse.json({ success: true, message: "Driver removed successfully" });
   } catch (error: any) {
     console.error("DELETE /api/drivers/[id] error:", error);

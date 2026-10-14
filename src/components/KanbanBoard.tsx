@@ -42,6 +42,7 @@ import TrainingScorecard from "./TrainingScorecard";
 import InsuranceView from "./InsuranceView";
 import DashboardView from "./DashboardView";
 import DriversView from "./DriversView";
+import FlaggedDriversView from "./FlaggedDriversView";
 import PasswordChangeModal from "./PasswordChangeModal";
 import UserProfileModal from "./UserProfileModal";
 import AddLeadModal from "./AddLeadModal";
@@ -79,14 +80,14 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
-  BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
-  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
-  FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
-  FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
-  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
+  BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
+  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "flagged-drivers", "whatsapp"],
+  FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
+  FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
+  FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -111,7 +112,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:                 "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
@@ -168,6 +169,9 @@ export default function KanbanBoard() {
   }
   if (!allowedTabs.includes("vehicle-ops")) {
     allowedTabs = [...allowedTabs, "vehicle-ops"];
+  }
+  if (!allowedTabs.includes("flagged-drivers")) {
+    allowedTabs = [...allowedTabs, "flagged-drivers"];
   }
 
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
@@ -1416,6 +1420,19 @@ export default function KanbanBoard() {
               </button>
             )}
 
+            {allowedTabs.includes("flagged-drivers") && (
+              <button
+                onClick={() => handleSelectTab("flagged-drivers")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "flagged-drivers"
+                    ? "bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-300 font-bold"
+                    : "text-gray-600 hover:text-rose-700 hover:bg-rose-50/50"
+                }`}
+              >
+                🚩 {t.flaggedDrivers || "Chauffeurs Signalés"}
+              </button>
+            )}
+
             {allowedTabs.includes("fleet") && (
               <button
                 onClick={() => handleSelectTab("fleet")}
@@ -1906,6 +1923,8 @@ export default function KanbanBoard() {
           <SettingsView />
         ) : activeTab === "drivers" ? (
           <DriversView />
+        ) : activeTab === "flagged-drivers" ? (
+          <FlaggedDriversView />
         ) : activeTab === "fleet" ? (
           <FleetView />
         ) : activeTab === "vehicle-ops" ? (

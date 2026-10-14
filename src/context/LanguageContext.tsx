@@ -12,6 +12,7 @@ export interface Translations {
   leads: string;
   training: string;
   drivers: string;
+  flaggedDrivers: string;
   fleet: string;
   support: string;
   perf: string;
@@ -114,6 +115,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     leads: "Leads",
     training: "Training",
     drivers: "Drivers",
+    flaggedDrivers: "Flagged Drivers",
     fleet: "Fleet",
     support: "Support",
     perf: "Collections & Perf",
@@ -211,6 +213,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     leads: "Prospects",
     training: "Formation",
     drivers: "Chauffeurs",
+    flaggedDrivers: "Chauffeurs Signalés",
     fleet: "Flotte",
     support: "Support",
     perf: "Encaissements & Perf",
@@ -308,6 +311,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     leads: "المرشحين",
     training: "التدريب",
     drivers: "السائقين",
+    flaggedDrivers: "السائقين المعلمين",
     fleet: "الأسطول",
     support: "الدعم الفني",
     perf: "التحصيل والأداء",
