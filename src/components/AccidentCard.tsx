@@ -445,11 +445,13 @@ export default function AccidentCard({
     setIsUpdating(true);
     try {
       const agentName = session?.user?.name || session?.user?.email || "Agent";
-      const payload: any = { timeline_step: nextStep.id };
+      const payload: any = {
+        timeline_step: nextStep.id,
+        author: agentName,
+      };
 
       if (commentText.trim()) {
         payload.comment = commentText.trim();
-        payload.author = agentName;
       }
 
       const res = await fetch(`/api/accidents/${claim.id}`, {
@@ -495,11 +497,13 @@ export default function AccidentCard({
     setIsUpdating(true);
     try {
       const agentName = session?.user?.name || session?.user?.email || "Agent";
-      const payload: any = { timeline_step: targetStep.id };
+      const payload: any = {
+        timeline_step: targetStep.id,
+        author: agentName,
+      };
 
       if (commentText.trim()) {
         payload.comment = commentText.trim();
-        payload.author = agentName;
       }
 
       const res = await fetch(`/api/accidents/${claim.id}`, {

@@ -289,6 +289,9 @@ export async function PATCH(req: Request, context: any) {
         });
       }
 
+      const currentUser = "user" in authResult ? authResult.user : null;
+      const actorName = currentUser?.name || currentUser?.email || body.author || "Agent Assurance";
+
       // Automatically dispatch Telegram alert to the Field Supervisor group!
       await sendCarReadyTelegramAlert({
         plate_number: plateNumber,
@@ -297,7 +300,7 @@ export async function PATCH(req: Request, context: any) {
         driver_phone: updatedClaim.driver_phone,
         downtime_days: totalDays,
         assigned_to: existingTask?.assigned_to || null,
-        triggered_by: body.author || "Agent Assurance",
+        triggered_by: actorName,
         notes: body.comment || "Véhicule réparé au garage. Prêt pour récupération et convoyage en flotte.",
       }).catch((err) => console.error("Auto Telegram car ready alert error:", err));
 
@@ -312,8 +315,8 @@ export async function PATCH(req: Request, context: any) {
       existingComments.unshift({
         id: crypto.randomUUID(),
         timeline_step: "READY_FOR_PICKUP",
-        comment: "🚗 Véhicule réparé et prêt au garage. Alerte Telegram envoyée automatiquement au superviseur terrain.",
-        author: "Système Telegram",
+        comment: `🚗 Véhicule marqué prêt au garage par ${actorName}. Alerte Telegram envoyée au superviseur terrain.`,
+        author: actorName,
         created_at: new Date().toISOString(),
       });
 
