@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
+import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
+import { touchSyncState } from "@/lib/sync";
 
 export async function GET(
   request: NextRequest,
@@ -120,19 +122,32 @@ export async function PATCH(
           where: { id: oldVehicleId },
           data: {
             status: "Available",
+            assigned_driver_name: null,
+            assigned_driver_phone: null,
           },
-        });
+        }).catch(() => {});
       }
 
       // 2. Link new vehicle
       if (newVehicleId) {
-        await prisma.vehicle.update({
+        const linkedVehicle = await prisma.vehicle.update({
           where: { id: newVehicleId },
           data: {
             status: "Actif",
+            assigned_driver_name: updatedDriver.fullName,
+            assigned_driver_phone: updatedDriver.phoneSanitized,
           },
-        });
+        }).catch(() => null);
+
+        if (linkedVehicle) {
+          await syncVehicleAssignmentToLead(
+            { fullName: updatedDriver.fullName, phoneSanitized: updatedDriver.phoneSanitized },
+            linkedVehicle
+          ).catch(() => {});
+        }
       }
+
+      await touchSyncState("leads").catch(() => {});
     }
 
     return NextResponse.json({ driver: updatedDriver });

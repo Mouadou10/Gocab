@@ -5,6 +5,8 @@ import { processVehicleSideEffects } from "@/lib/services/vehicleService";
 import { logAudit } from "@/lib/services/auditLogger";
 import { extractVidangeStatsFromTickets } from "@/lib/vidangeStats";
 import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
+import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * GET /api/vehicles/[id]
@@ -271,6 +273,15 @@ export async function PATCH(
 
     if (body.assigned_driver_id !== undefined || body.assigned_driver_name !== undefined) {
       await reconcileDriverVehicleAssignments().catch(() => {});
+      const targetDriverName = updateData.assigned_driver_name || vehicle.assigned_driver_name;
+      const targetDriverPhone = updateData.assigned_driver_phone || vehicle.assigned_driver_phone;
+      if (targetDriverName) {
+        await syncVehicleAssignmentToLead(
+          { fullName: targetDriverName, phoneSanitized: targetDriverPhone },
+          vehicle
+        ).catch(() => {});
+      }
+      await touchSyncState("leads").catch(() => {});
     }
 
     const userId = session?.user?.name || session?.user?.email || session?.user?.id || "agent";

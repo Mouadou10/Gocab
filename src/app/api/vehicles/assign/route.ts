@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { syncVehicleAssignmentToLead } from '@/lib/services/leadVehicleReconciliation';
+import { touchSyncState } from '@/lib/sync';
 
 export async function POST(req: Request) {
   try {
@@ -58,6 +60,14 @@ export async function POST(req: Request) {
         assigned_driver_phone: driver.phoneSanitized
       }
     });
+
+    // 5. Synchronize Lead to VEHICLE_ASSIGNMENT
+    await syncVehicleAssignmentToLead(
+      { fullName: driver.fullName, phoneSanitized: driver.phoneSanitized },
+      { id: vehicleId, plate_number: vehicle.plate_number }
+    ).catch(() => {});
+
+    await touchSyncState("leads").catch(() => {});
 
     return NextResponse.json({ 
       success: true, 
