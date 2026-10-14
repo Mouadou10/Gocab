@@ -421,6 +421,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, ...res });
     }
 
+    if (action === "toggle_bot") {
+      if (!conversationId) {
+        return NextResponse.json({ error: "Conversation requise" }, { status: 400 });
+      }
+      const conv = await getDbConv().findUnique({ where: { id: conversationId } });
+      if (!conv) {
+        return NextResponse.json({ error: "Conversation introuvable" }, { status: 404 });
+      }
+      const isCurrentlyPaused =
+        conv.workflow_state === "BOT_PAUSED" || conv.workflow_state === "HUMAN_AGENT";
+      const newWorkflowState = isCurrentlyPaused ? "NONE" : "BOT_PAUSED";
+      const updated = await getDbConv().update({
+        where: { id: conversationId },
+        data: { workflow_state: newWorkflowState },
+      });
+      return NextResponse.json({
+        success: true,
+        workflowState: updated.workflow_state,
+        isBotPaused: newWorkflowState === "BOT_PAUSED",
+      });
+    }
+
     if (!phoneNumber) {
       return NextResponse.json({ error: "Numéro de téléphone requis" }, { status: 400 });
     }

@@ -724,12 +724,20 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     },
   });
 
-  // Update conversation's last message
+  // Update conversation's last message and transition to HUMAN_AGENT if an agent replied
+  const isAgentSender = opts.senderName !== "🤖 Bot GoCab";
+  const shouldSetHuman =
+    isAgentSender &&
+    (conversation.workflow_state === "NONE" ||
+      conversation.workflow_state === "AWAITING_MENU_CHOICE" ||
+      conversation.workflow_state === "AWAITING_IMMAT");
+
   await getDbConv().update({
     where: { id: conversation.id },
     data: {
       last_message: opts.text,
       last_message_at: new Date(),
+      ...(shouldSetHuman ? { workflow_state: "HUMAN_AGENT" } : {}),
     },
   });
 
@@ -1114,6 +1122,30 @@ async function processInboundBotWorkflow(
   // =========================================================================
   const state = conversation.workflow_state || "NONE";
 
+  // 0. If conversation is in Human Agent takeover or explicitly paused, DO NOT trigger bot
+  if (state === "HUMAN_AGENT" || state === "BOT_PAUSED") {
+    return;
+  }
+
+  // 0.1 Check if any human agent has ever replied in this conversation
+  const recentAgentMsg = await getDbMsg().findFirst({
+    where: {
+      conversation_id: conversation.id,
+      direction: "OUTBOUND",
+      sender_name: { not: "🤖 Bot GoCab" },
+    },
+  });
+
+  if (recentAgentMsg) {
+    if (state === "NONE" || state === "AWAITING_MENU_CHOICE") {
+      await getDbConv().update({
+        where: { id: conversation.id },
+        data: { workflow_state: "HUMAN_AGENT" },
+      });
+    }
+    return;
+  }
+
   const isMenuCommand = ["menu", "start", "0", "accueil", "aide", "help", "options"].includes(
     lower
   );
@@ -1173,8 +1205,22 @@ async function processInboundBotWorkflow(
     return;
   }
 
-  // 5. Initial contact (state === "NONE") -> Send the 2-option Welcome Menu automatically
+  // 5. Initial contact (state === "NONE") -> Send the 2-option Welcome Menu ONLY ONCE
   if (state === "NONE") {
+    const welcomeAlreadySent = await getDbMsg().findFirst({
+      where: {
+        conversation_id: conversation.id,
+        direction: "OUTBOUND",
+        sender_name: "🤖 Bot GoCab",
+      },
+    });
+
+    if (welcomeAlreadySent) {
+      // Menu was already sent previously; route to Lead Acquisition silently without spamming
+      await routeConversationToLeadAcquisition(conversation.id, contactName, false);
+      return;
+    }
+
     await sendWhatsAppWelcomeMenu(conversation.phone_number, conversation.id);
     return;
   }
@@ -1218,8 +1264,11 @@ async function processInboundBotWorkflow(
       });
       return;
     }
-    // Re-prompt menu options gently
-    await sendWhatsAppWelcomeMenu(conversation.phone_number, conversation.id);
+
+    // DO NOT RE-SEND THE WELCOME MENU!
+    // The customer is sending free-form text (e.g. asking a question, replying "siege", etc.).
+    // Transfer directly to Lead Acquisition / Human discussion without sending any bot message!
+    await routeConversationToLeadAcquisition(conversation.id, contactName, false);
     return;
   }
 
@@ -1344,11 +1393,17 @@ export async function handleEchoWhatsAppMessage(payload: {
     },
   });
 
+  const shouldSetHuman =
+    conversation.workflow_state === "NONE" ||
+    conversation.workflow_state === "AWAITING_MENU_CHOICE" ||
+    conversation.workflow_state === "AWAITING_IMMAT";
+
   await getDbConv().update({
     where: { id: conversation.id },
     data: {
       last_message: payload.text,
       last_message_at: new Date(),
+      ...(shouldSetHuman ? { workflow_state: "HUMAN_AGENT" } : {}),
     },
   });
 

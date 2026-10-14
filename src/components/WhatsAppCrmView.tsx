@@ -444,6 +444,34 @@ export default function WhatsAppCrmView() {
     }
   };
 
+  // Toggle Bot Pause / Human mode
+  const handleToggleBot = async () => {
+    if (!activeConversation) return;
+    try {
+      const res = await fetch("/api/whatsapp/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle_bot",
+          conversationId: activeConversation.id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(
+          data.isBotPaused
+            ? "⏸️ Bot mis en pause (Mode Humain activé) !"
+            : "🤖 Bot réactivé pour cette discussion !"
+        );
+        fetchConversations(true);
+      } else {
+        toast.error(data.error || "Erreur de basculement du bot");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    }
+  };
+
   // Simulate incoming driver response
   const handleSimulateInbound = async (textToSimulate: string) => {
     if (!activeConversation) return;
@@ -905,6 +933,36 @@ export default function WhatsAppCrmView() {
 
               {/* Action Buttons & Dossier Toggle */}
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Bot State / Human Mode Toggle */}
+                <button
+                  onClick={handleToggleBot}
+                  className={`px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    activeConversation.workflowState === "BOT_PAUSED" ||
+                    activeConversation.workflowState === "HUMAN_AGENT"
+                      ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200"
+                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200"
+                  }`}
+                  title={
+                    activeConversation.workflowState === "BOT_PAUSED" ||
+                    activeConversation.workflowState === "HUMAN_AGENT"
+                      ? "Mode Humain actif (Bot en pause sur ce contact). Cliquez pour réactiver le bot."
+                      : "Bot automatique actif. Cliquez pour mettre en pause le bot et passer en mode 100% humain."
+                  }
+                >
+                  {activeConversation.workflowState === "BOT_PAUSED" ||
+                  activeConversation.workflowState === "HUMAN_AGENT" ? (
+                    <>
+                      <span className="text-xs">⏸️</span>
+                      <span className="hidden lg:inline text-amber-800 font-bold">Mode Humain</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs">🤖</span>
+                      <span className="hidden lg:inline text-emerald-800 font-bold">Bot Actif</span>
+                    </>
+                  )}
+                </button>
+
                 {/* Send 2-option Bot Welcome Menu */}
                 <button
                   onClick={handleSendWelcomeMenu}
