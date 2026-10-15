@@ -78,11 +78,20 @@ export async function GET(request: NextRequest) {
           status: true,
           assigned_driver_name: true,
           assigned_driver_phone: true,
+          assigned_supervisor: true,
+          assigned_collector: true,
         },
       }),
     ]);
 
     // Build fallback lookup maps for vehicles by driver phone and name
+    const alreadyAssignedVehicleIds = new Set<string>();
+    for (const d of drivers) {
+      if (d.assignedVehicleId) {
+        alreadyAssignedVehicleIds.add(d.assignedVehicleId);
+      }
+    }
+
     const vehicleByDriverPhone = new Map<string, typeof allVehicles[0]>();
     const vehicleByDriverName = new Map<string, typeof allVehicles[0]>();
     for (const v of allVehicles) {
@@ -199,6 +208,8 @@ export async function GET(request: NextRequest) {
             plate_number: driver.assignedVehicle.plate_number,
             make_model: driver.assignedVehicle.make_model,
             status: driver.assignedVehicle.status,
+            assigned_supervisor: driver.assignedVehicle.assigned_supervisor,
+            assigned_collector: driver.assignedVehicle.assigned_collector,
           }
         : null;
 
@@ -209,20 +220,30 @@ export async function GET(request: NextRequest) {
           const cleanN = driver.fullName.toLowerCase().replace(/\s+/g, " ").trim();
           fbV = vehicleByDriverName.get(cleanN) || null;
         }
-        if (fbV) {
-          resolvedVehicle = {
-            id: fbV.id,
-            plate_number: fbV.plate_number,
-            make_model: fbV.make_model,
-            status: fbV.status,
-          };
-          // Self-heal in background
-          prisma.driverProfile.updateMany({
-            where: { id: driver.id, assignedVehicleId: null },
-            data: { assignedVehicleId: fbV.id },
-          }).catch(() => {});
+        if (fbV && !alreadyAssignedVehicleIds.has(fbV.id)) {
+          const vDriverName = (fbV.assigned_driver_name || "").toLowerCase().replace(/\s+/g, " ").trim();
+          const dName = (driver.fullName || "").toLowerCase().replace(/\s+/g, " ").trim();
+          const vPhone = (fbV.assigned_driver_phone || "").replace(/\D/g, "").slice(-9);
+          if (vDriverName === dName || (cleanP && vPhone && vPhone === cleanP)) {
+            alreadyAssignedVehicleIds.add(fbV.id);
+            resolvedVehicle = {
+              id: fbV.id,
+              plate_number: fbV.plate_number,
+              make_model: fbV.make_model,
+              status: fbV.status,
+              assigned_supervisor: fbV.assigned_supervisor,
+              assigned_collector: fbV.assigned_collector,
+            };
+            // Self-heal in background
+            prisma.driverProfile.updateMany({
+              where: { id: driver.id, assignedVehicleId: null },
+              data: { assignedVehicleId: fbV.id },
+            }).catch(() => {});
+          }
         }
       }
+
+      const manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
 
       return {
         id: driver.id,
@@ -230,7 +251,13 @@ export async function GET(request: NextRequest) {
         phoneSanitized: driver.phoneSanitized,
         cinNumber: driver.cinNumber,
         contractType: contract,
-        vehicle: resolvedVehicle,
+        vehicle: resolvedVehicle
+          ? {
+              ...resolvedVehicle,
+              manager,
+            }
+          : null,
+        manager,
         currentArrearsMAD: currentArrears,
         consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
         isCriticalRed,
@@ -245,15 +272,58 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // When hasMorningCsv is true and morning debt exists, use it; otherwise use expected contract sum
+    // Collect all managers present in active driver list
+    const managerCounts = new Map<string, { name: string; count: number; arrears: number }>();
+    for (const d of driverList) {
+      if (d.manager) {
+        const rawM = d.manager.trim();
+        const key = rawM.toLowerCase();
+        const formattedName = rawM
+          .split(" ")
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+        const curr = managerCounts.get(key) || { name: formattedName, count: 0, arrears: 0 };
+        curr.count += 1;
+        curr.arrears += d.currentArrearsMAD || 0;
+        managerCounts.set(key, curr);
+      }
+    }
+    const managers = Array.from(managerCounts.values()).sort((a, b) => b.count - a.count);
+
+    // Filter by manager if requested
+    const managerParam = searchParams.get("manager");
+    let targetDriverSet = driverList;
+    if (managerParam && managerParam !== "ALL") {
+      const targetM = managerParam.trim().toLowerCase();
+      targetDriverSet = driverList.filter((d) =>
+        d.manager ? d.manager.toLowerCase().includes(targetM) || targetM.includes(d.manager.toLowerCase()) : false
+      );
+    }
+
+    // Calculate metrics for target set (filtered or global)
+    let subMorningTargetMAD = 0;
+    let subExpectedContractMAD = 0;
+    let subClearedTodayMAD = 0;
+    let subArrearsAllMAD = 0;
+    let subCriticalRedCount = 0;
+
+    for (const d of targetDriverSet) {
+      const morningD = d.morningBalance !== null && d.morningBalance !== undefined ? Math.abs(Math.min(0, d.morningBalance)) : 0;
+      subMorningTargetMAD += morningD;
+      subExpectedContractMAD += d.expectedTodayMAD || 0;
+      subClearedTodayMAD += d.clearedTodayMAD || 0;
+      subArrearsAllMAD += d.currentArrearsMAD || 0;
+      if (d.isCriticalRed) subCriticalRedCount++;
+    }
+
     const effectiveTargetMAD =
-      hasMorningCsv && totalMorningTargetMAD > 0
-        ? totalMorningTargetMAD
-        : totalExpectedContractMAD;
-    const remainingToCollectMAD = Math.max(0, effectiveTargetMAD - totalClearedTodayMAD);
+      hasMorningCsv && subMorningTargetMAD > 0
+        ? subMorningTargetMAD
+        : subExpectedContractMAD;
+    const remainingToCollectMAD = Math.max(0, effectiveTargetMAD - subClearedTodayMAD);
     const target60PercentMAD = Math.round(effectiveTargetMAD * 0.6);
     const collectionPercentage =
-      effectiveTargetMAD > 0 ? (totalClearedTodayMAD / effectiveTargetMAD) * 100 : 0;
+      effectiveTargetMAD > 0 ? (subClearedTodayMAD / effectiveTargetMAD) * 100 : 0;
 
     return NextResponse.json({
       date: startDateStr,
@@ -264,16 +334,18 @@ export async function GET(request: NextRequest) {
       dayOfWeek: startOfRange.getUTCDay(),
       hasMorningCsv,
       hasEveningCsv,
+      managers,
+      selectedManager: managerParam || "ALL",
       summary: {
-        totalDrivers: drivers.length,
+        totalDrivers: targetDriverSet.length,
         totalExpectedTodayMAD: effectiveTargetMAD,
         totalMorningTargetMAD: effectiveTargetMAD,
-        totalClearedTodayMAD,
+        totalClearedTodayMAD: subClearedTodayMAD,
         remainingToCollectMAD,
-        totalArrearsAllMAD,
+        totalArrearsAllMAD: subArrearsAllMAD,
         target60PercentMAD,
         collectionPercentage,
-        criticalRedCount,
+        criticalRedCount: subCriticalRedCount,
         hasMorningCsv,
         hasEveningCsv,
         isRange,
@@ -281,7 +353,7 @@ export async function GET(request: NextRequest) {
         startDate: startDateStr,
         endDate: endDateStr,
       },
-      drivers: driverList,
+      drivers: targetDriverSet,
     });
   } catch (error: any) {
     console.error("GET /api/collections/driver-daily error:", error);

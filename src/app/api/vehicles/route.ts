@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const search = searchParams.get("search") || "";
     const hub = searchParams.get("hub") || "";
     const status = searchParams.get("status") || "";
+    const manager = searchParams.get("manager") || "";
 
     const where: any = { is_archived: false };
 
@@ -32,6 +33,18 @@ export async function GET(request: Request) {
 
     if (status) {
       where.status = status;
+    }
+
+    if (manager && manager !== "ALL") {
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { assigned_collector: { contains: manager } },
+            { assigned_supervisor: { contains: manager } },
+          ],
+        },
+      ];
     }
 
     const vehicles = await prisma.vehicle.findMany({

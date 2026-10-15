@@ -215,6 +215,13 @@ export async function PATCH(
     if (body.assigned_driver_phone !== undefined) updateData.assigned_driver_phone = body.assigned_driver_phone;
     if (body.notes !== undefined) updateData.notes = body.notes;
 
+    if (body.assigned_supervisor !== undefined) {
+      updateData.assigned_supervisor = body.assigned_supervisor ? body.assigned_supervisor.trim() : null;
+    }
+    if (body.assigned_collector !== undefined) {
+      updateData.assigned_collector = body.assigned_collector ? body.assigned_collector.trim() : null;
+    }
+
     if (body.historical_driver_name !== undefined) updateData.historical_driver_name = body.historical_driver_name;
     if (body.historical_driver_phone !== undefined) updateData.historical_driver_phone = body.historical_driver_phone;
 

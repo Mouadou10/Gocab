@@ -140,6 +140,7 @@ export default function FleetView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedHub, setSelectedHub] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedManager, setSelectedManager] = useState("");
   const [activeQuickTab, setActiveQuickTab] = useState<string>("ALL");
   const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
   const [copiedPlate, setCopiedPlate] = useState<string | null>(null);
@@ -191,11 +192,12 @@ export default function FleetView() {
       if (searchTerm) params.set("search", searchTerm);
       if (selectedHub) params.set("hub", selectedHub);
       if (selectedStatus) params.set("status", selectedStatus);
+      if (selectedManager) params.set("manager", selectedManager);
 
       const res = await fetch(`/api/vehicles?${params.toString()}`);
       const data = await res.json();
       if (data.vehicles) {
-        if (!searchTerm && !selectedHub && !selectedStatus) {
+        if (!searchTerm && !selectedHub && !selectedStatus && !selectedManager) {
           globalCachedVehicles = data.vehicles;
         }
         setVehicles(data.vehicles);
@@ -205,7 +207,7 @@ export default function FleetView() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, selectedHub, selectedStatus]);
+  }, [searchTerm, selectedHub, selectedStatus, selectedManager]);
 
   useEffect(() => {
     fetchVehicles();
@@ -463,11 +465,12 @@ export default function FleetView() {
     }
   }
 
-  const hasActiveFilters = Boolean(searchTerm || selectedHub || selectedStatus || activeQuickTab !== "ALL");
+  const hasActiveFilters = Boolean(searchTerm || selectedHub || selectedStatus || selectedManager || activeQuickTab !== "ALL");
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedHub("");
     setSelectedStatus("");
+    setSelectedManager("");
     setActiveQuickTab("ALL");
   };
 
@@ -816,6 +819,18 @@ export default function FleetView() {
               ))}
             </select>
 
+            {/* Manager Filter */}
+            <select
+              value={selectedManager}
+              onChange={(e) => setSelectedManager(e.target.value)}
+              className="border border-slate-200/90 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-slate-50 font-medium text-slate-700 cursor-pointer"
+            >
+              <option value="">Tous les gestionnaires</option>
+              <option value="mehdi">👤 Mehdi Elyattouti (26)</option>
+              <option value="aziz">👤 Mohamed Aziz (66)</option>
+              <option value="hamza">👤 Hamza Rassid (2)</option>
+            </select>
+
             {hasActiveFilters && (
               <button
                 type="button"
@@ -964,6 +979,19 @@ export default function FleetView() {
                           </div>
                         ) : (
                           <div className="text-[10px] text-slate-400 italic mt-0.5">Non assigné</div>
+                        )}
+
+                        {(v.assigned_collector || v.assigned_supervisor) && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] text-slate-700 font-bold">
+                              <span>🛡️</span>
+                              <span>
+                                {(v.assigned_collector || v.assigned_supervisor || "").toLowerCase().includes("mehdi")
+                                  ? "Mehdi Elyattouti"
+                                  : v.assigned_collector || v.assigned_supervisor}
+                              </span>
+                            </span>
+                          </div>
                         )}
                       </td>
 

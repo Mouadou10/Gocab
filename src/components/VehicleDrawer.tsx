@@ -58,6 +58,8 @@ export interface Vehicle {
   assigned_driver_phone: string | null;
   historical_driver_name?: string | null;
   historical_driver_phone?: string | null;
+  assigned_supervisor?: string | null;
+  assigned_collector?: string | null;
   is_current_working_car?: boolean;
   driverProfile?: { id: string; fullName: string; phoneSanitized: string; cinNumber?: string | null } | null;
   total_expenses_mad?: number;
@@ -105,6 +107,12 @@ export default function VehicleDrawer({
   const [assignedDriverName, setAssignedDriverName] = useState(vehicle?.assigned_driver_name || "");
   const [assignedDriverPhone, setAssignedDriverPhone] = useState(vehicle?.assigned_driver_phone || "");
   const [assignedDriverId, setAssignedDriverId] = useState(vehicle?.driverProfile?.id || "");
+  const [assignedSupervisor, setAssignedSupervisor] = useState(
+    vehicle?.assigned_supervisor || vehicle?.assigned_collector || ""
+  );
+  const [assignedCollector, setAssignedCollector] = useState(
+    vehicle?.assigned_collector || vehicle?.assigned_supervisor || ""
+  );
   const [notes, setNotes] = useState(vehicle?.notes || "");
 
   const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
@@ -291,6 +299,8 @@ export default function VehicleDrawer({
         autorisation_expiry_date: autorisationExpiry || null,
         technical_inspection_expiry: technicalInspectionExpiry || null,
         assigned_driver_id: assignedDriverId || null,
+        assigned_supervisor: assignedSupervisor || null,
+        assigned_collector: assignedCollector || assignedSupervisor || null,
         notes: notes || null,
       };
 
@@ -595,6 +605,26 @@ export default function VehicleDrawer({
                     </span>
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                  <span>👤</span> Gestionnaire de Flotte (Fleet Manager)
+                </label>
+                <select
+                  value={assignedSupervisor}
+                  onChange={(e) => {
+                    setAssignedSupervisor(e.target.value);
+                    setAssignedCollector(e.target.value);
+                  }}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
+                >
+                  <option value="">-- Non assigné --</option>
+                  <option value="mehdi elyattouti">Mehdi Elyattouti</option>
+                  <option value="Mohamed Aziz">Mohamed Aziz</option>
+                  <option value="HAMZA RASSID">Hamza Rassid</option>
+                  <option value="Salma Abouri">Salma Abouri</option>
+                </select>
               </div>
             </div>
 

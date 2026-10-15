@@ -55,7 +55,11 @@ interface DriverDailyItem {
     plate_number: string;
     make_model: string;
     status: string;
+    assigned_supervisor?: string | null;
+    assigned_collector?: string | null;
+    manager?: string | null;
   } | null;
+  manager?: string | null;
   currentArrearsMAD: number;
   consecutiveUnpaidDays: number;
   isCriticalRed: boolean;
@@ -67,6 +71,12 @@ interface DriverDailyItem {
   calculatedDelta?: number | null;
   paymentNote: string | null;
   paymentLedgerId: string | null;
+}
+
+interface ManagerInfo {
+  name: string;
+  count: number;
+  arrears: number;
 }
 
 interface DailySummary {
@@ -153,6 +163,23 @@ export default function FleetPerformanceView() {
 
   const { data: session } = useSession() || {};
   const currentUserName = session?.user?.name || "Fleet Performance Manager";
+  const currentUserEmail = session?.user?.email || "";
+
+  // Manager filter state
+  const [selectedManager, setSelectedManager] = useState<string>("ALL");
+  const [availableManagers, setAvailableManagers] = useState<ManagerInfo[]>([]);
+
+  // Automatically default to Mehdi if the logged-in user is Mehdi
+  const hasAutoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !hasAutoSelectedRef.current &&
+      (currentUserEmail.toLowerCase().includes("mehdi") || currentUserName.toLowerCase().includes("mehdi"))
+    ) {
+      setSelectedManager("mehdi elyattouti");
+      hasAutoSelectedRef.current = true;
+    }
+  }, [currentUserEmail, currentUserName]);
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -282,12 +309,16 @@ export default function FleetPerformanceView() {
   const fetchDriverCollections = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/collections/driver-daily?startDate=${startDate}&endDate=${endDate}`);
+      const managerQuery = selectedManager !== "ALL" ? `&manager=${encodeURIComponent(selectedManager)}` : "";
+      const res = await fetch(`/api/collections/driver-daily?startDate=${startDate}&endDate=${endDate}${managerQuery}`);
       const data = await res.json();
 
       if (data.drivers) {
         setDrivers(data.drivers);
         setSummary(data.summary);
+        if (data.managers) {
+          setAvailableManagers(data.managers);
+        }
 
         // Pre-populate input values with cleared amounts
         const initialInputs: Record<string, number> = {};
@@ -303,7 +334,7 @@ export default function FleetPerformanceView() {
     } finally {
       setIsLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedManager]);
 
   useEffect(() => {
     fetchDriverCollections();
@@ -389,10 +420,19 @@ export default function FleetPerformanceView() {
 
   // Filtered driver list
   const filteredDrivers = drivers.filter((d) => {
+    if (selectedManager !== "ALL") {
+      const targetM = selectedManager.trim().toLowerCase();
+      const driverM = (d.manager || "").trim().toLowerCase();
+      if (!driverM.includes(targetM) && !targetM.includes(driverM)) {
+        return false;
+      }
+    }
+
     const matchesSearch =
       d.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.phoneSanitized.includes(searchQuery) ||
-      (d.vehicle?.plate_number && d.vehicle.plate_number.toLowerCase().includes(searchQuery.toLowerCase()));
+      (d.vehicle?.plate_number && d.vehicle.plate_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (d.manager && d.manager.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchesSearch) return false;
 
@@ -539,11 +579,11 @@ export default function FleetPerformanceView() {
             <button
               onClick={() => {
                 if (drivers.length === 0) return;
-                const headers = "Nom,Telephone,CIN,Vehicule,Attendu (MAD),Encaisse (MAD),Jours Sans Paiement,Arrieres (MAD)\n";
+                const headers = "Nom,Telephone,CIN,Vehicule,Gestionnaire,Attendu (MAD),Encaisse (MAD),Jours Sans Paiement,Arrieres (MAD)\n";
                 const rows = drivers
                   .map(
                     (d) =>
-                      `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || "Aucun"}",${d.expectedTodayMAD},${d.clearedTodayMAD},${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
+                      `"${d.fullName}","${d.phoneSanitized}","${d.cinNumber}","${d.vehicle?.plate_number || "Aucun"}","${d.manager || "Non assigné"}",${d.expectedTodayMAD},${d.clearedTodayMAD},${d.consecutiveUnpaidDays},${d.currentArrearsMAD}`
                   )
                   .join("\n");
                 const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
@@ -592,6 +632,40 @@ export default function FleetPerformanceView() {
           >
             <FileSpreadsheet className="w-4 h-4 text-navy" />
             Importer Soldes CSV / Excel (Matin)
+          </button>
+        </div>
+      )}
+
+      {/* Active Manager Sub-portfolio Banner */}
+      {selectedManager !== "ALL" && (
+        <div className="bg-gradient-to-r from-navy via-[#1b3453] to-[#0d1e38] text-white p-4 rounded-2xl border border-gold/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gold/20 text-gold rounded-xl border border-gold/30 shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-3xs font-black uppercase text-gold tracking-wide bg-gold/10 px-2 py-0.5 rounded-md border border-gold/20">
+                  Portefeuille Dédié
+                </span>
+                <span className="text-sm font-extrabold text-white">
+                  {selectedManager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : selectedManager}
+                </span>
+                <span className="text-2xs bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-0.5 rounded-full font-bold">
+                  {summary?.totalDrivers || filteredDrivers.length} Véhicules & Chauffeurs
+                </span>
+              </div>
+              <p className="text-2xs text-white/70 mt-1">
+                Suivi personnalisé de la collecte de cash, des impayés et des alertes 3e jour assignés à ce gestionnaire.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedManager("ALL")}
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-start sm:self-auto"
+          >
+            <span>Voir Flotte Globale</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
@@ -887,16 +961,46 @@ export default function FleetPerformanceView() {
       )}
 
       {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Rechercher par chauffeur, téléphone, immatriculation..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-slate-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-navy/20"
-          />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Rechercher par chauffeur, téléphone, matricule, gestionnaire..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-slate-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-navy/20"
+            />
+          </div>
+
+          {/* Manager Filter Selector Dropdown */}
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl shrink-0">
+            <User className="w-3.5 h-3.5 text-navy shrink-0" />
+            <span className="text-3xs font-extrabold text-gray-500 uppercase tracking-wider shrink-0">
+              Gestionnaire :
+            </span>
+            <select
+              value={selectedManager}
+              onChange={(e) => setSelectedManager(e.target.value)}
+              className="bg-transparent text-navy text-xs font-black focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">🌐 Tous les gestionnaires ({drivers.length})</option>
+              <option value="mehdi elyattouti">👤 Mehdi Elyattouti (26)</option>
+              <option value="Mohamed Aziz">👤 Mohamed Aziz (66)</option>
+              {availableManagers
+                .filter(
+                  (m) =>
+                    !m.name.toLowerCase().includes("mehdi") &&
+                    !m.name.toLowerCase().includes("aziz")
+                )
+                .map((m) => (
+                  <option key={m.name} value={m.name}>
+                    👤 {m.name} ({m.count})
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
         {/* Filter Pills */}
@@ -1013,16 +1117,22 @@ export default function FleetPerformanceView() {
                         </div>
                       </td>
 
-                      {/* Vehicle Immatriculation */}
+                      {/* Vehicle Immatriculation & Manager */}
                       <td className="py-4 px-4">
                         {driver.vehicle ? (
-                          <div className="space-y-0.5">
+                          <div className="space-y-1">
                             <span className="font-mono font-bold text-xs bg-navy/5 text-navy px-2 py-0.5 rounded-lg border border-navy/10 inline-block">
                               {driver.vehicle.plate_number}
                             </span>
                             <p className="text-2xs text-gray-400 truncate max-w-[120px]">
                               {driver.vehicle.make_model}
                             </p>
+                            {driver.manager && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                <User className="w-2.5 h-2.5 text-slate-500" />
+                                {driver.manager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : driver.manager}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-2xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200">
