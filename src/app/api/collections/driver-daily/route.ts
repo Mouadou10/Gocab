@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
     // Fetch all drivers with assigned vehicle and payment ledger in date range
     const [drivers, allVehicles] = await Promise.all([
       prisma.driverProfile.findMany({
+        where: {
+          is_archived: false,
+          assignedVehicleId: { not: null },
+        },
         include: {
           assignedVehicle: true,
           payments: {
@@ -119,7 +123,55 @@ export async function GET(request: NextRequest) {
     let totalArrearsAllMAD = 0;
     let criticalRedCount = 0;
 
-    const driverList = drivers.map((driver) => {
+    const driverList: any[] = [];
+
+    for (const driver of drivers) {
+      let resolvedVehicle = driver.assignedVehicle
+        ? {
+            id: driver.assignedVehicle.id,
+            plate_number: driver.assignedVehicle.plate_number,
+            make_model: driver.assignedVehicle.make_model,
+            status: driver.assignedVehicle.status,
+            assigned_supervisor: driver.assignedVehicle.assigned_supervisor,
+            assigned_collector: driver.assignedVehicle.assigned_collector,
+          }
+        : null;
+
+      if (!resolvedVehicle) {
+        const cleanP = driver.phoneSanitized?.replace(/\D/g, "").slice(-9);
+        let fbV = cleanP ? vehicleByDriverPhone.get(cleanP) : null;
+        if (!fbV && driver.fullName) {
+          const cleanN = driver.fullName.toLowerCase().replace(/\s+/g, " ").trim();
+          fbV = vehicleByDriverName.get(cleanN) || null;
+        }
+        if (fbV && !alreadyAssignedVehicleIds.has(fbV.id)) {
+          const vDriverName = (fbV.assigned_driver_name || "").toLowerCase().replace(/\s+/g, " ").trim();
+          const dName = (driver.fullName || "").toLowerCase().replace(/\s+/g, " ").trim();
+          const vPhone = (fbV.assigned_driver_phone || "").replace(/\D/g, "").slice(-9);
+          if (vDriverName === dName || (cleanP && vPhone && vPhone === cleanP)) {
+            alreadyAssignedVehicleIds.add(fbV.id);
+            resolvedVehicle = {
+              id: fbV.id,
+              plate_number: fbV.plate_number,
+              make_model: fbV.make_model,
+              status: fbV.status,
+              assigned_supervisor: fbV.assigned_supervisor,
+              assigned_collector: fbV.assigned_collector,
+            };
+            // Self-heal in background
+            prisma.driverProfile.updateMany({
+              where: { id: driver.id, assignedVehicleId: null },
+              data: { assignedVehicleId: fbV.id },
+            }).catch(() => {});
+          }
+        }
+      }
+
+      // Strictly skip drivers without any car assigned
+      if (!resolvedVehicle) {
+        continue;
+      }
+
       const contract = (driver.contractType || "DAILY").toUpperCase();
       let expectedTodayMAD = 0;
 
@@ -201,62 +253,18 @@ export async function GET(request: NextRequest) {
 
       const firstPayment = driver.payments[0];
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
-
-      let resolvedVehicle = driver.assignedVehicle
-        ? {
-            id: driver.assignedVehicle.id,
-            plate_number: driver.assignedVehicle.plate_number,
-            make_model: driver.assignedVehicle.make_model,
-            status: driver.assignedVehicle.status,
-            assigned_supervisor: driver.assignedVehicle.assigned_supervisor,
-            assigned_collector: driver.assignedVehicle.assigned_collector,
-          }
-        : null;
-
-      if (!resolvedVehicle) {
-        const cleanP = driver.phoneSanitized?.replace(/\D/g, "").slice(-9);
-        let fbV = cleanP ? vehicleByDriverPhone.get(cleanP) : null;
-        if (!fbV && driver.fullName) {
-          const cleanN = driver.fullName.toLowerCase().replace(/\s+/g, " ").trim();
-          fbV = vehicleByDriverName.get(cleanN) || null;
-        }
-        if (fbV && !alreadyAssignedVehicleIds.has(fbV.id)) {
-          const vDriverName = (fbV.assigned_driver_name || "").toLowerCase().replace(/\s+/g, " ").trim();
-          const dName = (driver.fullName || "").toLowerCase().replace(/\s+/g, " ").trim();
-          const vPhone = (fbV.assigned_driver_phone || "").replace(/\D/g, "").slice(-9);
-          if (vDriverName === dName || (cleanP && vPhone && vPhone === cleanP)) {
-            alreadyAssignedVehicleIds.add(fbV.id);
-            resolvedVehicle = {
-              id: fbV.id,
-              plate_number: fbV.plate_number,
-              make_model: fbV.make_model,
-              status: fbV.status,
-              assigned_supervisor: fbV.assigned_supervisor,
-              assigned_collector: fbV.assigned_collector,
-            };
-            // Self-heal in background
-            prisma.driverProfile.updateMany({
-              where: { id: driver.id, assignedVehicleId: null },
-              data: { assignedVehicleId: fbV.id },
-            }).catch(() => {});
-          }
-        }
-      }
-
       const manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
 
-      return {
+      driverList.push({
         id: driver.id,
         fullName: driver.fullName,
         phoneSanitized: driver.phoneSanitized,
         cinNumber: driver.cinNumber,
         contractType: contract,
-        vehicle: resolvedVehicle
-          ? {
-              ...resolvedVehicle,
-              manager,
-            }
-          : null,
+        vehicle: {
+          ...resolvedVehicle,
+          manager,
+        },
         manager,
         currentArrearsMAD: currentArrears,
         consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
@@ -269,8 +277,8 @@ export async function GET(request: NextRequest) {
         calculatedDelta: driver.payments.length > 1 ? totalDelta : (firstPayment?.calculatedDelta ?? null),
         paymentNote: latestPayment?.notes || null,
         paymentLedgerId: latestPayment?.id || null,
-      };
-    });
+      });
+    }
 
     // Collect all managers present in active driver list
     const managerCounts = new Map<string, { name: string; count: number; arrears: number }>();

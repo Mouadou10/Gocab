@@ -420,6 +420,9 @@ export default function FleetPerformanceView() {
 
   // Filtered driver list
   const filteredDrivers = drivers.filter((d) => {
+    // Only drivers with an assigned vehicle appear in this list
+    if (!d.vehicle) return false;
+
     if (selectedManager !== "ALL") {
       const targetM = selectedManager.trim().toLowerCase();
       const driverM = (d.manager || "").trim().toLowerCase();
