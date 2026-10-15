@@ -76,7 +76,21 @@ interface DriverDailyItem {
 interface ManagerInfo {
   name: string;
   count: number;
+  vehicleCount?: number;
   arrears: number;
+}
+
+interface PortfolioStats {
+  vehicleCount: number;
+  driverCount: number;
+  targetMAD: number;
+  clearedMAD: number;
+  remainingMAD: number;
+  target50PercentMAD: number;
+  target60PercentMAD: number;
+  arrearsMAD: number;
+  criticalRedCount: number;
+  collectionPercentage: number;
 }
 
 interface DailySummary {
@@ -104,6 +118,10 @@ export default function FleetPerformanceView() {
   const [activePreset, setActivePreset] = useState<"today" | "yesterday" | "week" | "month" | "7d" | "custom">("today");
   const [drivers, setDrivers] = useState<DriverDailyItem[]>([]);
   const [summary, setSummary] = useState<DailySummary | null>(null);
+  const [portfolios, setPortfolios] = useState<{
+    aziz?: PortfolioStats;
+    mehdi?: PortfolioStats;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isRangeMode = startDate !== endDate;
@@ -165,21 +183,42 @@ export default function FleetPerformanceView() {
   const currentUserName = session?.user?.name || "Fleet Performance Manager";
   const currentUserEmail = session?.user?.email || "";
 
-  // Manager filter state
-  const [selectedManager, setSelectedManager] = useState<string>("ALL");
+  // Manager filter state - Defaults to Mohamed Aziz to separate portfolios by default (or user preference)
+  const [selectedManager, setSelectedManager] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("fleet_perf_selected_portfolio");
+      if (saved) return saved;
+    }
+    return "Mohamed Aziz";
+  });
   const [availableManagers, setAvailableManagers] = useState<ManagerInfo[]>([]);
 
-  // Automatically default to Mehdi if the logged-in user is Mehdi
+  // Automatically default to user's assigned portfolio if logged-in user is Mehdi or Aziz
   const hasAutoSelectedRef = useRef(false);
   useEffect(() => {
-    if (
-      !hasAutoSelectedRef.current &&
-      (currentUserEmail.toLowerCase().includes("mehdi") || currentUserName.toLowerCase().includes("mehdi"))
-    ) {
-      setSelectedManager("mehdi elyattouti");
-      hasAutoSelectedRef.current = true;
+    if (!hasAutoSelectedRef.current) {
+      if (
+        currentUserEmail.toLowerCase().includes("mehdi") ||
+        currentUserName.toLowerCase().includes("mehdi")
+      ) {
+        setSelectedManager("mehdi elyattouti");
+        hasAutoSelectedRef.current = true;
+      } else if (
+        currentUserEmail.toLowerCase().includes("aziz") ||
+        currentUserName.toLowerCase().includes("aziz")
+      ) {
+        setSelectedManager("Mohamed Aziz");
+        hasAutoSelectedRef.current = true;
+      }
     }
   }, [currentUserEmail, currentUserName]);
+
+  const handleSelectManager = (mgr: string) => {
+    setSelectedManager(mgr);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("fleet_perf_selected_portfolio", mgr);
+    }
+  };
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -316,6 +355,9 @@ export default function FleetPerformanceView() {
       if (data.drivers) {
         setDrivers(data.drivers);
         setSummary(data.summary);
+        if (data.portfolios) {
+          setPortfolios(data.portfolios);
+        }
         if (data.managers) {
           setAvailableManagers(data.managers);
         }
@@ -639,39 +681,269 @@ export default function FleetPerformanceView() {
         </div>
       )}
 
-      {/* Active Manager Sub-portfolio Banner */}
-      {selectedManager !== "ALL" && (
-        <div className="bg-gradient-to-r from-navy via-[#1b3453] to-[#0d1e38] text-white p-4 rounded-2xl border border-gold/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gold/20 text-gold rounded-xl border border-gold/30 shrink-0">
-              <Car className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-3xs font-black uppercase text-gold tracking-wide bg-gold/10 px-2 py-0.5 rounded-md border border-gold/20">
-                  Portefeuille Dédié
+      {/* ─── DEDICATED PORTFOLIO SWITCHER (AZIZ VS MEHDI VS GLOBAL) ─── */}
+      <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-gray-100 shadow-xs space-y-3.5 animate-fadeIn">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <span className="text-3xs font-black uppercase text-gold tracking-wider bg-gold/10 px-2 py-0.5 rounded-md border border-gold/20">
+              Ségrégation des Portefeuilles de Recouvrement
+            </span>
+            <h2 className="text-sm sm:text-base font-extrabold text-navy mt-1 flex items-center gap-2">
+              <span>👤 Portefeuilles Gestionnaires Dédiés</span>
+              <span className="text-xs font-semibold text-gray-500">
+                (Séparez la performance de Mohamed Aziz et de Mehdi Elyattouti)
+              </span>
+            </h2>
+          </div>
+
+          {/* Portfolio Quick Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-2xs font-bold text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-xl">
+              🚗 Flotte Totale : <strong className="text-navy">100 Véhicules</strong>
+            </span>
+            <span className="text-2xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
+              👨‍✈️ Chauffeurs Portefeuille : <strong className="text-emerald-900">{summary?.totalDrivers || filteredDrivers.length}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* The 3 Main Portfolio Selector Tabs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3.5 pt-1">
+          {/* Tab 1: Mohamed Aziz */}
+          <button
+            type="button"
+            onClick={() => handleSelectManager("Mohamed Aziz")}
+            className={`p-4 rounded-2xl text-left border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between gap-2.5 ${
+              selectedManager.toLowerCase().includes("aziz")
+                ? "bg-gradient-to-br from-navy via-[#1b3453] to-[#0d1e38] text-white border-gold/60 shadow-md ring-2 ring-gold/40"
+                : "bg-gray-50 hover:bg-gray-100/90 text-gray-700 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className={`p-2 rounded-xl text-sm ${
+                  selectedManager.toLowerCase().includes("aziz")
+                    ? "bg-gold/20 text-gold border border-gold/30"
+                    : "bg-white text-navy border border-gray-200 shadow-2xs"
+                }`}>
+                  👤
                 </span>
-                <span className="text-sm font-extrabold text-white">
-                  {selectedManager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : selectedManager}
-                </span>
-                <span className="text-2xs bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-0.5 rounded-full font-bold">
-                  {summary?.totalDrivers || filteredDrivers.length} Véhicules & Chauffeurs
-                </span>
+                <div>
+                  <h3 className="font-extrabold text-sm tracking-tight leading-tight flex items-center gap-1.5">
+                    <span>Mohamed Aziz</span>
+                    {selectedManager.toLowerCase().includes("aziz") && (
+                      <span className="text-3xs bg-gold text-navy font-black px-1.5 py-0.2 rounded">ACTIF</span>
+                    )}
+                  </h3>
+                  <p className={`text-[11px] ${selectedManager.toLowerCase().includes("aziz") ? "text-gold/90 font-medium" : "text-gray-500"}`}>
+                    Fleet Performance Manager
+                  </p>
+                </div>
               </div>
-              <p className="text-2xs text-white/70 mt-1">
-                Suivi personnalisé de la collecte de cash, des impayés et des alertes 3e jour assignés à ce gestionnaire.
+              <span className={`text-2xs font-black px-2.5 py-1 rounded-full border ${
+                selectedManager.toLowerCase().includes("aziz")
+                  ? "bg-gold text-navy border-gold font-black shadow-xs"
+                  : "bg-white text-navy border-gray-200"
+              }`}>
+                68 Véhicules
+              </span>
+            </div>
+
+            <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-2xs">
+              <span className={selectedManager.toLowerCase().includes("aziz") ? "text-white/80" : "text-gray-500"}>
+                {portfolios?.aziz?.driverCount ?? 59} Chauffeurs actifs (transférés Hamza inclus)
+              </span>
+              <span className={`font-mono font-bold ${selectedManager.toLowerCase().includes("aziz") ? "text-emerald-300 font-black" : "text-emerald-700"}`}>
+                {portfolios?.aziz?.clearedMAD !== undefined ? `${portfolios.aziz.clearedMAD.toLocaleString()} MAD` : ""}
+              </span>
+            </div>
+
+            {selectedManager.toLowerCase().includes("aziz") && (
+              <div className="absolute top-0 right-0 w-1.5 h-full bg-gold" />
+            )}
+          </button>
+
+          {/* Tab 2: Mehdi Elyattouti */}
+          <button
+            type="button"
+            onClick={() => handleSelectManager("mehdi elyattouti")}
+            className={`p-4 rounded-2xl text-left border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between gap-2.5 ${
+              selectedManager.toLowerCase().includes("mehdi")
+                ? "bg-gradient-to-br from-navy via-[#1b3453] to-[#0d1e38] text-white border-gold/60 shadow-md ring-2 ring-gold/40"
+                : "bg-gray-50 hover:bg-gray-100/90 text-gray-700 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className={`p-2 rounded-xl text-sm ${
+                  selectedManager.toLowerCase().includes("mehdi")
+                    ? "bg-gold/20 text-gold border border-gold/30"
+                    : "bg-white text-navy border border-gray-200 shadow-2xs"
+                }`}>
+                  👤
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-sm tracking-tight leading-tight flex items-center gap-1.5">
+                    <span>Mehdi Elyattouti</span>
+                    {selectedManager.toLowerCase().includes("mehdi") && (
+                      <span className="text-3xs bg-gold text-navy font-black px-1.5 py-0.2 rounded">ACTIF</span>
+                    )}
+                  </h3>
+                  <p className={`text-[11px] ${selectedManager.toLowerCase().includes("mehdi") ? "text-gold/90 font-medium" : "text-gray-500"}`}>
+                    Fleet Performance Manager
+                  </p>
+                </div>
+              </div>
+              <span className={`text-2xs font-black px-2.5 py-1 rounded-full border ${
+                selectedManager.toLowerCase().includes("mehdi")
+                  ? "bg-gold text-navy border-gold font-black shadow-xs"
+                  : "bg-white text-navy border-gray-200"
+              }`}>
+                26 Véhicules
+              </span>
+            </div>
+
+            <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-2xs">
+              <span className={selectedManager.toLowerCase().includes("mehdi") ? "text-white/80" : "text-gray-500"}>
+                {portfolios?.mehdi?.driverCount ?? 26} Chauffeurs actifs sous gestion
+              </span>
+              <span className={`font-mono font-bold ${selectedManager.toLowerCase().includes("mehdi") ? "text-emerald-300 font-black" : "text-emerald-700"}`}>
+                {portfolios?.mehdi?.clearedMAD !== undefined ? `${portfolios.mehdi.clearedMAD.toLocaleString()} MAD` : ""}
+              </span>
+            </div>
+
+            {selectedManager.toLowerCase().includes("mehdi") && (
+              <div className="absolute top-0 right-0 w-1.5 h-full bg-gold" />
+            )}
+          </button>
+
+          {/* Tab 3: Global / All */}
+          <button
+            type="button"
+            onClick={() => handleSelectManager("ALL")}
+            className={`p-4 rounded-2xl text-left border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between gap-2.5 ${
+              selectedManager === "ALL"
+                ? "bg-gradient-to-br from-navy via-[#1b3453] to-[#0d1e38] text-white border-gold/60 shadow-md ring-2 ring-gold/40"
+                : "bg-gray-50 hover:bg-gray-100/90 text-gray-700 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className={`p-2 rounded-xl text-sm ${
+                  selectedManager === "ALL"
+                    ? "bg-gold/20 text-gold border border-gold/30"
+                    : "bg-white text-navy border border-gray-200 shadow-2xs"
+                }`}>
+                  🌐
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-sm tracking-tight leading-tight flex items-center gap-1.5">
+                    <span>Flotte Complète</span>
+                    {selectedManager === "ALL" && (
+                      <span className="text-3xs bg-gold text-navy font-black px-1.5 py-0.2 rounded">ACTIF</span>
+                    )}
+                  </h3>
+                  <p className={`text-[11px] ${selectedManager === "ALL" ? "text-gold/90 font-medium" : "text-gray-500"}`}>
+                    Vue Agrégée Direction
+                  </p>
+                </div>
+              </div>
+              <span className={`text-2xs font-black px-2.5 py-1 rounded-full border ${
+                selectedManager === "ALL"
+                  ? "bg-gold text-navy border-gold font-black shadow-xs"
+                  : "bg-white text-navy border-gray-200"
+              }`}>
+                100 Véhicules
+              </span>
+            </div>
+
+            <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-2xs">
+              <span className={selectedManager === "ALL" ? "text-white/80" : "text-gray-500"}>
+                Aziz (68) + Mehdi (26) + Dispo (6)
+              </span>
+              <span className={`font-mono font-bold ${selectedManager === "ALL" ? "text-emerald-300 font-black" : "text-emerald-700"}`}>
+                Total Pool
+              </span>
+            </div>
+
+            {selectedManager === "ALL" && (
+              <div className="absolute top-0 right-0 w-1.5 h-full bg-gold" />
+            )}
+          </button>
+        </div>
+
+        {/* Contextual Status Banner */}
+        <div className={`p-3.5 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          selectedManager.toLowerCase().includes("aziz")
+            ? "bg-blue-50/80 border-blue-200 text-blue-950"
+            : selectedManager.toLowerCase().includes("mehdi")
+            ? "bg-emerald-50/80 border-emerald-200 text-emerald-950"
+            : "bg-amber-50/80 border-amber-200 text-amber-950"
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className="text-xl shrink-0">
+              {selectedManager.toLowerCase().includes("aziz") ? "👤" : selectedManager.toLowerCase().includes("mehdi") ? "👤" : "🌐"}
+            </span>
+            <div>
+              <p className="font-black text-xs sm:text-sm">
+                {selectedManager.toLowerCase().includes("aziz") && (
+                  <>Portefeuille Actif : Mohamed Aziz (68 Véhicules — inclut les 2 véhicules transférés de Hamza Rassid).</>
+                )}
+                {selectedManager.toLowerCase().includes("mehdi") && (
+                  <>Portefeuille Actif : Mehdi Elyattouti (26 Véhicules sous gestion directe).</>
+                )}
+                {selectedManager === "ALL" && (
+                  <>Vue Globale Flotte (100 Véhicules) — Cliquez sur Mohamed Aziz ou Mehdi Elyattouti ci-dessus pour isoler leur performance.</>
+                )}
+              </p>
+              <p className="text-2xs opacity-80 mt-0.5">
+                {selectedManager.toLowerCase().includes("aziz") && "Les KPIs (Cible 50%-60%, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mohamed Aziz."}
+                {selectedManager.toLowerCase().includes("mehdi") && "Les KPIs (Cible 50%-60%, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mehdi Elyattouti."}
+                {selectedManager === "ALL" && "Les indicateurs ci-dessous agrègent l'ensemble des encaissements de tous les gestionnaires réunis."}
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setSelectedManager("ALL")}
-            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-start sm:self-auto"
-          >
-            <span>Voir Flotte Globale</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {selectedManager.toLowerCase().includes("aziz") ? (
+              <button
+                type="button"
+                onClick={() => handleSelectManager("mehdi elyattouti")}
+                className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-2xs rounded-xl border border-emerald-300 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              >
+                <span>Basculer vers Mehdi (26)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : selectedManager.toLowerCase().includes("mehdi") ? (
+              <button
+                type="button"
+                onClick={() => handleSelectManager("Mohamed Aziz")}
+                className="px-3 py-1.5 bg-white hover:bg-blue-50 text-blue-800 font-black text-2xs rounded-xl border border-blue-300 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              >
+                <span>Basculer vers Aziz (68)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectManager("Mohamed Aziz")}
+                  className="px-3 py-1.5 bg-white hover:bg-blue-50 text-navy font-black text-2xs rounded-xl border border-gray-300 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Voir Aziz (68)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectManager("mehdi elyattouti")}
+                  className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-navy font-black text-2xs rounded-xl border border-gray-300 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Voir Mehdi (26)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* KPI Summary Cards Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -679,7 +951,13 @@ export default function FleetPerformanceView() {
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-2xs font-bold text-gray-500 uppercase">
-              {isRangeMode ? `Cible Période (${daysCount}j)` : "Cible Matinale (100% CSV)"}
+              {isRangeMode
+                ? `Cible Période (${daysCount}j)`
+                : selectedManager.toLowerCase().includes("aziz")
+                ? "Cible Matinale (Mohamed Aziz)"
+                : selectedManager.toLowerCase().includes("mehdi")
+                ? "Cible Matinale (Mehdi Elyattouti)"
+                : "Cible Matinale (100% Flotte)"}
             </span>
             <span
               className={`text-3xs font-black px-2 py-0.5 rounded-full ${
@@ -728,7 +1006,13 @@ export default function FleetPerformanceView() {
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-2xs font-bold text-gray-500 uppercase">
-                  {isRangeMode ? `Encaissé Période (${daysCount}j)` : "Encaissé Aujourd'hui"}
+                  {isRangeMode
+                    ? `Encaissé Période (${daysCount}j)`
+                    : selectedManager.toLowerCase().includes("aziz")
+                    ? "Encaissé Aujourd'hui (Mohamed Aziz)"
+                    : selectedManager.toLowerCase().includes("mehdi")
+                    ? "Encaissé Aujourd'hui (Mehdi Elyattouti)"
+                    : "Encaissé Aujourd'hui (Flotte)"}
                 </span>
                 <span
                   className={`text-3xs font-black px-2 py-0.5 rounded-full ${
@@ -793,7 +1077,13 @@ export default function FleetPerformanceView() {
         {/* Remaining to collect (Negative balance remaining) */}
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-gray-500 uppercase">Reste à Encaisser</span>
+            <span className="text-2xs font-bold text-gray-500 uppercase">
+              {selectedManager.toLowerCase().includes("aziz")
+                ? "Reste à Encaisser (Aziz)"
+                : selectedManager.toLowerCase().includes("mehdi")
+                ? "Reste à Encaisser (Mehdi)"
+                : "Reste à Encaisser (Flotte)"}
+            </span>
             {!summary?.hasMorningCsv && !isRangeMode && (
               <span className="text-3xs font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                 En attente CSV
@@ -814,7 +1104,7 @@ export default function FleetPerformanceView() {
             {isRangeMode
               ? `Sur la période : ${daysCount} jours sélectionné(s)`
               : summary?.hasMorningCsv
-              ? `Cumul total impayés flotte : ${(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD`
+              ? `Cumul total impayés : ${(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD`
               : "En attente de l'import CSV du matin"}
           </p>
         </div>
@@ -844,7 +1134,11 @@ export default function FleetPerformanceView() {
                   summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-600" : "text-gray-400"
                 }`}
               />
-              Alerte Rouge (3e Jour)
+              {selectedManager.toLowerCase().includes("aziz")
+                ? "Alerte Rouge (Aziz)"
+                : selectedManager.toLowerCase().includes("mehdi")
+                ? "Alerte Rouge (Mehdi)"
+                : "Alerte Rouge (3e Jour)"}
             </span>
             <span
               className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
@@ -985,12 +1279,12 @@ export default function FleetPerformanceView() {
             </span>
             <select
               value={selectedManager}
-              onChange={(e) => setSelectedManager(e.target.value)}
+              onChange={(e) => handleSelectManager(e.target.value)}
               className="bg-transparent text-navy text-xs font-black focus:outline-none cursor-pointer"
             >
-              <option value="ALL">🌐 Tous les gestionnaires ({drivers.length})</option>
+              <option value="Mohamed Aziz">👤 Mohamed Aziz (68)</option>
               <option value="mehdi elyattouti">👤 Mehdi Elyattouti (26)</option>
-              <option value="Mohamed Aziz">👤 Mohamed Aziz (66)</option>
+              <option value="ALL">🌐 Tous les gestionnaires (100)</option>
               {availableManagers
                 .filter(
                   (m) =>
@@ -999,7 +1293,7 @@ export default function FleetPerformanceView() {
                 )
                 .map((m) => (
                   <option key={m.name} value={m.name}>
-                    👤 {m.name} ({m.count})
+                    👤 {m.name} ({m.vehicleCount || m.count})
                   </option>
                 ))}
             </select>
@@ -1014,7 +1308,7 @@ export default function FleetPerformanceView() {
               filterType === "ALL" ? "bg-navy text-white shadow-2xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
-            Tous ({drivers.length})
+            Tous ({filteredDrivers.length})
           </button>
           <button
             onClick={() => setFilterType("RED")}
@@ -1057,6 +1351,30 @@ export default function FleetPerformanceView() {
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
+      </div>
+
+      {/* Table Section Header with Portfolio Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-gold shrink-0" />
+          <h2 className="text-sm font-extrabold text-navy">
+            {selectedManager.toLowerCase().includes("aziz")
+              ? "📋 Liste des Chauffeurs & Véhicules — Portefeuille Mohamed Aziz"
+              : selectedManager.toLowerCase().includes("mehdi")
+              ? "📋 Liste des Chauffeurs & Véhicules — Portefeuille Mehdi Elyattouti"
+              : "📋 Liste des Chauffeurs & Véhicules — Flotte Complète (Vue Agrégée)"}
+          </h2>
+          <span className="text-2xs font-black text-navy bg-navy/10 px-2 py-0.5 rounded-full">
+            {filteredDrivers.length} {filteredDrivers.length === 1 ? "chauffeur" : "chauffeurs"}
+          </span>
+        </div>
+        <p className="text-2xs text-gray-500">
+          {selectedManager.toLowerCase().includes("aziz")
+            ? "Affichage des 68 véhicules d'Aziz (dont 2 transférés de Hamza Rassid)"
+            : selectedManager.toLowerCase().includes("mehdi")
+            ? "Affichage des 26 véhicules de Mehdi sous gestion directe"
+            : "Affichage global de tous les chauffeurs de la flotte"}
+        </p>
       </div>
 
       {/* Driver Daily Collections Table */}

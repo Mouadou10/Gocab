@@ -280,17 +280,37 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Count total vehicles per manager from all active vehicles
+    let azizVehiclesCount = 0;
+    let mehdiVehiclesCount = 0;
+    for (const v of allVehicles) {
+      const mgr = (v.assigned_collector || v.assigned_supervisor || "").toLowerCase();
+      if (mgr.includes("mehdi")) mehdiVehiclesCount++;
+      else if (mgr.includes("aziz")) azizVehiclesCount++;
+    }
+
     // Collect all managers present in active driver list
-    const managerCounts = new Map<string, { name: string; count: number; arrears: number }>();
+    const managerCounts = new Map<string, { name: string; count: number; vehicleCount: number; arrears: number }>();
     for (const d of driverList) {
       if (d.manager) {
         const rawM = d.manager.trim();
         const key = rawM.toLowerCase();
-        const formattedName = rawM
-          .split(" ")
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(" ");
-        const curr = managerCounts.get(key) || { name: formattedName, count: 0, arrears: 0 };
+        const isAziz = key.includes("aziz");
+        const isMehdi = key.includes("mehdi");
+        const formattedName = isMehdi
+          ? "Mehdi Elyattouti"
+          : isAziz
+          ? "Mohamed Aziz"
+          : rawM
+              .split(" ")
+              .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+              .join(" ");
+        const curr = managerCounts.get(key) || {
+          name: formattedName,
+          count: 0,
+          vehicleCount: isAziz ? azizVehiclesCount : isMehdi ? mehdiVehiclesCount : 0,
+          arrears: 0,
+        };
         curr.count += 1;
         curr.arrears += d.currentArrearsMAD || 0;
         managerCounts.set(key, curr);
@@ -307,6 +327,44 @@ export async function GET(request: NextRequest) {
         d.manager ? d.manager.toLowerCase().includes(targetM) || targetM.includes(d.manager.toLowerCase()) : false
       );
     }
+
+    // Calculate individual portfolio stats for Aziz and Mehdi
+    const azizDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("aziz"));
+    const mehdiDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi"));
+
+    const calcPortfolioMetrics = (subset: typeof driverList, totalVehicles: number) => {
+      let mDebt = 0;
+      let expMAD = 0;
+      let clrMAD = 0;
+      let arrMAD = 0;
+      let redCount = 0;
+      for (const d of subset) {
+        const morningD = d.morningBalance !== null && d.morningBalance !== undefined ? Math.abs(Math.min(0, d.morningBalance)) : 0;
+        mDebt += morningD;
+        expMAD += d.expectedTodayMAD || 0;
+        clrMAD += d.clearedTodayMAD || 0;
+        arrMAD += d.currentArrearsMAD || 0;
+        if (d.isCriticalRed) redCount++;
+      }
+      const effTarget = hasMorningCsv && mDebt > 0 ? mDebt : expMAD;
+      return {
+        vehicleCount: totalVehicles,
+        driverCount: subset.length,
+        targetMAD: effTarget,
+        clearedMAD: clrMAD,
+        remainingMAD: Math.max(0, effTarget - clrMAD),
+        target50PercentMAD: Math.round(effTarget * 0.5),
+        target60PercentMAD: Math.round(effTarget * 0.6),
+        arrearsMAD: arrMAD,
+        criticalRedCount: redCount,
+        collectionPercentage: effTarget > 0 ? (clrMAD / effTarget) * 100 : 0,
+      };
+    };
+
+    const portfolios = {
+      aziz: calcPortfolioMetrics(azizDrivers, azizVehiclesCount),
+      mehdi: calcPortfolioMetrics(mehdiDrivers, mehdiVehiclesCount),
+    };
 
     // Calculate metrics for target set (filtered or global)
     let subMorningTargetMAD = 0;
@@ -343,6 +401,7 @@ export async function GET(request: NextRequest) {
       hasMorningCsv,
       hasEveningCsv,
       managers,
+      portfolios,
       selectedManager: managerParam || "ALL",
       summary: {
         totalDrivers: targetDriverSet.length,

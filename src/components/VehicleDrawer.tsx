@@ -620,9 +620,8 @@ export default function VehicleDrawer({
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
                 >
                   <option value="">-- Non assigné --</option>
-                  <option value="mehdi elyattouti">Mehdi Elyattouti</option>
-                  <option value="Mohamed Aziz">Mohamed Aziz</option>
-                  <option value="HAMZA RASSID">Hamza Rassid</option>
+                  <option value="Mohamed Aziz">Mohamed Aziz (68 Véhicules)</option>
+                  <option value="mehdi elyattouti">Mehdi Elyattouti (26 Véhicules)</option>
                   <option value="Salma Abouri">Salma Abouri</option>
                 </select>
               </div>

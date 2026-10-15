@@ -825,10 +825,9 @@ export default function FleetView() {
               onChange={(e) => setSelectedManager(e.target.value)}
               className="border border-slate-200/90 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-slate-50 font-medium text-slate-700 cursor-pointer"
             >
-              <option value="">Tous les gestionnaires</option>
+              <option value="">Tous les gestionnaires (100)</option>
+              <option value="aziz">👤 Mohamed Aziz (68)</option>
               <option value="mehdi">👤 Mehdi Elyattouti (26)</option>
-              <option value="aziz">👤 Mohamed Aziz (66)</option>
-              <option value="hamza">👤 Hamza Rassid (2)</option>
             </select>
 
             {hasActiveFilters && (
