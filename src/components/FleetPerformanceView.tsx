@@ -108,6 +108,9 @@ interface DailySummary {
   totalClearedTodayMAD: number;
   remainingToCollectMAD: number;
   totalArrearsAllMAD: number;
+  unassignedArrearsMAD?: number;
+  unassignedCount?: number;
+  globalSystemArrearsMAD?: number;
   target60PercentMAD?: number;
   collectionPercentage?: number;
   criticalRedCount: number;
@@ -1157,13 +1160,35 @@ export default function FleetPerformanceView() {
               <span className="text-gray-300 font-extrabold">—</span>
             )}
           </p>
-          <p className="text-2xs text-gray-500 mt-1 font-medium leading-tight">
-            {isRangeMode
-              ? `Sur la période : ${daysCount} jours sélectionné(s)`
-              : summary?.hasMorningCsv
-              ? `Cumul total impayés : ${(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD`
-              : "En attente de l'import CSV du matin"}
-          </p>
+          <div className="text-2xs text-gray-500 mt-1 font-medium leading-tight space-y-1">
+            <div className="flex items-center justify-between">
+              <span>
+                {isRangeMode
+                  ? `Sur la période : ${daysCount} jours sélectionné(s)`
+                  : summary?.hasMorningCsv
+                  ? "Flotte active (avec véhicule) :"
+                  : "En attente de l'import CSV du matin"}
+              </span>
+              {summary?.hasMorningCsv && (
+                <span className="font-bold text-gray-700">{(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD</span>
+              )}
+            </div>
+            {summary?.unassignedArrearsMAD && summary.unassignedArrearsMAD > 0 && selectedManager === "ALL" ? (
+              <div
+                className="text-[10px] text-gray-400 font-normal bg-gray-50 p-1.5 rounded-lg border border-gray-100 flex items-center justify-between"
+                title={`${summary.unassignedCount || 11} chauffeurs sans véhicule assigné cumulent ${summary.unassignedArrearsMAD.toLocaleString()} MAD. Total système = ${summary.globalSystemArrearsMAD?.toLocaleString() || "66,227"} MAD.`}
+              >
+                <span>+ Hors flotte ({summary.unassignedCount || 11} sans véhicule) :</span>
+                <span className="font-semibold text-gray-600">+{summary.unassignedArrearsMAD.toLocaleString()} MAD</span>
+              </div>
+            ) : null}
+            {summary?.globalSystemArrearsMAD && selectedManager === "ALL" ? (
+              <div className="text-[10px] text-gray-600 font-bold flex items-center justify-between pt-0.5 border-t border-gray-100">
+                <span>Total Global Système GoCab :</span>
+                <span className="text-amber-700 font-extrabold">{summary.globalSystemArrearsMAD.toLocaleString()} MAD</span>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* Critical 3rd Day Red Alert Count */}

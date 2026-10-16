@@ -413,6 +413,16 @@ export async function GET(request: NextRequest) {
     const collectionPercentage =
       effectiveTargetMAD > 0 ? (subClearedTodayMAD / effectiveTargetMAD) * 100 : 0;
 
+    // Aggregation of unassigned drivers debt for complete cross-system transparency
+    const unassignedDebtAgg = await prisma.driverProfile.aggregate({
+      where: { assignedVehicleId: null },
+      _sum: { currentArrearsMAD: true },
+      _count: { id: true },
+    });
+    const unassignedArrearsMAD = unassignedDebtAgg._sum.currentArrearsMAD || 0;
+    const unassignedCount = unassignedDebtAgg._count.id || 0;
+    const globalSystemArrearsMAD = subArrearsAllMAD + unassignedArrearsMAD;
+
     return NextResponse.json({
       date: startDateStr,
       startDate: startDateStr,
@@ -432,6 +442,9 @@ export async function GET(request: NextRequest) {
         totalClearedTodayMAD: subClearedTodayMAD,
         remainingToCollectMAD,
         totalArrearsAllMAD: subArrearsAllMAD,
+        unassignedArrearsMAD,
+        unassignedCount,
+        globalSystemArrearsMAD,
         target60PercentMAD,
         collectionPercentage,
         criticalRedCount: subCriticalRedCount,
