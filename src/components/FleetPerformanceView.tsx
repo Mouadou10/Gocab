@@ -37,12 +37,15 @@ import {
   Send,
   Zap,
   FileSpreadsheet,
+  FileText,
+  History,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useLanguage } from "@/context/LanguageContext";
 import BalanceReconciliationModal from "./BalanceReconciliationModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
+import DriverDailyCommentModal, { DriverCommentItem } from "./DriverDailyCommentModal";
 
 interface DriverDailyItem {
   id: string;
@@ -71,6 +74,11 @@ interface DriverDailyItem {
   calculatedDelta?: number | null;
   paymentNote: string | null;
   paymentLedgerId: string | null;
+  todayComment?: string | null;
+  todayCommentAuthor?: string | null;
+  todayCommentDate?: string | null;
+  commentsCount?: number;
+  comments?: DriverCommentItem[];
 }
 
 interface ManagerInfo {
@@ -182,6 +190,7 @@ export default function FleetPerformanceView() {
   const { data: session } = useSession() || {};
   const currentUserName = session?.user?.name || "Fleet Performance Manager";
   const currentUserEmail = session?.user?.email || "";
+  const currentUserRole = (session?.user as any)?.role || "FLEET_PERF_MANAGER";
 
   // Manager filter state - Defaults to Mohamed Aziz to separate portfolios by default (or user preference)
   const [selectedManager, setSelectedManager] = useState<string>(() => {
@@ -231,6 +240,54 @@ export default function FleetPerformanceView() {
   const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [whatsappSupportChats, setWhatsappSupportChats] = useState<any[]>([]);
+
+  // Driver Daily Comment & History Modal State
+  const [commentDriver, setCommentDriver] = useState<DriverDailyItem | null>(null);
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+
+  const handleCommentSaved = (driverId: string, newComment: DriverCommentItem) => {
+    setDrivers((prev) =>
+      prev.map((d) => {
+        if (d.id !== driverId) return d;
+        const updatedComments = [newComment, ...(d.comments || []).filter((c) => c.id !== newComment.id)];
+        const targetDateKey = endDate || startDate;
+        const isToday = (newComment.commentDate || newComment.createdAt.split("T")[0]) === targetDateKey;
+        return {
+          ...d,
+          comments: updatedComments,
+          commentsCount: updatedComments.length,
+          ...(isToday
+            ? {
+                todayComment: newComment.content,
+                todayCommentAuthor: newComment.authorName,
+                todayCommentDate: newComment.commentDate,
+              }
+            : {}),
+        };
+      })
+    );
+  };
+
+  const handleCommentDeleted = (driverId: string, commentId: string) => {
+    setDrivers((prev) =>
+      prev.map((d) => {
+        if (d.id !== driverId) return d;
+        const updatedComments = (d.comments || []).filter((c) => c.id !== commentId);
+        const targetDateKey = endDate || startDate;
+        const remainingToday = updatedComments.filter(
+          (c) => (c.commentDate || c.createdAt.split("T")[0]) === targetDateKey
+        );
+        return {
+          ...d,
+          comments: updatedComments,
+          commentsCount: updatedComments.length,
+          todayComment: remainingToday[0]?.content || null,
+          todayCommentAuthor: remainingToday[0]?.authorName || null,
+          todayCommentDate: remainingToday[0]?.commentDate || null,
+        };
+      })
+    );
+  };
 
   // Fetch active WhatsApp conversations routed to Fleet Performance Support via Immatriculation
   const fetchWhatsAppSupportChats = useCallback(async () => {
@@ -1435,6 +1492,53 @@ export default function FleetPerformanceView() {
                             <Phone className="w-3 h-3 text-gray-400" />
                             {driver.phoneSanitized} · CIN: {driver.cinNumber}
                           </p>
+
+                          {/* Today's observation / note pill directly visible in row */}
+                          {driver.todayComment ? (
+                            <div
+                              onClick={() => {
+                                setCommentDriver(driver);
+                                setIsCommentModalOpen(true);
+                              }}
+                              className="mt-1 p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 rounded-xl text-3xs font-medium cursor-pointer transition-all flex items-start gap-1 max-w-xs shadow-2xs group"
+                              title="Cliquez pour voir tout l'historique ou modifier cette note"
+                            >
+                              <span className="shrink-0 text-amber-700 font-bold">💬 Note du {endDate} :</span>
+                              <span className="truncate group-hover:underline italic font-semibold text-amber-900">
+                                &ldquo;{driver.todayComment}&rdquo;
+                              </span>
+                              {driver.todayCommentAuthor && (
+                                <span className="shrink-0 text-[9px] text-amber-700/80 ml-auto font-bold font-mono">
+                                  ({driver.todayCommentAuthor})
+                                </span>
+                              )}
+                            </div>
+                          ) : (driver.commentsCount || 0) > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCommentDriver(driver);
+                                setIsCommentModalOpen(true);
+                              }}
+                              className="mt-1 px-2 py-0.5 bg-blue-50/80 hover:bg-blue-100 text-navy border border-blue-200 rounded-lg text-3xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+                              title="Voir les notes antérieures dans l'historique"
+                            >
+                              <History className="w-2.5 h-2.5 text-navy" />
+                              <span>Historique : {driver.commentsCount} note(s) passée(s)</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCommentDriver(driver);
+                                setIsCommentModalOpen(true);
+                              }}
+                              className="mt-0.5 text-3xs text-gray-400 hover:text-navy flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity cursor-pointer font-medium"
+                              title="Ajouter une observation pour ce chauffeur"
+                            >
+                              <span>+ Ajouter note</span>
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -1674,54 +1778,98 @@ export default function FleetPerformanceView() {
                                     const contractText = driver.contractType === "WEEKLY" ? "hebdomadaire (1,800 MAD/lundi)" : "journalier (300 MAD/jour)";
                                     const defaultMsg = `Bonjour ${driver.fullName},\n\nNous vous contactons concernant votre versement GoCab (${contractText}).\nVotre solde d'impayé actuel est de : ${amountDue} MAD.\nMerci de procéder au règlement pour éviter tout blocage du véhicule (${driver.vehicle?.plate_number || ""}).\n\nL'équipe GoCab Operations.`;
                                     setDirectWhatsAppTarget({
-                                      phoneNumber: driver.phoneSanitized,
-                                      contactName: driver.fullName,
-                                      contactType: "DRIVER",
-                                      plateNumber: driver.vehicle?.plate_number,
-                                      arrearsMAD: driver.currentArrearsMAD,
-                                      unpaidDays: driver.consecutiveUnpaidDays,
-                                      defaultMessage: defaultMsg,
-                                    });
-                                    setIsWhatsAppModalOpen(true);
-                                  }}
-                                  className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors cursor-pointer"
-                                  title="Envoyer un WhatsApp direct depuis le CRM"
-                                >
-                                  <MessageSquare className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {/* Driver Balance CSV Import & Reconciliation Modal */}
-      <BalanceReconciliationModal
-        isOpen={isBalanceModalOpen}
-        onClose={() => setIsBalanceModalOpen(false)}
-        selectedDate={endDate}
-        onSuccess={fetchDriverCollections}
-      />
+                                       phoneNumber: driver.phoneSanitized,
+                                       contactName: driver.fullName,
+                                       contactType: "DRIVER",
+                                       plateNumber: driver.vehicle?.plate_number,
+                                       arrearsMAD: driver.currentArrearsMAD,
+                                       unpaidDays: driver.consecutiveUnpaidDays,
+                                       defaultMessage: defaultMsg,
+                                     });
+                                     setIsWhatsAppModalOpen(true);
+                                   }}
+                                   className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors cursor-pointer"
+                                   title="Envoyer un WhatsApp direct depuis le CRM"
+                                 >
+                                   <MessageSquare className="w-3.5 h-3.5" />
+                                 </button>
+                               </div>
 
-      {/* Direct WhatsApp Sending Modal */}
-      <WhatsAppDirectModal
-        isOpen={isWhatsAppModalOpen}
-        onClose={() => setIsWhatsAppModalOpen(false)}
-        target={directWhatsAppTarget}
-        onOpenFullChat={(phone) => {
-          try {
-            localStorage.setItem("gocab_target_whatsapp_phone", phone);
-          } catch (e) {}
-          window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
-        }}
-      />
-    </div>
+                               {/* Observation / Comment & History Button */}
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   setCommentDriver(driver);
+                                   setIsCommentModalOpen(true);
+                                 }}
+                                 className={`w-full max-w-[130px] px-2 py-1 rounded-xl text-3xs font-black transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer border ${
+                                   driver.todayComment
+                                     ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300 ring-1 ring-amber-400 font-extrabold"
+                                     : (driver.commentsCount || 0) > 0
+                                     ? "bg-blue-50 hover:bg-blue-100 text-navy border-blue-200 font-bold"
+                                     : "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200"
+                                 }`}
+                                 title={
+                                   driver.todayComment
+                                     ? `Note du ${endDate}: "${driver.todayComment}" - Cliquez pour voir ou modifier`
+                                     : (driver.commentsCount || 0) > 0
+                                     ? `${driver.commentsCount} note(s) dans l'historique - Cliquez pour voir`
+                                     : "Écrire une observation / commentaire pour ce chauffeur"
+                                 }
+                               >
+                                 <FileText className={`w-3 h-3 ${driver.todayComment ? "text-amber-800" : "text-gray-500"}`} />
+                                 <span className="truncate">
+                                   {driver.todayComment
+                                     ? "💬 Note du jour"
+                                     : (driver.commentsCount || 0) > 0
+                                     ? `📜 Notes (${driver.commentsCount})`
+                                     : "+ Commentaire"}
+                                 </span>
+                               </button>
+                             </div>
+                           );
+                         })()}
+                       </td>
+                     </tr>
+                   );
+                 })
+               )}
+             </tbody>
+           </table>
+         </div>
+       </div>
+       {/* Driver Balance CSV Import & Reconciliation Modal */}
+       <BalanceReconciliationModal
+         isOpen={isBalanceModalOpen}
+         onClose={() => setIsBalanceModalOpen(false)}
+         selectedDate={endDate}
+         onSuccess={fetchDriverCollections}
+       />
+ 
+       {/* Direct WhatsApp Sending Modal */}
+       <WhatsAppDirectModal
+         isOpen={isWhatsAppModalOpen}
+         onClose={() => setIsWhatsAppModalOpen(false)}
+         target={directWhatsAppTarget}
+         onOpenFullChat={(phone) => {
+           try {
+             localStorage.setItem("gocab_target_whatsapp_phone", phone);
+           } catch (e) {}
+           window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
+         }}
+       />
+
+       {/* Driver Daily Comment & History Modal */}
+       <DriverDailyCommentModal
+         isOpen={isCommentModalOpen}
+         onClose={() => setIsCommentModalOpen(false)}
+         driver={commentDriver}
+         targetDate={endDate || startDate}
+         currentUserName={currentUserName}
+         currentUserRole={currentUserRole}
+         onCommentSaved={handleCommentSaved}
+         onCommentDeleted={handleCommentDeleted}
+       />
+     </div>
   );
 }

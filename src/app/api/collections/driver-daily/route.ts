@@ -70,6 +70,9 @@ export async function GET(request: NextRequest) {
             },
             orderBy: { paymentDate: "asc" },
           },
+          comments: {
+            orderBy: { createdAt: "desc" },
+          },
         },
         orderBy: { fullName: "asc" },
       }),
@@ -255,6 +258,20 @@ export async function GET(request: NextRequest) {
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
       const manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
 
+      // Comments for this driver (linked to specific date + full history)
+      const targetDateKey = endDateStr || startDateStr;
+      const driverComments = (driver.comments || []).map((c) => ({
+        id: c.id,
+        authorName: c.authorName,
+        authorRole: c.authorRole,
+        content: c.content,
+        commentDate: c.commentDate || c.createdAt.toISOString().split("T")[0],
+        createdAt: c.createdAt.toISOString(),
+      }));
+
+      const todayComments = driverComments.filter((c) => c.commentDate === targetDateKey);
+      const todayComment = todayComments[0] || null;
+
       driverList.push({
         id: driver.id,
         fullName: driver.fullName,
@@ -277,6 +294,11 @@ export async function GET(request: NextRequest) {
         calculatedDelta: driver.payments.length > 1 ? totalDelta : (firstPayment?.calculatedDelta ?? null),
         paymentNote: latestPayment?.notes || null,
         paymentLedgerId: latestPayment?.id || null,
+        todayComment: todayComment ? todayComment.content : null,
+        todayCommentAuthor: todayComment ? todayComment.authorName : null,
+        todayCommentDate: todayComment ? todayComment.commentDate : null,
+        commentsCount: driverComments.length,
+        comments: driverComments,
       });
     }
 

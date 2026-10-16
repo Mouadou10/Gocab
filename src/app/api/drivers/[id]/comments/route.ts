@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
 import { invalidateDriverCache } from "@/lib/driverCache";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/drivers/[id]/comments
- * Fetches all comments for a specific driver, ordered by creation date ascending.
+ * Fetches all comments for a specific driver, ordered by creation date descending.
+ * Optionally filters or highlights comments for a specific date (?date=YYYY-MM-DD).
  */
 export async function GET(
   request: NextRequest,
@@ -19,13 +21,28 @@ export async function GET(
       return authResult.error;
     }
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const dateParam = searchParams.get("date");
 
     const comments = await prisma.driverComment.findMany({
       where: { driverId: id },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ comments });
+    const formattedComments = comments.map((c) => ({
+      ...c,
+      commentDate: c.commentDate || c.createdAt.toISOString().split("T")[0],
+    }));
+
+    const dateComments = dateParam
+      ? formattedComments.filter((c) => c.commentDate === dateParam)
+      : [];
+
+    return NextResponse.json({
+      comments: formattedComments,
+      dateComments,
+      totalCount: formattedComments.length,
+    });
   } catch (error: any) {
     console.error("GET /api/drivers/[id]/comments error:", error);
     return NextResponse.json(
@@ -37,7 +54,7 @@ export async function GET(
 
 /**
  * POST /api/drivers/[id]/comments
- * Adds a team comment to a driver record.
+ * Adds a team comment to a driver record associated with a specific date.
  */
 export async function POST(
   request: NextRequest,
@@ -50,7 +67,7 @@ export async function POST(
     }
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const { content, authorName, authorRole } = body;
+    const { content, authorName, authorRole, commentDate, date } = body;
 
     if (!content || !String(content).trim()) {
       return NextResponse.json({ error: "Comment content is required" }, { status: 400 });
@@ -74,7 +91,9 @@ export async function POST(
     const effectiveAuthorRole =
       authorRole ||
       userObj?.role ||
-      "OPERATIONS";
+      "FLEET_MANAGER";
+
+    const targetDate = String(commentDate || date || new Date().toISOString().split("T")[0]).trim();
 
     const newComment = await prisma.driverComment.create({
       data: {
@@ -82,12 +101,20 @@ export async function POST(
         authorName: effectiveAuthorName,
         authorRole: effectiveAuthorRole,
         content: String(content).trim(),
+        commentDate: targetDate,
       },
     });
 
     invalidateDriverCache();
+    await touchSyncState("collections").catch(() => {});
 
-    return NextResponse.json({ success: true, comment: newComment });
+    return NextResponse.json({
+      success: true,
+      comment: {
+        ...newComment,
+        commentDate: targetDate,
+      },
+    });
   } catch (error: any) {
     console.error("POST /api/drivers/[id]/comments error:", error);
     return NextResponse.json(

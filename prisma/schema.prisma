@@ -302,10 +302,12 @@ model DriverComment {
   authorName  String
   authorRole  String?
   content     String
+  commentDate String?       // YYYY-MM-DD date this comment is associated with (e.g. 2026-10-16)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@index([driverId])
+  @@index([driverId, commentDate])
 }
 
 model SupportTicket {
