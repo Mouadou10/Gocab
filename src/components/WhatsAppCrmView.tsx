@@ -23,9 +23,14 @@ import {
   ShieldCheck,
   Copy,
   Info,
+  ExternalLink,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { GOCAB_WHATSAPP_TEMPLATES, formatDisplayPhone } from "@/lib/whatsapp";
+import {
+  GOCAB_WHATSAPP_TEMPLATES,
+  formatDisplayPhone,
+  normalizeWhatsAppPhone,
+} from "@/lib/whatsapp";
 
 interface DriverSummary {
   id: string;
@@ -122,6 +127,15 @@ export default function WhatsAppCrmView() {
 
   // Active selected conversation object
   const activeConversation = conversations.find((c) => c.id === selectedConvId) || null;
+
+  // 24-hour Meta Customer Service Window evaluation
+  const lastInboundMsg = [...messages].reverse().find((m) => m.direction === "INBOUND");
+  const is24hWindowOpen = lastInboundMsg
+    ? Date.now() - new Date(lastInboundMsg.created_at).getTime() < 24 * 60 * 60 * 1000
+    : false;
+  const hours24hRemaining = lastInboundMsg && is24hWindowOpen
+    ? Math.max(0, Math.floor((24 * 60 * 60 * 1000 - (Date.now() - new Date(lastInboundMsg.created_at).getTime())) / (1000 * 60 * 60)))
+    : 0;
 
   // Auto scroll chat to bottom
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
@@ -909,7 +923,7 @@ export default function WhatsAppCrmView() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-gray-500 font-mono mt-0.5">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 font-mono mt-0.5 flex-wrap">
                     <button
                       type="button"
                       onClick={() => {
@@ -927,6 +941,22 @@ export default function WhatsAppCrmView() {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       En ligne WhatsApp
                     </span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300" />
+                    {is24hWindowOpen ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        title="Fenêtre d'assistance Meta de 24h active : les messages libres via API sont autorisés."
+                      >
+                        🟢 Fenêtre 24h active (~{hours24hRemaining}h)
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300"
+                        title="Ce contact n'a pas écrit depuis plus de 24h. Meta bloque l'envoi direct par API sans modèle pré-approuvé (Code 131047). Utilisez WhatsApp Web pour lui écrire directement sans restriction."
+                      >
+                        🟠 Fenêtre 24h fermée (Meta API restreinte)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1108,25 +1138,49 @@ export default function WhatsAppCrmView() {
                               </span>
                             )}
                             {msg.status === "FAILED" && (
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span
-                                  className="text-red-700 font-semibold flex items-center gap-1 text-[9px] bg-red-100/90 border border-red-200 px-1.5 py-0.5 rounded-md"
-                                  title={msg.error_message || "Échec d'envoi"}
-                                >
-                                  <AlertTriangle className="w-3 h-3 text-red-600" /> Non distribué
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setInputMessage(msg.text);
-                                    textareaRef.current?.focus();
-                                    toast("Message rechargé dans la zone d'envoi", { icon: "✍️" });
-                                  }}
-                                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-black underline cursor-pointer"
-                                  title="Reprendre ce texte pour le renvoyer"
-                                >
-                                  Réessayer
-                                </button>
+                              <div className="mt-2 pt-2 border-t border-red-200/80 text-[10px] space-y-1.5 text-left">
+                                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                  <span
+                                    className="text-red-700 font-bold flex items-center gap-1 text-[10px] bg-red-100/90 border border-red-200 px-2 py-0.5 rounded-md"
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                    {msg.error_message?.includes("131047") || msg.error_message?.includes("24h")
+                                      ? "Non distribué (Fenêtre Meta 24h fermée)"
+                                      : "Non distribué"}
+                                  </span>
+
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}?text=${encodeURIComponent(msg.text)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-xs transition-all cursor-pointer text-[10px]"
+                                      title="Ouvrir instantanément sur WhatsApp Web ou application mobile pour envoyer sans blocage"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      <span>Envoyer via WhatsApp Web</span>
+                                    </a>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setInputMessage(msg.text);
+                                        textareaRef.current?.focus();
+                                        toast("Message rechargé dans la zone d'envoi", { icon: "✍️" });
+                                      }}
+                                      className="text-[10px] text-gray-500 hover:text-gray-800 font-semibold underline cursor-pointer"
+                                      title="Reprendre ce texte pour le renvoyer"
+                                    >
+                                      Recharger
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <p className="text-[10px] text-red-800/90 leading-relaxed font-normal bg-red-50/70 p-1.5 rounded-lg border border-red-200/50">
+                                  {msg.error_message?.includes("131047") || msg.error_message?.includes("24h")
+                                    ? "Ce contact ne vous a pas écrit durant les dernières 24h. Meta bloque l'envoi direct par API sans modèle pré-approuvé. Cliquez sur 'Envoyer via WhatsApp Web' pour lui transmettre immédiatement."
+                                    : msg.error_message || "Échec de transmission par la passerelle WhatsApp."}
+                                </p>
                               </div>
                             )}
                           </div>
@@ -1158,6 +1212,26 @@ export default function WhatsAppCrmView() {
 
             {/* Chat Input Footer */}
             <div className="bg-white border-t border-gray-200/80 p-3 md:p-4">
+              {!is24hWindowOpen && (
+                <div className="mb-2.5 px-3 py-2 bg-amber-50 border border-amber-200/80 rounded-xl flex items-center justify-between gap-2 text-[11px] text-amber-900 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>Fenêtre 24h fermée :</strong> Ce contact ne vous a pas écrit durant les dernières 24h. L&apos;API Meta rejettera le texte libre (Code 131047). Utilisez <strong>WhatsApp Web</strong> ci-dessous.
+                    </span>
+                  </div>
+                  <a
+                    href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}${inputMessage.trim() ? `?text=${encodeURIComponent(inputMessage.trim())}` : ""}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 shadow-2xs transition-all"
+                    title="Ouvrir directement dans WhatsApp Web"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Ouvrir Web
+                  </a>
+                </div>
+              )}
+
               <form onSubmit={handleSendMessage} className="flex items-end gap-2.5">
                 <div className="flex-1 bg-gray-100/90 rounded-2xl p-1.5 border border-gray-200 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all shadow-2xs">
                   <textarea
@@ -1176,11 +1250,23 @@ export default function WhatsAppCrmView() {
                   />
                 </div>
 
+                {/* Direct WhatsApp Web Button (Bypasses 24h window restriction) */}
+                <a
+                  href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}${inputMessage.trim() ? `?text=${encodeURIComponent(inputMessage.trim())}` : ""}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-11 h-11 rounded-2xl bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-gray-600 border border-gray-200 flex items-center justify-center transition-all shrink-0 cursor-pointer shadow-2xs"
+                  title="Ouvrir dans WhatsApp Web ou Mobile (sans contrainte de fenêtre 24h Meta)"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+
+                {/* Send via API */}
                 <button
                   type="submit"
                   disabled={!inputMessage.trim() || isSending}
                   className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 disabled:opacity-40 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 transition-all shrink-0 cursor-pointer"
-                  title="Envoyer sur WhatsApp"
+                  title="Envoyer via l'API WhatsApp officielle (soumis à la fenêtre 24h)"
                 >
                   {isSending ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

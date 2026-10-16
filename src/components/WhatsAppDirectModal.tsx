@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { formatDisplayPhone } from "@/lib/whatsapp";
+import { formatDisplayPhone, normalizeWhatsAppPhone } from "@/lib/whatsapp";
 
 export interface WhatsAppDirectTarget {
   phoneNumber: string;
@@ -209,7 +209,7 @@ export default function WhatsAppDirectModal({
               className="w-full p-3 bg-white border border-gray-300 rounded-2xl text-xs font-sans text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-2xs leading-relaxed"
             />
             <div className="flex items-center justify-between text-[11px] text-gray-400">
-              <span>Le message sera transmis instantanément au contact.</span>
+              <span>L&apos;API officielle applique une fenêtre 24h. Si le contact est inactif, utilisez WhatsApp Web.</span>
               <span>{messageText.length} caractères</span>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function WhatsAppDirectModal({
             </span>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={onClose}
@@ -267,6 +267,16 @@ export default function WhatsAppDirectModal({
             >
               Fermer
             </button>
+            <a
+              href={`https://wa.me/${normalizeWhatsAppPhone(target.phoneNumber)}${messageText.trim() ? `?text=${encodeURIComponent(messageText.trim())}` : ""}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Envoyer directement via WhatsApp Web ou application mobile (sans restriction de fenêtre 24h Meta)"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>WhatsApp Web</span>
+            </a>
             <button
               type="button"
               onClick={handleSend}
