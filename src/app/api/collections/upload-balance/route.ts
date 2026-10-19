@@ -35,14 +35,42 @@ function normalizeName(name: string): string {
 
 /**
  * Normalizes vehicle license plate number.
+ * Strips parenthesized city/hub info (e.g. "(Casablanca1)"), converts Arabic characters (ي -> Y, etc.),
+ * and normalizes hyphenation.
  */
 function normalizePlate(plate: string): string {
   if (!plate) return "";
-  return plate
-    .toUpperCase()
+  let clean = plate
+    .replace(/\s*\(.*?\)/g, "") // strip parenthesized text like (Casablanca1)
+    .replace(/\s*\[.*?\]/g, "")
+    .toUpperCase();
+
+  // Arabic letter transliteration commonly seen on Moroccan plates
+  clean = clean
+    .replace(/ي/g, "Y")
+    .replace(/أ|إ|آ|ا/g, "A")
+    .replace(/ب/g, "B")
+    .replace(/د/g, "D")
+    .replace(/ه/g, "H")
+    .replace(/و/g, "W")
+    .replace(/ج/g, "J")
+    .replace(/ط/g, "T")
+    .replace(/س/g, "S")
+    .replace(/م/g, "M")
+    .replace(/ر/g, "R");
+
+  return clean
     .replace(/[^A-Z0-9-]/g, "-")
     .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
     .trim();
+}
+
+/**
+ * Strips all non-alphanumeric chars for ultra-fuzzy plate matching (e.g. 26517Y6 or WW028124).
+ */
+function compactPlate(plate: string): string {
+  return normalizePlate(plate).replace(/[^A-Z0-9]/g, "");
 }
 
 /**
@@ -176,14 +204,33 @@ export async function POST(request: NextRequest) {
 
     for (const v of allVehicles) {
       const pNorm = normalizePlate(v.plate_number);
+      const cNorm = compactPlate(v.plate_number);
       if (pNorm) plateMap.set(pNorm, v);
+      if (cNorm) plateMap.set(cNorm, v);
+
+      // Support WW prefix <-> suffix mapping (e.g. WW028124 <-> 028124WW)
+      if (cNorm.includes("WW")) {
+        const digits = cNorm.replace(/WW/g, "");
+        if (digits) {
+          plateMap.set(`WW${digits}`, v);
+          plateMap.set(`${digits}WW`, v);
+        }
+      }
+
       if (v.notes) {
-        const match = v.notes.match(/Ancien\s*N°?:\s*([A-Za-z0-9-]+)/i);
-        if (match && match[1]) {
-          const oldNorm = normalizePlate(match[1]);
-          if (oldNorm && !plateMap.has(oldNorm)) {
-            plateMap.set(oldNorm, v);
-          }
+        const matchOld = v.notes.match(/Ancien\s*N°?:\s*([A-Za-z0-9-]+)/i);
+        if (matchOld && matchOld[1]) {
+          const oldNorm = normalizePlate(matchOld[1]);
+          const oldComp = compactPlate(matchOld[1]);
+          if (oldNorm && !plateMap.has(oldNorm)) plateMap.set(oldNorm, v);
+          if (oldComp && !plateMap.has(oldComp)) plateMap.set(oldComp, v);
+        }
+        const matchEnreg = v.notes.match(/Enreg:\s*([A-Za-z0-9\s-]+)/i);
+        if (matchEnreg && matchEnreg[1]) {
+          const enregNorm = normalizePlate(matchEnreg[1]);
+          const enregComp = compactPlate(matchEnreg[1]);
+          if (enregNorm && !plateMap.has(enregNorm)) plateMap.set(enregNorm, v);
+          if (enregComp && !plateMap.has(enregComp)) plateMap.set(enregComp, v);
         }
       }
     }
@@ -265,8 +312,18 @@ export async function POST(request: NextRequest) {
       let vehicle = null;
       if (rawPlate) {
         const normPlate = normalizePlate(rawPlate);
+        const compPlate = compactPlate(rawPlate);
         if (normPlate) {
-          vehicle = plateMap.get(normPlate);
+          vehicle = plateMap.get(normPlate) || plateMap.get(compPlate);
+
+          // Fuzzy WW lookup
+          if (!vehicle && compPlate.includes("WW")) {
+            const digits = compPlate.replace(/WW/g, "");
+            if (digits) {
+              vehicle = plateMap.get(`WW${digits}`) || plateMap.get(`${digits}WW`) || null;
+            }
+          }
+
           if (!vehicle && rawPhone) {
             const pNorm = normalizePhone(rawPhone);
             const d = pNorm ? phoneMap.get(pNorm) : undefined;
@@ -274,6 +331,15 @@ export async function POST(request: NextRequest) {
               vehicle = allVehicles.find((av) => av.id === d.assignedVehicleId) || null;
             }
           }
+
+          if (!vehicle && rawName) {
+            const nNorm = normalizeName(rawName);
+            const d = nNorm ? nameMap.get(nNorm) : undefined;
+            if (d?.assignedVehicleId) {
+              vehicle = allVehicles.find((av) => av.id === d.assignedVehicleId) || null;
+            }
+          }
+
           if (!vehicle) {
             try {
               vehicle = await prisma.vehicle.create({
@@ -288,9 +354,10 @@ export async function POST(request: NextRequest) {
                 },
               });
               plateMap.set(normPlate, vehicle);
+              if (compPlate) plateMap.set(compPlate, vehicle);
               newVehiclesCreated++;
             } catch (e) {
-              vehicle = plateMap.get(normPlate) || null;
+              vehicle = plateMap.get(normPlate) || plateMap.get(compPlate) || null;
             }
           } else if (rawStatus && vehicle.status !== rawStatus) {
             // Update vehicle status if explicitly specified in CSV
@@ -425,10 +492,10 @@ export async function POST(request: NextRequest) {
 
       // Link vehicle if not yet linked
       if (vehicle && driver.assignedVehicleId !== vehicle.id) {
-        // Release vehicle from any other driver currently assigned to it
+        // Release vehicle from any other driver currently assigned to it and archive them
         await prisma.driverProfile.updateMany({
           where: { assignedVehicleId: vehicle.id, id: { not: driver.id } },
-          data: { assignedVehicleId: null },
+          data: { assignedVehicleId: null, is_archived: true },
         });
         for (const d of allDrivers) {
           if (d.assignedVehicleId === vehicle.id && d.id !== driver.id) {
@@ -439,15 +506,17 @@ export async function POST(request: NextRequest) {
             });
             d.assignedVehicleId = null;
             (d as any).assignedVehicle = null;
+            (d as any).is_archived = true;
           }
         }
 
         await prisma.driverProfile.update({
           where: { id: driver.id },
-          data: { assignedVehicleId: vehicle.id },
+          data: { assignedVehicleId: vehicle.id, is_archived: false },
         });
         driver.assignedVehicleId = vehicle.id;
         (driver as any).assignedVehicle = vehicle;
+        (driver as any).is_archived = false;
 
         await prisma.vehicle.update({
           where: { id: vehicle.id },
@@ -457,8 +526,20 @@ export async function POST(request: NextRequest) {
           },
         }).catch(() => {});
       } else if (vehicle && driver.assignedVehicleId === vehicle.id) {
+        // Ensure driver is active if currently assigned
+        if (driver.is_archived) {
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: { is_archived: false },
+          }).catch(() => {});
+          (driver as any).is_archived = false;
+        }
+
         // Keep vehicle assigned driver metadata strictly in sync
-        if (vehicle.assigned_driver_name !== driver.fullName) {
+        if (
+          vehicle.assigned_driver_name !== driver.fullName ||
+          vehicle.assigned_driver_phone !== driver.phoneSanitized
+        ) {
           await prisma.vehicle.update({
             where: { id: vehicle.id },
             data: {
