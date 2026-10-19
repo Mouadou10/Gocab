@@ -213,9 +213,154 @@ export async function PATCH(req: Request, context: any) {
       return NextResponse.json({ success: true, claim: updatedClaim, fieldTask });
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: UPLOAD / ATTACH DOCUMENT (PHOTO OR PDF)
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "UPLOAD_DOCUMENT") {
+      const doc = body.document;
+      if (!doc || !doc.fileUrl || !doc.name) {
+        return NextResponse.json({ success: false, error: "Document payload invalid (name and fileUrl required)" }, { status: 400 });
+      }
+
+      let existingDocs: any[] = [];
+      try {
+        existingDocs = currentClaim.documents ? JSON.parse(currentClaim.documents) : [];
+        if (!Array.isArray(existingDocs)) existingDocs = [];
+      } catch {
+        existingDocs = [];
+      }
+
+      const currentUser = "user" in authResult ? authResult.user : null;
+      const authorName = doc.author || body.author || currentUser?.name || currentUser?.email || "Agent Assurance";
+
+      const newDoc = {
+        id: doc.id || crypto.randomUUID(),
+        name: String(doc.name).trim(),
+        fileUrl: doc.fileUrl,
+        fileType: doc.fileType || "application/octet-stream",
+        category: doc.category || "AUTRE",
+        stage: doc.stage || currentClaim.timeline_step,
+        size: typeof doc.size === "number" ? doc.size : null,
+        author: authorName,
+        created_at: doc.created_at || new Date().toISOString(),
+      };
+
+      existingDocs.unshift(newDoc);
+
+      // Append an informative comment to history
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+        if (!Array.isArray(existingComments)) existingComments = [];
+      } catch {
+        existingComments = [];
+      }
+
+      const categoryLabels: Record<string, string> = {
+        CONSTAT: "Constat Amiable",
+        DEVIS: "Devis Réparation",
+        PHOTOS: "Photo Sinistre",
+        EXPERTISE: "Rapport d'Expertise",
+        FACTURE: "Facture / Quittance",
+        AUTRE: "Document",
+      };
+      const catLabel = categoryLabels[newDoc.category] || newDoc.category;
+
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: currentClaim.timeline_step,
+        comment: `📎 Document joint (${catLabel}) : "${newDoc.name}" par ${authorName}.`,
+        author: authorName,
+        created_at: new Date().toISOString(),
+      });
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: {
+          documents: JSON.stringify(existingDocs),
+          comments: JSON.stringify(existingComments),
+        },
+        include: {
+          vehicle: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
+        },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: DELETE DOCUMENT
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "DELETE_DOCUMENT") {
+      const documentId = body.documentId;
+      if (!documentId) {
+        return NextResponse.json({ success: false, error: "documentId required" }, { status: 400 });
+      }
+
+      let existingDocs: any[] = [];
+      try {
+        existingDocs = currentClaim.documents ? JSON.parse(currentClaim.documents) : [];
+        if (!Array.isArray(existingDocs)) existingDocs = [];
+      } catch {
+        existingDocs = [];
+      }
+
+      const docToDelete = existingDocs.find((d: any) => d.id === documentId);
+      const remainingDocs = existingDocs.filter((d: any) => d.id !== documentId);
+
+      const currentUser = "user" in authResult ? authResult.user : null;
+      const authorName = body.author || currentUser?.name || currentUser?.email || "Agent Assurance";
+
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+        if (!Array.isArray(existingComments)) existingComments = [];
+      } catch {
+        existingComments = [];
+      }
+
+      if (docToDelete) {
+        existingComments.unshift({
+          id: crypto.randomUUID(),
+          timeline_step: currentClaim.timeline_step,
+          comment: `🗑️ Document retiré : "${docToDelete.name}" par ${authorName}.`,
+          author: authorName,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: {
+          documents: JSON.stringify(remainingDocs),
+          comments: JSON.stringify(existingComments),
+        },
+        include: {
+          vehicle: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
+        },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim });
+    }
+
     const updateData: any = {};
     if (body.severity !== undefined) updateData.severity = body.severity;
     if (body.fault !== undefined) updateData.fault = body.fault;
+    if (body.documents !== undefined) {
+      updateData.documents = typeof body.documents === "string" ? body.documents : JSON.stringify(body.documents);
+    }
     
     let isStatusChange = false;
     if (body.reopen && currentClaim.timeline_step === "VEHICLE_BACK") {
@@ -257,7 +402,11 @@ export async function PATCH(req: Request, context: any) {
       data: updateData,
       include: {
         vehicle: true,
-        driver: true,
+        driver: {
+          include: {
+            accidentClaims: true,
+          },
+        },
       },
     });
 

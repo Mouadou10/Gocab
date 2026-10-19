@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import {
@@ -20,6 +20,14 @@ import {
   Send,
   Calendar,
   X,
+  FileText,
+  Image as ImageIcon,
+  Paperclip,
+  Download,
+  Eye,
+  UploadCloud,
+  ExternalLink,
+  Plus,
 } from "lucide-react";
 
 export interface AccidentComment {
@@ -29,6 +37,27 @@ export interface AccidentComment {
   author?: string | null;
   created_at: string;
 }
+
+export interface AccidentDocument {
+  id: string;
+  name: string;
+  fileUrl: string; // Base64 data URL
+  fileType: string; // e.g. "application/pdf", "image/jpeg", "image/png"
+  category: "CONSTAT" | "DEVIS" | "PHOTOS" | "EXPERTISE" | "FACTURE" | "AUTRE";
+  stage: string; // e.g. "NEW_ACCIDENT", "CAR_IN_GARAGE", etc.
+  size?: number | null;
+  author?: string | null;
+  created_at: string;
+}
+
+export const DOCUMENT_CATEGORIES = [
+  { id: "CONSTAT", label: "Constat Amiable", icon: "📝", badgeColor: "bg-blue-50 text-blue-700 border-blue-200" },
+  { id: "DEVIS", label: "Devis Réparation", icon: "📋", badgeColor: "bg-amber-50 text-amber-700 border-amber-200" },
+  { id: "PHOTOS", label: "Photos Sinistre", icon: "📸", badgeColor: "bg-rose-50 text-rose-700 border-rose-200" },
+  { id: "EXPERTISE", label: "Rapport d'Expertise", icon: "🔍", badgeColor: "bg-purple-50 text-purple-700 border-purple-200" },
+  { id: "FACTURE", label: "Facture / Quittance", icon: "🧾", badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  { id: "AUTRE", label: "Autre Document", icon: "📁", badgeColor: "bg-gray-100 text-gray-700 border-gray-200" },
+] as const;
 
 export interface AccidentClaim {
   id: string;
@@ -42,6 +71,7 @@ export interface AccidentClaim {
   step_updated_at: string;
   created_at: string;
   comments?: string | null;
+  documents?: string | null;
   vehicle: {
     plate_number: string;
     make_model: string;
@@ -193,6 +223,18 @@ export default function AccidentCard({
   const [isSubmittingMission, setIsSubmittingMission] = useState(false);
   const [isSendingReadyTelegram, setIsSendingReadyTelegram] = useState(false);
 
+  // Document states
+  const [showDocsDrawer, setShowDocsDrawer] = useState(true);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [uploadCategory, setUploadCategory] = useState<
+    "CONSTAT" | "DEVIS" | "PHOTOS" | "EXPERTISE" | "FACTURE" | "AUTRE"
+  >("DEVIS");
+  const [previewDoc, setPreviewDoc] = useState<AccidentDocument | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+  const [isUploadBoxOpen, setIsUploadBoxOpen] = useState(false);
+  const [filterDocCategory, setFilterDocCategory] = useState<string>("ALL");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Fetch field supervisors for mission assignment
   useEffect(() => {
     async function fetchSupervisors() {
@@ -223,6 +265,17 @@ export default function AccidentCard({
     }
   } catch {
     commentsList = [];
+  }
+
+  // Parse documents safely
+  let documentsList: AccidentDocument[] = [];
+  try {
+    if (claim.documents) {
+      documentsList = JSON.parse(claim.documents);
+      if (!Array.isArray(documentsList)) documentsList = [];
+    }
+  } catch {
+    documentsList = [];
   }
 
   const calculateDays = (dateStr: string) => {
@@ -548,6 +601,203 @@ export default function AccidentCard({
       toast.error("Erreur réseau");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes || bytes <= 0) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getDocCategoryDef = (catId: string) => {
+    const found = DOCUMENT_CATEGORIES.find((c) => c.id === catId);
+    return found || { id: catId, label: catId, icon: "📁", badgeColor: "bg-gray-100 text-gray-700 border-gray-200" };
+  };
+
+  const downloadDocument = (doc: AccidentDocument) => {
+    try {
+      const link = document.createElement("a");
+      link.href = doc.fileUrl;
+      link.download = doc.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Téléchargement de "${doc.name}"`);
+    } catch (e) {
+      console.error("Download error:", e);
+      window.open(doc.fileUrl, "_blank");
+    }
+  };
+
+  const processFile = (file: File): Promise<{ name: string; fileType: string; size: number; fileUrl: string }> => {
+    return new Promise((resolve, reject) => {
+      // PDF document
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        if (file.size > 8 * 1024 * 1024) {
+          return reject(new Error("Le fichier PDF est trop volumineux (max 8 Mo)."));
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({
+            name: file.name,
+            fileType: "application/pdf",
+            size: file.size,
+            fileUrl: reader.result as string,
+          });
+        };
+        reader.onerror = () => reject(new Error("Erreur de lecture du PDF."));
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // Photos (JPEG, PNG, WEBP)
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 1600;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              return resolve({
+                name: file.name,
+                fileType: file.type || "image/jpeg",
+                size: file.size,
+                fileUrl: reader.result as string,
+              });
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+            const approxSize = Math.round((compressedDataUrl.length * 3) / 4);
+            const cleanName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
+            resolve({
+              name: cleanName,
+              fileType: "image/jpeg",
+              size: approxSize,
+              fileUrl: compressedDataUrl,
+            });
+          };
+          img.onerror = () => {
+            resolve({
+              name: file.name,
+              fileType: file.type || "image/jpeg",
+              size: file.size,
+              fileUrl: reader.result as string,
+            });
+          };
+          img.src = e.target?.result as string;
+        };
+        reader.onerror = () => reject(new Error("Erreur de lecture de l'image."));
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // Other generic files
+      if (file.size > 5 * 1024 * 1024) {
+        return reject(new Error("Le fichier est trop volumineux (max 5 Mo)."));
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve({
+          name: file.name,
+          fileType: file.type || "application/octet-stream",
+          size: file.size,
+          fileUrl: reader.result as string,
+        });
+      };
+      reader.onerror = () => reject(new Error("Erreur lors de la lecture du fichier."));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleUploadDocument = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploadingDoc(true);
+    try {
+      const agentName = session?.user?.name || session?.user?.email || "Agent Assurance";
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const processed = await processFile(file);
+        const res = await fetch(`/api/accidents/${claim.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "UPLOAD_DOCUMENT",
+            document: {
+              name: processed.name,
+              fileUrl: processed.fileUrl,
+              fileType: processed.fileType,
+              category: uploadCategory,
+              stage: claim.timeline_step,
+              size: processed.size,
+              author: agentName,
+            },
+          }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Échec du téléversement");
+        }
+      }
+      toast.success(`${files.length} document(s) ajouté(s) avec succès !`);
+      setIsUploadBoxOpen(false);
+      setShowDocsDrawer(true);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      onUpdate();
+    } catch (err: any) {
+      console.error("Failed to upload document:", err);
+      toast.error(err.message || "Erreur lors du téléversement");
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string, docName: string) => {
+    if (!confirm(`Supprimer définitivement le document "${docName}" ?`)) return;
+    setDeletingDocId(docId);
+    try {
+      const agentName = session?.user?.name || session?.user?.email || "Agent Assurance";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "DELETE_DOCUMENT",
+          documentId: docId,
+          author: agentName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`"${docName}" supprimé avec succès`);
+        if (previewDoc?.id === docId) {
+          setPreviewDoc(null);
+        }
+        onUpdate();
+      } else {
+        toast.error("Échec de la suppression");
+      }
+    } catch (err) {
+      console.error("Delete doc error:", err);
+      toast.error("Erreur réseau");
+    } finally {
+      setDeletingDocId(null);
     }
   };
 
@@ -1006,7 +1256,326 @@ export default function AccidentCard({
         </div>
       </div>
 
-      {/* 5. Compact Comments & Activity Drawer */}
+      {/* 5. Documents & Pièces Jointes (Photos & PDF) */}
+      <div className="border-t border-gray-100 bg-slate-50/70 p-4 sm:p-5 space-y-3">
+        {/* Documents Header & Toggle */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setShowDocsDrawer(!showDocsDrawer)}
+              className="flex items-center gap-1.5 font-bold text-xs text-gray-800 uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <span>📁</span>
+              <span>Pièces Jointes & Photos</span>
+            </button>
+            <span className="px-2 py-0.5 rounded-full text-3xs font-mono font-bold bg-navy text-white shadow-2xs">
+              {documentsList.length}
+            </span>
+            {documentsList.length > 0 && (
+              <span className="text-2xs text-gray-500 hidden sm:inline">
+                ({documentsList.filter((d) => d.fileType.startsWith("image/")).length} photo(s),{" "}
+                {documentsList.filter((d) => d.fileType === "application/pdf" || d.name.toLowerCase().endsWith(".pdf")).length} PDF)
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsUploadBoxOpen(!isUploadBoxOpen);
+                if (!showDocsDrawer) setShowDocsDrawer(true);
+              }}
+              className="inline-flex items-center gap-1 px-3 py-1 bg-navy hover:bg-navy/90 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isUploadBoxOpen ? "Fermer l'envoi" : "Ajouter Photo / PDF"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowDocsDrawer(!showDocsDrawer)}
+              className="p-1 text-gray-400 hover:text-gray-700 rounded-md transition-colors cursor-pointer"
+              title={showDocsDrawer ? "Masquer la section documents" : "Afficher les documents"}
+            >
+              {showDocsDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Upload Box / Dropzone */}
+        {isUploadBoxOpen && (
+          <div className="bg-white rounded-2xl border-2 border-dashed border-blue-300 p-4 space-y-3.5 animate-fadeIn shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-navy flex items-center gap-1.5">
+                <UploadCloud className="w-4 h-4 text-blue-600" />
+                <span>Téléverser des pièces justificatives</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsUploadBoxOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Category selection */}
+            <div>
+              <label className="block text-3xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Catégorie de la pièce jointe :
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {DOCUMENT_CATEGORIES.map((cat) => {
+                  const isSelected = uploadCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setUploadCategory(cat.id as any)}
+                      className={`px-2.5 py-1.5 rounded-lg text-2xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer text-left ${
+                        isSelected
+                          ? "bg-navy text-white border-navy shadow-2xs"
+                          : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                      <span className="truncate">{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dropzone Area */}
+            <div
+              onClick={() => !isUploadingDoc && fileInputRef.current?.click()}
+              className={`p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+                isUploadingDoc
+                  ? "bg-gray-50 border-gray-300 cursor-not-allowed"
+                  : "bg-blue-50/40 hover:bg-blue-50 border-blue-200 hover:border-blue-400"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,image/*"
+                multiple
+                className="hidden"
+                disabled={isUploadingDoc}
+                onChange={(e) => handleUploadDocument(e.target.files)}
+              />
+
+              {isUploadingDoc ? (
+                <div className="space-y-2 flex flex-col items-center">
+                  <div className="w-7 h-7 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="text-xs font-bold text-blue-900">
+                    Traitement & enregistrement en cours...
+                  </div>
+                  <div className="text-3xs text-gray-500">
+                    Optimisation haute résolution et stockage sécurisé
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-2 shadow-2xs">
+                    <UploadCloud className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-gray-800">
+                    Cliquez pour choisir vos fichiers ou glissez-déposez ici
+                  </div>
+                  <div className="text-2xs text-gray-500 mt-1">
+                    Formats acceptés : <strong className="text-gray-700">PDF, JPG, PNG, WEBP</strong> (jusqu&apos;à 8 Mo)
+                  </div>
+                  <div className="mt-2 text-3xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                    Catégorie sélectionnée : {getDocCategoryDef(uploadCategory).label}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Documents Content (when drawer is open) */}
+        {showDocsDrawer && (
+          <div className="space-y-2.5">
+            {documentsList.length === 0 ? (
+              !isUploadBoxOpen && (
+                <div className="bg-white rounded-xl border border-dashed border-gray-300 p-4 text-center space-y-1.5">
+                  <div className="text-2xs text-gray-500 italic">
+                    Aucune photo ni document PDF attaché à ce sinistre pour le moment.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadBoxOpen(true)}
+                    className="inline-flex items-center gap-1 text-2xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Joindre un constat amiable, un devis de réparation ou des photos de dégâts</span>
+                  </button>
+                </div>
+              )
+            ) : (
+              <>
+                {/* Category Filter Pills (if multiple categories) */}
+                {documentsList.length > 2 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-3xs">
+                    <button
+                      type="button"
+                      onClick={() => setFilterDocCategory("ALL")}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                        filterDocCategory === "ALL"
+                          ? "bg-navy text-white shadow-2xs"
+                          : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                      }`}
+                    >
+                      Tous ({documentsList.length})
+                    </button>
+                    {DOCUMENT_CATEGORIES.map((cat) => {
+                      const count = documentsList.filter((d) => d.category === cat.id).length;
+                      if (count === 0) return null;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setFilterDocCategory(cat.id)}
+                          className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            filterDocCategory === cat.id
+                              ? "bg-navy text-white shadow-2xs"
+                              : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                          }`}
+                        >
+                          {cat.icon} {cat.label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Documents Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {documentsList
+                    .filter((doc) => filterDocCategory === "ALL" || doc.category === filterDocCategory)
+                    .map((doc) => {
+                      const catDef = getDocCategoryDef(doc.category);
+                      const isPdf = doc.fileType === "application/pdf" || doc.name.toLowerCase().endsWith(".pdf");
+                      const stepDef = TIMELINE_STEPS.find((s) => s.id === doc.stage);
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className="bg-white rounded-xl border border-gray-200 p-2.5 shadow-2xs hover:shadow-md hover:border-gray-300 transition-all flex flex-col justify-between group"
+                        >
+                          {/* Card Top: Category & Stage */}
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-2">
+                              <span
+                                className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider flex items-center gap-1 ${catDef.badgeColor}`}
+                              >
+                                <span>{catDef.icon}</span>
+                                <span className="truncate max-w-[110px]">{catDef.label}</span>
+                              </span>
+
+                              {stepDef && (
+                                <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  {stepDef.shortLabel}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Thumbnail / Preview Area */}
+                            <div
+                              onClick={() => setPreviewDoc(doc)}
+                              className="w-full h-24 bg-gray-50 rounded-lg border border-gray-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition-all relative"
+                            >
+                              {isPdf ? (
+                                <div className="flex flex-col items-center justify-center text-rose-600 gap-1 p-2">
+                                  <FileText className="w-8 h-8" />
+                                  <span className="text-[10px] font-black tracking-wider uppercase bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded">
+                                    PDF
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={doc.fileUrl}
+                                    alt={doc.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                                    <Eye className="w-4 h-4 mr-1" />
+                                    <span>Aperçu</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* File Name & Details */}
+                            <div className="mt-2 min-w-0">
+                              <div
+                                onClick={() => setPreviewDoc(doc)}
+                                className="text-xs font-bold text-gray-900 truncate hover:text-blue-600 cursor-pointer"
+                                title={doc.name}
+                              >
+                                {doc.name}
+                              </div>
+                              <div className="text-[10px] text-gray-400 flex items-center justify-between mt-0.5">
+                                <span>{formatFileSize(doc.size)}</span>
+                                <span>{new Date(doc.created_at).toLocaleDateString("fr-FR")}</span>
+                              </div>
+                              {doc.author && (
+                                <div className="text-[9px] text-gray-500 truncate mt-0.5">
+                                  Ajouté par : <span className="font-semibold">{doc.author}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons: Preview, Download, Delete */}
+                          <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDoc(doc)}
+                              className="flex-1 py-1 px-1.5 rounded-lg text-2xs font-bold bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              title="Voir directement dans le CRM"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Voir</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => downloadDocument(doc)}
+                              className="flex-1 py-1 px-1.5 rounded-lg text-2xs font-bold bg-gray-100 hover:bg-navy text-gray-700 hover:text-white transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              title="Télécharger sur votre appareil"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Télécharger</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDocument(doc.id, doc.name)}
+                              disabled={deletingDocId === doc.id}
+                              className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Supprimer cette pièce jointe"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 6. Compact Comments & Activity Drawer */}
       <div className="border-t border-gray-100 bg-gray-50/60 p-4 sm:p-5 space-y-3">
         {/* Accordion Toggle Bar */}
         <div className="flex items-center justify-between gap-2">
@@ -1064,6 +1633,18 @@ export default function AccidentCard({
               disabled={isSavingComment || isUpdating}
               className="flex-1 text-xs text-gray-800 placeholder-gray-400 bg-gray-50/50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy focus:bg-white transition-all resize-none"
             />
+            <button
+              type="button"
+              onClick={() => {
+                setIsUploadBoxOpen(true);
+                setShowDocsDrawer(true);
+              }}
+              className="px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-lg flex items-center justify-center gap-1 transition-all shrink-0 cursor-pointer shadow-2xs border border-gray-200"
+              title="Joindre une photo ou document PDF (Devis, constat...)"
+            >
+              <Paperclip className="w-3.5 h-3.5 text-navy" />
+              <span className="hidden sm:inline text-3xs">Joindre</span>
+            </button>
             <button
               type="button"
               onClick={handleSaveCommentOnly}
@@ -1298,6 +1879,134 @@ export default function AccidentCard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Modal: In-CRM Preview (Image Lightbox & Embedded PDF Viewer) */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[94vh]">
+            {/* Header */}
+            <div className="p-4 bg-navy text-white flex items-center justify-between shrink-0 gap-3">
+              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <span className="text-2xl">
+                  {previewDoc.fileType === "application/pdf" || previewDoc.name.toLowerCase().endsWith(".pdf")
+                    ? "📄"
+                    : "📸"}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-sm text-white truncate max-w-xs sm:max-w-md">
+                      {previewDoc.name}
+                    </h3>
+                    <span
+                      className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider ${
+                        getDocCategoryDef(previewDoc.category).badgeColor
+                      }`}
+                    >
+                      {getDocCategoryDef(previewDoc.category).label}
+                    </span>
+                  </div>
+                  <div className="text-2xs text-gray-300 flex items-center gap-2 mt-0.5">
+                    {previewDoc.size && <span>{formatFileSize(previewDoc.size)}</span>}
+                    {previewDoc.author && <span>• Ajouté par : {previewDoc.author}</span>}
+                    <span>• {new Date(previewDoc.created_at).toLocaleDateString("fr-FR")}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => downloadDocument(previewDoc)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Télécharger directement le fichier"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Télécharger</span>
+                </button>
+
+                <a
+                  href={previewDoc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                  title="Ouvrir dans un nouvel onglet"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                  title="Fermer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Viewer Content */}
+            <div className="flex-1 bg-gray-900/95 p-2 sm:p-4 overflow-auto flex items-center justify-center min-h-[350px]">
+              {previewDoc.fileType === "application/pdf" || previewDoc.name.toLowerCase().endsWith(".pdf") ? (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <iframe
+                    src={previewDoc.fileUrl}
+                    title={previewDoc.name}
+                    className="w-full h-[70vh] rounded-2xl border border-gray-700 bg-white shadow-2xl"
+                  />
+                  <div className="mt-2 text-center text-2xs text-gray-400">
+                    Si le PDF ne s&apos;affiche pas dans votre navigateur,{" "}
+                    <button
+                      type="button"
+                      onClick={() => downloadDocument(previewDoc)}
+                      className="text-blue-400 hover:text-blue-300 underline font-bold cursor-pointer"
+                    >
+                      cliquez ici pour le télécharger
+                    </button>
+                    .
+                  </div>
+                </div>
+              ) : (
+                <div className="relative max-w-full max-h-[75vh] flex items-center justify-center p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewDoc.fileUrl}
+                    alt={previewDoc.name}
+                    className="max-w-full max-h-[72vh] object-contain rounded-2xl shadow-2xl border border-gray-800"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-600 shrink-0">
+              <span className="text-2xs text-gray-500">
+                Immatriculation : <strong className="font-mono text-gray-800">{claim.vehicle.plate_number}</strong>
+                {claim.driver_name ? ` • Chauffeur : ${claim.driver_name}` : ""}
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteDocument(previewDoc.id, previewDoc.name)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 font-bold flex items-center gap-1 text-2xs px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Supprimer ce document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 font-bold rounded-xl text-gray-800 transition-colors cursor-pointer text-xs"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
