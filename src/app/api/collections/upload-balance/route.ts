@@ -49,11 +49,40 @@ function normalizePlate(plate: string): string {
  */
 function parseBalance(val: any): number | null {
   if (typeof val === "number") return isNaN(val) ? null : val;
-  if (!val || typeof val !== "string") return null;
-  const cleaned = val.replace(/[^0-9.-]/g, "");
-  if (!cleaned) return null;
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
+  if (!val) return null;
+  if (typeof val !== "string") val = String(val);
+  const s = val.trim();
+  if (!s) return null;
+
+  // Detect negative indicators: leading/trailing minus, parentheses like (1800), or -MAD
+  const isParenNegative = /^\(.*\)$/.test(s);
+  const hasMinus = s.includes("-") || isParenNegative;
+
+  // Extract only digits, period, and comma
+  let numStr = s.replace(/[^0-9.,]/g, "");
+  if (!numStr) return null;
+
+  if (numStr.includes(",") && numStr.includes(".")) {
+    // Both comma and dot present
+    if (numStr.lastIndexOf(",") > numStr.lastIndexOf(".")) {
+      // e.g. "1.800,00" -> 1800.00
+      numStr = numStr.replace(/\./g, "").replace(",", ".");
+    } else {
+      // e.g. "1,800.00" -> 1800.00
+      numStr = numStr.replace(/,/g, "");
+    }
+  } else if (numStr.includes(",")) {
+    const parts = numStr.split(",");
+    if (parts.length === 2 && parts[1].length <= 2) {
+      numStr = `${parts[0]}.${parts[1]}`;
+    } else {
+      numStr = numStr.replace(/,/g, "");
+    }
+  }
+
+  const num = parseFloat(numStr);
+  if (isNaN(num)) return null;
+  return hasMinus ? -Math.abs(num) : Math.abs(num);
 }
 
 export const dynamic = "force-dynamic";
@@ -301,10 +330,20 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // ONLY if driver is still not found AND rawName is absent/empty in CSV row,
-      // fallback to the vehicle's current assigned driver
-      if (!driver && !rawName && vehicle?.id) {
-        driver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
+      // Fallback: check vehicle's currently assigned driver if available
+      if (!driver && vehicle?.id) {
+        const vDriver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
+        if (vDriver) {
+          if (!rawName) {
+            driver = vDriver;
+          } else {
+            const vNorm = normalizeName(vDriver.fullName);
+            const rNorm = normalizeName(rawName);
+            if (vNorm === rNorm || vNorm.includes(rNorm) || rNorm.includes(vNorm)) {
+              driver = vDriver;
+            }
+          }
+        }
       }
 
       // If driver is not found in DB, auto-enroll driver from CSV (SSOT)

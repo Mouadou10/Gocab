@@ -229,10 +229,15 @@ export async function GET(request: NextRequest) {
       // Current arrears: reflects latest balance (evening if uploaded, morning if uploaded, else driver profile)
       let currentArrears = driver.currentArrearsMAD;
       const latestPayment = driver.payments[driver.payments.length - 1];
-      if (latestPayment?.eveningBalance !== null && latestPayment?.eveningBalance !== undefined) {
-        currentArrears = Math.abs(Math.min(0, latestPayment.eveningBalance));
-      } else if (hasMorningCsv && latestPayment?.morningBalance !== null && latestPayment?.morningBalance !== undefined) {
-        currentArrears = Math.abs(Math.min(0, latestPayment.morningBalance));
+      const rawExcelBalance =
+        latestPayment?.eveningBalance !== null && latestPayment?.eveningBalance !== undefined
+          ? latestPayment.eveningBalance
+          : (hasMorningCsv && latestPayment?.morningBalance !== null && latestPayment?.morningBalance !== undefined)
+          ? latestPayment.morningBalance
+          : null;
+
+      if (rawExcelBalance !== null) {
+        currentArrears = rawExcelBalance < 0 ? Math.abs(rawExcelBalance) : 0;
       }
 
       totalMorningTargetMAD += morningDebt;
@@ -284,6 +289,7 @@ export async function GET(request: NextRequest) {
         },
         manager,
         currentArrearsMAD: currentArrears,
+        excelBalance: rawExcelBalance,
         consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
         isCriticalRed,
         expectedTodayMAD,

@@ -212,12 +212,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const DRIVER_PHONE_ALIASES = [
+      "driver phone",
+      "phone",
+      "telephone",
+      "téléphone",
+      "tel",
+      "gsm",
+      "mobile",
+      "numéro chauffeur",
+      "tel chauffeur",
+      "téléphone chauffeur",
+      "contact",
+      "num",
+    ];
+
     // 2. Pre-fetch all existing drivers in 1 query
     const allDrivers = await prisma.driverProfile.findMany();
     const driverByName = new Map<string, typeof allDrivers[0]>();
+    const driverByPhone = new Map<string, typeof allDrivers[0]>();
+    const driverByAssignedVehicleId = new Map<string, typeof allDrivers[0]>();
+
     for (const d of allDrivers) {
       const clean = d.fullName.toLowerCase().replace(/\s+/g, " ").trim();
       driverByName.set(clean, d);
+      if (d.phoneSanitized) {
+        const cleanP = d.phoneSanitized.replace(/\D/g, "").slice(-9);
+        if (cleanP) driverByPhone.set(cleanP, d);
+      }
+      if (d.assignedVehicleId) {
+        driverByAssignedVehicleId.set(d.assignedVehicleId, d);
+      }
     }
 
     // 3. Pre-fetch all open maintenance tickets in 1 query
@@ -267,6 +292,7 @@ export async function POST(request: NextRequest) {
       oldNumber: string | null;
       regNu: string | null;
       driverName: string | null;
+      driverPhone: string | null;
       status: string;
       insurancePolicy: string | null;
       isInsuranceActive: boolean;
@@ -303,6 +329,7 @@ export async function POST(request: NextRequest) {
 
       const vin = getField(row, ["vin code", "vin", "chassis", "numéro de châssis"]) || null;
       const driverName = getField(row, DRIVER_ALIASES) || null;
+      const driverPhone = getField(row, DRIVER_PHONE_ALIASES) || null;
 
       const rawStatus = getField(row, ["status", "statut", "etat", "état"]);
       const status = mapStatus(rawStatus, Boolean(driverName));
@@ -345,6 +372,7 @@ export async function POST(request: NextRequest) {
         oldNumber: oldNumber || null,
         regNu: regNu || null,
         driverName,
+        driverPhone,
         status,
         insurancePolicy,
         isInsuranceActive,
@@ -477,26 +505,69 @@ export async function POST(request: NextRequest) {
 
             processedVehicleIds.add(vehicleId);
 
-            // Driver profile auto-link
+            // Driver profile auto-link (Multi-strategy: Phone -> Vehicle Existing Driver -> Fuzzy Name)
             let matchedDriver: any = null;
-            if (item.driverName && vehicleId) {
-              const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
-              matchedDriver = driverByName.get(cleanTarget);
+            if (vehicleId) {
+              const targetPhone = item.driverPhone || existing?.assigned_driver_phone;
+              if (targetPhone) {
+                const cleanP = targetPhone.replace(/\D/g, "").slice(-9);
+                if (cleanP && driverByPhone.has(cleanP)) {
+                  matchedDriver = driverByPhone.get(cleanP);
+                }
+              }
 
-              // Fallback word matching
-              if (!matchedDriver) {
-                const words = cleanTarget.split(" ").filter((w: string) => w.length >= 3);
-                if (words.length >= 2) {
+              // Check existing driver assigned to this vehicle
+              if (!matchedDriver && driverByAssignedVehicleId.has(vehicleId)) {
+                const currentAssigned = driverByAssignedVehicleId.get(vehicleId)!;
+                if (!item.driverName) {
+                  matchedDriver = currentAssigned;
+                } else {
+                  const curNorm = currentAssigned.fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                  const targetNorm = item.driverName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                  if (curNorm === targetNorm || curNorm.includes(targetNorm) || targetNorm.includes(curNorm)) {
+                    matchedDriver = currentAssigned;
+                  }
+                }
+              }
+
+              // Match by name
+              if (!matchedDriver && item.driverName) {
+                const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
+                matchedDriver = driverByName.get(cleanTarget);
+
+                // Fallback word & fuzzy matching
+                if (!matchedDriver) {
+                  const targetWords = cleanTarget.split(" ").filter((w: string) => w.length >= 3);
                   for (const [key, d] of driverByName.entries()) {
-                    if (words.every((w: string) => key.includes(w))) {
+                    const keyWords = key.split(" ").filter((w: string) => w.length >= 3);
+                    if (targetWords.length >= 2 && targetWords.every((w: string) => key.includes(w))) {
                       matchedDriver = d;
                       break;
+                    }
+                    // Handle spelling variations like benjaloun vs benjelloun
+                    if (targetWords.length >= 2 && keyWords.length >= 2) {
+                      const firstNameMatch = targetWords[0] === keyWords[0];
+                      const lastName1 = targetWords[targetWords.length - 1];
+                      const lastName2 = keyWords[keyWords.length - 1];
+                      if (firstNameMatch && (lastName1.startsWith(lastName2.slice(0, 4)) || lastName2.startsWith(lastName1.slice(0, 4)))) {
+                        matchedDriver = d;
+                        break;
+                      }
                     }
                   }
                 }
               }
 
               if (matchedDriver) {
+                // Update driver name if vehicle CSV has a better/updated spelling
+                if (item.driverName && matchedDriver.fullName !== item.driverName) {
+                  await prisma.driverProfile.update({
+                    where: { id: matchedDriver.id },
+                    data: { fullName: item.driverName },
+                  }).catch(() => {});
+                  matchedDriver.fullName = item.driverName;
+                }
+
                 if (matchedDriver.assignedVehicleId !== vehicleId) {
                   // Release driver's former vehicle to history
                   if (matchedDriver.assignedVehicleId) {
@@ -527,9 +598,10 @@ export async function POST(request: NextRequest) {
                     data: { assignedVehicleId: vehicleId },
                   });
                   matchedDriver.assignedVehicleId = vehicleId;
+                  driverByAssignedVehicleId.set(vehicleId, matchedDriver);
                 }
                 linked_drivers++;
-              } else {
+              } else if (item.driverName) {
                 try {
                   // Release this vehicle from ANY other driver first
                   await prisma.driverProfile.updateMany({
@@ -542,10 +614,16 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
+                  const realPhone = item.driverPhone || existing?.assigned_driver_phone;
+                  const cleanRealPhone = realPhone ? realPhone.replace(/\D/g, "") : "";
+                  const phoneFormatted = cleanRealPhone && cleanRealPhone.length >= 9
+                    ? (cleanRealPhone.startsWith("212") ? `+${cleanRealPhone}` : `+212${cleanRealPhone.slice(-9)}`)
+                    : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
+
                   const newDriver = await prisma.driverProfile.create({
                     data: {
                       fullName: item.driverName,
-                      phoneSanitized: `+212600${Math.floor(100000 + Math.random() * 900000)}`,
+                      phoneSanitized: phoneFormatted,
                       cinNumber: `CIN-${item.plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
                       age: 30,
                       licenseSeniority: 4,
@@ -558,7 +636,11 @@ export async function POST(request: NextRequest) {
                     },
                   });
                   matchedDriver = newDriver;
+                  const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
                   driverByName.set(cleanTarget, newDriver);
+                  const pDigits = phoneFormatted.replace(/\D/g, "").slice(-9);
+                  if (pDigits) driverByPhone.set(pDigits, newDriver);
+                  driverByAssignedVehicleId.set(vehicleId, newDriver);
                   allDrivers.push(newDriver as any);
                   linked_drivers++;
                 } catch (e) {

@@ -64,6 +64,7 @@ interface DriverDailyItem {
   } | null;
   manager?: string | null;
   currentArrearsMAD: number;
+  excelBalance?: number | null;
   consecutiveUnpaidDays: number;
   isCriticalRed: boolean;
   expectedTodayMAD: number;
@@ -1474,7 +1475,7 @@ export default function FleetPerformanceView() {
                   {isRangeMode ? "Total Encaissé Période (MAD)" : "Montant Encaissé (MAD)"}
                 </th>
                 <th className="py-4 px-4 text-center">Jours Sans Versement</th>
-                <th className="py-4 px-4 text-right">Total Impayés (Cumul)</th>
+                <th className="py-4 px-4 text-right">Solde & Impayés (MAD)</th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
@@ -1690,9 +1691,9 @@ export default function FleetPerformanceView() {
                             {/* Balance Snapshot Info if imported via CSV */}
                             {(driver.morningBalance !== null || driver.eveningBalance !== null) && (
                               <div className="text-3xs font-mono text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <span>Matin: {driver.morningBalance ?? "-"}</span>
+                                <span>Matin: {driver.morningBalance !== null && driver.morningBalance !== undefined ? (driver.morningBalance < 0 ? `-MAD ${Math.abs(driver.morningBalance).toLocaleString()}` : `${driver.morningBalance.toLocaleString()} MAD`) : "-"}</span>
                                 <span>➔</span>
-                                <span>Soir: {driver.eveningBalance ?? "-"}</span>
+                                <span>Soir: {driver.eveningBalance !== null && driver.eveningBalance !== undefined ? (driver.eveningBalance < 0 ? `-MAD ${Math.abs(driver.eveningBalance).toLocaleString()}` : `${driver.eveningBalance.toLocaleString()} MAD`) : "-"}</span>
                               </div>
                             )}
                           </div>
@@ -1722,6 +1723,10 @@ export default function FleetPerformanceView() {
                           <span className="text-2xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                             ⚠️ Arriérés ({driver.currentArrearsMAD} DH)
                           </span>
+                        ) : (driver.excelBalance !== null && driver.excelBalance !== undefined && driver.excelBalance > 0) || (driver.morningBalance !== null && driver.morningBalance !== undefined && driver.morningBalance > 0) ? (
+                          <span className="text-2xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                            ✓ Avance (+{(driver.excelBalance ?? driver.morningBalance)} DH)
+                          </span>
                         ) : (
                           <span className="text-2xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
                             ✓ À jour (0 j)
@@ -1729,18 +1734,55 @@ export default function FleetPerformanceView() {
                         )}
                       </td>
 
-                      {/* Total Arrears / Debt Addition */}
+                      {/* Total Arrears / Debt / Excel Balance */}
                       <td className="py-4 px-4 text-right">
-                        <div className="space-y-0.5">
-                          <p className={`font-mono font-black text-sm ${driver.currentArrearsMAD > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                            {driver.currentArrearsMAD.toLocaleString()} MAD
-                          </p>
-                          {driver.currentArrearsMAD > 0 && (
-                            <span className="text-3xs text-red-500 font-semibold block">
-                              +{driver.currentArrearsMAD} DH d'arriérés
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const excelBal = driver.eveningBalance ?? driver.morningBalance ?? driver.excelBalance;
+                          const hasExcel = excelBal !== null && excelBal !== undefined;
+
+                          if (hasExcel && excelBal < 0) {
+                            return (
+                              <div className="space-y-0.5">
+                                <p className="font-mono font-black text-sm text-red-600">
+                                  -MAD {Math.abs(excelBal).toLocaleString()}
+                                </p>
+                                <span className="text-3xs text-red-500 font-semibold block">
+                                  Dette / Arriérés : {Math.abs(excelBal).toLocaleString()} DH
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          if (hasExcel && excelBal > 0) {
+                            return (
+                              <div className="space-y-0.5">
+                                <p className="font-mono font-black text-sm text-emerald-600">
+                                  +MAD {excelBal.toLocaleString()}
+                                </p>
+                                <span className="text-3xs text-emerald-700 font-bold block">
+                                  ✓ Avance / Crédit Chauffeur
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="space-y-0.5">
+                              <p className={`font-mono font-black text-sm ${driver.currentArrearsMAD > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                                {driver.currentArrearsMAD > 0 ? `-MAD ${driver.currentArrearsMAD.toLocaleString()}` : "0 MAD"}
+                              </p>
+                              {driver.currentArrearsMAD > 0 ? (
+                                <span className="text-3xs text-red-500 font-semibold block">
+                                  +{driver.currentArrearsMAD} DH d'arriérés
+                                </span>
+                              ) : (
+                                <span className="text-3xs text-emerald-600 font-medium block">
+                                  ✓ Solde à jour
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions: Recovery Trigger & Save / WhatsApp */}
