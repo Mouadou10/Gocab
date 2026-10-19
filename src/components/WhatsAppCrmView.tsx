@@ -24,6 +24,14 @@ import {
   Copy,
   Info,
   ExternalLink,
+  Camera,
+  Image as ImageIcon,
+  Maximize2,
+  Download,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Paperclip,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -86,6 +94,21 @@ interface MessageItem {
   media_url?: string | null;
 }
 
+function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/api/") ||
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed;
+  }
+  return `/api/whatsapp/media/${encodeURIComponent(trimmed)}`;
+}
+
 export default function WhatsAppCrmView() {
   const { data: session } = useSession();
   const userRole = ((session?.user as any)?.role || "").toUpperCase();
@@ -121,6 +144,14 @@ export default function WhatsAppCrmView() {
   const [newChatName, setNewChatName] = useState("");
   const [simulateText, setSimulateText] = useState("");
   const [apiConfig, setApiConfig] = useState<any>(null);
+
+  // Photo Lightbox & Upload states
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; caption?: string } | null>(null);
+  const [lightboxScale, setLightboxScale] = useState(1);
+  const [lightboxRotation, setLightboxRotation] = useState(0);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -266,14 +297,95 @@ export default function WhatsAppCrmView() {
     return () => clearInterval(interval);
   }, [selectedConvId, messages.length]);
 
-  // Send Message handler
+  // Escape key listener to close Lightbox modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLightboxImage(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Photo handlers
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Veuillez sélectionner un fichier image valide (JPG, PNG, WebP)");
+      return;
+    }
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("L'image dépasse la limite autorisée de 16 Mo");
+      return;
+    }
+    setSelectedPhotoFile(file);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const clearSelectedPhoto = () => {
+    setSelectedPhotoFile(null);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          setSelectedPhotoFile(file);
+          if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+          setPhotoPreviewUrl(URL.createObjectURL(file));
+          toast.success("Photo collée depuis le presse-papier !", { icon: "📋" });
+          break;
+        }
+      }
+    }
+  };
+
+  // Send Message handler (Text + Optional Photo)
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputMessage.trim() || !activeConversation || isSending) return;
+    if ((!inputMessage.trim() && !selectedPhotoFile) || !activeConversation || isSending) return;
 
     const messageText = inputMessage.trim();
+    const photoToUpload = selectedPhotoFile;
+    const previewToClean = photoPreviewUrl;
+
     setInputMessage("");
+    clearSelectedPhoto();
     setIsSending(true);
+
+    let uploadedMediaUrl: string | null = null;
+    if (photoToUpload) {
+      try {
+        const formData = new FormData();
+        formData.append("file", photoToUpload);
+        const uploadRes = await fetch("/api/whatsapp/media/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadRes.ok && uploadData.mediaUrl) {
+          uploadedMediaUrl = uploadData.mediaUrl;
+        } else {
+          throw new Error(uploadData.error || "Échec du téléversement de l'image");
+        }
+      } catch (err: any) {
+        toast.error(`Erreur image: ${err.message || "Impossible de téléverser l'image"}`);
+        setIsSending(false);
+        setSelectedPhotoFile(photoToUpload);
+        setPhotoPreviewUrl(previewToClean);
+        return;
+      }
+    }
 
     // Optimistic UI message insertion
     const tempId = `temp-${Date.now()}`;
@@ -283,7 +395,8 @@ export default function WhatsAppCrmView() {
       direction: "OUTBOUND",
       sender_type: "AGENT",
       sender_name: "GoCab Operations",
-      text: messageText,
+      text: messageText || (uploadedMediaUrl ? "📷 Photo" : ""),
+      media_url: uploadedMediaUrl,
       status: "PENDING",
       created_at: new Date().toISOString(),
     };
@@ -297,6 +410,8 @@ export default function WhatsAppCrmView() {
           conversationId: activeConversation.id,
           phoneNumber: activeConversation.phoneNumber,
           text: messageText,
+          mediaUrl: uploadedMediaUrl || undefined,
+          mediaType: uploadedMediaUrl ? "image" : undefined,
         }),
       });
 
@@ -1110,9 +1225,91 @@ export default function WhatsAppCrmView() {
                           </span>
                         </div>
 
-                        <p className="whitespace-pre-wrap leading-relaxed font-sans text-xs select-text">
-                          {msg.text}
-                        </p>
+                        {/* Media display (Image / Photo) */}
+                        {msg.media_url ? (
+                          <div className="relative group my-1.5 overflow-hidden rounded-xl border border-black/10 bg-black/5 max-w-sm">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={resolveMediaUrl(msg.media_url)}
+                              alt={msg.text || "Photo WhatsApp"}
+                              loading="lazy"
+                              className="w-full max-h-72 object-cover rounded-xl cursor-pointer hover:opacity-95 transition-opacity"
+                              onClick={() => {
+                                setLightboxScale(1);
+                                setLightboxRotation(0);
+                                setLightboxImage({
+                                  url: resolveMediaUrl(msg.media_url!),
+                                  caption: msg.text && msg.text !== "📷 Photo reçue" ? msg.text : undefined,
+                                });
+                              }}
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                                const parent = (e.currentTarget as HTMLElement).parentElement;
+                                const fallback = parent?.querySelector(".media-fallback") as HTMLElement;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                            {/* Fallback if image failed to load / expired */}
+                            <div className="media-fallback hidden flex-col items-center justify-center p-6 text-center text-gray-500 bg-gray-50/90 rounded-xl">
+                              <Camera className="w-8 h-8 text-gray-400 mb-1.5" />
+                              <span className="text-[11px] font-semibold text-gray-700">Photo WhatsApp</span>
+                              <span className="text-[9px] text-gray-400 mt-0.5">Média non disponible ou expiré sur WhatsApp</span>
+                            </div>
+
+                            {/* Hover Action Overlay */}
+                            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-xs rounded-lg p-1 shadow-md">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightboxScale(1);
+                                  setLightboxRotation(0);
+                                  setLightboxImage({
+                                    url: resolveMediaUrl(msg.media_url!),
+                                    caption: msg.text && msg.text !== "📷 Photo reçue" ? msg.text : undefined,
+                                  });
+                                }}
+                                className="p-1 rounded text-white/90 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                title="Agrandir en plein écran"
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                              </button>
+                              <a
+                                href={resolveMediaUrl(msg.media_url)}
+                                download={`photo-whatsapp-${msg.id}.jpg`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1 rounded text-white/90 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                title="Télécharger l'image"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        ) : !msg.media_url && (msg.text?.includes("Photo") || msg.text?.includes("photo") || msg.text?.includes("📷")) ? (
+                          <div className="flex items-center gap-2 p-2 my-1 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900">
+                            <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                              <Camera className="w-4 h-4 text-amber-700" />
+                            </div>
+                            <div className="text-[11px] flex-1 leading-tight">
+                              <div className="font-semibold text-amber-950 flex items-center gap-1.5">
+                                <span>Photo WhatsApp reçue</span>
+                                <span className="text-[9px] font-normal text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">Mobile</span>
+                              </div>
+                              <p className="text-[10px] text-amber-800/80 mt-0.5">
+                                Image reçue sur l&apos;application mobile WhatsApp.
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Text / Caption */}
+                        {msg.text && (msg.text !== "📷 Photo reçue" || !msg.media_url) && (
+                          <p className="whitespace-pre-wrap leading-relaxed font-sans text-xs select-text">
+                            {msg.text}
+                          </p>
+                        )}
 
                         {/* Delivery Status & Inline Retry */}
                         {isOutbound && (
@@ -1232,20 +1429,91 @@ export default function WhatsAppCrmView() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2.5">
+              {/* Photo Preview Chip (if an image is selected) */}
+              {photoPreviewUrl && (
+                <div className="mb-2 px-3 py-2 bg-emerald-50/90 border border-emerald-200/90 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 shrink-0 bg-black/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photoPreviewUrl}
+                        alt="Aperçu photo"
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => {
+                          setLightboxScale(1);
+                          setLightboxRotation(0);
+                          setLightboxImage({ url: photoPreviewUrl, caption: selectedPhotoFile?.name });
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 text-xs">
+                      <div className="font-bold text-emerald-950 truncate max-w-xs sm:max-w-md">
+                        {selectedPhotoFile?.name || "Photo jointe"}
+                      </div>
+                      <div className="text-[10px] text-emerald-700 flex items-center gap-1.5 mt-0.5">
+                        <span>
+                          {selectedPhotoFile
+                            ? `${(selectedPhotoFile.size / 1024).toFixed(1)} Ko`
+                            : ""}
+                        </span>
+                        <span>•</span>
+                        <span>Prête à être envoyée avec votre message</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearSelectedPhoto}
+                    className="p-1.5 rounded-xl text-emerald-800 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                    title="Supprimer la photo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Hidden file input for photos */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+                {/* Photo Attachment Button */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`w-11 h-11 rounded-2xl border flex items-center justify-center transition-all shrink-0 cursor-pointer shadow-2xs ${
+                    selectedPhotoFile
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-300 ring-2 ring-emerald-400/20"
+                      : "bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-gray-600 border-gray-200"
+                  }`}
+                  title="Joindre une photo (ou collez avec Ctrl+V)"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+
                 <div className="flex-1 bg-gray-100/90 rounded-2xl p-1.5 border border-gray-200 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all shadow-2xs">
                   <textarea
                     ref={textareaRef}
                     rows={2}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
+                    onPaste={handlePaste}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         handleSendMessage();
                       }
                     }}
-                    placeholder={`Écrivez à ${activeConversation.contactName}... (Entrée pour envoyer, Maj+Entrée pour saut de ligne)`}
+                    placeholder={
+                      selectedPhotoFile
+                        ? "Ajouter une légende à la photo... (optionnel, Entrée pour envoyer)"
+                        : `Écrivez à ${activeConversation.contactName}... (Entrée pour envoyer, Maj+Entrée pour saut de ligne)`
+                    }
                     className="w-full px-3 py-1.5 text-xs bg-transparent focus:outline-none resize-none placeholder:text-gray-400"
                   />
                 </div>
@@ -1264,7 +1532,7 @@ export default function WhatsAppCrmView() {
                 {/* Send via API */}
                 <button
                   type="submit"
-                  disabled={!inputMessage.trim() || isSending}
+                  disabled={(!inputMessage.trim() && !selectedPhotoFile) || isSending}
                   className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 disabled:opacity-40 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 transition-all shrink-0 cursor-pointer"
                   title="Envoyer via l'API WhatsApp officielle (soumis à la fenêtre 24h)"
                 >
@@ -1724,6 +1992,116 @@ export default function WhatsAppCrmView() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* FULL-SCREEN PHOTO LIGHTBOX MODAL                         */}
+      {/* ======================================================== */}
+      {lightboxImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/92 backdrop-blur-md flex flex-col justify-between p-4 select-none animate-fadeIn"
+          onClick={() => setLightboxImage(null)}
+        >
+          {/* Top Bar / Controls */}
+          <div
+            className="flex items-center justify-between gap-4 text-white p-2 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 truncate max-w-lg">
+              <Camera className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span className="text-xs md:text-sm font-semibold truncate text-white/90">
+                {lightboxImage.caption || "Photo WhatsApp"}
+              </span>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLightboxScale((s) => Math.max(0.5, s - 0.25))}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Dézoomer"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLightboxScale(1);
+                  setLightboxRotation(0);
+                }}
+                className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-mono text-white transition-colors cursor-pointer"
+                title="Réinitialiser le zoom"
+              >
+                {Math.round(lightboxScale * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxScale((s) => Math.min(3.5, s + 0.25))}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Zoomer"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxRotation((r) => (r + 90) % 360)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Pivoter de 90°"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+              <a
+                href={lightboxImage.url}
+                download="photo-whatsapp.jpg"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer flex items-center justify-center"
+                title="Télécharger l'image"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setLightboxImage(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-red-600 text-white transition-colors cursor-pointer ml-2"
+                title="Fermer (Échap)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Centered Image View with scale and rotation */}
+          <div
+            className="flex-1 flex items-center justify-center p-4 overflow-hidden"
+            onClick={() => setLightboxImage(null)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightboxImage.url}
+              alt={lightboxImage.caption || "Photo WhatsApp"}
+              style={{
+                transform: `scale(${lightboxScale}) rotate(${lightboxRotation}deg)`,
+                transition: "transform 0.15s ease-out",
+              }}
+              className="max-h-[82vh] max-w-[92vw] object-contain rounded-lg shadow-2xl cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Bottom Bar Caption (if present) */}
+          {lightboxImage.caption && (
+            <div
+              className="text-center p-3 text-white/90 text-xs md:text-sm bg-black/40 backdrop-blur-xs rounded-xl mx-auto max-w-xl truncate"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {lightboxImage.caption}
+            </div>
+          )}
         </div>
       )}
     </div>

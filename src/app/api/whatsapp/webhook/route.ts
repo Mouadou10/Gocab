@@ -58,17 +58,25 @@ export async function POST(req: NextRequest) {
 
     const body = JSON.parse(rawBody);
 
+    const extractMediaUrl = (msg: any): string | undefined => {
+      const mediaObj = msg.image || msg.document || msg.video || msg.audio || msg.voice;
+      if (mediaObj?.link) return mediaObj.link;
+      if (mediaObj?.url) return mediaObj.url;
+      if (mediaObj?.id) return `/api/whatsapp/media/${mediaObj.id}`;
+      return undefined;
+    };
+
     const extractMessageText = (msg: any): string => {
       if (msg.type === "text" && msg.text?.body) {
         return msg.text.body;
       } else if (msg.type === "image") {
-        return msg.image?.caption || "📷 Photo reçue";
+        return msg.image?.caption || "📷 Photo";
       } else if (msg.type === "document") {
-        return msg.document?.caption || `📄 Document reçu (${msg.document?.filename || "fichier"})`;
+        return msg.document?.caption || `📄 Document (${msg.document?.filename || "fichier"})`;
       } else if (msg.type === "audio" || msg.type === "voice") {
-        return "🎙️ Message vocal reçu";
+        return "🎙️ Message vocal";
       } else if (msg.type === "video") {
-        return msg.video?.caption || "🎥 Vidéo reçue";
+        return msg.video?.caption || "🎥 Vidéo";
       } else if (msg.type === "location") {
         return `📍 Position partagée: ${msg.location?.latitude}, ${msg.location?.longitude}`;
       } else if (msg.type === "interactive") {
@@ -89,6 +97,7 @@ export async function POST(req: NextRequest) {
     const processMessages = async (messages: any[], contactName?: string) => {
       for (const msg of messages) {
         const messageText = extractMessageText(msg);
+        const mediaUrl = extractMediaUrl(msg);
         const interactiveReplyId =
           msg.interactive?.button_reply?.id ||
           msg.interactive?.list_reply?.id ||
@@ -99,6 +108,7 @@ export async function POST(req: NextRequest) {
           contactName: contactName,
           text: messageText,
           waMessageId: msg.id,
+          mediaUrl,
           interactiveReplyId,
         });
       }
@@ -110,10 +120,12 @@ export async function POST(req: NextRequest) {
         const toPhone = echo.to;
         if (!toPhone) continue;
         const messageText = extractMessageText(echo);
+        const mediaUrl = extractMediaUrl(echo);
         await handleEchoWhatsAppMessage({
           toPhone,
           text: messageText,
           waMessageId: echo.id,
+          mediaUrl,
         });
       }
     };

@@ -61,10 +61,11 @@ export async function POST(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
     const body = await request.json();
-    const { conversationId, phoneNumber, text, senderName } = body;
+    const { conversationId, phoneNumber, text, senderName, mediaUrl, mediaType } = body;
 
-    if (!text || !text.trim()) {
-      return NextResponse.json({ error: "Le texte du message est requis" }, { status: 400 });
+    const messageText = (text && text.trim()) || (mediaUrl ? "📷 Photo" : "");
+    if (!messageText && !mediaUrl) {
+      return NextResponse.json({ error: "Le texte ou une photo est requis" }, { status: 400 });
     }
 
     if (!conversationId && !phoneNumber) {
@@ -89,8 +90,10 @@ export async function POST(request: NextRequest) {
     const result = await sendOutboundWhatsAppMessage({
       conversationId,
       phoneNumber: phone,
-      text: text.trim(),
+      text: messageText,
       senderName: senderName || "GoCab Operations",
+      mediaUrl: mediaUrl || undefined,
+      mediaType: mediaType || (mediaUrl ? "image" : undefined),
     });
 
     return NextResponse.json({

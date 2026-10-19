@@ -20,6 +20,8 @@ export interface SendMessageOptions {
   senderName?: string;
   templateKey?: string;
   interactiveButtons?: Array<{ id: string; title: string }>;
+  mediaUrl?: string;
+  mediaType?: "image" | "document" | "audio" | "video";
 }
 
 export interface InboundMessagePayload {
@@ -588,6 +590,27 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   let deliveryMode = "CRM_LIVE_SIMULATION";
 
   const buildPayload = (useInteractive: boolean) => {
+    if (opts.mediaUrl) {
+      const mediaIdMatch = opts.mediaUrl.match(/\/api\/whatsapp\/media\/([a-zA-Z0-9_-]+)/);
+      const mediaId = mediaIdMatch ? mediaIdMatch[1] : undefined;
+      const isLiveId = mediaId && !mediaId.startsWith("local-");
+
+      return {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhone,
+        type: "image",
+        image: isLiveId
+          ? { id: mediaId, caption: opts.text && opts.text !== "📷 Photo" ? opts.text : undefined }
+          : {
+              link: opts.mediaUrl.startsWith("http")
+                ? opts.mediaUrl
+                : `https://${process.env.VERCEL_URL || "crm.gocab.ma"}${opts.mediaUrl}`,
+              caption: opts.text && opts.text !== "📷 Photo" ? opts.text : undefined,
+            },
+      };
+    }
+
     if (useInteractive && opts.interactiveButtons && opts.interactiveButtons.length > 0) {
       return {
         messaging_product: "whatsapp",
@@ -720,6 +743,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
       text: opts.text,
       status: status,
       wa_message_id: waMessageId || `local-${Date.now()}`,
+      media_url: opts.mediaUrl || null,
       error_message: apiError || null,
     },
   });
