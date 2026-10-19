@@ -8,6 +8,7 @@ import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleR
 import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
 import { touchSyncState } from "@/lib/sync";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import { invalidateDriverCache } from "@/lib/driverCache";
 
 /**
  * GET /api/vehicles/[id]
@@ -263,7 +264,7 @@ export async function PATCH(
           // Link the driver profile to this vehicle
           await prisma.driverProfile.update({
             where: { id: body.assigned_driver_id },
-            data: { assignedVehicleId: id },
+            data: { assignedVehicleId: id, is_archived: false },
           });
 
           updateData.assigned_driver_name = driver.fullName;
@@ -271,12 +272,12 @@ export async function PATCH(
           updateData.historical_driver_name = null;
         }
       } else {
-        // Unlink the driver and record as historical
+        // Unlink the driver and record as historical, auto-archive driver with no assigned vehicle
         const currentDriver = await prisma.driverProfile.findUnique({ where: { assignedVehicleId: id } });
         if (currentDriver) {
           await prisma.driverProfile.update({
             where: { id: currentDriver.id },
-            data: { assignedVehicleId: null },
+            data: { assignedVehicleId: null, is_archived: true },
           });
           updateData.historical_driver_name = currentDriver.fullName;
           updateData.historical_driver_phone = currentDriver.phoneSanitized;
@@ -305,6 +306,7 @@ export async function PATCH(
         ).catch(() => {});
       }
       await touchSyncState("leads").catch(() => {});
+      invalidateDriverCache();
     }
 
     const userId = session?.user?.name || session?.user?.email || session?.user?.id || "agent";

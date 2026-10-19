@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { syncVehicleAssignmentToLead } from '@/lib/services/leadVehicleReconciliation';
 import { touchSyncState } from '@/lib/sync';
+import { invalidateDriverCache } from '@/lib/driverCache';
 
 export async function POST(req: Request) {
   try {
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     // 4. Proceed with Assignment
     await prisma.driverProfile.update({
       where: { id: driverId },
-      data: { assignedVehicleId: vehicleId }
+      data: { assignedVehicleId: vehicleId, is_archived: false }
     });
 
     await prisma.vehicle.update({
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
     ).catch(() => {});
 
     await touchSyncState("leads").catch(() => {});
+    invalidateDriverCache();
 
     return NextResponse.json({ 
       success: true, 

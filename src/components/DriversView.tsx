@@ -72,7 +72,8 @@ export default function DriversView() {
   const [drivers, setDrivers] = useState<DriverProfile[]>(() => globalCachedDrivers || []);
   const [isLoading, setIsLoading] = useState(!globalCachedDrivers || globalCachedDrivers.length === 0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterAssignment, setFilterAssignment] = useState<"ALL" | "ASSIGNED" | "UNASSIGNED" | "RED_FLAG">("ALL");
+  const [viewMode, setViewMode] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
+  const [filterAssignment, setFilterAssignment] = useState<"ALL" | "RED_FLAG">("ALL");
   const [filterStage, setFilterStage] = useState<string>("ALL");
 
   // Modals & Drawers
@@ -82,16 +83,19 @@ export default function DriversView() {
   const [directWhatsAppTarget, setDirectWhatsAppTarget] = useState<WhatsAppDirectTarget | null>(null);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
-  const fetchDrivers = async (silentParam: boolean | unknown = false) => {
+  const fetchDrivers = async (silentParam: boolean | unknown = false, loadArchived = false) => {
     const silent = typeof silentParam === "boolean" ? silentParam : false;
     try {
-      if (!silent && (!globalCachedDrivers || globalCachedDrivers.length === 0)) {
+      if (!silent) {
         setIsLoading(true);
       }
-      const res = await fetch("/api/drivers");
+      const url = loadArchived ? "/api/drivers?archived=true" : "/api/drivers";
+      const res = await fetch(url);
       const data = await res.json();
       if (data.drivers) {
-        globalCachedDrivers = data.drivers;
+        if (!loadArchived) {
+          globalCachedDrivers = data.drivers;
+        }
         setDrivers(data.drivers);
       }
     } catch (err) {
@@ -104,10 +108,8 @@ export default function DriversView() {
   };
 
   useEffect(() => {
-    // If we already have drivers in memory, load them instantly and refresh silently in the background
-    const hasCache = Boolean(globalCachedDrivers && globalCachedDrivers.length > 0);
-    fetchDrivers(hasCache);
-  }, []);
+    fetchDrivers(false, viewMode === "ARCHIVED");
+  }, [viewMode]);
 
   // Filtered drivers list
   const filteredDrivers = useMemo(() => {
@@ -121,9 +123,10 @@ export default function DriversView() {
 
       if (!matchSearch) return false;
 
-      // Assignment
-      if (filterAssignment === "ASSIGNED" && !d.assignedVehicleId) return false;
-      if (filterAssignment === "UNASSIGNED" && d.assignedVehicleId) return false;
+      // In active mode: strictly ensure driver has assigned vehicle
+      if (viewMode === "ACTIVE" && !d.assignedVehicleId) return false;
+
+      // Red Flag filter
       if (filterAssignment === "RED_FLAG" && !d.isRedFlagged) return false;
 
       // Stage
@@ -131,12 +134,11 @@ export default function DriversView() {
 
       return true;
     });
-  }, [drivers, searchQuery, filterAssignment, filterStage]);
+  }, [drivers, searchQuery, viewMode, filterAssignment, filterStage]);
 
   // Statistics
   const totalDrivers = drivers.length;
   const assignedCount = drivers.filter((d) => d.assignedVehicleId).length;
-  const unassignedCount = totalDrivers - assignedCount;
   const redFlagCount = drivers.filter((d) => d.isRedFlagged).length;
   const totalArrearsMAD = drivers.reduce((acc, d) => acc + (d.currentArrearsMAD || 0), 0);
   const kycVerifiedRate = totalDrivers > 0 ? Math.round((drivers.filter((d) => d.isKycVerified).length / totalDrivers) * 100) : 0;
@@ -183,11 +185,11 @@ export default function DriversView() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col">
           <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs font-semibold">Total Chauffeurs</span>
+            <span className="text-xs font-semibold">Chauffeurs Actifs</span>
             <Users className="w-4 h-4 text-navy" />
           </div>
-          <p className="text-2xl font-extrabold text-navy">{totalDrivers}</p>
-          <span className="text-2xs text-gray-400 mt-1">Inscrits dans le CRM</span>
+          <p className="text-2xl font-extrabold text-navy">{assignedCount}</p>
+          <span className="text-2xs text-gray-400 mt-1">Avec véhicule assigné</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col">
@@ -196,16 +198,16 @@ export default function DriversView() {
             <Car className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="text-2xl font-extrabold text-emerald-600">{assignedCount}</p>
-          <span className="text-2xs text-emerald-600 font-medium mt-1">Avec véhicule actif</span>
+          <span className="text-2xs text-emerald-600 font-medium mt-1">Véhicules en circulation</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col">
           <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs font-semibold">En Attente Véhicule</span>
-            <UserCheck className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-semibold">Sous Red Flag</span>
+            <span className="text-sm">🚩</span>
           </div>
-          <p className="text-2xl font-extrabold text-amber-600">{unassignedCount}</p>
-          <span className="text-2xs text-amber-600 font-medium mt-1">Prêts à être affectés</span>
+          <p className="text-2xl font-extrabold text-red-600">{redFlagCount}</p>
+          <span className="text-2xs text-red-500 font-medium mt-1">Dossiers sous surveillance</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col">
@@ -245,33 +247,25 @@ export default function DriversView() {
         <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
           <div className="flex items-center bg-gray-100 p-1 rounded-xl text-xs font-medium text-gray-600">
             <button
-              onClick={() => setFilterAssignment("ALL")}
+              onClick={() => {
+                setViewMode("ACTIVE");
+                setFilterAssignment("ALL");
+              }}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                filterAssignment === "ALL" ? "bg-white text-navy font-bold shadow-2xs" : "hover:text-navy"
+                viewMode === "ACTIVE" && filterAssignment === "ALL"
+                  ? "bg-white text-navy font-bold shadow-2xs"
+                  : "hover:text-navy"
               }`}
             >
-              Tous ({totalDrivers})
+              Chauffeurs Actifs ({viewMode === "ACTIVE" ? totalDrivers : assignedCount})
             </button>
             <button
-              onClick={() => setFilterAssignment("ASSIGNED")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                filterAssignment === "ASSIGNED" ? "bg-white text-emerald-700 font-bold shadow-2xs" : "hover:text-emerald-700"
-              }`}
-            >
-              Avec Véhicule ({assignedCount})
-            </button>
-            <button
-              onClick={() => setFilterAssignment("UNASSIGNED")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                filterAssignment === "UNASSIGNED" ? "bg-white text-amber-700 font-bold shadow-2xs" : "hover:text-amber-700"
-              }`}
-            >
-              En Attente ({unassignedCount})
-            </button>
-            <button
-              onClick={() => setFilterAssignment("RED_FLAG")}
+              onClick={() => {
+                setViewMode("ACTIVE");
+                setFilterAssignment("RED_FLAG");
+              }}
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                filterAssignment === "RED_FLAG"
+                viewMode === "ACTIVE" && filterAssignment === "RED_FLAG"
                   ? "bg-red-600 text-white font-bold shadow-2xs"
                   : "text-red-700 hover:bg-red-50 hover:text-red-800"
               }`}
@@ -279,6 +273,20 @@ export default function DriversView() {
             >
               <span>🚩</span>
               <span>Red Flags ({redFlagCount})</span>
+            </button>
+            <button
+              onClick={() => {
+                setViewMode("ARCHIVED");
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                viewMode === "ARCHIVED"
+                  ? "bg-slate-700 text-white font-bold shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+              }`}
+              title="Afficher les chauffeurs archivés sans véhicule"
+            >
+              <span>📁</span>
+              <span>Archivés (Sans Véhicule)</span>
             </button>
           </div>
 

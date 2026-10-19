@@ -19,12 +19,13 @@ export async function GET(request: NextRequest) {
       return authResult.error;
     }
     const { searchParams } = new URL(request.url);
+    const showArchived = searchParams.get("archived") === "true";
     const unassignedOnly = searchParams.get("unassigned") === "true";
     const currentVehicleId = searchParams.get("current_vehicle_id");
     const query = searchParams.get("q")?.trim();
     const stage = searchParams.get("stage")?.trim();
 
-    const isSimpleFetch = !unassignedOnly && !currentVehicleId && !query && !stage;
+    const isSimpleFetch = !unassignedOnly && !currentVehicleId && !query && !stage && !showArchived;
 
     // Return from in-memory server cache if fresh (5s TTL)
     const cached = getDriverCache();
@@ -41,14 +42,23 @@ export async function GET(request: NextRequest) {
 
     const where: any = {};
 
-    if (unassignedOnly) {
-      if (currentVehicleId) {
-        where.OR = [
-          { assignedVehicleId: null },
-          { assignedVehicleId: currentVehicleId }
-        ];
+    if (showArchived) {
+      where.is_archived = true;
+    } else {
+      where.is_archived = false;
+
+      if (unassignedOnly) {
+        if (currentVehicleId) {
+          where.OR = [
+            { assignedVehicleId: null },
+            { assignedVehicleId: currentVehicleId },
+          ];
+        } else {
+          where.assignedVehicleId = null;
+        }
       } else {
-        where.assignedVehicleId = null;
+        // By default: strictly display only drivers with an assigned vehicle
+        where.assignedVehicleId = { not: null };
       }
     }
 

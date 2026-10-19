@@ -127,6 +127,15 @@ export async function PATCH(
 
     if (assignedVehicleId !== undefined) {
       updateData.assignedVehicleId = assignedVehicleId || null;
+      if (!assignedVehicleId) {
+        updateData.is_archived = true;
+      } else {
+        updateData.is_archived = false;
+      }
+    }
+
+    if (body.is_archived !== undefined) {
+      updateData.is_archived = Boolean(body.is_archived);
     }
 
     const updatedDriver = await prisma.driverProfile.update({

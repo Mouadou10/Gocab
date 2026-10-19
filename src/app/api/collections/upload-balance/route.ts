@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
+import { invalidateDriverCache } from "@/lib/driverCache";
 
 /**
  * Normalizes phone numbers to comparable digits-only format.
@@ -705,6 +706,7 @@ export async function POST(request: NextRequest) {
 
     // Touch sync state so all active sessions & dashboard instantly refresh collections data
     await touchSyncState("collections");
+    invalidateDriverCache();
 
     return NextResponse.json({
       success: true,

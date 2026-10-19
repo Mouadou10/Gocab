@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Send,
   AlertTriangle,
+  Archive,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import WhatsAppDirectModal from "./WhatsAppDirectModal";
@@ -56,6 +57,7 @@ export interface DriverProfile {
   defaultStage: string;
   assignedVehicleId: string | null;
   assignedVehicle?: Vehicle | null;
+  is_archived?: boolean;
   isRedFlagged?: boolean;
   redFlagReason?: string | null;
   redFlaggedAt?: string | null;
@@ -304,6 +306,40 @@ export default function DriverDrawer({
       toast.error("Erreur réseau");
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  async function handleArchiveToggle() {
+    if (!driver) return;
+    const isCurrentlyArchived = Boolean(driver.is_archived);
+    const newArchived = !isCurrentlyArchived;
+    if (
+      !confirm(
+        newArchived
+          ? `Archiver le chauffeur ${driver.fullName} ? Il ne sera plus affiché dans la liste des chauffeurs actifs.`
+          : `Désarchiver le chauffeur ${driver.fullName} ?`
+      )
+    ) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/drivers/${driver.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_archived: newArchived }),
+      });
+      if (!res.ok) {
+        toast.error("Erreur lors de la mise à jour du statut d'archivage");
+        return;
+      }
+      toast.success(newArchived ? "Chauffeur archivé" : "Chauffeur restauré");
+      onUpdate();
+      onClose();
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -647,14 +683,30 @@ export default function DriverDrawer({
 
           {/* Drawer Footer */}
           <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting || isSaving}
-              className="p-2.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
-              title="Supprimer le profil chauffeur"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting || isSaving}
+                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
+                title="Supprimer le profil chauffeur"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveToggle}
+                disabled={isSaving}
+                className={`p-2 rounded-xl transition-colors ${
+                  driver.is_archived
+                    ? "text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-200"
+                }`}
+                title={driver.is_archived ? "Désarchiver le chauffeur" : "Archiver le chauffeur"}
+              >
+                <Archive className="w-4 h-4" />
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
