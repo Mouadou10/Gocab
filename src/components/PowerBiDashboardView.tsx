@@ -183,6 +183,11 @@ interface PerformanceData {
     ticketsTotalCount: number;
     ticketResolutionAttainmentPct: number;
     isTicketResolutionCompliant: boolean;
+    avgDaysMissingDocs?: number;
+    targetMaxMissingDocsDays?: number;
+    missingDocsVehiclesCount?: number;
+    missingDocsAttainmentPct?: number;
+    isMissingDocsCompliant?: boolean;
     teamAttainmentPct: number;
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
@@ -256,6 +261,9 @@ interface PerformanceData {
       targetTicketResolutionRate?: number;
       ticketsResolvedCount?: number;
       ticketsTotalCount?: number;
+      avgDaysMissingDocs?: number;
+      targetMaxMissingDocsDays?: number;
+      missingDocsVehiclesCount?: number;
       tasksTotal: number;
       tasksCompleted: number;
       tasksFailed: number;
@@ -887,7 +895,7 @@ export default function PowerBiDashboardView() {
     ];
   }, [activeFleet]);
 
-  // ── Chart 4c Data: Field Supervisor 3 KPIs Attainment ────────────
+  // ── Chart 4c Data: Field Supervisor 4 KPIs Attainment ────────────
   const fieldSupAttainmentData = useMemo(() => {
     if (!fieldSup) return [];
     return [
@@ -914,6 +922,14 @@ export default function PowerBiDashboardView() {
         actualLabel: `${fieldSup.ticketResolutionRate}% (${fieldSup.ticketsResolvedCount}/${fieldSup.ticketsTotalCount})`,
         targetLabel: "≥ 95%",
         isCompliant: fieldSup.isTicketResolutionCompliant,
+      },
+      {
+        name: "4. Documents Manquants (≤3j)",
+        Attainment: Math.min(130, fieldSup.missingDocsAttainmentPct ?? 100),
+        Cible: 100,
+        actualLabel: `${fieldSup.avgDaysMissingDocs ?? 0} j`,
+        targetLabel: `≤ ${fieldSup.targetMaxMissingDocsDays ?? 3} jours`,
+        isCompliant: fieldSup.isMissingDocsCompliant ?? true,
       },
     ];
   }, [fieldSup]);
@@ -2640,7 +2656,7 @@ export default function PowerBiDashboardView() {
                       Opérations Terrain, Attestations de Location &amp; Résolution Tickets
                     </h3>
                     <p className="text-2xs text-gray-500">
-                      Objectifs SLA : <strong>AVG &le; 3h</strong> Exécution Missions · <strong>&ge; 90%</strong> Attestations de Location à temps · <strong>&ge; 95%</strong> Tickets Résolus
+                      Objectifs SLA : <strong>AVG &le; 3h</strong> Missions · <strong>&ge; 90%</strong> Attestations à temps · <strong>&ge; 95%</strong> Tickets Résolus · <strong>AVG &le; 3j</strong> Documents Manquants
                     </p>
                   </div>
 
@@ -2658,7 +2674,7 @@ export default function PowerBiDashboardView() {
                         <span className="text-2xs font-bold text-gray-500">/ 1 000 DH max</span>
                       </div>
                       <p className="text-3xs text-emerald-700 font-semibold mt-0.5">
-                        Atteinte Globale (3 KPIs) : <strong>{fieldSup?.teamAttainmentPct ?? 100}%</strong>
+                        Atteinte Globale (4 KPIs) : <strong>{fieldSup?.teamAttainmentPct ?? 100}%</strong>
                       </p>
                     </div>
                   </div>
@@ -2674,8 +2690,8 @@ export default function PowerBiDashboardView() {
                   theme="emerald"
                 />
 
-                {/* 3 KPIs Cards for Field Supervisor Team */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+                {/* 4 KPIs Cards for Field Supervisor Team */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
                   {/* KPI 1: AVG Time to Complete Missions (<= 3h AVG) */}
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2">
                     <div className="flex justify-between items-center">
@@ -2788,7 +2804,7 @@ export default function PowerBiDashboardView() {
                   <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-3xs font-black text-emerald-900 uppercase">
-                        3. Taux deTickets Résolus
+                        3. Taux de Tickets Résolus
                       </span>
                       <span
                         className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
@@ -2837,9 +2853,63 @@ export default function PowerBiDashboardView() {
                       </span>
                     </div>
                   </div>
+
+                  {/* KPI 4: AVG Number of Days Car Can Stay as Missing Documents (<= 3 days) */}
+                  <div className="bg-amber-50/40 border border-amber-200/80 rounded-2xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-3xs font-black text-amber-900 uppercase">
+                        4. Documents Manquants Parc
+                      </span>
+                      <span
+                        className={`text-3xs font-bold px-2 py-0.5 rounded-full ${
+                          (fieldSup?.avgDaysMissingDocs ?? 0) <= (fieldSup?.targetMaxMissingDocsDays || 3.0)
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        Cible : &le; {fieldSup?.targetMaxMissingDocsDays || 3}j
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-amber-950 font-mono">
+                        {fieldSup?.avgDaysMissingDocs ?? 0} jour(s)
+                      </span>
+                      <span className="text-xs text-gray-500 font-mono">
+                        / max {fieldSup?.targetMaxMissingDocsDays || 3}j
+                      </span>
+                    </div>
+                    <div className="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (fieldSup?.avgDaysMissingDocs ?? 0) <= (fieldSup?.targetMaxMissingDocsDays || 3.0)
+                            ? "bg-emerald-500"
+                            : "bg-red-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, fieldSup?.missingDocsAttainmentPct || 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-3xs font-bold pt-0.5">
+                      <span className="text-gray-500">
+                        {fieldSup?.missingDocsVehiclesCount ?? 0} véhicule(s) en régularisation
+                      </span>
+                      <span
+                        className={
+                          (fieldSup?.avgDaysMissingDocs ?? 0) <= (fieldSup?.targetMaxMissingDocsDays || 3.0)
+                            ? "text-emerald-700"
+                            : "text-red-700"
+                        }
+                      >
+                        {(fieldSup?.avgDaysMissingDocs ?? 0) <= (fieldSup?.targetMaxMissingDocsDays || 3.0)
+                          ? "✓ SLA ≤ 3j respecté"
+                          : "⚠️ Dépassement > 3j"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Field Supervisor Charts & 3-Objective Compliance Matrix */}
+                {/* Field Supervisor Charts & 4-Objective Compliance Matrix */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 relative z-10">
                   {/* Left: Attainment BarChart */}
                   <div className="lg:col-span-7 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
@@ -2850,7 +2920,7 @@ export default function PowerBiDashboardView() {
                           <span>Score d&apos;Atteinte par KPI — Field Supervisor</span>
                         </h4>
                         <p className="text-3xs text-gray-500">
-                          Comparaison par rapport à la cible 100% (Missions ≤3h, Attestations ≥90%, Tickets ≥95%)
+                          Comparaison par rapport à la cible 100% (Missions ≤3h, Attestations ≥90%, Tickets ≥95%, Documents ≤3j)
                         </p>
                       </div>
                       <span className="text-3xs font-bold px-2 py-0.5 bg-green-100 text-green-900 rounded-md">
@@ -2922,7 +2992,7 @@ export default function PowerBiDashboardView() {
                     </div>
                   </div>
 
-                  {/* Right: 3-Objective Compliance Summary Table */}
+                  {/* Right: 4-Objective Compliance Summary Table */}
                   <div className="lg:col-span-5 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/40 border border-green-200/70 rounded-2xl p-4 flex flex-col justify-between">
                     <div className="border-b border-green-100 pb-2.5 mb-2 flex items-center justify-between">
                       <div>
@@ -2930,11 +3000,11 @@ export default function PowerBiDashboardView() {
                           🎯 Matrice de Conformité — Hamza &amp; Ayoub Rassid
                         </h4>
                         <p className="text-3xs text-gray-500">
-                           Pondération : 1/3 Missions · 1/3 Attestations · 1/3 Tickets
+                           Pondération : 25% Missions · 25% Attestations · 25% Tickets · 25% Documents Manquants
                         </p>
                       </div>
                       <span className="text-3xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        {fieldSupAttainmentData.filter((x) => x.isCompliant).length} / 3 conformes
+                        {fieldSupAttainmentData.filter((x) => x.isCompliant).length} / 4 conformes
                       </span>
                     </div>
 

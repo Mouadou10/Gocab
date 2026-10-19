@@ -28,6 +28,7 @@ interface DepartmentTargets {
   target_collection_rate: number;
   target_max_vidange_hours: number;
   target_max_field_mission_hours: number;
+  target_max_missing_docs_days: number;
   target_weekly_revenue_mad: number;
   target_daily_tasks: number;
   target_fleet_uptime: number;
@@ -53,6 +54,7 @@ interface DepartmentTargets {
   weight_field_mission: number;
   weight_field_attestation: number;
   weight_field_tickets: number;
+  weight_field_missing_docs: number;
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
@@ -79,6 +81,7 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_collection_rate: 60,
   target_max_vidange_hours: 1.0, // Timing to deal with Vidange/AdBleu AVG <= 1H
   target_max_field_mission_hours: 3.0, // Timing to execute field mission AVG <= 3H
+  target_max_missing_docs_days: 3.0, // AVG number of days car can stay as missing documents <= 3 days
   target_weekly_revenue_mad: 50000,
   target_daily_tasks: 10,
   target_fleet_uptime: 95,
@@ -101,9 +104,10 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   weight_fleet_vidange: 20,
   weight_fleet_mission: 20,
 
-  weight_field_mission: 33.3,
-  weight_field_attestation: 33.3,
-  weight_field_tickets: 33.4,
+  weight_field_mission: 25,
+  weight_field_attestation: 25,
+  weight_field_tickets: 25,
+  weight_field_missing_docs: 25,
 };
 
 export async function GET(request: NextRequest) {
@@ -182,9 +186,11 @@ export async function GET(request: NextRequest) {
           weight_fleet_vidange: parsed.weight_fleet_vidange !== undefined ? Number(parsed.weight_fleet_vidange) : DEFAULT_TARGETS.weight_fleet_vidange,
           weight_fleet_mission: parsed.weight_fleet_mission !== undefined ? Number(parsed.weight_fleet_mission) : DEFAULT_TARGETS.weight_fleet_mission,
 
+          target_max_missing_docs_days: Number(parsed.target_max_missing_docs_days) || 3.0,
           weight_field_mission: parsed.weight_field_mission !== undefined ? Number(parsed.weight_field_mission) : DEFAULT_TARGETS.weight_field_mission,
           weight_field_attestation: parsed.weight_field_attestation !== undefined ? Number(parsed.weight_field_attestation) : DEFAULT_TARGETS.weight_field_attestation,
           weight_field_tickets: parsed.weight_field_tickets !== undefined ? Number(parsed.weight_field_tickets) : DEFAULT_TARGETS.weight_field_tickets,
+          weight_field_missing_docs: parsed.weight_field_missing_docs !== undefined ? Number(parsed.weight_field_missing_docs) : DEFAULT_TARGETS.weight_field_missing_docs,
         };
       }
     } catch (err) {
@@ -1141,15 +1147,39 @@ export async function GET(request: NextRequest) {
       Math.min(150, (ticketResolutionRate / targetTicketResolutionRate) * 100).toFixed(1)
     );
 
-    // Composite Team Attainment % across all 3 KPIs
+    // KPI 4: AVG Number of Days Car Can Stay as Missing Documents (Target: <= 3.0 days)
+    const missingDocVehicles = allFleetVehicles.filter((v) => v.status === "missing_document");
+    const activeMissingDocDurations = missingDocVehicles.map((v) =>
+      v.total_downtime_days && v.total_downtime_days > 0
+        ? v.total_downtime_days
+        : Number(Math.max(0.1, (now.getTime() - new Date(v.updated_at).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1))
+    );
+
+    const targetMaxMissingDocsDays = targets.target_max_missing_docs_days || 3.0;
+    const avgDaysMissingDocs =
+      activeMissingDocDurations.length > 0
+        ? Number((activeMissingDocDurations.reduce((a, b) => a + b, 0) / activeMissingDocDurations.length).toFixed(1))
+        : 3.0;
+
+    const isMissingDocsCompliant = avgDaysMissingDocs <= targetMaxMissingDocsDays;
+    const missingDocsAttainmentPct =
+      avgDaysMissingDocs <= targetMaxMissingDocsDays
+        ? Math.min(120, Number((100 + (targetMaxMissingDocsDays - avgDaysMissingDocs) * 5).toFixed(1)))
+        : Math.max(0, Number(((targetMaxMissingDocsDays / avgDaysMissingDocs) * 100).toFixed(1)));
+
+    // Composite Team Attainment % across all 4 KPIs (equal 25% weight)
     const fieldWeightSum =
-      (targets.weight_field_mission + targets.weight_field_attestation + targets.weight_field_tickets) || 100;
+      (targets.weight_field_mission +
+        targets.weight_field_attestation +
+        targets.weight_field_tickets +
+        targets.weight_field_missing_docs) || 100;
 
     const fieldSupervisorTeamAttainmentPct = Number(
       (
         (targets.weight_field_mission * Math.min(150, missionTimeAttainmentPct) +
           targets.weight_field_attestation * Math.min(150, attestationAttainmentPct) +
-          targets.weight_field_tickets * Math.min(150, ticketResolutionAttainmentPct)) /
+          targets.weight_field_tickets * Math.min(150, ticketResolutionAttainmentPct) +
+          targets.weight_field_missing_docs * Math.min(150, missingDocsAttainmentPct)) /
         fieldWeightSum
       ).toFixed(1)
     );
@@ -1234,7 +1264,7 @@ export async function GET(request: NextRequest) {
       } else if (u.role === "FIELD_SUPERVISOR" || uName.includes("hamza") || uName.includes("ayoub rassid")) {
         dept = "Opérations Terrain";
         teamName = "Field Supervisor (Hamza & Ayoub Rassid)";
-        keyMetric = "Missions (≤3h) · Attest. (90%) · Tickets (95%)";
+        keyMetric = "Missions (≤3h) · Attest. (90%) · Tickets (95%) · Docs (≤3j)";
         actual = ticketResolutionRate;
         target = targetTicketResolutionRate;
         unit = "% résolus";
@@ -1538,6 +1568,11 @@ export async function GET(request: NextRequest) {
         ticketsTotalCount,
         ticketResolutionAttainmentPct,
         isTicketResolutionCompliant: ticketResolutionRate >= targetTicketResolutionRate,
+        avgDaysMissingDocs,
+        targetMaxMissingDocsDays,
+        missingDocsVehiclesCount: missingDocVehicles.length,
+        missingDocsAttainmentPct,
+        isMissingDocsCompliant,
         teamAttainmentPct: fieldSupervisorTeamAttainmentPct,
         monthlyBonusBudgetMAD: 1000,
         bonusEarnedMAD: fieldSupervisorBonusEarnedMAD,
@@ -1546,6 +1581,7 @@ export async function GET(request: NextRequest) {
           mission: targets.weight_field_mission,
           attestation: targets.weight_field_attestation,
           tickets: targets.weight_field_tickets,
+          missingDocs: targets.weight_field_missing_docs,
           total: fieldWeightSum,
         },
         calculationDetails: [
@@ -1575,6 +1611,15 @@ export async function GET(request: NextRequest) {
             cappedAttainmentPct: Number(Math.min(150, ticketResolutionAttainmentPct).toFixed(1)),
             weightPct: targets.weight_field_tickets,
             contributionPct: Number(((targets.weight_field_tickets * Math.min(150, ticketResolutionAttainmentPct)) / fieldWeightSum).toFixed(1)),
+          },
+          {
+            kpi: "Véhicules Documents Manquants (≤ 3j)",
+            actual: `${avgDaysMissingDocs} jours`,
+            target: `≤ ${targetMaxMissingDocsDays} jours`,
+            rawAttainmentPct: Number(missingDocsAttainmentPct.toFixed(1)),
+            cappedAttainmentPct: Number(Math.min(150, missingDocsAttainmentPct).toFixed(1)),
+            weightPct: targets.weight_field_missing_docs,
+            contributionPct: Number(((targets.weight_field_missing_docs * Math.min(150, missingDocsAttainmentPct)) / fieldWeightSum).toFixed(1)),
           },
         ],
       },
@@ -1645,6 +1690,9 @@ export async function GET(request: NextRequest) {
           targetTicketResolutionRate,
           ticketsResolvedCount,
           ticketsTotalCount,
+          avgDaysMissingDocs,
+          targetMaxMissingDocsDays,
+          missingDocsVehiclesCount: missingDocVehicles.length,
           tasksTotal,
           tasksCompleted,
           tasksFailed,
