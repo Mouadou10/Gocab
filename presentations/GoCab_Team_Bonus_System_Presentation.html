@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoCab Team Presentation — New Bonus System & Calculation Logic</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      --gocab-navy: #162c50;
+      --gocab-blue: #234272;
+      --gocab-blue-light: #365c9c;
+      --gocab-olive: #596626;
+      --gocab-lime: #a3e635;
+      --gocab-bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-dark: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background: #0b1320;
+      color: var(--text-dark);
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    /* Presentation Deck Controls */
+    .deck-controls {
+      position: fixed;
+      bottom: 20px;
+      right: 25px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      padding: 8px 16px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+    .deck-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .deck-btn:hover {
+      background: var(--gocab-lime);
+      color: var(--text-dark);
+      border-color: var(--gocab-lime);
+    }
+    .slide-counter {
+      color: #cbd5e1;
+      font-size: 13px;
+      font-weight: 700;
+      font-mono: monospace;
+      padding: 0 6px;
+    }
+
+    /* Speaker Notes Toggle */
+    .notes-toggle {
+      background: rgba(163, 230, 53, 0.2);
+      color: var(--gocab-lime);
+      border-color: var(--gocab-lime);
+    }
+
+    /* Slides container */
+    .slides-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 0 90px 0;
+      gap: 36px;
+    }
+
+    .slide {
+      width: 1280px;
+      height: 720px;
+      background: var(--gocab-bg);
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 0.25s ease;
+    }
+
+    /* Fullscreen Slide Focus mode */
+    body.presentation-mode .slide {
+      display: none;
+      border-radius: 0;
+      width: 100vw;
+      height: 100vh;
+      border: none;
+    }
+    body.presentation-mode .slide.active-slide {
+      display: flex;
+    }
+    body.presentation-mode .slides-wrapper {
+      padding: 0;
+      gap: 0;
+    }
+
+    /* Header styling */
+    .slide-header {
+      padding: 24px 36px 16px 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: #ffffff;
+    }
+    .slide-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .gocab-badge {
+      background: var(--gocab-navy);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 8px;
+      letter-spacing: 1px;
+    }
+    .slide-title-block h2 {
+      font-size: 21px;
+      font-weight: 800;
+      color: var(--text-dark);
+      letter-spacing: -0.4px;
+    }
+    .slide-title-block .slide-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gocab-olive);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+    }
+    .slide-header-right {
+      display: flex;
+      gap: 10px;
+    }
+    .pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      background: #f1f5f9;
+      color: var(--text-muted);
+    }
+    .pill.lime {
+      background: rgba(163, 230, 53, 0.2);
+      color: #3f6212;
+      border: 1px solid rgba(163, 230, 53, 0.4);
+    }
+    .pill.navy {
+      background: #e0e7ff;
+      color: #1e1b4b;
+    }
+
+    /* Slide Content Body */
+    .slide-body {
+      flex: 1;
+      padding: 26px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    /* Footer */
+    .slide-footer {
+      padding: 12px 36px;
+      background: #ffffff;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Cover Slide */
+    .slide-cover {
+      background: linear-gradient(135deg, #091322 0%, #162c50 55%, #234272 85%, #3f4d1a 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 56px;
+    }
+    .cover-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .cover-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 8px 18px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .cover-brand span.logo {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--gocab-navy);
+      letter-spacing: -0.5px;
+    }
+    .cover-brand span.sub {
+      font-size: 9px;
+      font-weight: 800;
+      color: var(--gocab-olive);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .cover-center {
+      max-width: 860px;
+    }
+    .cover-tagline {
+      color: var(--gocab-lime);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .cover-title {
+      font-size: 42px;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 18px;
+      letter-spacing: -1px;
+    }
+    .cover-title span { color: var(--gocab-lime); }
+    .cover-desc {
+      font-size: 16px;
+      line-height: 1.55;
+      color: #cbd5e1;
+      max-width: 780px;
+      margin-bottom: 24px;
+    }
+    .cover-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .stat-card {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      padding: 14px 18px;
+    }
+    .stat-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--gocab-lime);
+      margin-bottom: 2px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    /* Grids & Cards */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 18px 22px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    .badge.navy { background: #e0e7ff; color: #1e1b4b; }
+    .badge.olive { background: #ecfccb; color: #365314; }
+    .badge.emerald { background: #d1fae5; color: #065f46; }
+    .badge.amber { background: #fef3c7; color: #92400e; }
+
+    /* Formula & Calculation Box */
+    .math-box {
+      background: #0f172a;
+      color: #fff;
+      border-radius: 14px;
+      padding: 16px 20px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      border-left: 4px solid var(--gocab-lime);
+    }
+    .math-formula {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--gocab-lime);
+      margin-bottom: 6px;
+      font-family: monospace;
+    }
+    .math-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.45;
+    }
+
+    .kpi-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #edf2f7;
+    }
+    .kpi-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .kpi-target {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--gocab-blue);
+    }
+    .kpi-weight {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--gocab-olive);
+      background: #f0fdf4;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid #bbf7d0;
+    }
+
+    /* Example Box */
+    .example-box {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 14px;
+      padding: 16px 20px;
+      color: #14532d;
+    }
+    .example-title {
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Speaker Notes Bar (collapsible) */
+    .speaker-notes-bar {
+      display: none;
+      position: absolute;
+      bottom: 45px;
+      left: 36px;
+      right: 36px;
+      background: rgba(15, 23, 42, 0.95);
+      color: #e2e8f0;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border: 1px solid #334155;
+      z-index: 50;
+    }
+    .speaker-notes-bar.show { display: block; }
+    .notes-tag {
+      font-weight: 800;
+      color: var(--gocab-lime);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .deck-controls { display: none !important; }
+      .slide {
+        page-break-after: always;
+        break-after: page;
+        box-shadow: none;
+        border: none;
+        width: 100%;
+        height: 100vh;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Navigation Controls -->
+  <div class="deck-controls">
+    <button class="deck-btn" onclick="prevSlide()">← Précédent</button>
+    <span class="slide-counter" id="counterDisplay">Slide 1 / 10</span>
+    <button class="deck-btn" onclick="nextSlide()">Suivant →</button>
+    <button class="deck-btn" onclick="toggleFullScreen()">⛶ Plein Écran</button>
+    <button class="deck-btn notes-toggle" onclick="toggleNotes()">🎙️ Notes Orateur</button>
+  </div>
+
+  <div class="slides-wrapper" id="deckContainer">
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 1: COVER SLIDE                                     -->
+    <!-- ======================================================== -->
+    <div class="slide slide-cover active-slide" id="slide-1">
+      <div class="cover-top">
+        <div class="cover-brand">
+          <span class="logo">GoCab</span>
+          <span class="sub">Casablanca • Operational Excellence</span>
+        </div>
+        <div class="pill lime">DÉPLOIEMENT PRODUCTION 2026</div>
+      </div>
+
+      <div class="cover-center">
+        <div class="cover-tagline">MOTEUR DE RECONNAISSANCE & DE PERFORMANCE</div>
+        <h1 class="cover-title">
+          Le Nouveau Système de <span>Bonus GoCab</span> & Sa Logique de Calcul
+        </h1>
+        <p class="cover-desc">
+          Une présentation transparente pour toute l'équipe opérationnelle : comment chaque effort quotidien, chaque appel qualifié, chaque recouvrement et chaque intervention rapide se traduit directement en dirhams sur votre fiche de paie mensuelle (jusqu'à <strong>1 000 DH / mois</strong>).
+        </p>
+
+        <div class="cover-stats">
+          <div class="stat-card">
+            <div class="stat-val">1 000 DH</div>
+            <div class="stat-label">Bonus Mensuel Maximum par Spécialiste</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val">100% Pro-Rata</div>
+            <div class="stat-label">Chaque % Atteint = Votre Payout Garanti</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val">Temps Réel</div>
+            <div class="stat-label">Calculé & Visible Chaque Jour dans le CRM</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val">4 Piliers</div>
+            <div class="stat-label">Acquisition, Onboarding, Flotte & Terrain</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
+        <span>GoCab Morocco • Présentation d'Équipe</span>
+        <span>Utilisez les flèches ← → du clavier pour naviguer</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-1">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Bienvenue à tous ! Aujourd'hui, je suis très enthousiaste de vous présenter officiellement le nouveau système de bonus de GoCab. Nous avons conçu ce système avec une idée centrale : la justice, la clarté totale et la récompense directe de vos efforts quotidiens. Chez GoCab, votre investissement quotidien ne doit plus dépendre d'une appréciation subjective en fin d'année, mais d'une formule mathématique transparente qui valorise votre travail jour après jour."
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 2: PHILOSOPHY & WHY THIS SYSTEM EXISTS             -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-2">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">PHILOSOPHIE</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">POURQUOI CE SYSTÈME A ÉTÉ CRÉÉ</div>
+            <h2>Les 4 Piliers de la Logique de Motivation GoCab</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill lime">ÉQUITÉ & TRANSPARENCE</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-4" style="flex: 1;">
+          <div class="card" style="border-top: 4px solid #10b981;">
+            <div class="card-header">
+              <span class="card-title">1. Fini le "Tout ou Rien"</span>
+              <span class="badge emerald">Sécurité Pro-Rata</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.55;">
+              Dans les anciens modèles, si vous ratiez un objectif le 18 du mois, le bonus était perdu et la motivation retombait. Chez GoCab, <strong>le calcul est 100% proportionnel (pro-rata)</strong> : 85% d'atteinte = <strong>850 DH</strong>, 95% = <strong>950 DH</strong>. Chaque journée compte jusqu'au jour 30 !
+            </p>
+          </div>
+
+          <div class="card" style="border-top: 4px solid var(--gocab-navy);">
+            <div class="card-header">
+              <span class="card-title">2. Équilibre Volume × Qualité</span>
+              <span class="badge navy">Anti-Bâclage</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.55;">
+              Chaque métier associe un indicateur de rythme et un indicateur de rigueur : appels + présence en formation ; encaissement + rétention des chauffeurs ; rapidité d'intervention + résolution des tickets. Personne n'est pénalisé s'il fait les choses avec qualité.
+            </p>
+          </div>
+
+          <div class="card" style="border-top: 4px solid #f59e0b;">
+            <div class="card-header">
+              <span class="card-title">3. Visibilité Quotidienne CRM</span>
+              <span class="badge amber">Zéro Surprise</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.55;">
+              Fini l'attente stressante de la fin du mois. Votre progression, votre taux d'atteinte et votre bonus accumulé en dirhams sont <strong>calculés en direct dans le CRM PowerBI</strong>. Vous savez exactement où vous en êtes chaque matin.
+            </p>
+          </div>
+
+          <div class="card" style="border-top: 4px solid var(--gocab-olive);">
+            <div class="card-header">
+              <span class="card-title">4. Le Relais d'Équipe</span>
+              <span class="badge olive">Le Témoin</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.55;">
+              GoCab fonctionne comme une course de relais : l'Acquisition transmet des leads sérieux à l'Onboarding, l'Onboarding affecte les voitures sans temps mort (&le; 1j), le Support Flotte veille aux loyers et le Terrain sécurise les véhicules. Nous gagnons ensemble !
+            </p>
+          </div>
+        </div>
+
+        <div class="math-box">
+          <div class="math-formula">Règle Universelle GoCab : Bonus Gagné (MAD) = Math.min(1 000, 1 000 × Taux Global %)</div>
+          <div class="math-sub">
+            Le budget alloué par GoCab est de <strong>1 000 DH net mensuel</strong> pour chaque collaborateur opérationnel. Les jours ouvrés sont automatiquement ajustés sur le calendrier légal marocain (hors jours fériés).
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 2 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-2">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Insistez bien sur la notion de 'Pro-Rata'. Expliquez-leur : 'Si vous faites un mois à 88%, vous ne touchez pas 0 DH, vous touchez 880 DH ! Rien de ce que vous faites n'est jeté à la poubelle.' Mettez aussi en avant la transparence : le système n'est pas un fichier Excel caché dans le bureau du directeur, il est branché sur la base de données du CRM et calcule vos scores automatiquement."
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 3: MASTER ROLES & BONUS MATRIX                     -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-3">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">VUE D'ENSEMBLE</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">RÉPARTITION PAR DÉPARTEMENT</div>
+            <h2>La Matrice des 4 Piliers Opérationnels GoCab</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill navy">7 SPÉCIALISTES COUVERTS</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <!-- Pillar 1 -->
+          <div class="card" style="border-left: 4px solid var(--gocab-navy);">
+            <div class="card-header">
+              <div>
+                <span class="card-title">1. Acquisition des Leads</span>
+                <span style="font-size: 11px; color: var(--text-muted);">Nour & Kaoutar</span>
+              </div>
+              <span class="badge navy">1 000 DH / pers.</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+              <div class="kpi-row">
+                <span class="kpi-name">📞 Appels Qualifiés Journaliers</span>
+                <span class="kpi-target">50 appels / jour</span>
+                <span class="kpi-weight">Poids 40%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">📅 Formations Fixées au Planning</span>
+                <span class="kpi-target">15 fixées / jour</span>
+                <span class="kpi-weight">Poids 40%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🎯 Taux de Conversion Appels → RDV</span>
+                <span class="kpi-target">&ge; 30,0%</span>
+                <span class="kpi-weight">Poids 20%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pillar 2 -->
+          <div class="card" style="border-left: 4px solid var(--gocab-lime);">
+            <div class="card-header">
+              <div>
+                <span class="card-title">2. Intégration & Vélocité Flotte</span>
+                <span style="font-size: 11px; color: var(--text-muted);">Ayoub Gsaib</span>
+              </div>
+              <span class="badge olive">1 000 DH / pers.</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+              <div class="kpi-row">
+                <span class="kpi-name">🎓 Chauffeurs Présents en Formation</span>
+                <span class="kpi-target">10 présents / jour (65%)</span>
+                <span class="kpi-weight">Poids 40%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">✍️ Précommandes & Assignations</span>
+                <span class="kpi-target">4 précommandes (&ge;20%)</span>
+                <span class="kpi-weight">Poids 40%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">⚡ Vélocité Flotte (Attente voiture)</span>
+                <span class="kpi-target">&le; 1,0 jour d'attente</span>
+                <span class="kpi-weight">Poids 20%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pillar 3 -->
+          <div class="card" style="border-left: 4px solid #f59e0b;">
+            <div class="card-header">
+              <div>
+                <span class="card-title">3. Gestion de la Performance Flotte</span>
+                <span style="font-size: 11px; color: var(--text-muted);">Salma Abouri & Mohamed Aziz</span>
+              </div>
+              <span class="badge amber">1 000 DH / pers.</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
+              <div class="kpi-row">
+                <span class="kpi-name">💰 Recouvrement Cash Quotidien</span>
+                <span class="kpi-target">50% &agrave; 60% fin de journée</span>
+                <span class="kpi-weight">Poids 25%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🛡️ Churn Chauffeurs Mensuel</span>
+                <span class="kpi-target">&le; 20% du parc actif</span>
+                <span class="kpi-weight">Poids 20%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🔧 Délai Immo Garage / Assurance</span>
+                <span class="kpi-target">&le; 10 jours en moyenne</span>
+                <span class="kpi-weight">Poids 20%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">⏱️ SLA Traitement Vidange/AdBlue</span>
+                <span class="kpi-target">&le; 1,0 Heure en moyenne</span>
+                <span class="kpi-weight">Poids 17,5%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🚀 SLA Exécution Mission Terrain</span>
+                <span class="kpi-target">&le; 3,0 Heures en moyenne</span>
+                <span class="kpi-weight">Poids 17,5%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pillar 4 -->
+          <div class="card" style="border-left: 4px solid #10b981;">
+            <div class="card-header">
+              <div>
+                <span class="card-title">4. Opérations & Superviseurs Terrain</span>
+                <span style="font-size: 11px; color: var(--text-muted);">Hamza Rassid & Ayoub Rassid</span>
+              </div>
+              <span class="badge emerald">1 000 DH / pers.</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+              <div class="kpi-row">
+                <span class="kpi-name">⚡ SLA Exécution Missions / Récupérations</span>
+                <span class="kpi-target">&le; 3,0 Heures en moyenne</span>
+                <span class="kpi-weight">Poids 33,3%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">📋 Attestations de Location & Contrôles</span>
+                <span class="kpi-target">&ge; 90% renouvelées à temps</span>
+                <span class="kpi-weight">Poids 33,3%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🛠️ Résolution des Tickets / Pannes</span>
+                <span class="kpi-target">&ge; 95% résolus</span>
+                <span class="kpi-weight">Poids 33,4%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 3 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-3">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Présentez la structure d'ensemble. 'Voici comment nos 7 postes clés sont couverts. Chaque personne a ses propres leviers d'action. Vous n'êtes pas jugés sur les actions des autres, mais sur votre propre périmètre métier. Chaque collaborateur a 1 000 DH de potentiel mensuel.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 4: LEAD ACQUISITION (NOUR & KAOUTAR)               -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-4">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">PILIER 1</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">ACQUISITION & QUALIFICATION</div>
+            <h2>Équipe Acquisition Leads (Nour & Kaoutar) : Calcul & Démonstration</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill navy">50 APPELS • 15 RDV • 30% CONV</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title">Les 3 Objectifs & Leurs Coefficients</span>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Appels Qualifiés Réalisés</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : 50 appels / jour ouvré</div>
+                </div>
+                <span class="kpi-weight">Poids : 40%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Formations Fixées</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : 15 RDV fixés / jour ouvré</div>
+                </div>
+                <span class="kpi-weight">Poids : 40%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Taux de Conversion Funnel</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &ge; 30,0% des appels convertis en RDV</div>
+                </div>
+                <span class="kpi-weight">Poids : 20%</span>
+              </div>
+            </div>
+
+            <div class="math-box" style="margin-top:auto;">
+              <div class="math-formula">Score % = (0,40 × Appels%) + (0,40 × RDV%) + (0,20 × Conv%)</div>
+              <div class="math-sub">Bonus Net = Math.min(1 000, 1 000 × Score %)</div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#f8fafc;">
+            <span class="card-title" style="color:var(--gocab-blue);">Exemple Chiffré Concret (Mois de 22 jours)</span>
+            
+            <div style="font-size:12px; color:var(--text-muted); line-height:1.6; display:flex; flex-direction:column; gap:8px;">
+              <div>• <strong>Volume d'appels réalisés :</strong> 1 056 appels (Cible = 1 100) &rarr; <span style="font-weight:800; color:#1e293b;">96,0%</span></div>
+              <div>• <strong>RDV formations fixés :</strong> 310 RDV (Cible = 330) &rarr; <span style="font-weight:800; color:#1e293b;">93,9%</span></div>
+              <div>• <strong>Taux de conversion :</strong> 310 / 1 056 = 29,35% (Cible = 30%) &rarr; <span style="font-weight:800; color:#1e293b;">97,8%</span></div>
+            </div>
+
+            <div class="example-box" style="margin-top:12px;">
+              <div class="example-title">💡 Calcul du Bonus pour ce Mois :</div>
+              <div style="font-size:12px; font-family:monospace; font-weight:700;">
+                Score Global = (0,40 × 96,0%) + (0,40 × 93,9%) + (0,20 × 97,8%)<br>
+                Score Global = 38,4% + 37,56% + 19,56% = <strong>95,5%</strong>
+              </div>
+              <div style="font-size:16px; font-weight:900; margin-top:8px; color:#15803d;">
+                &rarr; Bonus Viré : 955 DH sur la paie ! 💸
+              </div>
+            </div>
+
+            <p style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+              <em>Note : Si les cibles sont atteintes à 100%, le bonus versé est le montant maximal plein de <strong>1 000 DH</strong>.</em>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 4 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-4">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Parlez directement à Nour et Kaoutar : 'Votre mission est la porte d'entrée de toute l'entreprise. 50 appels par jour et 15 formations fixées, c'est ce qui fait tourner GoCab. Regardez cet exemple : même si vous êtes légèrement en dessous à 48 appels au lieu de 50, vous touchez quand même 955 DH ! Le système reconnaît chaque effort.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 5: ONBOARDING SPECIALIST (AYOUB GSAIB)              -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-5">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">PILIER 2</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">FORMATION & VÉLOCITÉ FLOTTE</div>
+            <h2>Spécialiste Intégration (Ayoub Gsaib) : Calcul & Démonstration</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill lime">&le; 1,0j ATTENTE VÉHICULE</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title">Les 3 Objectifs & Leurs Coefficients</span>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Candidats Présents en Formation</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : 10 présents / jour (Taux de présence &ge; 65%)</div>
+                </div>
+                <span class="kpi-weight">Poids : 40%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Précommandes & Assignations</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : 4 par jour (&ge; 20% conversion par session)</div>
+                </div>
+                <span class="kpi-weight">Poids : 40%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Vélocité Flotte (Attente Véhicules Disponibles)</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &le; 1,0 jour moyen d'attente d'une voiture prête</div>
+                </div>
+                <span class="kpi-weight">Poids : 20%</span>
+              </div>
+            </div>
+
+            <div class="math-box" style="margin-top:auto;">
+              <div class="math-formula">Score % = (0,40 × Présents%) + (0,40 × Précommandes%) + (0,20 × Vélocité%)</div>
+              <div class="math-sub">
+                Si attente &le; 1,0j : 100% à 120% (bonus rapidité). Si attente &gt; 1,0j : dégressif pro-rata.
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#f8fafc;">
+            <span class="card-title" style="color:var(--gocab-blue);">Exemple Chiffré Concret (Mois de 22 jours)</span>
+            
+            <div style="font-size:12px; color:var(--text-muted); line-height:1.6; display:flex; flex-direction:column; gap:8px;">
+              <div>• <strong>Présents aux sessions :</strong> 215 chauffeurs (Cible = 220) &rarr; <span style="font-weight:800; color:#1e293b;">97,7%</span></div>
+              <div>• <strong>Précommandes & Voitures assignées :</strong> 90 signatures (Cible = 88) &rarr; <span style="font-weight:800; color:#15803d;">102,2% (Cible dépassée !)</span></div>
+              <div>• <strong>Vélocité flotte :</strong> 0,85 jour d'attente moyen (&le; 1,0j) &rarr; <span style="font-weight:800; color:#15803d;">103,0% (Super rapide !)</span></div>
+            </div>
+
+            <div class="example-box" style="margin-top:12px;">
+              <div class="example-title">💡 Calcul du Bonus pour ce Mois :</div>
+              <div style="font-size:12px; font-family:monospace; font-weight:700;">
+                Score Global = (0,40 × 97,7%) + (0,40 × 102,2%) + (0,20 × 103,0%)<br>
+                Score Global = 39,08% + 40,88% + 20,60% = <strong>100,56%</strong>
+              </div>
+              <div style="font-size:16px; font-weight:900; margin-top:8px; color:#15803d;">
+                &rarr; Bonus Viré : 1 000 DH (Plein Plafond !) 🏆
+              </div>
+            </div>
+
+            <p style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+              <em>Une voiture disponible qui ne dort pas dans la cour et qui sort le jour même rapporte directement du bonus.</em>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 5 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-5">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Parlez à Ayoub Gsaib : 'Ton rôle transforme les candidats en revenus réels. Les deux leviers majeurs sont : animer une excellente formation pour convaincre au moins 20% des présents de signer, et t'assurer que dès qu'une voiture devient disponible, elle est attribuée en moins de 24h. Si tu fais ça, tes 1 000 DH sont 100% sécurisés chaque mois.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 6: FLEET PERFORMANCE (SALMA & MOHAMED AZIZ)        -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-6">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">PILIER 3</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">SUPPORT FLOTTE & RECOUVREMENT</div>
+            <h2>Managers Performance Flotte (Salma & Mohamed Aziz)</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill amber">CASH • CHURN &le;20% • IMMO &le;10j</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title">Les 5 Objectifs & Leurs Pondérations</span>
+            <div style="display:flex; flex-direction:column; gap:7px; margin-top:4px;">
+              <div class="kpi-row">
+                <span class="kpi-name">💰 Encaissement Cash du Jour</span>
+                <span class="kpi-target">50% à 60% fin de journée</span>
+                <span class="kpi-weight">25%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🛡️ Churn Chauffeurs Mensuel</span>
+                <span class="kpi-target">&le; 20% du parc</span>
+                <span class="kpi-weight">20%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🔧 Délai Immo Garage/Assurance</span>
+                <span class="kpi-target">&le; 10 jours en moyenne</span>
+                <span class="kpi-weight">20%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">⏱️ SLA Traitement Vidange/AdBlue</span>
+                <span class="kpi-target">&le; 1,0H en moyenne</span>
+                <span class="kpi-weight">17,5%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">🚀 SLA Exécution Mission Terrain</span>
+                <span class="kpi-target">&le; 3,0H en moyenne</span>
+                <span class="kpi-weight">17,5%</span>
+              </div>
+            </div>
+
+            <div class="math-box" style="margin-top:auto;">
+              <div class="math-formula">Score = 0,25×Cash + 0,20×Churn + 0,20×Immo + 0,175×Vidange + 0,175×Mission</div>
+              <div class="math-sub">
+                Chaque composante dispose de marges de sécurité réalistes (ex: 50% de cash minimum, pas 100%).
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#f8fafc;">
+            <span class="card-title" style="color:var(--gocab-blue);">Exemple Chiffré Réel du Mois</span>
+            
+            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.55; display:flex; flex-direction:column; gap:6px;">
+              <div>• <strong>Taux de recouvrement moyen :</strong> 56% encaissé (Cible 50%-60%) &rarr; <span style="font-weight:800; color:#15803d;">106,0%</span></div>
+              <div>• <strong>Churn mensuel :</strong> 16% des chauffeurs (&le; 20%) &rarr; <span style="font-weight:800; color:#15803d;">102,0%</span></div>
+              <div>• <strong>Immobilisation garage :</strong> 8,2 jours (&le; 10j) &rarr; <span style="font-weight:800; color:#15803d;">103,6%</span></div>
+              <div>• <strong>Délai moyen Vidange/AdBlue :</strong> 0,75H (&le; 1,0H) &rarr; <span style="font-weight:800; color:#15803d;">105,0%</span></div>
+              <div>• <strong>Délai mission terrain :</strong> 2,4H (&le; 3,0H) &rarr; <span style="font-weight:800; color:#15803d;">106,0%</span></div>
+            </div>
+
+            <div class="example-box" style="margin-top:10px;">
+              <div class="example-title">💡 Calcul du Bonus pour Salma & Mohamed Aziz :</div>
+              <div style="font-size:11.5px; font-family:monospace; font-weight:700;">
+                Score Global = (0,25×106) + (0,20×102) + (0,20×103,6) + (0,175×105) + (0,175×106)<br>
+                Score Global = 26,5% + 20,4% + 20,72% + 18,38% + 18,55% = <strong>104,55%</strong>
+              </div>
+              <div style="font-size:16px; font-weight:900; margin-top:8px; color:#15803d;">
+                &rarr; Bonus Viré : 1 000 DH chacun ! 💰
+              </div>
+            </div>
+
+            <p style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+              <em>Même si quelques chauffeurs difficiles ont des retards de paiement, l'objectif de 50%-60% protège votre bonus.</em>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 6 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-6">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Rassurez Salma et Mohamed Aziz : 'Nous savons que certains chauffeurs sont de mauvaise foi ou que certains garages traînent. C'est pourquoi nous n'avons pas mis une cible impossible de 100% de cash ou 0 jour de garage. La cible de cash est à 50%-60%, et la moyenne d'immo est à 10 jours. Cela vous donne de la marge tout en alignant votre bonus avec la santé financière de l'entreprise.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 7: FIELD OPERATIONS (HAMZA & AYOUB RASSID)         -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-7">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">PILIER 4</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">OPÉRATIONS & SUPERVISEURS TERRAIN</div>
+            <h2>Équipe Terrain (Hamza Rassid & Ayoub Rassid)</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill emerald">&le; 3,0H SLA • &ge; 90% CONTRÔLES • &ge; 95% TICKETS</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title">Les 3 Objectifs Équilibrés (1/3 chacun)</span>
+            <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Délai d'Exécution des Missions Terrain</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &le; 3,0 Heures en moyenne par intervention</div>
+                </div>
+                <span class="kpi-weight">Poids : 33,3%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Attestations de Location & Contrôles Mensuels</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &ge; 90% des chauffeurs en règle et contrôlés à temps</div>
+                </div>
+                <span class="kpi-weight">Poids : 33,3%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Taux de Résolution des Tickets & Pannes</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &ge; 95% des tickets assignés résolus</div>
+                </div>
+                <span class="kpi-weight">Poids : 33,4%</span>
+              </div>
+            </div>
+
+            <div class="math-box" style="margin-top:auto;">
+              <div class="math-formula">Score Global = (33,3% × Missions) + (33,3% × Attestations) + (33,4% × Tickets)</div>
+              <div class="math-sub">
+                Poids égal à un tiers pour chaque mission : rapidité, conformité réglementaire et efficacité technique.
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#f8fafc;">
+            <span class="card-title" style="color:var(--gocab-blue);">Exemple Chiffré Réel du Mois</span>
+            
+            <div style="font-size:12px; color:var(--text-muted); line-height:1.6; display:flex; flex-direction:column; gap:8px;">
+              <div>• <strong>Délai moyen d'intervention terrain :</strong> 2,3 Heures (&le; 3,0H) &rarr; <span style="font-weight:800; color:#15803d;">107,0% (Tr&egrave;s r&eacute;actif !)</span></div>
+              <div>• <strong>Chauffeurs contrôlés / Attestation à jour :</strong> 91,5% (&ge; 90%) &rarr; <span style="font-weight:800; color:#15803d;">101,7% (En règle !)</span></div>
+              <div>• <strong>Tickets et tâches résolus :</strong> 96,2% (&ge; 95%) &rarr; <span style="font-weight:800; color:#15803d;">101,3% (Problèmes réglés !)</span></div>
+            </div>
+
+            <div class="example-box" style="margin-top:14px;">
+              <div class="example-title">💡 Calcul du Bonus pour Hamza & Ayoub Rassid :</div>
+              <div style="font-size:12px; font-family:monospace; font-weight:700;">
+                Score Global = (0,333 × 107,0%) + (0,333 × 101,7%) + (0,334 × 101,3%)<br>
+                Score Global = 35,63% + 33,87% + 33,84% = <strong>103,34%</strong>
+              </div>
+              <div style="font-size:16px; font-weight:900; margin-top:8px; color:#15803d;">
+                &rarr; Bonus Viré : 1 000 DH chacun ! 🚗💨
+              </div>
+            </div>
+
+            <p style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+              <em>Chaque déplacement sur le terrain pour récupérer un véhicule ou renouveler une attestation compte immédiatement dans le calcul.</em>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 7 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-7">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Parlez à Hamza et Ayoub Rassid : 'Vous êtes nos yeux et nos bras sur le terrain. Vos 3 missions sont claires : quand un véhicule doit être récupéré, intervenir en moins de 3 heures ; s'assurer que chaque chauffeur a son attestation de location renouvelée chaque mois ; et fermer vos tickets d'intervention. Si vous respectez ce standard, vos 1 000 DH de bonus sont assurés.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 8: REAL-TIME TRANSPARENCY IN CRM                   -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-8">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">TRANSPARENCE</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">SUIVI AU QUOTIDIEN</div>
+            <h2>Comment Suivre Votre Bonus en Direct dans le CRM GoCab</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill lime">TABLEAU DE BORD LIVE POWERBI</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title">3 Éléments Visibles Chaque Jour</span>
+            
+            <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+              <div style="background:#f8fafc; padding:12px 14px; border-radius:12px; border:1px solid var(--border);">
+                <div style="font-weight:800; font-size:12px; color:var(--gocab-navy); margin-bottom:4px;">1. Jauge de Progression Mensuelle (%)</div>
+                <p style="font-size:11px; color:var(--text-muted); line-height:1.45;">
+                  Une barre visuelle vous indique votre % d'atteinte cumulé depuis le 1er du mois. Elle se met à jour automatiquement à chaque appel, chaque RDV, chaque paiement et chaque tâche enregistrée.
+                </p>
+              </div>
+
+              <div style="background:#f8fafc; padding:12px 14px; border-radius:12px; border:1px solid var(--border);">
+                <div style="font-weight:800; font-size:12px; color:#15803d; margin-bottom:4px;">2. Montant du Bonus Débloqué (DH)</div>
+                <p style="font-size:11px; color:var(--text-muted); line-height:1.45;">
+                  En dessous de la jauge, vous voyez en gros caractères le montant exact en Dirhams : par exemple <em>"780 DH débloqués sur 1 000 DH"</em>.
+                </p>
+              </div>
+
+              <div style="background:#f8fafc; padding:12px 14px; border-radius:12px; border:1px solid var(--border);">
+                <div style="font-weight:800; font-size:12px; color:var(--gocab-olive); margin-bottom:4px;">3. Détail Métrique par Métrique</div>
+                <p style="font-size:11px; color:var(--text-muted); line-height:1.45;">
+                  Vous voyez précisément quel indicateur est au vert (ex: Churn &agrave; 16%) et quel indicateur a besoin d'un coup d'accélérateur (ex: quelques appels de plus cet après-midi).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#f1f5f9; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:30px;">
+            <div style="width:70px; height:70px; border-radius:24px; background:var(--gocab-navy); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:14px; box-shadow:0 10px 20px rgba(22,44,80,0.3);">
+              📊
+            </div>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-dark); margin-bottom:8px;">
+              Autonomie & Maîtrise de Vos Résultats
+            </h3>
+            <p style="font-size:12px; color:var(--text-muted); line-height:1.6; max-width:420px; margin-bottom:16px;">
+              Vous n'avez pas besoin d'attendre qu'un manager vous dise comment s'est passé votre mois. Vous avez le tableau de bord sous les yeux en permanence.
+            </p>
+            <div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 18px; font-size:12px; font-weight:700; color:var(--gocab-navy);">
+              🔗 Onglet CRM : &laquo; Performance &amp; Bonus &raquo;
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 8 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-8">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Montrez-leur que c'est un outil d'empowerment : 'L'objectif n'est pas de vous surveiller, mais de vous donner le volant. Vous voyez votre score monter chaque jour. Si vous voyez le 20 du mois que vous êtes à 800 DH, vous savez exactement quoi faire les 6 derniers jours pour débloquer les 200 DH restants.'"
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 9: FAQS & REAL-WORLD REASSURANCES                  -->
+    <!-- ======================================================== -->
+    <div class="slide" id="slide-9">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="gocab-badge">QUESTIONS FRÉQUENTES</span>
+          <div class="slide-title-block">
+            <div class="slide-tag">CLARTÉ TOTALE</div>
+            <h2>Réponses aux Questions &amp; Situations Particulières</h2>
+          </div>
+        </div>
+        <div class="slide-header-right">
+          <span class="pill olive">VOS QUESTIONS, NOS RÉPONSES</span>
+        </div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2" style="flex: 1;">
+          <div class="card">
+            <span class="card-title" style="color:var(--gocab-navy);">❓ Que se passe-t-il si un chauffeur refuse de payer ?</span>
+            <p style="font-size:12px; color:var(--text-muted); line-height:1.55;">
+              <strong>Réponse :</strong> La cible de recouvrement a été fixée à <strong>50%–60%</strong> du montant attendu le soir, et non pas 100%. Nous savons qu'il y a toujours des impondérables. Tant que vous appliquez le protocole d'appels et d'avertissements réguliers, votre bonus est protégé.
+            </p>
+          </div>
+
+          <div class="card">
+            <span class="card-title" style="color:var(--gocab-navy);">❓ Et si un garage attend une pièce pendant 2 semaines ?</span>
+            <p style="font-size:12px; color:var(--text-muted); line-height:1.55;">
+              <strong>Réponse :</strong> L'indicateur calcule la <strong>moyenne de tout le parc (&le; 10 jours)</strong>. Les réparations rapides de 2 ou 3 jours et les vidanges compensent les dossiers d'assurance plus longs. Un seul cas lourd n'impacte pas votre bonus si le reste est géré rapidement.
+            </p>
+          </div>
+
+          <div class="card">
+            <span class="card-title" style="color:var(--gocab-navy);">❓ Que se passe-t-il si j'ai un jour sans (maladie / imprévu) ?</span>
+            <p style="font-size:12px; color:var(--text-muted); line-height:1.55;">
+              <strong>Réponse :</strong> C'est la beauté du modèle <strong>pro-rata</strong> : un mauvais mardi ne ruine pas votre mois. Le calcul est lissé sur l'ensemble des jours ouvrés du mois. Vous avez 20 à 22 jours pour ajuster la cadence et sécuriser votre montant.
+            </p>
+          </div>
+
+          <div class="card">
+            <span class="card-title" style="color:var(--gocab-navy);">❓ Quand et comment le bonus est-il versé ?</span>
+            <p style="font-size:12px; color:var(--text-muted); line-height:1.55;">
+              <strong>Réponse :</strong> Les scores sont clôturés le dernier jour ouvré du mois. Le résultat est directement exporté vers le service paie/RH et versé sur votre compte bancaire avec votre salaire mensuel.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="slide-footer">
+        <span>GoCab Operational Blueprint 2026</span>
+        <span>Slide 9 / 10</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-9">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Cette slide désamorce 99% des craintes. Prenez le temps de lire chaque réponse à voix haute. Montrez-leur que la direction a pensé aux difficultés de terrain et a construit des marges de tolérance intelligentes dans les formules."
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SLIDE 10: CONCLUSION & WINNING TOGETHER                  -->
+    <!-- ======================================================== -->
+    <div class="slide slide-cover" id="slide-10" style="background: linear-gradient(135deg, #091322 0%, #162c50 50%, #2b3b14 100%);">
+      <div class="cover-top">
+        <div class="cover-brand">
+          <span class="logo">GoCab</span>
+          <span class="sub">Casablanca • 2026</span>
+        </div>
+        <div class="pill lime">ENGAGEMENT MUTUEL</div>
+      </div>
+
+      <div class="cover-center">
+        <div class="cover-tagline">CONCLUSION & DÉMARRAGE IMMÉDIAT</div>
+        <h1 class="cover-title" style="font-size: 38px;">
+          Quand GoCab Gagne, <br><span>Toute l'Équipe Gagne Directement !</span>
+        </h1>
+        <p class="cover-desc">
+          Ce système a été pensé pour vous : plus d'arbitraire, plus de frustration de fin de mois. Tout est clair, mathématique, transparent et entre vos mains dès aujourd'hui.
+        </p>
+
+        <div class="grid-3" style="gap: 16px; margin-top: 10px;">
+          <div class="stat-card" style="border-left: 4px solid var(--gocab-lime);">
+            <div style="font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 4px;">1. Connectez-vous au CRM</div>
+            <div style="font-size: 12px; color: #cbd5e1;">Consultez votre vue de performance et familiarisez-vous avec vos 3 à 5 jauges dès aujourd'hui.</div>
+          </div>
+          <div class="stat-card" style="border-left: 4px solid #38bdf8;">
+            <div style="font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 4px;">2. Visez les 1 000 DH</div>
+            <div style="font-size: 12px; color: #cbd5e1;">Chaque appel, chaque encaissement, chaque mission rapide compte. Visez les 100% de bonus chaque mois.</div>
+          </div>
+          <div class="stat-card" style="border-left: 4px solid #a3e635;">
+            <div style="font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 4px;">3. Jouez le Relais</div>
+            <div style="font-size: 12px; color: #cbd5e1;">Aidez vos collègues du maillon suivant à réussir. La victoire collective garantit les primes individuelles.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 14px;">
+        <span style="font-weight: 700;">Des questions ? Toute l'équipe de direction reste à votre écoute ! 🚀</span>
+        <span style="font-weight: 800; color: var(--gocab-lime);">GoCab • Ensemble vers le sommet</span>
+      </div>
+
+      <div class="speaker-notes-bar" id="notes-10">
+        <div class="notes-tag">Notes pour l'orateur</div>
+        "Concluez avec énergie et enthousiasme : 'Nous avons hâte de voir 100% d'entre vous toucher leur bonus plein de 1 000 DH dès ce mois-ci. Merci pour votre engagement de chaque jour, maintenant allons chercher ces résultats ensemble ! Avez-vous des questions ?'"
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentSlide = 1;
+    const totalSlides = 10;
+    let showNotes = false;
+
+    function updateSlideVisibility() {
+      const slides = document.querySelectorAll('.slide');
+      slides.forEach((s, idx) => {
+        if (document.body.classList.contains('presentation-mode')) {
+          if (idx + 1 === currentSlide) {
+            s.classList.add('active-slide');
+          } else {
+            s.classList.remove('active-slide');
+          }
+        }
+      });
+      document.getElementById('counterDisplay').innerText = `Slide ${currentSlide} / ${totalSlides}`;
+      
+      // Update active notes
+      document.querySelectorAll('.speaker-notes-bar').forEach(n => {
+        if (showNotes && n.id === `notes-${currentSlide}`) {
+          n.classList.add('show');
+        } else {
+          n.classList.remove('show');
+        }
+      });
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        currentSlide++;
+        updateSlideVisibility();
+        scrollToSlide(currentSlide);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        currentSlide--;
+        updateSlideVisibility();
+        scrollToSlide(currentSlide);
+      }
+    }
+
+    function scrollToSlide(slideNum) {
+      if (!document.body.classList.contains('presentation-mode')) {
+        const target = document.getElementById(`slide-${slideNum}`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }
+
+    function toggleFullScreen() {
+      document.body.classList.toggle('presentation-mode');
+      if (document.body.classList.contains('presentation-mode')) {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+      updateSlideVisibility();
+    }
+
+    function toggleNotes() {
+      showNotes = !showNotes;
+      const btn = document.querySelector('.notes-toggle');
+      if (showNotes) {
+        btn.style.background = 'var(--gocab-lime)';
+        btn.style.color = '#000';
+      } else {
+        btn.style.background = 'rgba(163, 230, 53, 0.2)';
+        btn.style.color = 'var(--gocab-lime)';
+      }
+      updateSlideVisibility();
+    }
+
+    // Keyboard listeners
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullScreen();
+      } else if (e.key === 'n' || e.key === 'N') {
+        toggleNotes();
+      }
+    });
+
+    // Initial load
+    updateSlideVisibility();
+  </script>
+</body>
+</html>
