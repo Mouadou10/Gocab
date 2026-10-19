@@ -424,16 +424,41 @@
       margin-bottom: 4px;
     }
 
+    @page {
+      size: 1333px 750px;
+      margin: 0;
+    }
+
     @media print {
-      body { background: #fff; }
-      .deck-controls { display: none !important; }
+      body {
+        background: #0b1320 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .deck-controls {
+        display: none !important;
+      }
+      .speaker-notes-bar {
+        display: none !important;
+      }
+      .slides-wrapper {
+        padding: 0 !important;
+        gap: 0 !important;
+      }
       .slide {
-        page-break-after: always;
-        break-after: page;
-        box-shadow: none;
-        border: none;
-        width: 100%;
-        height: 100vh;
+        display: flex !important;
+        width: 1333px !important;
+        height: 750px !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+        overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
