@@ -155,8 +155,14 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    vehiclesCount?: number;
     weights?: Record<string, number>;
     calculationDetails?: CalculationDetail[];
+    managers?: {
+      aziz: any;
+      mehdi: any;
+      all: any;
+    };
   };
   fieldSupervisorTeam?: {
     avgHoursMissionCompletion: number;
@@ -307,7 +313,7 @@ const DEPARTMENTS = [
   { id: "ALL", label: "Tous les Départements" },
   { id: "LEAD_ACQUISITION_JR", label: "📞 Traffic Acquisition (Nour & Kaoutar)" },
   { id: "TRAINING", label: "🎓 Onboarding (Ayoub Gsaib)" },
-  { id: "FLEET_PERF_MANAGER", label: "🚗 Fleet Performance (Salma & Mohamed Aziz)" },
+  { id: "FLEET_PERF_MANAGER", label: "🚗 Fleet Performance (Mohamed Aziz & Mehdi)" },
   { id: "FIELD_SUPERVISOR", label: "🛡️ Field Supervisor (Hamza & Ayoub Rassid)" },
   { id: "GARAGE", label: "🔧 Maintenance & Garage" },
 ];
@@ -549,16 +555,24 @@ export default function PowerBiDashboardView() {
     );
   }, [userRole, userName, userEmail]);
 
+  const isAziz = useMemo(() => {
+    return userName.includes("aziz") || userEmail.includes("aziz");
+  }, [userName, userEmail]);
+
+  const isMehdi = useMemo(() => {
+    return userName.includes("mehdi") || userEmail.includes("mehdi");
+  }, [userName, userEmail]);
+
   const isFleetMember = useMemo(() => {
     return (
       userRole === "FLEET_PERF_MANAGER" ||
       userRole === "FLEET_MANAGER" ||
+      isAziz ||
+      isMehdi ||
       userName.includes("salma") ||
-      userName.includes("aziz") ||
-      userEmail.includes("salma") ||
-      userEmail.includes("aziz")
+      userEmail.includes("salma")
     );
-  }, [userRole, userName, userEmail]);
+  }, [userRole, isAziz, isMehdi, userName, userEmail]);
 
   const isFieldMember = useMemo(() => {
     return (
@@ -591,6 +605,15 @@ export default function PowerBiDashboardView() {
   }, [isExecutiveOrAdmin, isTrafficMember, isOnboardingMember, isFleetMember, isFieldMember]);
 
   const [selectedTeamTab, setSelectedTeamTab] = useState<"all" | "traffic" | "onboarding" | "fleet" | "field">(defaultTeam);
+  const [selectedFleetManager, setSelectedFleetManager] = useState<"all" | "aziz" | "mehdi">("all");
+
+  useEffect(() => {
+    if (isMehdi) {
+      setSelectedFleetManager("mehdi");
+    } else if (isAziz) {
+      setSelectedFleetManager("aziz");
+    }
+  }, [isMehdi, isAziz]);
 
   useEffect(() => {
     if (!isExecutiveOrAdmin) {
@@ -718,6 +741,20 @@ export default function PowerBiDashboardView() {
   const fieldSup = data?.fieldSupervisorTeam;
   const callResults = data?.callResultsBreakdown;
 
+  const activeFleet = useMemo(() => {
+    if (!fleetPerf) return null;
+    if (selectedFleetManager === "aziz" && fleetPerf.managers?.aziz) {
+      return fleetPerf.managers.aziz;
+    }
+    if (selectedFleetManager === "mehdi" && fleetPerf.managers?.mehdi) {
+      return fleetPerf.managers.mehdi;
+    }
+    if (selectedFleetManager === "all" && fleetPerf.managers?.all) {
+      return fleetPerf.managers.all;
+    }
+    return fleetPerf;
+  }, [fleetPerf, selectedFleetManager]);
+
   // ── Chart 1 Data: Call Distribution Donut ────────────────────────
   const callDistributionData = useMemo(() => {
     if (!callResults || callResults.total === 0) return [];
@@ -805,50 +842,50 @@ export default function PowerBiDashboardView() {
 
   // ── Chart 4b Data: Fleet Performance 5 KPIs Attainment ───────────
   const fleetPerfAttainmentData = useMemo(() => {
-    if (!fleetPerf) return [];
+    if (!activeFleet) return [];
     return [
       {
         name: "1. Cash (50%-60%)",
-        Attainment: Math.min(130, fleetPerf.collectionAttainmentPct),
+        Attainment: Math.min(130, activeFleet.collectionAttainmentPct ?? 0),
         Cible: 100,
-        actualLabel: `${fleetPerf.collectionRecoveryRate}%`,
+        actualLabel: `${activeFleet.collectionRecoveryRate ?? 0}%`,
         targetLabel: "50% - 60%",
-        isCompliant: fleetPerf.isCollectionCompliant,
+        isCompliant: activeFleet.isCollectionCompliant ?? false,
       },
       {
         name: "2. Churn (≤20%)",
-        Attainment: Math.min(130, fleetPerf.churnAttainmentPct),
+        Attainment: Math.min(130, activeFleet.churnAttainmentPct ?? 0),
         Cible: 100,
-        actualLabel: `${fleetPerf.monthlyChurnRate}%`,
+        actualLabel: `${activeFleet.monthlyChurnRate ?? 0}%`,
         targetLabel: "≤ 20% / mois",
-        isCompliant: fleetPerf.isChurnCompliant,
+        isCompliant: activeFleet.isChurnCompliant ?? false,
       },
       {
         name: "3. Maint. (≤10j)",
-        Attainment: Math.min(130, fleetPerf.maintenanceAttainmentPct),
+        Attainment: Math.min(130, activeFleet.maintenanceAttainmentPct ?? 0),
         Cible: 100,
-        actualLabel: `${fleetPerf.avgDaysInMaintenance} j`,
+        actualLabel: `${activeFleet.avgDaysInMaintenance ?? 0} j`,
         targetLabel: "≤ 10 jours",
-        isCompliant: fleetPerf.isMaintenanceCompliant,
+        isCompliant: activeFleet.isMaintenanceCompliant ?? false,
       },
       {
         name: "4. Vidange (≤1h)",
-        Attainment: Math.min(130, fleetPerf.vidangeAttainmentPct),
+        Attainment: Math.min(130, activeFleet.vidangeAttainmentPct ?? 0),
         Cible: 100,
-        actualLabel: `${fleetPerf.avgHoursAdBlueVidange} h`,
+        actualLabel: `${activeFleet.avgHoursAdBlueVidange ?? 0} h`,
         targetLabel: "AVG ≤ 1h",
-        isCompliant: fleetPerf.isVidangeCompliant,
+        isCompliant: activeFleet.isVidangeCompliant ?? false,
       },
       {
         name: "5. Mission (≤3h)",
-        Attainment: Math.min(130, fleetPerf.fieldMissionAttainmentPct),
+        Attainment: Math.min(130, activeFleet.fieldMissionAttainmentPct ?? 0),
         Cible: 100,
-        actualLabel: `${fleetPerf.avgHoursFieldMission} h`,
+        actualLabel: `${activeFleet.avgHoursFieldMission ?? 0} h`,
         targetLabel: "AVG ≤ 3h",
-        isCompliant: fleetPerf.isFieldMissionCompliant,
+        isCompliant: activeFleet.isFieldMissionCompliant ?? false,
       },
     ];
-  }, [fleetPerf]);
+  }, [activeFleet]);
 
   // ── Chart 4c Data: Field Supervisor 3 KPIs Attainment ────────────
   const fieldSupAttainmentData = useMemo(() => {
@@ -1196,7 +1233,7 @@ export default function PowerBiDashboardView() {
                             : "bg-amber-100 text-amber-800"
                         }`}
                       >
-                        Salma &amp; Aziz
+                        Mohamed Aziz &amp; Mehdi
                       </span>
                     </button>
                     <button
@@ -1242,7 +1279,13 @@ export default function PowerBiDashboardView() {
                         <h4 className="text-xs font-black text-gray-900">
                           {selectedTeamTab === "traffic" && "Traffic Acquisition (Nour Abouri & Kaoutar Ouardi)"}
                           {selectedTeamTab === "onboarding" && "Onboarding Specialist (Ayoub Gsaib)"}
-                          {selectedTeamTab === "fleet" && "Fleet Performance (Salma Abouri & Mohamed Aziz)"}
+                          {selectedTeamTab === "fleet" && (
+                            isMehdi
+                              ? "Fleet Performance — Pôle Mehdi Elyattouti (26 Véhicules)"
+                              : isAziz
+                              ? "Fleet Performance — Pôle Mohamed Aziz (68 Véhicules)"
+                              : "Fleet Performance (Mohamed Aziz & Mehdi Elyattouti)"
+                          )}
                           {selectedTeamTab === "field" && "Field Supervisor (Hamza Rassid & Ayoub Rassid)"}
                         </h4>
                       </div>
@@ -2053,7 +2096,7 @@ export default function PowerBiDashboardView() {
             )}
 
             {/* ══════════════════════════════════════════════════════════════
-                SECTION 3: FLEET PERFORMANCE MANAGER TEAM (SALMA & MOHAMED AZIZ)
+                SECTION 3: FLEET PERFORMANCE MANAGER TEAM (MOHAMED AZIZ & MEHDI)
                ══════════════════════════════════════════════════════════════ */}
             {(selectedTeamTab === "all" || selectedTeamTab === "fleet") && (
               <div className="bg-white border-2 border-amber-200 rounded-3xl p-6 shadow-sm space-y-5">
@@ -2068,7 +2111,7 @@ export default function PowerBiDashboardView() {
                           Fleet Performance Manager
                         </h3>
                         <span className="text-3xs px-2.5 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-full border border-amber-300">
-                          Salma Abouri & Mohamed Aziz
+                          Mohamed Aziz &amp; Mehdi Elyattouti
                         </span>
                       </div>
                       <p className="text-2xs text-gray-500 mt-0.5">
@@ -2088,250 +2131,380 @@ export default function PowerBiDashboardView() {
                         <span className="text-3xs px-1.5 py-0.2 bg-amber-200 text-amber-950 rounded font-bold">Option 2 (Prop. pur)</span>
                       </div>
                       <p className="text-sm font-black text-gray-900 font-mono">
-                        {fleetPerf?.bonusEarnedMAD ?? kpis.fleetCollections.bonusEarnedMAD ?? 0} DH{" "}
+                        {activeFleet?.bonusEarnedMAD ?? fleetPerf?.bonusEarnedMAD ?? 0} DH{" "}
                         <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
                       </p>
                       <p className="text-3xs text-gray-600 font-semibold">
-                        Atteinte globale équipe : <strong>{fleetPerf?.teamAttainmentPct ?? 0}%</strong>
+                        Atteinte ({selectedFleetManager === "mehdi" ? "Mehdi 26 véh." : selectedFleetManager === "aziz" ? "Aziz 68 véh." : "Flotte Globale"}) : <strong>{activeFleet?.teamAttainmentPct ?? fleetPerf?.teamAttainmentPct ?? 0}%</strong>
                       </p>
                     </div>
                   </div>
                 </div>
 
+                {/* Sub-Fleet Manager Scope Switcher */}
+                <div className="bg-amber-50/70 border border-amber-200 p-2.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🔑</span>
+                    <div>
+                      <span className="text-2xs font-black uppercase tracking-wider text-amber-900 block">
+                        Périmètre Véhicules &amp; Gestionnaire de Flotte
+                      </span>
+                      <p className="text-3xs text-gray-500">
+                        {isMehdi
+                          ? "Attribution individuelle : vos 26 véhicules assignés"
+                          : isAziz
+                          ? "Attribution individuelle : vos 68 véhicules assignés"
+                          : "Calcul différencié des primes et KPIs par véhicule assigné dans le parc GoCab"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Flotte Globale (100) */}
+                    {(isExecutiveOrAdmin || (!isMehdi && !isAziz)) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFleetManager("all")}
+                        className={`px-3 py-1.5 rounded-xl text-2xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedFleetManager === "all"
+                            ? "bg-amber-600 text-white shadow-xs"
+                            : "bg-white text-gray-700 hover:bg-amber-100/60 border border-amber-200"
+                        }`}
+                      >
+                        <span>🚗</span>
+                        <span>Flotte Globale</span>
+                        <span
+                          className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                            selectedFleetManager === "all" ? "bg-amber-700 text-amber-100" : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {fleetPerf?.managers?.all?.vehiclesCount ?? fleetPerf?.vehiclesCount ?? 100} véh.
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Mohamed Aziz (68) */}
+                    {(isExecutiveOrAdmin || isAziz || (!isMehdi && !isAziz)) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFleetManager("aziz")}
+                        className={`px-3 py-1.5 rounded-xl text-2xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedFleetManager === "aziz"
+                            ? "bg-amber-600 text-white shadow-xs"
+                            : "bg-white text-gray-700 hover:bg-amber-100/60 border border-amber-200"
+                        }`}
+                      >
+                        <span>👤</span>
+                        <span>Mohamed Aziz</span>
+                        <span
+                          className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                            selectedFleetManager === "aziz" ? "bg-amber-700 text-amber-100" : "bg-amber-100 text-amber-900"
+                          }`}
+                        >
+                          {fleetPerf?.managers?.aziz?.vehiclesCount ?? 68} véh. · {fleetPerf?.managers?.aziz?.bonusEarnedMAD ?? 413} DH
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Mehdi Elyattouti (26) */}
+                    {(isExecutiveOrAdmin || isMehdi || (!isMehdi && !isAziz)) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFleetManager("mehdi")}
+                        className={`px-3 py-1.5 rounded-xl text-2xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedFleetManager === "mehdi"
+                            ? "bg-amber-600 text-white shadow-xs"
+                            : "bg-white text-gray-700 hover:bg-amber-100/60 border border-amber-200"
+                        }`}
+                      >
+                        <span>👤</span>
+                        <span>Mehdi Elyattouti</span>
+                        <span
+                          className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                            selectedFleetManager === "mehdi" ? "bg-amber-700 text-amber-100" : "bg-amber-100 text-amber-900"
+                          }`}
+                        >
+                          {fleetPerf?.managers?.mehdi?.vehiclesCount ?? 26} véh. · {fleetPerf?.managers?.mehdi?.bonusEarnedMAD ?? 722} DH
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Calculation Details Card */}
                 <KPICalculationExplanationCard
-                  title="Fleet Performance Manager Team"
-                  members={["Salma Abouri", "Mohamed Aziz"]}
-                  details={fleetPerf?.calculationDetails}
-                  teamAttainmentPct={fleetPerf?.teamAttainmentPct}
-                  bonusEarnedMAD={fleetPerf?.bonusEarnedMAD ?? kpis.fleetCollections.bonusEarnedMAD}
+                  title={`Fleet Performance — ${
+                    selectedFleetManager === "mehdi"
+                      ? "Mehdi Elyattouti (26 Véhicules assignés)"
+                      : selectedFleetManager === "aziz"
+                      ? "Mohamed Aziz (68 Véhicules assignés)"
+                      : "Flotte Globale (100 Véhicules)"
+                  }`}
+                  members={
+                    selectedFleetManager === "mehdi"
+                      ? ["Mehdi Elyattouti"]
+                      : selectedFleetManager === "aziz"
+                      ? ["Mohamed Aziz"]
+                      : ["Mohamed Aziz", "Mehdi Elyattouti"]
+                  }
+                  details={activeFleet?.calculationDetails ?? fleetPerf?.calculationDetails}
+                  teamAttainmentPct={activeFleet?.teamAttainmentPct ?? fleetPerf?.teamAttainmentPct}
+                  bonusEarnedMAD={activeFleet?.bonusEarnedMAD ?? fleetPerf?.bonusEarnedMAD ?? 0}
                   theme="amber"
                 />
 
                 {/* 5 Core Fleet Performance KPIs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                   {/* KPI 1: Daily Cash Collection (50% - 60%) */}
-                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
-                    (fleetPerf?.collectionRecoveryRate ?? kpis.fleetCollections.collectionRecoveryRate) >= 50
-                      ? "bg-emerald-50/60 border-emerald-300"
-                      : "bg-slate-50/70 border-slate-200"
-                  }`}>
+                  <div
+                    className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                      (activeFleet?.collectionRecoveryRate ?? 0) >= 50
+                        ? "bg-emerald-50/60 border-emerald-300"
+                        : "bg-slate-50/70 border-slate-200"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-3xs font-black uppercase tracking-wider text-emerald-800">
                         1. Cash Collection
                       </p>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        (fleetPerf?.collectionRecoveryRate ?? kpis.fleetCollections.collectionRecoveryRate) >= 50
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-amber-200 text-amber-900"
-                      }`}>
-                        {(fleetPerf?.collectionRecoveryRate ?? kpis.fleetCollections.collectionRecoveryRate) >= 50 ? "✓ 50%–60%" : "⚠️ < 50%"}
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          (activeFleet?.collectionRecoveryRate ?? 0) >= 50
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        {(activeFleet?.collectionRecoveryRate ?? 0) >= 50 ? "✓ 50%–60%" : "⚠️ < 50%"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
-                        {fleetPerf?.collectionRecoveryRate ?? kpis.fleetCollections.collectionRecoveryRate}%
+                        {activeFleet?.collectionRecoveryRate ?? 0}%
                       </span>
                       <span className="text-3xs font-bold text-gray-600">Cible : 50%–60%</span>
                     </div>
                     <div className="relative w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          (fleetPerf?.collectionRecoveryRate ?? kpis.fleetCollections.collectionRecoveryRate) >= 50
+                          (activeFleet?.collectionRecoveryRate ?? 0) >= 50
                             ? "bg-emerald-600"
                             : "bg-amber-500"
                         }`}
-                        style={{ width: `${Math.min(100, fleetPerf?.collectionAttainmentPct ?? kpis.fleetCollections.collectionAttainmentPct ?? 0)}%` }}
+                        style={{
+                          width: `${Math.min(100, activeFleet?.collectionAttainmentPct ?? 0)}%`,
+                        }}
                       />
                     </div>
                     <div className="flex justify-between text-3xs font-semibold pt-0.5">
                       <span className="text-gray-500 truncate">
-                        {(fleetPerf?.totalEveningCollectedMAD ?? kpis.fleetCollections.totalEveningCollectedMAD).toLocaleString()} MAD
+                        {(activeFleet?.totalEveningCollectedMAD ?? 0).toLocaleString()} MAD
                       </span>
                       <strong className="text-emerald-700 shrink-0">
-                        Att. {fleetPerf?.collectionAttainmentPct ?? kpis.fleetCollections.collectionAttainmentPct}%
+                        Att. {activeFleet?.collectionAttainmentPct ?? 0}%
                       </strong>
                     </div>
                   </div>
 
                   {/* KPI 2: Monthly Churn Rate (<= 20% monthly of total fleet drivers) */}
-                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
-                    (fleetPerf?.monthlyChurnRate ?? kpis.fleetCollections.monthlyChurnRate ?? 0) <= 20
-                      ? "bg-emerald-50/60 border-emerald-300"
-                      : "bg-rose-50/70 border-rose-300"
-                  }`}>
+                  <div
+                    className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                      (activeFleet?.monthlyChurnRate ?? 0) <= 20
+                        ? "bg-emerald-50/60 border-emerald-300"
+                        : "bg-rose-50/70 border-rose-300"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-3xs font-black uppercase tracking-wider text-amber-900">
                         2. Churn Mensuel
                       </p>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        (fleetPerf?.monthlyChurnRate ?? kpis.fleetCollections.monthlyChurnRate ?? 0) <= 20
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-rose-200 text-rose-900"
-                      }`}>
-                        {(fleetPerf?.monthlyChurnRate ?? kpis.fleetCollections.monthlyChurnRate ?? 0) <= 20 ? "✓ ≤ 20%" : "⚠️ > 20%"}
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          (activeFleet?.monthlyChurnRate ?? 0) <= 20
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-rose-200 text-rose-900"
+                        }`}
+                      >
+                        {(activeFleet?.monthlyChurnRate ?? 0) <= 20 ? "✓ ≤ 20%" : "⚠️ > 20%"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
-                        {fleetPerf?.monthlyChurnRate ?? kpis.fleetCollections.monthlyChurnRate ?? 0}%
+                        {activeFleet?.monthlyChurnRate ?? 0}%
                       </span>
                       <span className="text-3xs font-bold text-gray-600">Max : &le; 20%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          (fleetPerf?.monthlyChurnRate ?? kpis.fleetCollections.monthlyChurnRate ?? 0) <= 20
+                          (activeFleet?.monthlyChurnRate ?? 0) <= 20
                             ? "bg-emerald-600"
                             : "bg-rose-600"
                         }`}
-                        style={{ width: `${Math.min(100, fleetPerf?.churnAttainmentPct ?? 100)}%` }}
+                        style={{ width: `${Math.min(100, activeFleet?.churnAttainmentPct ?? 100)}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-3xs font-semibold pt-0.5">
                       <span className="text-gray-500">
-                        {fleetPerf?.churnCount ?? 0} / {fleetPerf?.totalFleetDrivers ?? 0} chauffeurs
+                        {activeFleet?.churnCount ?? 0} / {activeFleet?.totalFleetDrivers ?? 0} chauffeurs
                       </span>
                       <strong className="text-emerald-700">
-                        Att. {fleetPerf?.churnAttainmentPct ?? 100}%
+                        Att. {activeFleet?.churnAttainmentPct ?? 100}%
                       </strong>
                     </div>
                   </div>
 
                   {/* KPI 3: AVG Cars Stay in Maintenance (<= 10 days) */}
-                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
-                    (fleetPerf?.avgDaysInMaintenance ?? kpis.fleetCollections.avgDaysInsuranceRepair) <= 10
-                      ? "bg-emerald-50/60 border-emerald-300"
-                      : "bg-rose-50/70 border-rose-300"
-                  }`}>
+                  <div
+                    className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                      (activeFleet?.avgDaysInMaintenance ?? 0) <= 10
+                        ? "bg-emerald-50/60 border-emerald-300"
+                        : "bg-rose-50/70 border-rose-300"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-3xs font-black uppercase tracking-wider text-blue-900">
                         3. Voitures Maint.
                       </p>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        (fleetPerf?.avgDaysInMaintenance ?? kpis.fleetCollections.avgDaysInsuranceRepair) <= 10
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-rose-200 text-rose-900"
-                      }`}>
-                        {(fleetPerf?.avgDaysInMaintenance ?? kpis.fleetCollections.avgDaysInsuranceRepair) <= 10 ? "✓ ≤ 10j" : "⚠️ > 10j"}
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          (activeFleet?.avgDaysInMaintenance ?? 0) <= 10
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-rose-200 text-rose-900"
+                        }`}
+                      >
+                        {(activeFleet?.avgDaysInMaintenance ?? 0) <= 10 ? "✓ ≤ 10j" : "⚠️ > 10j"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
-                        {fleetPerf?.avgDaysInMaintenance ?? kpis.fleetCollections.avgDaysInsuranceRepair} j
+                        {activeFleet?.avgDaysInMaintenance ?? 0} j
                       </span>
                       <span className="text-3xs font-bold text-gray-600">Max : &le; 10j</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          (fleetPerf?.avgDaysInMaintenance ?? kpis.fleetCollections.avgDaysInsuranceRepair) <= 10
+                          (activeFleet?.avgDaysInMaintenance ?? 0) <= 10
                             ? "bg-emerald-600"
                             : "bg-rose-600"
                         }`}
-                        style={{ width: `${Math.min(100, fleetPerf?.maintenanceAttainmentPct ?? 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, activeFleet?.maintenanceAttainmentPct ?? 100)}%`,
+                        }}
                       />
                     </div>
                     <div className="flex justify-between text-3xs font-semibold pt-0.5">
                       <span className="text-gray-500">
-                        {fleetPerf?.carsInMaintenanceCount ?? 0} véhicule(s) garage
+                        {activeFleet?.carsInMaintenanceCount ?? 0} véhicule(s) garage
                       </span>
                       <strong className="text-emerald-700">
-                        Att. {fleetPerf?.maintenanceAttainmentPct ?? 100}%
+                        Att. {activeFleet?.maintenanceAttainmentPct ?? 100}%
                       </strong>
                     </div>
                   </div>
 
                   {/* KPI 4: Timing to Deal with Vidange / AdBleu (AVG <= 1H) */}
-                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
-                    (fleetPerf?.avgHoursAdBlueVidange ?? kpis.fleetCollections.avgHoursAdBlueVidange) <= 1.0
-                      ? "bg-emerald-50/60 border-emerald-300"
-                      : "bg-amber-50/70 border-amber-300"
-                  }`}>
+                  <div
+                    className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                      (activeFleet?.avgHoursAdBlueVidange ?? 0) <= 1.0
+                        ? "bg-emerald-50/60 border-emerald-300"
+                        : "bg-amber-50/70 border-amber-300"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-3xs font-black uppercase tracking-wider text-purple-900">
                         4. Vidange / AdBleu
                       </p>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        (fleetPerf?.avgHoursAdBlueVidange ?? kpis.fleetCollections.avgHoursAdBlueVidange) <= 1.0
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-amber-200 text-amber-900"
-                      }`}>
-                        {(fleetPerf?.avgHoursAdBlueVidange ?? kpis.fleetCollections.avgHoursAdBlueVidange) <= 1.0 ? "⚡ ≤ 1h" : "⚠️ > 1h"}
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          (activeFleet?.avgHoursAdBlueVidange ?? 0) <= 1.0
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        {(activeFleet?.avgHoursAdBlueVidange ?? 0) <= 1.0 ? "⚡ ≤ 1h" : "⚠️ > 1h"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
-                        {fleetPerf?.avgHoursAdBlueVidange ?? kpis.fleetCollections.avgHoursAdBlueVidange} h
+                        {activeFleet?.avgHoursAdBlueVidange ?? 0} h
                       </span>
                       <span className="text-3xs font-bold text-gray-600">AVG : &le; 1h</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          (fleetPerf?.avgHoursAdBlueVidange ?? kpis.fleetCollections.avgHoursAdBlueVidange) <= 1.0
+                          (activeFleet?.avgHoursAdBlueVidange ?? 0) <= 1.0
                             ? "bg-emerald-600"
                             : "bg-amber-500"
                         }`}
-                        style={{ width: `${Math.min(100, fleetPerf?.vidangeAttainmentPct ?? 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, activeFleet?.vidangeAttainmentPct ?? 100)}%`,
+                        }}
                       />
                     </div>
                     <div className="flex justify-between text-3xs font-semibold pt-0.5">
                       <span className="text-gray-500">
-                        {fleetPerf?.vidangeTicketsCount ?? 0} ticket(s) traités
+                        {activeFleet?.vidangeTicketsCount ?? 0} ticket(s) traités
                       </span>
                       <strong className="text-emerald-700">
-                        Att. {fleetPerf?.vidangeAttainmentPct ?? 100}%
+                        Att. {activeFleet?.vidangeAttainmentPct ?? 100}%
                       </strong>
                     </div>
                   </div>
 
                   {/* KPI 5: Timing to Execute Field Mission (AVG <= 3H) */}
-                  <div className={`rounded-2xl p-4 space-y-2 border transition-all ${
-                    (fleetPerf?.avgHoursFieldMission ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
-                      ? "bg-emerald-50/60 border-emerald-300"
-                      : "bg-amber-50/70 border-amber-300"
-                  }`}>
+                  <div
+                    className={`rounded-2xl p-4 space-y-2 border transition-all ${
+                      (activeFleet?.avgHoursFieldMission ?? 0) <= 3.0
+                        ? "bg-emerald-50/60 border-emerald-300"
+                        : "bg-amber-50/70 border-amber-300"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-3xs font-black uppercase tracking-wider text-teal-900">
                         5. Mission Terrain
                       </p>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        (fleetPerf?.avgHoursFieldMission ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-amber-200 text-amber-900"
-                      }`}>
-                        {(fleetPerf?.avgHoursFieldMission ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0 ? "⚡ ≤ 3h" : "⚠️ > 3h"}
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          (activeFleet?.avgHoursFieldMission ?? 0) <= 3.0
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        {(activeFleet?.avgHoursFieldMission ?? 0) <= 3.0 ? "⚡ ≤ 3h" : "⚠️ > 3h"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
-                        {fleetPerf?.avgHoursFieldMission ?? kpis.fieldOperations.avgHoursVehicleRecovery} h
+                        {activeFleet?.avgHoursFieldMission ?? 0} h
                       </span>
                       <span className="text-3xs font-bold text-gray-600">AVG : &le; 3h</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          (fleetPerf?.avgHoursFieldMission ?? kpis.fieldOperations.avgHoursVehicleRecovery) <= 3.0
+                          (activeFleet?.avgHoursFieldMission ?? 0) <= 3.0
                             ? "bg-emerald-600"
                             : "bg-amber-500"
                         }`}
-                        style={{ width: `${Math.min(100, fleetPerf?.fieldMissionAttainmentPct ?? 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, activeFleet?.fieldMissionAttainmentPct ?? 100)}%`,
+                        }}
                       />
                     </div>
                     <div className="flex justify-between text-3xs font-semibold pt-0.5">
                       <span className="text-gray-500">
-                        {fleetPerf?.fieldMissionsCompletedCount ?? kpis.fieldOperations.tasksCompleted} mission(s)
+                        {activeFleet?.fieldMissionsCompletedCount ?? 0} mission(s)
                       </span>
                       <strong className="text-emerald-700">
-                        Att. {fleetPerf?.fieldMissionAttainmentPct ?? 100}%
+                        Att. {activeFleet?.fieldMissionAttainmentPct ?? 100}%
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* Visual Analytics Panel for Fleet Performance Manager (Salma & Mohamed Aziz) */}
+                {/* Visual Analytics Panel for Fleet Performance Manager */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-amber-100">
                   {/* Left: Bar Chart of 5 KPIs Attainment % */}
                   <div className="lg:col-span-7 bg-amber-50/30 border border-amber-200/80 rounded-2xl p-4 flex flex-col justify-between">
@@ -2339,11 +2512,11 @@ export default function PowerBiDashboardView() {
                       <div className="flex items-center gap-2">
                         <span className="p-1 rounded-lg bg-amber-100 text-amber-800 text-xs">📊</span>
                         <h4 className="text-xs font-black text-gray-900 uppercase tracking-wide">
-                          Taux d&apos;Atteinte par KPI — Salma Abouri & Mohamed Aziz
+                          Taux d&apos;Atteinte par KPI — {selectedFleetManager === "mehdi" ? "Mehdi Elyattouti (26 véh.)" : selectedFleetManager === "aziz" ? "Mohamed Aziz (68 véh.)" : "Mohamed Aziz & Mehdi Elyattouti"}
                         </h4>
                       </div>
                       <span className="text-3xs font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full">
-                        Score Équipe : {fleetPerf?.teamAttainmentPct ?? 0}%
+                        Score : {activeFleet?.teamAttainmentPct ?? 0}%
                       </span>
                     </div>
 

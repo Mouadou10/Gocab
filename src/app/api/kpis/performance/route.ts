@@ -418,7 +418,8 @@ export async function GET(request: NextRequest) {
     const totalTrainingPreorders = preordersCount + assignedVehiclesCount;
 
     const trafficAttendedPersons = directTrafficAttended > 0 ? directTrafficAttended : attendedCount;
-    const trafficPreordersAssigned = directTrafficPreorders > 0 ? directTrafficPreorders : totalTrainingPreorders;
+    // Align with Onboarding conversions: Traffic team gets credit for all downstream conversions (preorders + assignments)
+    const trafficPreordersAssigned = Math.max(directTrafficPreorders, totalTrainingPreorders);
 
     const trafficTrainingFixedRate = trafficCallsDone > 0 ? Number(((trafficTrainingFixed / trafficCallsDone) * 100).toFixed(1)) : 0;
     const trafficAttendedRate = trafficTrainingFixed > 0 ? Number(((trafficAttendedPersons / trafficTrainingFixed) * 100).toFixed(1)) : 0;
@@ -623,56 +624,52 @@ export async function GET(request: NextRequest) {
     // 1,000 MAD Bonus (Option 2: Proportionnel pur)
     const onboardingBonusEarnedMAD = Math.min(1000, Math.round(1000 * (onboardingTeamAttainmentPct / 100)));
 
-    // 4. Query Collections & Daily Ledgers
-    const paymentLedgers = await prisma.paymentLedger.findMany({
-      where: {
-        paymentDate: {
-          gte: startDate,
-          lte: endDate,
+    // 4. Query Collections & Daily Ledgers with Vehicle Assignment
+    const [allFleetVehicles, paymentLedgers, dailyCollections, activeAccidents, garageVehicles, repairTickets, vidangeTickets, churnEvents, fieldTasks] = await Promise.all([
+      prisma.vehicle.findMany({
+        where: { is_archived: false },
+        select: {
+          id: true,
+          plate_number: true,
+          assigned_collector: true,
+          status: true,
+          total_downtime_days: true,
+          updated_at: true,
         },
-      },
-      include: {
-        driver: true,
-      },
-    });
-
-    const dailyCollections = await prisma.dailyCollection.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
+      }),
+      prisma.paymentLedger.findMany({
+        where: {
+          paymentDate: {
+            gte: startDate,
+            lte: endDate,
+          },
         },
-      },
-    });
-
-    const totalMorningTargetMAD =
-      paymentLedgers.reduce((acc, row) => {
-        const mb = Number(row.morningBalance) || 0;
-        if (mb < 0) return acc + Math.abs(mb);
-        return acc + (Number(row.expectedMAD) || 0);
-      }, 0) || dailyCollections.reduce((acc, d) => acc + (Number(d.expected_total) || 0), 0);
-
-    const totalEveningCollectedMAD =
-      paymentLedgers.reduce((acc, row) => {
-        const collected =
-          Number(row.clearedMAD) || (Number(row.calculatedDelta) && Number(row.calculatedDelta) > 0 ? Number(row.calculatedDelta) : 0);
-        return acc + collected;
-      }, 0) || dailyCollections.reduce((acc, d) => acc + (Number(d.collected_total) || 0), 0);
-
-    const collectionRecoveryRate =
-      totalMorningTargetMAD > 0 ? Number(((totalEveningCollectedMAD / totalMorningTargetMAD) * 100).toFixed(1)) : 0;
-
-    // 5. Calculate Support, Maintenance, Churn & Field Mission Metrics for Fleet Performance Manager (Salma & Mohamed Aziz)
-    const [activeAccidents, garageVehicles, repairTickets, vidangeTickets] = await Promise.all([
+        include: {
+          driver: {
+            include: {
+              assignedVehicle: true,
+            },
+          },
+        },
+      }),
+      prisma.dailyCollection.findMany({
+        where: {
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+      }),
       prisma.accidentClaim.findMany({
         where: { timeline_step: { not: "VEHICLE_BACK" } },
+        include: { vehicle: true },
       }),
       prisma.vehicle.findMany({
         where: {
           is_archived: false,
           status: { in: ["In garage", "In service", "Accident", "Maintenance"] },
         },
-        select: { id: true, total_downtime_days: true, updated_at: true },
+        select: { id: true, total_downtime_days: true, updated_at: true, assigned_collector: true },
       }),
       prisma.maintenanceTicket.findMany({
         where: {
@@ -694,105 +691,34 @@ export async function GET(request: NextRequest) {
           ],
         },
       }),
+      prisma.churnEvent.findMany({
+        where: {
+          churned_at: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+      }),
+      prisma.fieldTask.findMany({
+        where: {
+          created_at: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+      }),
     ]);
 
-    // 5a. AVG Days Cars Stay in Maintenance (Target: <= 10 days)
-    const maintenanceDurationsDays: number[] = [];
-    activeAccidents.forEach((claim) => {
-      const claimDate = new Date(claim.created_at);
-      const days = Math.max(0, (now.getTime() - claimDate.getTime()) / (1000 * 60 * 60 * 24));
-      maintenanceDurationsDays.push(days);
-    });
-    repairTickets.forEach((ticket) => {
-      const start = new Date(ticket.started_at || ticket.created_at);
-      const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
-      const days = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      maintenanceDurationsDays.push(days);
-    });
-    garageVehicles.forEach((v) => {
-      if (v.total_downtime_days && v.total_downtime_days > 0) {
-        maintenanceDurationsDays.push(v.total_downtime_days);
-      } else {
-        const days = Math.max(0, (now.getTime() - new Date(v.updated_at).getTime()) / (1000 * 60 * 60 * 24));
-        maintenanceDurationsDays.push(days);
-      }
+    // Map vehicles to assigned Fleet Performance Manager ("aziz" vs "mehdi" vs "unassigned")
+    const vehicleCollectorMap = new Map<string, string>();
+    const plateCollectorMap = new Map<string, string>();
+    allFleetVehicles.forEach((v) => {
+      const norm = (v.assigned_collector || "").toLowerCase();
+      const col = norm.includes("aziz") ? "aziz" : norm.includes("mehdi") ? "mehdi" : "unassigned";
+      vehicleCollectorMap.set(v.id, col);
+      plateCollectorMap.set(v.plate_number, col);
     });
 
-    const avgDaysInsuranceRepair =
-      maintenanceDurationsDays.length > 0
-        ? Number((maintenanceDurationsDays.reduce((a, b) => a + b, 0) / maintenanceDurationsDays.length).toFixed(1))
-        : 0;
-    const carsInMaintenanceCount = Math.max(garageVehicles.length, activeAccidents.length);
-
-    // 5b. Timing to Deal with Vidange / AdBleu (Target: AVG <= 1.0 H)
-    const vidangeHoursList: number[] = [];
-    vidangeTickets.forEach((ticket) => {
-      const start = new Date(ticket.started_at || ticket.created_at);
-      const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
-      const hours = Math.max(0.1, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
-      vidangeHoursList.push(hours);
-    });
-    const avgHoursAdBlueVidange =
-      vidangeHoursList.length > 0
-        ? Number((vidangeHoursList.reduce((a, b) => a + b, 0) / vidangeHoursList.length).toFixed(1))
-        : 0.8;
-
-    // 5c. Monthly Churn Rate (Target: <= 20% monthly of total fleet drivers)
-    const churnEvents = await prisma.churnEvent.findMany({
-      where: {
-        churned_at: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-    });
-
-    const [activeDriversCount, activeVehiclesCount] = await Promise.all([
-      prisma.driverProfile.count({ where: { is_archived: false } }),
-      prisma.vehicle.count({ where: { is_archived: false, status: "Actif" } }),
-    ]);
-
-    const totalFleetDrivers = Math.max(activeDriversCount, activeVehiclesCount, 1);
-    const churnCount = churnEvents.length;
-    const weeksInRange = Math.max(1, workingDays / 5);
-    const weeklyChurnRate =
-      totalFleetDrivers > 0 ? Number((((churnCount / weeksInRange) / totalFleetDrivers) * 100).toFixed(1)) : 0;
-
-    const monthsInPeriod = moroccanDaysInfo.totalCalendarDays > 31 ? moroccanDaysInfo.totalCalendarDays / 30 : 1;
-    const monthlyChurnRate =
-      totalFleetDrivers > 0 ? Number((((churnCount / monthsInPeriod) / totalFleetDrivers) * 100).toFixed(1)) : 0;
-
-    // 6. Query Field Tasks & Inspections (Timing to Execute Field Mission: AVG <= 3.0 H)
-    const fieldTasks = await prisma.fieldTask.findMany({
-      where: {
-        created_at: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-    });
-
-    const tasksCompleted = fieldTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED").length;
-    const tasksFailed = fieldTasks.filter((t) => t.status === "Failed" || t.status === "FAILED").length;
-    const tasksTotal = fieldTasks.length;
-    const taskCompletionRate = tasksTotal > 0 ? Number(((tasksCompleted / tasksTotal) * 100).toFixed(1)) : 0;
-
-    const completedTasks = fieldTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED");
-    let totalRecoveryHours = 0;
-    completedTasks.forEach((task) => {
-      if (task.recovery_duration_hours && task.recovery_duration_hours > 0) {
-        totalRecoveryHours += task.recovery_duration_hours;
-      } else if (task.completed_at) {
-        const h = Math.max(0.2, (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60));
-        totalRecoveryHours += h;
-      } else if (task.duration_hours) {
-        totalRecoveryHours += task.duration_hours;
-      }
-    });
-    const avgHoursVehicleRecovery =
-      completedTasks.length > 0 ? Number((totalRecoveryHours / completedTasks.length).toFixed(1)) : 2.1;
-
-    // ── Fleet Performance Manager Team (Salma Abouri & Mohamed Aziz) Composite Attainment & 1,000 MAD Bonus ──
     const targetMinCollectionRate = targets.target_min_collection_rate || 50; // 50%-60% daily target
     const targetMaxCollectionRate = targets.target_collection_rate || 60;
     const maxMonthlyChurnRate = targets.target_monthly_churn_rate || 20; // <= 20% monthly
@@ -800,47 +726,6 @@ export async function GET(request: NextRequest) {
     const maxHoursVidangeAdBlue = targets.target_max_vidange_hours || 1.0; // <= 1H AVG
     const maxHoursFieldMission = targets.target_max_field_mission_hours || 3.0; // <= 3H AVG
 
-    // KPI 1 Attainment: Cash Collection (50%-60% of daily collection amount by end of day)
-    const collectionAttainmentPct =
-      collectionRecoveryRate >= targetMinCollectionRate
-        ? Math.min(
-            150,
-            Number(
-              (
-                100 +
-                ((collectionRecoveryRate - targetMinCollectionRate) /
-                  Math.max(1, targetMaxCollectionRate - targetMinCollectionRate)) *
-                  10
-              ).toFixed(1)
-            )
-          )
-        : Number(((collectionRecoveryRate / targetMinCollectionRate) * 100).toFixed(1));
-
-    // KPI 2 Attainment: Monthly Churn Rate (<= 20% monthly of total fleet drivers)
-    const churnAttainmentPct =
-      monthlyChurnRate <= maxMonthlyChurnRate
-        ? Math.min(120, Number((100 + (maxMonthlyChurnRate - monthlyChurnRate) * 0.5).toFixed(1)))
-        : Math.max(0, Number((100 - (monthlyChurnRate - maxMonthlyChurnRate) * 5).toFixed(1)));
-
-    // KPI 3 Attainment: AVG Days Cars Stay in Maintenance (<= 10 days)
-    const maintenanceAttainmentPct =
-      avgDaysInsuranceRepair <= maxDaysInMaintenance
-        ? Math.min(120, Number((100 + (maxDaysInMaintenance - avgDaysInsuranceRepair) * 2).toFixed(1)))
-        : Math.max(0, Number((100 - (avgDaysInsuranceRepair - maxDaysInMaintenance) * 10).toFixed(1)));
-
-    // KPI 4 Attainment: Timing to Deal with Vidange / AdBleu (AVG <= 1H)
-    const vidangeAttainmentPct =
-      avgHoursAdBlueVidange <= maxHoursVidangeAdBlue
-        ? Math.min(120, Number((100 + (maxHoursVidangeAdBlue - avgHoursAdBlueVidange) * 20).toFixed(1)))
-        : Math.max(0, Number(((maxHoursVidangeAdBlue / avgHoursAdBlueVidange) * 100).toFixed(1)));
-
-    // KPI 5 Attainment: Timing to Execute Field Mission (AVG <= 3H)
-    const fieldMissionAttainmentPct =
-      avgHoursVehicleRecovery <= maxHoursFieldMission
-        ? Math.min(120, Number((100 + (maxHoursFieldMission - avgHoursVehicleRecovery) * 10).toFixed(1)))
-        : Math.max(0, Number(((maxHoursFieldMission / avgHoursVehicleRecovery) * 100).toFixed(1)));
-
-    // Weighted Composite Team Attainment % across all 5 KPIs:
     const fleetWeightSum =
       (targets.weight_fleet_cash +
         targets.weight_fleet_churn +
@@ -848,18 +733,300 @@ export async function GET(request: NextRequest) {
         targets.weight_fleet_vidange +
         targets.weight_fleet_mission) || 100;
 
-    const fleetPerfTeamAttainmentPct = Number(
-      (
-        (targets.weight_fleet_cash * Math.min(150, collectionAttainmentPct) +
-          targets.weight_fleet_churn * Math.min(150, churnAttainmentPct) +
-          targets.weight_fleet_maintenance * Math.min(150, maintenanceAttainmentPct) +
-          targets.weight_fleet_vidange * Math.min(150, vidangeAttainmentPct) +
-          targets.weight_fleet_mission * Math.min(150, fieldMissionAttainmentPct)) /
-        fleetWeightSum
-      ).toFixed(1)
-    );
+    const computeFleetKPIs = (mgrKey: "all" | "aziz" | "mehdi") => {
+      const isMgr = (collector: string) => {
+        if (mgrKey === "all") return true;
+        return collector === mgrKey;
+      };
 
-    const fleetPerfBonusEarnedMAD = Math.min(1000, Math.round(1000 * (fleetPerfTeamAttainmentPct / 100)));
+      const mgrVehicles = allFleetVehicles.filter((v) => {
+        const col = vehicleCollectorMap.get(v.id) || "unassigned";
+        return isMgr(col);
+      });
+      const vehiclesCount = mgrVehicles.length;
+
+      // 1. Cash Collection per assigned vehicles
+      let mgrMorningTarget = 0;
+      let mgrEveningCollected = 0;
+      paymentLedgers.forEach((row) => {
+        const vId = row.driver?.assignedVehicle?.id;
+        const col = vId ? (vehicleCollectorMap.get(vId) || "unassigned") : "unassigned";
+        if (!isMgr(col)) return;
+
+        const mb = Number(row.morningBalance) || 0;
+        if (mb < 0) mgrMorningTarget += Math.abs(mb);
+        else mgrMorningTarget += (Number(row.expectedMAD) || 0);
+
+        const collected =
+          Number(row.clearedMAD) || (Number(row.calculatedDelta) && Number(row.calculatedDelta) > 0 ? Number(row.calculatedDelta) : 0);
+        mgrEveningCollected += collected;
+      });
+
+      if (mgrKey === "all" && mgrMorningTarget === 0 && dailyCollections.length > 0) {
+        mgrMorningTarget = dailyCollections.reduce((acc, d) => acc + (Number(d.expected_total) || 0), 0);
+        mgrEveningCollected = dailyCollections.reduce((acc, d) => acc + (Number(d.collected_total) || 0), 0);
+      }
+
+      const collectionRecoveryRate =
+        mgrMorningTarget > 0 ? Number(((mgrEveningCollected / mgrMorningTarget) * 100).toFixed(1)) : 0;
+
+      // 2. Maintenance Durations per assigned vehicles
+      const maintenanceDurations: number[] = [];
+      activeAccidents.forEach((claim) => {
+        const col = claim.vehicle ? (vehicleCollectorMap.get(claim.vehicle.id) || "unassigned") : "unassigned";
+        if (!isMgr(col)) return;
+        const days = Math.max(0, (now.getTime() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        maintenanceDurations.push(days);
+      });
+      repairTickets.forEach((ticket) => {
+        const col = vehicleCollectorMap.get(ticket.vehicle_id) || plateCollectorMap.get(ticket.plate_number) || "unassigned";
+        if (!isMgr(col)) return;
+        const start = new Date(ticket.started_at || ticket.created_at);
+        const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
+        maintenanceDurations.push(Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+      });
+      garageVehicles.forEach((v) => {
+        const col = vehicleCollectorMap.get(v.id) || "unassigned";
+        if (!isMgr(col)) return;
+        if (v.total_downtime_days && v.total_downtime_days > 0) {
+          maintenanceDurations.push(v.total_downtime_days);
+        } else {
+          maintenanceDurations.push(Math.max(0, (now.getTime() - new Date(v.updated_at).getTime()) / (1000 * 60 * 60 * 24)));
+        }
+      });
+      const avgDaysInMaintenance =
+        maintenanceDurations.length > 0
+          ? Number((maintenanceDurations.reduce((a, b) => a + b, 0) / maintenanceDurations.length).toFixed(1))
+          : 0;
+
+      const carsInMaintenanceCount = maintenanceDurations.length;
+
+      // 3. Vidange / AdBleu per assigned vehicles
+      const vidangeHours: number[] = [];
+      vidangeTickets.forEach((ticket) => {
+        const col = vehicleCollectorMap.get(ticket.vehicle_id) || plateCollectorMap.get(ticket.plate_number) || "unassigned";
+        if (!isMgr(col)) return;
+        const start = new Date(ticket.started_at || ticket.created_at);
+        const end = ticket.resolved_at ? new Date(ticket.resolved_at) : now;
+        vidangeHours.push(Math.max(0.1, (end.getTime() - start.getTime()) / (1000 * 60 * 60)));
+      });
+      const avgHoursAdBlueVidange =
+        vidangeHours.length > 0
+          ? Number((vidangeHours.reduce((a, b) => a + b, 0) / vidangeHours.length).toFixed(1))
+          : 0.8;
+
+      // 4. Monthly Churn Rate per assigned vehicles
+      const mgrChurnEvents = churnEvents.filter((c) => {
+        const col = vehicleCollectorMap.get(c.vehicle_id) || plateCollectorMap.get(c.plate_number) || "unassigned";
+        return isMgr(col);
+      });
+      const churnCount = mgrChurnEvents.length;
+      const totalDrivers = Math.max(vehiclesCount, 1);
+      const monthsInPeriod = moroccanDaysInfo.totalCalendarDays > 31 ? moroccanDaysInfo.totalCalendarDays / 30 : 1;
+      const monthlyChurnRate =
+        totalDrivers > 0 ? Number((((churnCount / monthsInPeriod) / totalDrivers) * 100).toFixed(1)) : 0;
+
+      // 5. Field Missions per assigned vehicles
+      const missionHours: number[] = [];
+      const completedTasks = fieldTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED");
+      completedTasks.forEach((task) => {
+        const col = (task.vehicle_id && vehicleCollectorMap.get(task.vehicle_id)) || (task.plate_number && plateCollectorMap.get(task.plate_number)) || "unassigned";
+        if (!isMgr(col)) return;
+        if (task.recovery_duration_hours && task.recovery_duration_hours > 0) {
+          missionHours.push(task.recovery_duration_hours);
+        } else if (task.completed_at) {
+          const h = Math.max(0.2, (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60));
+          missionHours.push(h);
+        } else if (task.duration_hours) {
+          missionHours.push(task.duration_hours);
+        }
+      });
+      const avgHoursFieldMission =
+        missionHours.length > 0 ? Number((missionHours.reduce((a, b) => a + b, 0) / missionHours.length).toFixed(1)) : 2.1;
+
+      // ── Attainments ──
+      const collectionAttainmentPct =
+        collectionRecoveryRate >= targetMinCollectionRate
+          ? Math.min(
+              150,
+              Number(
+                (
+                  100 +
+                  ((collectionRecoveryRate - targetMinCollectionRate) /
+                    Math.max(1, targetMaxCollectionRate - targetMinCollectionRate)) *
+                    10
+                ).toFixed(1)
+              )
+            )
+          : Number(((collectionRecoveryRate / targetMinCollectionRate) * 100).toFixed(1));
+
+      const churnAttainmentPct =
+        monthlyChurnRate <= maxMonthlyChurnRate
+          ? Math.min(120, Number((100 + (maxMonthlyChurnRate - monthlyChurnRate) * 0.5).toFixed(1)))
+          : Math.max(0, Number((100 - (monthlyChurnRate - maxMonthlyChurnRate) * 5).toFixed(1)));
+
+      const maintenanceAttainmentPct =
+        avgDaysInMaintenance <= maxDaysInMaintenance
+          ? Math.min(120, Number((100 + (maxDaysInMaintenance - avgDaysInMaintenance) * 2).toFixed(1)))
+          : Math.max(0, Number((100 - (avgDaysInMaintenance - maxDaysInMaintenance) * 10).toFixed(1)));
+
+      const vidangeAttainmentPct =
+        avgHoursAdBlueVidange <= maxHoursVidangeAdBlue
+          ? Math.min(120, Number((100 + (maxHoursVidangeAdBlue - avgHoursAdBlueVidange) * 20).toFixed(1)))
+          : Math.max(0, Number(((maxHoursVidangeAdBlue / avgHoursAdBlueVidange) * 100).toFixed(1)));
+
+      const fieldMissionAttainmentPct =
+        avgHoursFieldMission <= maxHoursFieldMission
+          ? Math.min(120, Number((100 + (maxHoursFieldMission - avgHoursFieldMission) * 10).toFixed(1)))
+          : Math.max(0, Number(((maxHoursFieldMission / avgHoursFieldMission) * 100).toFixed(1)));
+
+      const teamAttainmentPct = Number(
+        (
+          (targets.weight_fleet_cash * Math.min(150, collectionAttainmentPct) +
+            targets.weight_fleet_churn * Math.min(150, churnAttainmentPct) +
+            targets.weight_fleet_maintenance * Math.min(150, maintenanceAttainmentPct) +
+            targets.weight_fleet_vidange * Math.min(150, vidangeAttainmentPct) +
+            targets.weight_fleet_mission * Math.min(150, fieldMissionAttainmentPct)) /
+          fleetWeightSum
+        ).toFixed(1)
+      );
+
+      const bonusEarnedMAD = Math.min(1000, Math.round(1000 * (teamAttainmentPct / 100)));
+
+      const calculationDetails = [
+        {
+          kpi: "Cash Collect (50%-60%)",
+          actual: `${collectionRecoveryRate}%`,
+          target: `${targetMinCollectionRate}% min / ${targetMaxCollectionRate}% cible`,
+          rawAttainmentPct: Number(collectionAttainmentPct.toFixed(1)),
+          cappedAttainmentPct: Number(Math.min(150, collectionAttainmentPct).toFixed(1)),
+          weightPct: targets.weight_fleet_cash,
+          contributionPct: Number(((targets.weight_fleet_cash * Math.min(150, collectionAttainmentPct)) / fleetWeightSum).toFixed(1)),
+        },
+        {
+          kpi: "Churn Mensuel (≤ 20%)",
+          actual: `${monthlyChurnRate}%`,
+          target: `≤ ${maxMonthlyChurnRate}%`,
+          rawAttainmentPct: Number(churnAttainmentPct.toFixed(1)),
+          cappedAttainmentPct: Number(Math.min(150, churnAttainmentPct).toFixed(1)),
+          weightPct: targets.weight_fleet_churn,
+          contributionPct: Number(((targets.weight_fleet_churn * Math.min(150, churnAttainmentPct)) / fleetWeightSum).toFixed(1)),
+        },
+        {
+          kpi: "Immobilisation Garage (≤ 10j)",
+          actual: `${avgDaysInMaintenance} jours`,
+          target: `≤ ${maxDaysInMaintenance} jours`,
+          rawAttainmentPct: Number(maintenanceAttainmentPct.toFixed(1)),
+          cappedAttainmentPct: Number(Math.min(150, maintenanceAttainmentPct).toFixed(1)),
+          weightPct: targets.weight_fleet_maintenance,
+          contributionPct: Number(((targets.weight_fleet_maintenance * Math.min(150, maintenanceAttainmentPct)) / fleetWeightSum).toFixed(1)),
+        },
+        {
+          kpi: "SLA Vidange & AdBleu (≤ 1h)",
+          actual: `${avgHoursAdBlueVidange} h`,
+          target: `≤ ${maxHoursVidangeAdBlue} h`,
+          rawAttainmentPct: Number(vidangeAttainmentPct.toFixed(1)),
+          cappedAttainmentPct: Number(Math.min(150, vidangeAttainmentPct).toFixed(1)),
+          weightPct: targets.weight_fleet_vidange,
+          contributionPct: Number(((targets.weight_fleet_vidange * Math.min(150, vidangeAttainmentPct)) / fleetWeightSum).toFixed(1)),
+        },
+        {
+          kpi: "SLA Mission Terrain (≤ 3h)",
+          actual: `${avgHoursFieldMission} h`,
+          target: `≤ ${maxHoursFieldMission} h`,
+          rawAttainmentPct: Number(fieldMissionAttainmentPct.toFixed(1)),
+          cappedAttainmentPct: Number(Math.min(150, fieldMissionAttainmentPct).toFixed(1)),
+          weightPct: targets.weight_fleet_mission,
+          contributionPct: Number(((targets.weight_fleet_mission * Math.min(150, fieldMissionAttainmentPct)) / fleetWeightSum).toFixed(1)),
+        },
+      ];
+
+      return {
+        managerKey: mgrKey,
+        name: mgrKey === "mehdi" ? "Mehdi Elyattouti" : mgrKey === "aziz" ? "Mohamed Aziz" : "Flotte Globale",
+        vehiclesCount,
+        totalMorningTargetMAD: mgrMorningTarget,
+        totalEveningCollectedMAD: mgrEveningCollected,
+        collectionRecoveryRate,
+        targetMinCollectionRate,
+        targetMaxCollectionRate,
+        collectionAttainmentPct,
+        isCollectionCompliant: collectionRecoveryRate >= targetMinCollectionRate,
+        monthlyChurnRate,
+        maxMonthlyChurnRate,
+        churnCount,
+        totalFleetDrivers: totalDrivers,
+        churnAttainmentPct,
+        isChurnCompliant: monthlyChurnRate <= maxMonthlyChurnRate,
+        avgDaysInMaintenance,
+        maxDaysInMaintenance,
+        carsInMaintenanceCount,
+        maintenanceAttainmentPct,
+        isMaintenanceCompliant: avgDaysInMaintenance <= maxDaysInMaintenance,
+        avgHoursAdBlueVidange,
+        maxHoursVidangeAdBlue,
+        vidangeTicketsCount: vidangeHours.length,
+        vidangeAttainmentPct,
+        isVidangeCompliant: avgHoursAdBlueVidange <= maxHoursVidangeAdBlue,
+        avgHoursFieldMission,
+        maxHoursFieldMission,
+        fieldMissionsCompletedCount: missionHours.length,
+        fieldMissionAttainmentPct,
+        isFieldMissionCompliant: avgHoursFieldMission <= maxHoursFieldMission,
+        teamAttainmentPct,
+        monthlyBonusBudgetMAD: 1000,
+        bonusEarnedMAD,
+        weights: {
+          cash: targets.weight_fleet_cash,
+          churn: targets.weight_fleet_churn,
+          maintenance: targets.weight_fleet_maintenance,
+          vidange: targets.weight_fleet_vidange,
+          mission: targets.weight_fleet_mission,
+          total: fleetWeightSum,
+        },
+        calculationDetails,
+      };
+    };
+
+    const azizFleet = computeFleetKPIs("aziz");
+    const mehdiFleet = computeFleetKPIs("mehdi");
+    const allFleet = computeFleetKPIs("all");
+
+    let selectedFleet = allFleet;
+    if (targetUser) {
+      const tu = (targetUser.name || targetUser.fullName || "").toLowerCase();
+      const te = (targetUser.email || "").toLowerCase();
+      if (tu.includes("mehdi") || te.includes("mehdi")) {
+        selectedFleet = mehdiFleet;
+      } else if (tu.includes("aziz") || te.includes("aziz")) {
+        selectedFleet = azizFleet;
+      }
+    }
+
+    const totalMorningTargetMAD = selectedFleet.totalMorningTargetMAD;
+    const totalEveningCollectedMAD = selectedFleet.totalEveningCollectedMAD;
+    const collectionRecoveryRate = selectedFleet.collectionRecoveryRate;
+    const collectionAttainmentPct = selectedFleet.collectionAttainmentPct;
+    const monthlyChurnRate = selectedFleet.monthlyChurnRate;
+    const churnCount = selectedFleet.churnCount;
+    const totalFleetDrivers = selectedFleet.totalFleetDrivers;
+    const churnAttainmentPct = selectedFleet.churnAttainmentPct;
+    const avgDaysInsuranceRepair = selectedFleet.avgDaysInMaintenance;
+    const carsInMaintenanceCount = selectedFleet.carsInMaintenanceCount;
+    const maintenanceAttainmentPct = selectedFleet.maintenanceAttainmentPct;
+    const avgHoursAdBlueVidange = selectedFleet.avgHoursAdBlueVidange;
+    const vidangeAttainmentPct = selectedFleet.vidangeAttainmentPct;
+    const tasksCompleted = selectedFleet.fieldMissionsCompletedCount;
+    const avgHoursVehicleRecovery = selectedFleet.avgHoursFieldMission;
+    const fieldMissionAttainmentPct = selectedFleet.fieldMissionAttainmentPct;
+    const fleetPerfTeamAttainmentPct = selectedFleet.teamAttainmentPct;
+    const fleetPerfBonusEarnedMAD = selectedFleet.bonusEarnedMAD;
+    const tasksTotal = fieldTasks.length;
+    const tasksFailed = fieldTasks.filter((t) => t.status === "Failed" || t.status === "FAILED").length;
+    const taskCompletionRate = tasksTotal > 0 ? Number(((tasksCompleted / tasksTotal) * 100).toFixed(1)) : 0;
+    const weeksInRange = Math.max(1, workingDays / 5);
+    const weeklyChurnRate =
+      totalFleetDrivers > 0 ? Number((((churnCount / weeksInRange) / totalFleetDrivers) * 100).toFixed(1)) : 0;
 
     const [inspections, attestationVehicles, allPeriodTickets] = await Promise.all([
       prisma.vehicleInspection.findMany({
@@ -1037,15 +1204,33 @@ export async function GET(request: NextRequest) {
         unit = "drivers";
         teamAttainmentPct = onboardingTeamAttainmentPct;
         bonusEarnedMAD = onboardingBonusEarnedMAD;
-      } else if (u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz")) {
+      } else if (u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz") || uName.includes("mehdi")) {
         dept = "Performance Flotte & Recouvrement";
-        teamName = "Fleet Performance (Salma & Mohamed Aziz)";
-        keyMetric = "Cash (50%-60%) & 5 KPIs Flotte";
-        actual = collectionRecoveryRate;
-        target = targetMinCollectionRate;
-        unit = "% (50%-60%)";
-        teamAttainmentPct = fleetPerfTeamAttainmentPct;
-        bonusEarnedMAD = fleetPerfBonusEarnedMAD;
+        if (uName.includes("mehdi") || u.email.includes("mehdi")) {
+          teamName = "Fleet Performance (Mehdi Elyattouti · 26 Véhicules)";
+          keyMetric = `Cash (${mehdiFleet.collectionRecoveryRate}%) · ${mehdiFleet.vehiclesCount} Véhicules`;
+          actual = mehdiFleet.collectionRecoveryRate;
+          target = targetMinCollectionRate;
+          unit = "% (50%-60%)";
+          teamAttainmentPct = mehdiFleet.teamAttainmentPct;
+          bonusEarnedMAD = mehdiFleet.bonusEarnedMAD;
+        } else if (uName.includes("aziz") || u.email.includes("aziz")) {
+          teamName = "Fleet Performance (Mohamed Aziz · 68 Véhicules)";
+          keyMetric = `Cash (${azizFleet.collectionRecoveryRate}%) · ${azizFleet.vehiclesCount} Véhicules`;
+          actual = azizFleet.collectionRecoveryRate;
+          target = targetMinCollectionRate;
+          unit = "% (50%-60%)";
+          teamAttainmentPct = azizFleet.teamAttainmentPct;
+          bonusEarnedMAD = azizFleet.bonusEarnedMAD;
+        } else {
+          teamName = "Fleet Performance (Salma Abouri)";
+          keyMetric = `Cash (${allFleet.collectionRecoveryRate}%) · Flotte Globale`;
+          actual = allFleet.collectionRecoveryRate;
+          target = targetMinCollectionRate;
+          unit = "% (50%-60%)";
+          teamAttainmentPct = allFleet.teamAttainmentPct;
+          bonusEarnedMAD = allFleet.bonusEarnedMAD;
+        }
       } else if (u.role === "FIELD_SUPERVISOR" || uName.includes("hamza") || uName.includes("ayoub rassid")) {
         dept = "Opérations Terrain";
         teamName = "Field Supervisor (Hamza & Ayoub Rassid)";
@@ -1076,7 +1261,11 @@ export async function GET(request: NextRequest) {
       }
 
       const individualAttainmentPct =
-        u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz")
+        uName.includes("mehdi") || u.email.includes("mehdi")
+          ? mehdiFleet.collectionAttainmentPct
+          : uName.includes("aziz") || u.email.includes("aziz")
+          ? azizFleet.collectionAttainmentPct
+          : u.role === "FLEET_PERF_MANAGER" || uName.includes("salma")
           ? collectionAttainmentPct
           : u.role === "FIELD_SUPERVISOR" || uName.includes("hamza") || uName.includes("ayoub rassid")
           ? fieldSupervisorTeamAttainmentPct
@@ -1314,7 +1503,7 @@ export async function GET(request: NextRequest) {
         teamAttainmentPct: fleetPerfTeamAttainmentPct,
         monthlyBonusBudgetMAD: 1000,
         bonusEarnedMAD: fleetPerfBonusEarnedMAD,
-        members: ["Salma Abouri", "Mohamed Aziz"],
+        members: ["Mohamed Aziz", "Mehdi Elyattouti"],
         weights: {
           cash: targets.weight_fleet_cash,
           churn: targets.weight_fleet_churn,
@@ -1323,53 +1512,12 @@ export async function GET(request: NextRequest) {
           mission: targets.weight_fleet_mission,
           total: fleetWeightSum,
         },
-        calculationDetails: [
-          {
-            kpi: "Cash Collect (50%-60%)",
-            actual: `${collectionRecoveryRate}%`,
-            target: `${targetMinCollectionRate}% min / ${targetMaxCollectionRate}% cible`,
-            rawAttainmentPct: Number(collectionAttainmentPct.toFixed(1)),
-            cappedAttainmentPct: Number(Math.min(150, collectionAttainmentPct).toFixed(1)),
-            weightPct: targets.weight_fleet_cash,
-            contributionPct: Number(((targets.weight_fleet_cash * Math.min(150, collectionAttainmentPct)) / fleetWeightSum).toFixed(1)),
-          },
-          {
-            kpi: "Churn Mensuel (≤ 20%)",
-            actual: `${monthlyChurnRate}%`,
-            target: `≤ ${maxMonthlyChurnRate}%`,
-            rawAttainmentPct: Number(churnAttainmentPct.toFixed(1)),
-            cappedAttainmentPct: Number(Math.min(150, churnAttainmentPct).toFixed(1)),
-            weightPct: targets.weight_fleet_churn,
-            contributionPct: Number(((targets.weight_fleet_churn * Math.min(150, churnAttainmentPct)) / fleetWeightSum).toFixed(1)),
-          },
-          {
-            kpi: "Immobilisation Garage (≤ 10j)",
-            actual: `${avgDaysInsuranceRepair} jours`,
-            target: `≤ ${maxDaysInMaintenance} jours`,
-            rawAttainmentPct: Number(maintenanceAttainmentPct.toFixed(1)),
-            cappedAttainmentPct: Number(Math.min(150, maintenanceAttainmentPct).toFixed(1)),
-            weightPct: targets.weight_fleet_maintenance,
-            contributionPct: Number(((targets.weight_fleet_maintenance * Math.min(150, maintenanceAttainmentPct)) / fleetWeightSum).toFixed(1)),
-          },
-          {
-            kpi: "SLA Vidange & AdBleu (≤ 1h)",
-            actual: `${avgHoursAdBlueVidange} h`,
-            target: `≤ ${maxHoursVidangeAdBlue} h`,
-            rawAttainmentPct: Number(vidangeAttainmentPct.toFixed(1)),
-            cappedAttainmentPct: Number(Math.min(150, vidangeAttainmentPct).toFixed(1)),
-            weightPct: targets.weight_fleet_vidange,
-            contributionPct: Number(((targets.weight_fleet_vidange * Math.min(150, vidangeAttainmentPct)) / fleetWeightSum).toFixed(1)),
-          },
-          {
-            kpi: "SLA Mission Terrain (≤ 3h)",
-            actual: `${avgHoursVehicleRecovery} h`,
-            target: `≤ ${maxHoursFieldMission} h`,
-            rawAttainmentPct: Number(fieldMissionAttainmentPct.toFixed(1)),
-            cappedAttainmentPct: Number(Math.min(150, fieldMissionAttainmentPct).toFixed(1)),
-            weightPct: targets.weight_fleet_mission,
-            contributionPct: Number(((targets.weight_fleet_mission * Math.min(150, fieldMissionAttainmentPct)) / fleetWeightSum).toFixed(1)),
-          },
-        ],
+        calculationDetails: selectedFleet.calculationDetails,
+        managers: {
+          aziz: azizFleet,
+          mehdi: mehdiFleet,
+          all: allFleet,
+        },
       },
       fieldSupervisorTeam: {
         avgHoursMissionCompletion,
