@@ -729,21 +729,26 @@
               </div>
               <span class="badge emerald">1 000 DH / pers.</span>
             </div>
-            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
               <div class="kpi-row">
                 <span class="kpi-name">⚡ SLA Exécution Missions / Récupérations</span>
                 <span class="kpi-target">&le; 3,0 Heures en moyenne</span>
-                <span class="kpi-weight">Poids 33,3%</span>
+                <span class="kpi-weight">Poids 25,0%</span>
               </div>
               <div class="kpi-row">
                 <span class="kpi-name">📋 Attestations de Location & Contrôles</span>
                 <span class="kpi-target">&ge; 90% renouvelées à temps</span>
-                <span class="kpi-weight">Poids 33,3%</span>
+                <span class="kpi-weight">Poids 25,0%</span>
               </div>
               <div class="kpi-row">
                 <span class="kpi-name">🛠️ Résolution des Tickets / Pannes</span>
                 <span class="kpi-target">&ge; 95% résolus</span>
-                <span class="kpi-weight">Poids 33,4%</span>
+                <span class="kpi-weight">Poids 25,0%</span>
+              </div>
+              <div class="kpi-row">
+                <span class="kpi-name">📁 Véhicules Documents Manquants</span>
+                <span class="kpi-target">&le; 3,0 Jours en moyenne</span>
+                <span class="kpi-weight">Poids 25,0%</span>
               </div>
             </div>
           </div>
@@ -1055,21 +1060,21 @@
           </div>
         </div>
         <div class="slide-header-right">
-          <span class="pill emerald">&le; 3,0H SLA • &ge; 90% CONTRÔLES • &ge; 95% TICKETS</span>
+          <span class="pill emerald">&le; 3,0H SLA • &ge; 90% CONTRÔLES • &ge; 95% TICKETS • &le; 3,0J DOCS</span>
         </div>
       </div>
 
       <div class="slide-body">
         <div class="grid-2" style="flex: 1;">
           <div class="card">
-            <span class="card-title">Les 3 Objectifs Équilibrés (1/3 chacun)</span>
-            <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+            <span class="card-title">Les 4 Objectifs Équilibrés (25% chacun)</span>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
               <div class="kpi-row">
                 <div>
                   <div style="font-weight:800; font-size:12px;">Délai d'Exécution des Missions Terrain</div>
                   <div style="font-size:11px; color:var(--text-muted);">Cible : &le; 3,0 Heures en moyenne par intervention</div>
                 </div>
-                <span class="kpi-weight">Poids : 33,3%</span>
+                <span class="kpi-weight">Poids : 25,0%</span>
               </div>
 
               <div class="kpi-row">
@@ -1077,7 +1082,7 @@
                   <div style="font-weight:800; font-size:12px;">Attestations de Location & Contrôles Mensuels</div>
                   <div style="font-size:11px; color:var(--text-muted);">Cible : &ge; 90% des chauffeurs en règle et contrôlés à temps</div>
                 </div>
-                <span class="kpi-weight">Poids : 33,3%</span>
+                <span class="kpi-weight">Poids : 25,0%</span>
               </div>
 
               <div class="kpi-row">
@@ -1085,14 +1090,22 @@
                   <div style="font-weight:800; font-size:12px;">Taux de Résolution des Tickets & Pannes</div>
                   <div style="font-size:11px; color:var(--text-muted);">Cible : &ge; 95% des tickets assignés résolus</div>
                 </div>
-                <span class="kpi-weight">Poids : 33,4%</span>
+                <span class="kpi-weight">Poids : 25,0%</span>
+              </div>
+
+              <div class="kpi-row">
+                <div>
+                  <div style="font-weight:800; font-size:12px;">Véhicules en Documents Manquants</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Cible : &le; 3,0 Jours en moyenne de régularisation parc</div>
+                </div>
+                <span class="kpi-weight">Poids : 25,0%</span>
               </div>
             </div>
 
             <div class="math-box" style="margin-top:auto;">
-              <div class="math-formula">Score Global = (33,3% × Missions) + (33,3% × Attestations) + (33,4% × Tickets)</div>
+              <div class="math-formula">Score Global = (25% × Missions) + (25% × Attestations) + (25% × Tickets) + (25% × Docs Manquants)</div>
               <div class="math-sub">
-                Poids égal à un tiers pour chaque mission : rapidité, conformité réglementaire et efficacité technique.
+                Poids égal à 25% pour chaque mission : rapidité d'intervention, conformité réglementaire, support technique et régularisation documentaire.
               </div>
             </div>
           </div>
@@ -1100,25 +1113,26 @@
           <div class="card" style="background:#f8fafc;">
             <span class="card-title" style="color:var(--gocab-blue);">Exemple Chiffré Réel du Mois</span>
             
-            <div style="font-size:12px; color:var(--text-muted); line-height:1.6; display:flex; flex-direction:column; gap:8px;">
+            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.5; display:flex; flex-direction:column; gap:6px;">
               <div>• <strong>Délai moyen d'intervention terrain :</strong> 2,3 Heures (&le; 3,0H) &rarr; <span style="font-weight:800; color:#15803d;">107,0% (Tr&egrave;s r&eacute;actif !)</span></div>
               <div>• <strong>Chauffeurs contrôlés / Attestation à jour :</strong> 91,5% (&ge; 90%) &rarr; <span style="font-weight:800; color:#15803d;">101,7% (En règle !)</span></div>
               <div>• <strong>Tickets et tâches résolus :</strong> 96,2% (&ge; 95%) &rarr; <span style="font-weight:800; color:#15803d;">101,3% (Problèmes réglés !)</span></div>
+              <div>• <strong>Durée véhicules documents manquants :</strong> 2,1 Jours (&le; 3,0j) &rarr; <span style="font-weight:800; color:#15803d;">104,5% (Régularisation rapide !)</span></div>
             </div>
 
-            <div class="example-box" style="margin-top:14px;">
+            <div class="example-box" style="margin-top:10px;">
               <div class="example-title">💡 Calcul du Bonus pour Hamza & Ayoub Rassid :</div>
-              <div style="font-size:12px; font-family:monospace; font-weight:700;">
-                Score Global = (0,333 × 107,0%) + (0,333 × 101,7%) + (0,334 × 101,3%)<br>
-                Score Global = 35,63% + 33,87% + 33,84% = <strong>103,34%</strong>
+              <div style="font-size:11.5px; font-family:monospace; font-weight:700;">
+                Score Global = (0,25 × 107,0%) + (0,25 × 101,7%) + (0,25 × 101,3%) + (0,25 × 104,5%)<br>
+                Score Global = 26,75% + 25,43% + 25,33% + 26,13% = <strong>103,64%</strong>
               </div>
-              <div style="font-size:16px; font-weight:900; margin-top:8px; color:#15803d;">
+              <div style="font-size:15px; font-weight:900; margin-top:6px; color:#15803d;">
                 &rarr; Bonus Viré : 1 000 DH chacun ! 🚗💨
               </div>
             </div>
 
-            <p style="font-size:11px; color:var(--text-muted); margin-top:6px;">
-              <em>Chaque déplacement sur le terrain pour récupérer un véhicule ou renouveler une attestation compte immédiatement dans le calcul.</em>
+            <p style="font-size:10.5px; color:var(--text-muted); margin-top:6px;">
+              <em>Chaque déplacement sur le terrain pour récupérer un véhicule, régulariser un document ou renouveler une attestation compte immédiatement dans le calcul.</em>
             </p>
           </div>
         </div>
@@ -1131,7 +1145,7 @@
 
       <div class="speaker-notes-bar" id="notes-7">
         <div class="notes-tag">Notes pour l'orateur</div>
-        "Parlez à Hamza et Ayoub Rassid : 'Vous êtes nos yeux et nos bras sur le terrain. Vos 3 missions sont claires : quand un véhicule doit être récupéré, intervenir en moins de 3 heures ; s'assurer que chaque chauffeur a son attestation de location renouvelée chaque mois ; et fermer vos tickets d'intervention. Si vous respectez ce standard, vos 1 000 DH de bonus sont assurés.'"
+        "Parlez à Hamza et Ayoub Rassid : 'Vous êtes nos yeux et nos bras sur le terrain. Vos 4 missions sont claires : quand un véhicule doit être récupéré, intervenir en moins de 3 heures ; s'assurer que chaque chauffeur a son attestation de location renouvelée chaque mois ; fermer vos tickets d'intervention ; et ne pas laisser un véhicule plus de 3 jours sans documents complets. Si vous respectez ce standard, vos 1 000 DH de bonus sont assurés.'"
       </div>
     </div>
 
