@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   ResponsiveContainer,
@@ -18,6 +19,16 @@ import {
   ReferenceLine,
   LabelList,
 } from "recharts";
+
+export interface CalculationDetail {
+  kpi: string;
+  actual: string;
+  target: string;
+  rawAttainmentPct: number;
+  cappedAttainmentPct: number;
+  weightPct: number;
+  contributionPct: number;
+}
 
 interface PerformanceData {
   period: {
@@ -69,6 +80,8 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    weights?: Record<string, number>;
+    calculationDetails?: CalculationDetail[];
   };
   onboardingSpecialistTeam?: {
     attendedCount: number;
@@ -92,6 +105,8 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    weights?: Record<string, number>;
+    calculationDetails?: CalculationDetail[];
     trainingSessions?: {
       date: string;
       convokedCount: number;
@@ -140,6 +155,8 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    weights?: Record<string, number>;
+    calculationDetails?: CalculationDetail[];
   };
   fieldSupervisorTeam?: {
     avgHoursMissionCompletion: number;
@@ -164,6 +181,8 @@ interface PerformanceData {
     monthlyBonusBudgetMAD: number;
     bonusEarnedMAD: number;
     members: string[];
+    weights?: Record<string, number>;
+    calculationDetails?: CalculationDetail[];
   };
   monthlyTargets?: {
     monthlyCallsTarget: number;
@@ -293,10 +312,291 @@ const DEPARTMENTS = [
   { id: "GARAGE", label: "🔧 Maintenance & Garage" },
 ];
 
-const CITIES = ["ALL", "Casablanca", "Rabat", "Marrakech", "Tangier", "Agadir", "Fez"];
+const CITIES = ["ALL", "Casablanca", "Rabat", "Marrakech", "Tanger", "Agadir", "Fès"];
+
+function KPICalculationExplanationCard({
+  teamName,
+  title,
+  members = [],
+  teamAttainmentPct = 0,
+  bonusEarnedMAD = 0,
+  details = [],
+  theme = "blue",
+}: {
+  teamName?: string;
+  title?: string;
+  members?: string[];
+  teamAttainmentPct?: number;
+  bonusEarnedMAD?: number;
+  details?: CalculationDetail[];
+  theme?: "blue" | "purple" | "amber" | "emerald";
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  const themeStyles = {
+    blue: {
+      border: "border-blue-200",
+      bgGradient: "from-blue-50/70 via-white to-indigo-50/40",
+      headerText: "text-blue-900",
+      pillBg: "bg-blue-100 text-blue-900",
+      tableHeaderBg: "bg-blue-50/70",
+    },
+    purple: {
+      border: "border-purple-200",
+      bgGradient: "from-purple-50/70 via-white to-fuchsia-50/40",
+      headerText: "text-purple-900",
+      pillBg: "bg-purple-100 text-purple-900",
+      tableHeaderBg: "bg-purple-50/70",
+    },
+    amber: {
+      border: "border-amber-200",
+      bgGradient: "from-amber-50/70 via-white to-orange-50/40",
+      headerText: "text-amber-900",
+      pillBg: "bg-amber-100 text-amber-900",
+      tableHeaderBg: "bg-amber-50/70",
+    },
+    emerald: {
+      border: "border-emerald-200",
+      bgGradient: "from-emerald-50/70 via-white to-green-50/40",
+      headerText: "text-emerald-900",
+      pillBg: "bg-emerald-100 text-emerald-900",
+      tableHeaderBg: "bg-emerald-50/70",
+    },
+  }[theme];
+
+  if (!details || details.length === 0) {
+    return null;
+  }
+
+  const totalWeights = details.reduce((sum, d) => sum + (d.weightPct || 0), 0);
+
+  return (
+    <div
+      className={`rounded-2xl border ${themeStyles.border} bg-gradient-to-br ${themeStyles.bgGradient} p-4 shadow-2xs space-y-3 transition-all`}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="p-1.5 rounded-xl bg-white shadow-2xs text-base">🧮</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className={`text-xs font-black uppercase tracking-wider ${themeStyles.headerText}`}>
+                Explication Détaillée &amp; Formule du Calcul de la Prime
+              </h4>
+              <span className={`text-3xs px-2 py-0.5 rounded-full font-bold ${themeStyles.pillBg}`}>
+                {members.join(" & ")}
+              </span>
+            </div>
+            <p className="text-3xs text-gray-500 mt-0.5">
+              Pondération personnalisée · Option 2 : Paiement Proportionnel pur (Plafond 150% par KPI)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <span className="text-3xs font-bold text-gray-500 uppercase tracking-wide block">
+              Atteinte Finale
+            </span>
+            <span className="text-xs font-black font-mono text-gray-900">
+              {teamAttainmentPct}% ➔ <strong className="text-emerald-700">{bonusEarnedMAD} DH</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="px-2.5 py-1 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg text-3xs font-bold text-gray-700 transition-all cursor-pointer shadow-2xs"
+          >
+            {isOpen ? "▲ Réduire" : "▼ Développer Détails"}
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="space-y-3 pt-1">
+          {/* Formula preview banner */}
+          <div className="p-2.5 bg-white/90 rounded-xl border border-gray-200/80 flex flex-col md:flex-row md:items-center justify-between gap-2 text-2xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-gray-700">📐 Formule Appliquée :</span>
+              <code className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded font-mono text-3xs font-bold">
+                Score Global (%) = Σ (Atteinte KPI × Poids %) / {totalWeights.toFixed(0)}%
+              </code>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-3xs font-bold text-gray-800">
+              <span>Prime = {teamAttainmentPct}% × 1 000 DH =</span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-xs">
+                {bonusEarnedMAD} DH / pers.
+              </span>
+            </div>
+          </div>
+
+          {/* Breakdown Table */}
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-left text-2xs">
+              <thead
+                className={`${themeStyles.tableHeaderBg} border-b border-gray-200 text-3xs font-black uppercase text-gray-600`}
+              >
+                <tr>
+                  <th className="py-2 px-3">Objectif / KPI</th>
+                  <th className="py-2 px-3 text-right">Réalisé Période</th>
+                  <th className="py-2 px-3 text-right">Cible Définie</th>
+                  <th className="py-2 px-3 text-right">Taux d&apos;Atteinte</th>
+                  <th className="py-2 px-3 text-right">Poids (%)</th>
+                  <th className="py-2 px-3 text-right">Contribution au Bonus</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {details.map((d, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="py-2.5 px-3 font-bold text-gray-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                      <span>{d.kpi}</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-gray-800">
+                      {d.actual}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-gray-500">{d.target}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">
+                      <span
+                        className={`font-black ${
+                          d.rawAttainmentPct >= 100
+                            ? "text-emerald-700"
+                            : d.rawAttainmentPct >= 70
+                            ? "text-blue-700"
+                            : "text-amber-700"
+                        }`}
+                      >
+                        {d.rawAttainmentPct}%
+                      </span>
+                      {d.rawAttainmentPct > 150 && (
+                        <span className="text-4xs text-gray-400 block font-normal">
+                          (plafonné à 150%)
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className="px-2 py-0.5 rounded-md text-3xs font-bold bg-gray-100 text-gray-800 border border-gray-200">
+                        {d.weightPct}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-black text-gray-900">
+                      +{d.contributionPct}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-gray-200 bg-gray-50/70 font-black text-2xs">
+                <tr>
+                  <td className="py-2.5 px-3 text-gray-900 uppercase">Total Composé</td>
+                  <td colSpan={3} className="py-2.5 px-3 text-right text-3xs font-semibold text-gray-500">
+                    Somme des contributions pondérées :
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                    {totalWeights.toFixed(0)}%
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono text-emerald-700 text-xs">
+                    {teamAttainmentPct}%
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Educational Footnote */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-3xs text-gray-600 bg-white/70 p-2 rounded-xl border border-gray-200/60">
+            <div className="flex items-center gap-1.5">
+              <span>💡</span>
+              <span>
+                <strong>Principe Option 2 (Proportionnel Pur) :</strong> Chaque point d&apos;effort
+                est rémunéré dès le 1er % sans seuil minimum couperet.
+              </span>
+            </div>
+            <div className="font-semibold text-gray-700">
+              Enveloppe Équipe : <strong>{bonusEarnedMAD * members.length} DH</strong> ({bonusEarnedMAD}{" "}
+              DH × {members.length} membres)
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PowerBiDashboardView() {
   const { t } = useLanguage();
+  const { data: session } = useSession() || {};
+  const userRole = session?.user?.role || "";
+  const userName = (session?.user?.name || "").toLowerCase();
+  const userEmail = (session?.user?.email || "").toLowerCase();
+
+  // Determine user's specific operational team membership
+  const isTrafficMember = useMemo(() => {
+    return (
+      userRole === "LEAD_ACQUISITION_JR" ||
+      userRole === "BRAND_MANAGER" ||
+      userName.includes("nour") ||
+      userName.includes("kaoutar") ||
+      userEmail.includes("nour") ||
+      userEmail.includes("kaoutar")
+    );
+  }, [userRole, userName, userEmail]);
+
+  const isOnboardingMember = useMemo(() => {
+    return (
+      userRole === "ONBOARDING_SPECIALIST" ||
+      userRole === "TRAINING" ||
+      userName.includes("ayoub gsaib") ||
+      userEmail.includes("gsaib")
+    );
+  }, [userRole, userName, userEmail]);
+
+  const isFleetMember = useMemo(() => {
+    return (
+      userRole === "FLEET_PERF_MANAGER" ||
+      userRole === "FLEET_MANAGER" ||
+      userName.includes("salma") ||
+      userName.includes("aziz") ||
+      userEmail.includes("salma") ||
+      userEmail.includes("aziz")
+    );
+  }, [userRole, userName, userEmail]);
+
+  const isFieldMember = useMemo(() => {
+    return (
+      userRole === "FIELD_SUPERVISOR" ||
+      userName.includes("hamza") ||
+      userName.includes("ayoub rassid") ||
+      userEmail.includes("rassid")
+    );
+  }, [userRole, userName, userEmail]);
+
+  const isExecutiveOrAdmin = useMemo(() => {
+    return (
+      userRole === "ADMIN" ||
+      userRole === "OPS_MANAGER" ||
+      userRole === "CEO" ||
+      userRole === "COO" ||
+      userRole === "DIRECTOR" ||
+      (!isTrafficMember && !isOnboardingMember && !isFleetMember && !isFieldMember)
+    );
+  }, [userRole, isTrafficMember, isOnboardingMember, isFleetMember, isFieldMember]);
+
+  const defaultTeam = useMemo(() => {
+    if (!isExecutiveOrAdmin) {
+      if (isTrafficMember) return "traffic";
+      if (isOnboardingMember) return "onboarding";
+      if (isFleetMember) return "fleet";
+      if (isFieldMember) return "field";
+    }
+    return "all";
+  }, [isExecutiveOrAdmin, isTrafficMember, isOnboardingMember, isFleetMember, isFieldMember]);
+
+  const [selectedTeamTab, setSelectedTeamTab] = useState<"all" | "traffic" | "onboarding" | "fleet" | "field">(defaultTeam);
+
+  useEffect(() => {
+    if (!isExecutiveOrAdmin) {
+      setSelectedTeamTab(defaultTeam);
+    }
+  }, [defaultTeam, isExecutiveOrAdmin]);
 
   // Filter States (PowerBI Slicers)
   const [selectedPreset, setSelectedPreset] = useState("month");
@@ -305,6 +605,26 @@ export default function PowerBiDashboardView() {
   const [selectedUser, setSelectedUser] = useState("ALL");
   const [selectedDept, setSelectedDept] = useState("ALL");
   const [selectedCity, setSelectedCity] = useState("ALL");
+
+  const handleDeptChange = (dept: string) => {
+    setSelectedDept(dept);
+    if (isExecutiveOrAdmin) {
+      if (dept === "LEAD_ACQUISITION_JR") setSelectedTeamTab("traffic");
+      else if (dept === "TRAINING") setSelectedTeamTab("onboarding");
+      else if (dept === "FLEET_PERF_MANAGER") setSelectedTeamTab("fleet");
+      else if (dept === "FIELD_SUPERVISOR") setSelectedTeamTab("field");
+      else if (dept === "ALL") setSelectedTeamTab("all");
+    }
+  };
+
+  const handleTeamTabClick = (tab: "all" | "traffic" | "onboarding" | "fleet" | "field") => {
+    setSelectedTeamTab(tab);
+    if (tab === "traffic") setSelectedDept("LEAD_ACQUISITION_JR");
+    else if (tab === "onboarding") setSelectedDept("TRAINING");
+    else if (tab === "fleet") setSelectedDept("FLEET_PERF_MANAGER");
+    else if (tab === "field") setSelectedDept("FIELD_SUPERVISOR");
+    else if (tab === "all") setSelectedDept("ALL");
+  };
 
   const [data, setData] = useState<PerformanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -370,18 +690,26 @@ export default function PowerBiDashboardView() {
     fetchPerformance();
   }, [fetchPerformance]);
 
-  // Filter leaderboard on client side by selected department if needed
+  // Filter leaderboard on client side by selected department or user's assigned team
   const filteredLeaderboard = useMemo(() => {
     if (!data?.leaderboard) return [];
-    if (selectedDept === "ALL") return data.leaderboard;
-    return data.leaderboard.filter((u) => {
+    let list = data.leaderboard;
+    if (!isExecutiveOrAdmin) {
+      if (isTrafficMember) return list.filter((u) => u.role === "LEAD_ACQUISITION_JR" || u.department.includes("Acquisition") || u.teamName?.includes("Traffic"));
+      if (isOnboardingMember) return list.filter((u) => u.role === "ONBOARDING_SPECIALIST" || u.department.includes("Formation") || u.teamName?.includes("Onboarding"));
+      if (isFleetMember) return list.filter((u) => u.role === "FLEET_PERF_MANAGER" || u.teamName?.includes("Fleet"));
+      if (isFieldMember) return list.filter((u) => u.role === "FIELD_SUPERVISOR" || u.teamName?.includes("Field"));
+      return list;
+    }
+    if (selectedDept === "ALL") return list;
+    return list.filter((u) => {
       if (selectedDept === "LEAD_ACQUISITION_JR") return u.role === "LEAD_ACQUISITION_JR" || u.department.includes("Acquisition");
       if (selectedDept === "TRAINING") return u.role === "ONBOARDING_SPECIALIST" || u.department.includes("Formation");
       if (selectedDept === "FLEET_PERF_MANAGER") return u.role === "FLEET_PERF_MANAGER";
       if (selectedDept === "FIELD_SUPERVISOR") return u.role === "FIELD_SUPERVISOR";
       return true;
     });
-  }, [data?.leaderboard, selectedDept]);
+  }, [data?.leaderboard, selectedDept, isExecutiveOrAdmin, isTrafficMember, isOnboardingMember, isFleetMember, isFieldMember]);
 
   const kpis = data?.kpis;
   const traffic = data?.trafficAcquisitionTeam;
@@ -687,8 +1015,9 @@ export default function PowerBiDashboardView() {
             </label>
             <select
               value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-2 focus:ring-navy/30 focus:border-navy outline-none"
+              disabled={!isExecutiveOrAdmin}
+              onChange={(e) => handleDeptChange(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-2 focus:ring-navy/30 focus:border-navy outline-none disabled:opacity-75 disabled:cursor-not-allowed"
             >
               {DEPARTMENTS.map((dept) => (
                 <option key={dept.id} value={dept.id}>
@@ -780,49 +1109,211 @@ export default function PowerBiDashboardView() {
         <>
           {activeTab === "overview" && (
             <div className="space-y-8">
+              {/* ── Team Navigation / Separation Bar ─────────────────────── */}
+              {isExecutiveOrAdmin ? (
+                <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-2xs space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🧭</span>
+                      <span className="text-2xs font-black uppercase tracking-wider text-navy">
+                        Filtrer par Pôle / Équipe Opérationnelle
+                      </span>
+                    </div>
+                    <span className="text-3xs text-gray-500 font-medium">
+                      Mode Superviseur / Admin · Sélectionnez une équipe spécifique ou affichez tout
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 p-1 bg-gray-100/80 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => handleTeamTabClick("all")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                        selectedTeamTab === "all"
+                          ? "bg-white text-navy shadow-xs border border-gray-200"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/60"
+                      }`}
+                    >
+                      <span>🌐</span>
+                      <span>Toutes les Équipes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTeamTabClick("traffic")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                        selectedTeamTab === "traffic"
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "text-blue-900 hover:text-blue-950 hover:bg-blue-50"
+                      }`}
+                    >
+                      <span>📞</span>
+                      <span>Traffic Acquisition</span>
+                      <span
+                        className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                          selectedTeamTab === "traffic"
+                            ? "bg-blue-700 text-blue-100"
+                            : "bg-blue-100 text-blue-800"
+                        }`}
+                      >
+                        Nour &amp; Kaoutar
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTeamTabClick("onboarding")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                        selectedTeamTab === "onboarding"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-purple-900 hover:text-purple-950 hover:bg-purple-50"
+                      }`}
+                    >
+                      <span>🎓</span>
+                      <span>Onboarding Specialist</span>
+                      <span
+                        className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                          selectedTeamTab === "onboarding"
+                            ? "bg-purple-700 text-purple-100"
+                            : "bg-purple-100 text-purple-800"
+                        }`}
+                      >
+                        Ayoub G.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTeamTabClick("fleet")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                        selectedTeamTab === "fleet"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "text-amber-900 hover:text-amber-950 hover:bg-amber-50"
+                      }`}
+                    >
+                      <span>🚗</span>
+                      <span>Fleet Performance</span>
+                      <span
+                        className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                          selectedTeamTab === "fleet"
+                            ? "bg-amber-700 text-amber-100"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        Salma &amp; Aziz
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTeamTabClick("field")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                        selectedTeamTab === "field"
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "text-emerald-900 hover:text-emerald-950 hover:bg-emerald-50"
+                      }`}
+                    >
+                      <span>🛡️</span>
+                      <span>Field Supervisor</span>
+                      <span
+                        className={`text-3xs px-1.5 py-0.2 rounded-full font-bold ${
+                          selectedTeamTab === "field"
+                            ? "bg-emerald-700 text-emerald-100"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        Hamza &amp; Ayoub R.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-navy text-white flex items-center justify-center font-bold text-lg shadow-2xs">
+                      {selectedTeamTab === "traffic"
+                        ? "📞"
+                        : selectedTeamTab === "onboarding"
+                        ? "🎓"
+                        : selectedTeamTab === "fleet"
+                        ? "🚗"
+                        : "🛡️"}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-3xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                          Espace Équipe Personnel
+                        </span>
+                        <h4 className="text-xs font-black text-gray-900">
+                          {selectedTeamTab === "traffic" && "Traffic Acquisition (Nour Abouri & Kaoutar Ouardi)"}
+                          {selectedTeamTab === "onboarding" && "Onboarding Specialist (Ayoub Gsaib)"}
+                          {selectedTeamTab === "fleet" && "Fleet Performance (Salma Abouri & Mohamed Aziz)"}
+                          {selectedTeamTab === "field" && "Field Supervisor (Hamza Rassid & Ayoub Rassid)"}
+                        </h4>
+                      </div>
+                      <p className="text-2xs text-gray-500 mt-0.5">
+                        Vue ciblée : vous visualisez exclusivement les indicateurs de votre équipe et le détail transparent du calcul de votre prime mensuelle (1 000 DH max).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-3xs font-bold text-gray-400">Connecté en tant que :</span>
+                    <span className="text-3xs font-black text-navy px-2.5 py-1 bg-gray-100 rounded-lg">
+                      {session?.user?.name || "Collaborateur"} ({userRole})
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* ══════════════════════════════════════════════════════════════
                   SECTION 1: TRAFFIC ACQUISITION TEAM (NOUR & KAOUTAR)
                  ══════════════════════════════════════════════════════════════ */}
-              <div className="bg-white border-2 border-blue-200 rounded-3xl p-6 shadow-sm space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl p-2.5 bg-blue-50 text-blue-800 rounded-2xl border border-blue-200">
-                      📞
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-black text-gray-900">
-                          Traffic Acquisition Team
-                        </h3>
-                        <span className="text-3xs px-2.5 py-0.5 bg-blue-100 text-blue-900 font-bold rounded-full">
-                          Nour Abouri & Kaoutar Ouardi
-                        </span>
+              {(selectedTeamTab === "all" || selectedTeamTab === "traffic") && (
+                <div className="bg-white border-2 border-blue-200 rounded-3xl p-6 shadow-sm space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl p-2.5 bg-blue-50 text-blue-800 rounded-2xl border border-blue-200">
+                        📞
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-black text-gray-900">
+                            Traffic Acquisition Team
+                          </h3>
+                          <span className="text-3xs px-2.5 py-0.5 bg-blue-100 text-blue-900 font-bold rounded-full">
+                            Nour Abouri & Kaoutar Ouardi
+                          </span>
+                        </div>
+                        <p className="text-2xs text-gray-500 mt-0.5">
+                          Prospection · Qualification téléphonique · Taux de conversion cible : <strong>30%</strong>
+                        </p>
                       </div>
-                      <p className="text-2xs text-gray-500 mt-0.5">
-                        Prospection · Qualification téléphonique · Taux de conversion cible : <strong>30%</strong>
-                      </p>
+                    </div>
+
+                    {/* 1 000 MAD Monthly Bonus Card */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
+                        💰
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-3xs font-black uppercase tracking-wider text-blue-700">Prime Mensuelle</span>
+                          <span className="text-3xs px-1.5 py-0.2 bg-blue-200 text-blue-900 rounded font-bold">Option 2 (Prop. pur)</span>
+                        </div>
+                        <p className="text-sm font-black text-gray-900 font-mono">
+                          {traffic?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
+                        </p>
+                        <p className="text-3xs text-gray-600 font-semibold">
+                          Atteinte globale équipe : <strong>{traffic?.teamAttainmentPct ?? 0}%</strong>
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 1 000 MAD Monthly Bonus Card */}
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
-                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
-                      💰
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-3xs font-black uppercase tracking-wider text-blue-700">Prime Mensuelle</span>
-                        <span className="text-3xs px-1.5 py-0.2 bg-blue-200 text-blue-900 rounded font-bold">Option 2 (Prop. pur)</span>
-                      </div>
-                      <p className="text-sm font-black text-gray-900 font-mono">
-                        {traffic?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
-                      </p>
-                      <p className="text-3xs text-gray-600 font-semibold">
-                        Atteinte globale équipe : <strong>{traffic?.teamAttainmentPct ?? 0}%</strong>
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  {/* Calculation Details Card */}
+                  <KPICalculationExplanationCard
+                    title="Traffic Acquisition Team"
+                    members={["Nour Abouri", "Kaoutar Ouardi"]}
+                    details={traffic?.calculationDetails}
+                    teamAttainmentPct={traffic?.teamAttainmentPct}
+                    bonusEarnedMAD={traffic?.bonusEarnedMAD}
+                    theme="blue"
+                  />
 
                 {/* 4 Core Traffic KPIs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1086,52 +1577,64 @@ export default function PowerBiDashboardView() {
                   </div>
                 </div>
               </div>
+            )}
 
               {/* ══════════════════════════════════════════════════════════════
                   SECTION 2: ONBOARDING SPECIALIST TEAM (AYOUB GSAIB)
                  ══════════════════════════════════════════════════════════════ */}
-              <div className="bg-white border-2 border-purple-200 rounded-3xl p-6 shadow-sm space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 pb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl p-2.5 bg-purple-50 text-purple-800 rounded-2xl border border-purple-200">
-                      🎓
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-black text-gray-900">
-                          Onboarding Specialist
-                        </h3>
-                        <span className="text-3xs px-2.5 py-0.5 bg-purple-100 text-purple-900 font-bold rounded-full">
-                          Ayoub Gsaib
-                        </span>
+              {(selectedTeamTab === "all" || selectedTeamTab === "onboarding") && (
+                <div className="bg-white border-2 border-purple-200 rounded-3xl p-6 shadow-sm space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 pb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl p-2.5 bg-purple-50 text-purple-800 rounded-2xl border border-purple-200">
+                        🎓
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-black text-gray-900">
+                            Onboarding Specialist
+                          </h3>
+                          <span className="text-3xs px-2.5 py-0.5 bg-purple-100 text-purple-900 font-bold rounded-full">
+                            Ayoub Gsaib
+                          </span>
+                        </div>
+                        <p className="text-2xs text-gray-500 mt-0.5">
+                          Formation chauffeurs · Précommandes & Contrats · Vélocité d&apos;attribution parc (&le; 1 jour)
+                        </p>
                       </div>
-                      <p className="text-2xs text-gray-500 mt-0.5">
-                        Formation chauffeurs · Précommandes & Contrats · Vélocité d&apos;attribution parc (&le; 1 jour)
-                      </p>
+                    </div>
+
+                    {/* 1 000 MAD Monthly Bonus Card */}
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
+                        💰
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-3xs font-black uppercase tracking-wider text-purple-700">Prime Mensuelle</span>
+                          <span className="text-3xs px-1.5 py-0.2 bg-purple-200 text-purple-900 rounded font-bold">Option 2 (Prop. pur)</span>
+                        </div>
+                        <p className="text-sm font-black text-gray-900 font-mono">
+                          {onboarding?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
+                        </p>
+                        <p className="text-3xs text-gray-600 font-semibold">
+                          Atteinte globale équipe : <strong>{onboarding?.teamAttainmentPct ?? 0}%</strong>
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 1 000 MAD Monthly Bonus Card */}
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 p-3 rounded-2xl flex items-center gap-3 shrink-0">
-                    <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg shadow-2xs">
-                      💰
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-3xs font-black uppercase tracking-wider text-purple-700">Prime Mensuelle</span>
-                        <span className="text-3xs px-1.5 py-0.2 bg-purple-200 text-purple-900 rounded font-bold">Option 2 (Prop. pur)</span>
-                      </div>
-                      <p className="text-sm font-black text-gray-900 font-mono">
-                        {onboarding?.bonusEarnedMAD ?? 0} DH <span className="text-xs font-normal text-gray-500">/ 1 000 DH</span>
-                      </p>
-                      <p className="text-3xs text-gray-600 font-semibold">
-                        Atteinte globale équipe : <strong>{onboarding?.teamAttainmentPct ?? 0}%</strong>
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  {/* Calculation Details Card */}
+                  <KPICalculationExplanationCard
+                    title="Onboarding Specialist Team"
+                    members={["Ayoub Gsaib"]}
+                    details={onboarding?.calculationDetails}
+                    teamAttainmentPct={onboarding?.teamAttainmentPct}
+                    bonusEarnedMAD={onboarding?.bonusEarnedMAD}
+                    theme="purple"
+                  />
 
-                {/* 4 Core Onboarding KPIs */}
+                  {/* 4 Core Onboarding KPIs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* 1. Attended Persons */}
                   <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-2">
@@ -1547,10 +2050,12 @@ export default function PowerBiDashboardView() {
                   </p>
                 </div>
               </div>
+            )}
 
-              {/* ══════════════════════════════════════════════════════════════
-                  SECTION 3: FLEET PERFORMANCE MANAGER TEAM (SALMA & MOHAMED AZIZ)
-                 ══════════════════════════════════════════════════════════════ */}
+            {/* ══════════════════════════════════════════════════════════════
+                SECTION 3: FLEET PERFORMANCE MANAGER TEAM (SALMA & MOHAMED AZIZ)
+               ══════════════════════════════════════════════════════════════ */}
+            {(selectedTeamTab === "all" || selectedTeamTab === "fleet") && (
               <div className="bg-white border-2 border-amber-200 rounded-3xl p-6 shadow-sm space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-100 pb-4">
                   <div className="flex items-center gap-3">
@@ -1592,6 +2097,16 @@ export default function PowerBiDashboardView() {
                     </div>
                   </div>
                 </div>
+
+                {/* Calculation Details Card */}
+                <KPICalculationExplanationCard
+                  title="Fleet Performance Manager Team"
+                  members={["Salma Abouri", "Mohamed Aziz"]}
+                  details={fleetPerf?.calculationDetails}
+                  teamAttainmentPct={fleetPerf?.teamAttainmentPct}
+                  bonusEarnedMAD={fleetPerf?.bonusEarnedMAD ?? kpis.fleetCollections.bonusEarnedMAD}
+                  theme="amber"
+                />
 
                 {/* 5 Core Fleet Performance KPIs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
@@ -1929,10 +2444,12 @@ export default function PowerBiDashboardView() {
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* ══════════════════════════════════════════════════════════════
-                  SECTION 4: FIELD SUPERVISOR TEAM (HAMZA & AYOUB RASSID)
-                 ══════════════════════════════════════════════════════════════ */}
+            {/* ══════════════════════════════════════════════════════════════
+                SECTION 4: FIELD SUPERVISOR TEAM (HAMZA & AYOUB RASSID)
+               ══════════════════════════════════════════════════════════════ */}
+            {(selectedTeamTab === "all" || selectedTeamTab === "field") && (
               <div className="bg-white border border-green-200/80 rounded-3xl p-6 shadow-sm space-y-5 relative overflow-hidden">
                 <div className="absolute -right-8 -top-8 w-40 h-40 bg-green-50 rounded-full pointer-events-none" />
 
@@ -1973,6 +2490,16 @@ export default function PowerBiDashboardView() {
                     </div>
                   </div>
                 </div>
+
+                {/* Calculation Details Card */}
+                <KPICalculationExplanationCard
+                  title="Field Supervisor Team"
+                  members={["Hamza Rassid", "Ayoub Rassid"]}
+                  details={fieldSup?.calculationDetails}
+                  teamAttainmentPct={fieldSup?.teamAttainmentPct}
+                  bonusEarnedMAD={fieldSup?.bonusEarnedMAD ?? kpis.fieldOperations.bonusEarnedMAD}
+                  theme="emerald"
+                />
 
                 {/* 3 KPIs Cards for Field Supervisor Team */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
@@ -2268,6 +2795,7 @@ export default function PowerBiDashboardView() {
                   </div>
                 </div>
               </div>
+            )}
             </div>
           )}
 
