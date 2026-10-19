@@ -34,6 +34,25 @@ interface DepartmentTargets {
   target_ticket_resolution_rate: number;
   target_avg_available_days: number;
   monthly_bonus_amount_mad: number;
+
+  // 🎯 Dynamic Objective Weights (%)
+  weight_traffic_calls: number;
+  weight_traffic_training: number;
+  weight_traffic_conversion: number;
+
+  weight_onboarding_attended: number;
+  weight_onboarding_preorders: number;
+  weight_onboarding_velocity: number;
+
+  weight_fleet_cash: number;
+  weight_fleet_churn: number;
+  weight_fleet_maintenance: number;
+  weight_fleet_vidange: number;
+  weight_fleet_mission: number;
+
+  weight_field_mission: number;
+  weight_field_attestation: number;
+  weight_field_tickets: number;
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
@@ -66,6 +85,25 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_ticket_resolution_rate: 95, // % of tickets resolved >= 95%
   target_avg_available_days: 1.0,
   monthly_bonus_amount_mad: 1000,
+
+  // Weights defaults
+  weight_traffic_calls: 40,
+  weight_traffic_training: 40,
+  weight_traffic_conversion: 20,
+
+  weight_onboarding_attended: 40,
+  weight_onboarding_preorders: 40,
+  weight_onboarding_velocity: 20,
+
+  weight_fleet_cash: 20,
+  weight_fleet_churn: 20,
+  weight_fleet_maintenance: 20,
+  weight_fleet_vidange: 20,
+  weight_fleet_mission: 20,
+
+  weight_field_mission: 33.3,
+  weight_field_attestation: 33.3,
+  weight_field_tickets: 33.4,
 };
 
 export async function GET(request: NextRequest) {
@@ -128,6 +166,25 @@ export async function GET(request: NextRequest) {
           target_daily_tasks: Number(parsed.target_daily_tasks) || DEFAULT_TARGETS.target_daily_tasks,
           target_fleet_uptime: Number(parsed.target_fleet_uptime) || DEFAULT_TARGETS.target_fleet_uptime,
           target_ticket_resolution_rate: Number(parsed.target_ticket_resolution_rate) || Number(parsed.target_sla_resolution_rate) || 95,
+
+          // Dynamic Weights Parsing
+          weight_traffic_calls: parsed.weight_traffic_calls !== undefined ? Number(parsed.weight_traffic_calls) : DEFAULT_TARGETS.weight_traffic_calls,
+          weight_traffic_training: parsed.weight_traffic_training !== undefined ? Number(parsed.weight_traffic_training) : DEFAULT_TARGETS.weight_traffic_training,
+          weight_traffic_conversion: parsed.weight_traffic_conversion !== undefined ? Number(parsed.weight_traffic_conversion) : DEFAULT_TARGETS.weight_traffic_conversion,
+
+          weight_onboarding_attended: parsed.weight_onboarding_attended !== undefined ? Number(parsed.weight_onboarding_attended) : DEFAULT_TARGETS.weight_onboarding_attended,
+          weight_onboarding_preorders: parsed.weight_onboarding_preorders !== undefined ? Number(parsed.weight_onboarding_preorders) : DEFAULT_TARGETS.weight_onboarding_preorders,
+          weight_onboarding_velocity: parsed.weight_onboarding_velocity !== undefined ? Number(parsed.weight_onboarding_velocity) : DEFAULT_TARGETS.weight_onboarding_velocity,
+
+          weight_fleet_cash: parsed.weight_fleet_cash !== undefined ? Number(parsed.weight_fleet_cash) : DEFAULT_TARGETS.weight_fleet_cash,
+          weight_fleet_churn: parsed.weight_fleet_churn !== undefined ? Number(parsed.weight_fleet_churn) : DEFAULT_TARGETS.weight_fleet_churn,
+          weight_fleet_maintenance: parsed.weight_fleet_maintenance !== undefined ? Number(parsed.weight_fleet_maintenance) : DEFAULT_TARGETS.weight_fleet_maintenance,
+          weight_fleet_vidange: parsed.weight_fleet_vidange !== undefined ? Number(parsed.weight_fleet_vidange) : DEFAULT_TARGETS.weight_fleet_vidange,
+          weight_fleet_mission: parsed.weight_fleet_mission !== undefined ? Number(parsed.weight_fleet_mission) : DEFAULT_TARGETS.weight_fleet_mission,
+
+          weight_field_mission: parsed.weight_field_mission !== undefined ? Number(parsed.weight_field_mission) : DEFAULT_TARGETS.weight_field_mission,
+          weight_field_attestation: parsed.weight_field_attestation !== undefined ? Number(parsed.weight_field_attestation) : DEFAULT_TARGETS.weight_field_attestation,
+          weight_field_tickets: parsed.weight_field_tickets !== undefined ? Number(parsed.weight_field_tickets) : DEFAULT_TARGETS.weight_field_tickets,
         };
       }
     } catch (err) {
@@ -371,8 +428,15 @@ export async function GET(request: NextRequest) {
     const callsAttainment = scaledCallsTarget > 0 ? (trafficCallsDone / scaledCallsTarget) * 100 : 0;
     const trainingAttainment = scaledTrainingTarget > 0 ? (trafficTrainingFixed / scaledTrainingTarget) * 100 : 0;
     const conversionAttainment = (trafficTrainingFixedRate / 30.0) * 100;
+    const trafficWeightSum =
+      (targets.weight_traffic_calls + targets.weight_traffic_training + targets.weight_traffic_conversion) || 100;
     const trafficTeamAttainmentPct = Number(
-      (0.40 * Math.min(150, callsAttainment) + 0.40 * Math.min(150, trainingAttainment) + 0.20 * Math.min(150, conversionAttainment)).toFixed(1)
+      (
+        (targets.weight_traffic_calls * Math.min(150, callsAttainment) +
+          targets.weight_traffic_training * Math.min(150, trainingAttainment) +
+          targets.weight_traffic_conversion * Math.min(150, conversionAttainment)) /
+        trafficWeightSum
+      ).toFixed(1)
     );
 
     // 1,000 MAD Bonus (Option 2: Proportionnel pur)
@@ -545,8 +609,15 @@ export async function GET(request: NextRequest) {
 
     const attendedAttainment = scaledAttendedTarget > 0 ? (onboardingAttendedCount / scaledAttendedTarget) * 100 : 0;
     const preordersAttainment = scaledPreordersTarget > 0 ? (onboardingPreorderAssignedTotal / scaledPreordersTarget) * 100 : 0;
+    const onboardingWeightSum =
+      (targets.weight_onboarding_attended + targets.weight_onboarding_preorders + targets.weight_onboarding_velocity) || 100;
     const onboardingTeamAttainmentPct = Number(
-      (0.40 * Math.min(150, attendedAttainment) + 0.40 * Math.min(150, preordersAttainment) + 0.20 * Math.min(150, velocityScorePct)).toFixed(1)
+      (
+        (targets.weight_onboarding_attended * Math.min(150, attendedAttainment) +
+          targets.weight_onboarding_preorders * Math.min(150, preordersAttainment) +
+          targets.weight_onboarding_velocity * Math.min(150, velocityScorePct)) /
+        onboardingWeightSum
+      ).toFixed(1)
     );
 
     // 1,000 MAD Bonus (Option 2: Proportionnel pur)
@@ -770,14 +841,21 @@ export async function GET(request: NextRequest) {
         : Math.max(0, Number(((maxHoursFieldMission / avgHoursVehicleRecovery) * 100).toFixed(1)));
 
     // Weighted Composite Team Attainment % across all 5 KPIs:
-    // 25% Cash Collection + 20% Monthly Churn + 20% Maintenance Days + 17.5% Vidange/AdBleu + 17.5% Field Mission
+    const fleetWeightSum =
+      (targets.weight_fleet_cash +
+        targets.weight_fleet_churn +
+        targets.weight_fleet_maintenance +
+        targets.weight_fleet_vidange +
+        targets.weight_fleet_mission) || 100;
+
     const fleetPerfTeamAttainmentPct = Number(
       (
-        0.25 * Math.min(150, collectionAttainmentPct) +
-        0.20 * Math.min(150, churnAttainmentPct) +
-        0.20 * Math.min(150, maintenanceAttainmentPct) +
-        0.175 * Math.min(150, vidangeAttainmentPct) +
-        0.175 * Math.min(150, fieldMissionAttainmentPct)
+        (targets.weight_fleet_cash * Math.min(150, collectionAttainmentPct) +
+          targets.weight_fleet_churn * Math.min(150, churnAttainmentPct) +
+          targets.weight_fleet_maintenance * Math.min(150, maintenanceAttainmentPct) +
+          targets.weight_fleet_vidange * Math.min(150, vidangeAttainmentPct) +
+          targets.weight_fleet_mission * Math.min(150, fieldMissionAttainmentPct)) /
+        fleetWeightSum
       ).toFixed(1)
     );
 
@@ -896,13 +974,16 @@ export async function GET(request: NextRequest) {
       Math.min(150, (ticketResolutionRate / targetTicketResolutionRate) * 100).toFixed(1)
     );
 
-    // Composite Team Attainment % across all 3 KPIs (Equal 1/3 weight each)
+    // Composite Team Attainment % across all 3 KPIs
+    const fieldWeightSum =
+      (targets.weight_field_mission + targets.weight_field_attestation + targets.weight_field_tickets) || 100;
+
     const fieldSupervisorTeamAttainmentPct = Number(
       (
-        (Math.min(150, missionTimeAttainmentPct) +
-          Math.min(150, attestationAttainmentPct) +
-          Math.min(150, ticketResolutionAttainmentPct)) /
-        3
+        (targets.weight_field_mission * Math.min(150, missionTimeAttainmentPct) +
+          targets.weight_field_attestation * Math.min(150, attestationAttainmentPct) +
+          targets.weight_field_tickets * Math.min(150, ticketResolutionAttainmentPct)) /
+        fieldWeightSum
       ).toFixed(1)
     );
     const fieldSupervisorBonusEarnedMAD = Math.min(

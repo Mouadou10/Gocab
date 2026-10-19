@@ -80,6 +80,25 @@ interface DepartmentTargets {
   target_weekly_revenue_mad: number;
   target_avg_available_days?: number;
   monthly_bonus_amount_mad?: number;
+
+  // 🎯 Dynamic Objective Weights (%)
+  weight_traffic_calls?: number;
+  weight_traffic_training?: number;
+  weight_traffic_conversion?: number;
+
+  weight_onboarding_attended?: number;
+  weight_onboarding_preorders?: number;
+  weight_onboarding_velocity?: number;
+
+  weight_fleet_cash?: number;
+  weight_fleet_churn?: number;
+  weight_fleet_maintenance?: number;
+  weight_fleet_vidange?: number;
+  weight_fleet_mission?: number;
+
+  weight_field_mission?: number;
+  weight_field_attestation?: number;
+  weight_field_tickets?: number;
 }
 
 const DEFAULT_TARGETS: DepartmentTargets = {
@@ -109,6 +128,25 @@ const DEFAULT_TARGETS: DepartmentTargets = {
   target_weekly_revenue_mad: 50000,
   target_avg_available_days: 1.0,
   monthly_bonus_amount_mad: 1000,
+
+  // Default Weights
+  weight_traffic_calls: 40,
+  weight_traffic_training: 40,
+  weight_traffic_conversion: 20,
+
+  weight_onboarding_attended: 40,
+  weight_onboarding_preorders: 40,
+  weight_onboarding_velocity: 20,
+
+  weight_fleet_cash: 20,
+  weight_fleet_churn: 20,
+  weight_fleet_maintenance: 20,
+  weight_fleet_vidange: 20,
+  weight_fleet_mission: 20,
+
+  weight_field_mission: 33.3,
+  weight_field_attestation: 33.3,
+  weight_field_tickets: 33.4,
 };
 
 interface UserRecord {
@@ -320,6 +358,47 @@ export default function SettingsView() {
   }, [today]);
 
   const workingDaysMonth = moroccanMonthData.workingDays;
+
+  // Real-time KPI Weight sums for all 4 operational pillars
+  const trafficWeightSum = useMemo(() => {
+    return (
+      (targets.weight_traffic_calls ?? 40) +
+      (targets.weight_traffic_training ?? 40) +
+      (targets.weight_traffic_conversion ?? 20)
+    );
+  }, [targets.weight_traffic_calls, targets.weight_traffic_training, targets.weight_traffic_conversion]);
+
+  const onboardingWeightSum = useMemo(() => {
+    return (
+      (targets.weight_onboarding_attended ?? 40) +
+      (targets.weight_onboarding_preorders ?? 40) +
+      (targets.weight_onboarding_velocity ?? 20)
+    );
+  }, [targets.weight_onboarding_attended, targets.weight_onboarding_preorders, targets.weight_onboarding_velocity]);
+
+  const fleetWeightSum = useMemo(() => {
+    return (
+      (targets.weight_fleet_cash ?? 20) +
+      (targets.weight_fleet_churn ?? 20) +
+      (targets.weight_fleet_maintenance ?? 20) +
+      (targets.weight_fleet_vidange ?? 20) +
+      (targets.weight_fleet_mission ?? 20)
+    );
+  }, [
+    targets.weight_fleet_cash,
+    targets.weight_fleet_churn,
+    targets.weight_fleet_maintenance,
+    targets.weight_fleet_vidange,
+    targets.weight_fleet_mission,
+  ]);
+
+  const fieldWeightSum = useMemo(() => {
+    return (
+      (targets.weight_field_mission ?? 33.3) +
+      (targets.weight_field_attestation ?? 33.3) +
+      (targets.weight_field_tickets ?? 33.4)
+    );
+  }, [targets.weight_field_mission, targets.weight_field_attestation, targets.weight_field_tickets]);
 
   // Bi-directional Funnel Handlers:
   // 1. Changing Daily Calls -> auto recalculates Training Fixed (30%), Attended (65%), Preorders (25%)
@@ -887,10 +966,10 @@ export default function SettingsView() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
               <div>
                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <span>🎯</span> Weekly Department Goals & Thresholds
+                  <span>🎯</span> Objectifs Hebdomadaires & Pondérations des KPIs (Weights %)
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Define the performance benchmarks for each operational pillar. The system calculates live variances and escalations against these targets.
+                  Configurez les objectifs de volume et le poids (%) de chaque KPI par équipe opérationnelle pour le calcul automatique des primes mensuelles.
                 </p>
               </div>
 
@@ -900,14 +979,14 @@ export default function SettingsView() {
                   onClick={() => setTargets(DEFAULT_TARGETS)}
                   className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl"
                 >
-                  Reset Defaults
+                  Valeurs par Défaut
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
                   className="px-5 py-2 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSaving ? "Saving…" : "💾 Save Department Targets"}
+                  {isSaving ? "Enregistrement…" : "💾 Enregistrer Cibles & Pondérations"}
                 </button>
               </div>
             </div>
@@ -968,20 +1047,46 @@ export default function SettingsView() {
                     <span className="text-xl">💼</span>
                     <div>
                       <h4 className="font-bold text-sm">Traffic Acquisition Team</h4>
-                      <p className="text-3xs text-blue-700 font-semibold">Nour Abouri & Kaoutar Ouardi</p>
+                      <p className="text-3xs text-blue-700 font-semibold">Nour Abouri &amp; Kaoutar Ouardi</p>
                     </div>
                   </div>
-                  <span className="text-3xs px-2 py-0.5 bg-blue-200/80 text-blue-900 font-bold rounded-full">
-                    Équipe 1
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      title="Total des pondérations de cette équipe"
+                      className={`text-3xs px-2 py-0.5 font-bold rounded-full border ${
+                        Math.round(trafficWeightSum) === 100
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-amber-100 text-amber-800 border-amber-300"
+                      }`}
+                    >
+                      {Math.round(trafficWeightSum * 10) / 10}% {Math.round(trafficWeightSum) === 100 ? "✓" : "≠100%"}
+                    </span>
+                    <span className="text-3xs px-2 py-0.5 bg-blue-200/80 text-blue-900 font-bold rounded-full">
+                      Équipe 1
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>Daily Calls Objective (Pilote Maître)</span>
-                      <span className="text-3xs text-blue-600 font-bold">100% Volume</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        1. Daily Calls Objective (Pilote Maître)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs">
+                        <span className="text-3xs text-blue-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_traffic_calls ?? 40}
+                          onChange={(e) => setTargets({ ...targets, weight_traffic_calls: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-blue-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-blue-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -995,10 +1100,24 @@ export default function SettingsView() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>Objectif Formations Fixées</span>
-                      <span className="text-3xs text-emerald-700 font-bold">30% des appels</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        2. Objectif Formations Fixées (30%)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs">
+                        <span className="text-3xs text-blue-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_traffic_training ?? 40}
+                          onChange={(e) => setTargets({ ...targets, weight_traffic_training: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-blue-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-blue-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1011,6 +1130,38 @@ export default function SettingsView() {
                     </div>
                   </div>
 
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        3. Taux de Conversion Funnel
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs">
+                        <span className="text-3xs text-blue-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_traffic_conversion ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_traffic_conversion: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-blue-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-blue-600">%</span>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={targets.target_lead_conversion_rate || 30}
+                        onChange={(e) => setTargets({ ...targets, target_lead_conversion_rate: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">% conversion</span>
+                    </div>
+                  </div>
+
                   <div className="p-3 bg-white rounded-xl border border-blue-100 space-y-1.5 text-2xs">
                     <div className="flex justify-between text-gray-600">
                       <span>Cible Hebdomadaire (5j ouvrés) :</span>
@@ -1019,6 +1170,12 @@ export default function SettingsView() {
                     <div className="flex justify-between text-gray-600">
                       <span>Cible Mensuelle ({workingDaysMonth}j ouvrés) :</span>
                       <strong className="text-gray-900 font-mono">{targets.target_daily_calls * workingDaysMonth} appels · {targets.target_daily_training_fixed * workingDaysMonth} fixées</strong>
+                    </div>
+                    <div className="flex justify-between items-center pt-1.5 border-t border-gray-100 text-gray-700 font-medium">
+                      <span>Pondération KPI :</span>
+                      <span className="font-mono text-3xs font-bold text-blue-900">
+                        {targets.weight_traffic_calls ?? 40}% Appels · {targets.weight_traffic_training ?? 40}% Formations · {targets.weight_traffic_conversion ?? 20}% Conv.
+                      </span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-gray-100 text-emerald-700 font-bold">
                       <span>Prime Mensuelle Équipe :</span>
@@ -1038,17 +1195,43 @@ export default function SettingsView() {
                       <p className="text-3xs text-purple-700 font-semibold">Ayoub Gsaib</p>
                     </div>
                   </div>
-                  <span className="text-3xs px-2 py-0.5 bg-purple-200/80 text-purple-900 font-bold rounded-full">
-                    Équipe 2
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      title="Total des pondérations de cette équipe"
+                      className={`text-3xs px-2 py-0.5 font-bold rounded-full border ${
+                        Math.round(onboardingWeightSum) === 100
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-amber-100 text-amber-800 border-amber-300"
+                      }`}
+                    >
+                      {Math.round(onboardingWeightSum * 10) / 10}% {Math.round(onboardingWeightSum) === 100 ? "✓" : "≠100%"}
+                    </span>
+                    <span className="text-3xs px-2 py-0.5 bg-purple-200/80 text-purple-900 font-bold rounded-full">
+                      Équipe 2
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>Objectif Présence Candidats</span>
-                      <span className="text-3xs text-purple-700 font-bold">65% des fixées</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        1. Objectif Présence Candidats (65% des fixées)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-purple-200 shadow-2xs">
+                        <span className="text-3xs text-purple-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_onboarding_attended ?? 40}
+                          onChange={(e) => setTargets({ ...targets, weight_onboarding_attended: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-purple-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-purple-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-purple-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1062,10 +1245,24 @@ export default function SettingsView() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>Objectif Précommandes & Affectations</span>
-                      <span className="text-3xs text-purple-700 font-bold">25% des fixées</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        2. Objectif Précommandes & Affectations
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-purple-200 shadow-2xs">
+                        <span className="text-3xs text-purple-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_onboarding_preorders ?? 40}
+                          onChange={(e) => handleDailyPreordersChange(Number(e.target.value))}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                        />
+                        <span className="text-3xs font-bold text-purple-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1079,10 +1276,24 @@ export default function SettingsView() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>Vélocité Véhicule Disponible au Parc</span>
-                      <span className="text-3xs text-emerald-700 font-bold">&le; 1 jour</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        3. Vélocité Véhicule Disponible au Parc
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-purple-200 shadow-2xs">
+                        <span className="text-3xs text-purple-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={0}
+                          max={100}
+                          value={targets.weight_onboarding_velocity ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_onboarding_velocity: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-purple-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-purple-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-purple-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1100,6 +1311,12 @@ export default function SettingsView() {
                     <div className="flex justify-between text-gray-600">
                       <span>Cible Mensuelle ({workingDaysMonth}j ouvrés) :</span>
                       <strong className="text-gray-900 font-mono">{(targets.target_daily_attended || 10) * workingDaysMonth} présents · {(targets.target_daily_preorders || 4) * workingDaysMonth} précommandes</strong>
+                    </div>
+                    <div className="flex justify-between items-center pt-1.5 border-t border-gray-100 text-gray-700 font-medium">
+                      <span>Pondération KPI :</span>
+                      <span className="font-mono text-3xs font-bold text-purple-900">
+                        {targets.weight_onboarding_attended ?? 40}% Présents · {targets.weight_onboarding_preorders ?? 40}% Précommandes · {targets.weight_onboarding_velocity ?? 20}% Vélocité
+                      </span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-gray-100 text-purple-700 font-bold">
                       <span>Prime Mensuelle Équipe :</span>
@@ -1119,18 +1336,44 @@ export default function SettingsView() {
                       <p className="text-3xs text-amber-600 font-semibold">Salma Abouri &amp; Mohamed Aziz</p>
                     </div>
                   </div>
-                  <span className="text-3xs font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
-                    💰 1 000 DH / mois
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      title="Total des pondérations de cette équipe"
+                      className={`text-3xs px-2 py-0.5 font-bold rounded-full border ${
+                        Math.round(fleetWeightSum) === 100
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-amber-100 text-amber-800 border-amber-300"
+                      }`}
+                    >
+                      {Math.round(fleetWeightSum * 10) / 10}% {Math.round(fleetWeightSum) === 100 ? "✓" : "≠100%"}
+                    </span>
+                    <span className="text-3xs font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
+                      💰 1 000 DH
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>Cash Collect Min</span>
-                        <span className="text-3xs text-amber-700 font-bold">50%</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        1. Cash Collect (Min / Cible)
                       </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                        <span className="text-3xs text-amber-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_fleet_cash ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_fleet_cash: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-amber-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-amber-600">%</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="relative">
                         <input
                           type="number"
@@ -1140,14 +1383,8 @@ export default function SettingsView() {
                           onChange={(e) => setTargets({ ...targets, target_min_collection_rate: Number(e.target.value) })}
                           className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">% min</span>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>Cash Collect Max</span>
-                        <span className="text-3xs text-emerald-700 font-bold">60%</span>
-                      </label>
                       <div className="relative">
                         <input
                           type="number"
@@ -1157,88 +1394,144 @@ export default function SettingsView() {
                           onChange={(e) => setTargets({ ...targets, target_collection_rate: Number(e.target.value) })}
                           className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">% cible</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>Churn Max Mensuel</span>
-                        <span className="text-3xs text-amber-700 font-bold">&le; 20%</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        2. Churn Max Mensuel (&le; 20%)
                       </label>
-                      <div className="relative">
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                        <span className="text-3xs text-amber-700 font-bold uppercase tracking-wider">Poids :</span>
                         <input
                           type="number"
-                          min={1}
+                          min={0}
                           max={100}
-                          value={targets.target_monthly_churn_rate ?? 20}
-                          onChange={(e) => setTargets({ ...targets, target_monthly_churn_rate: Number(e.target.value) })}
-                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                          step={1}
+                          value={targets.weight_fleet_churn ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_fleet_churn: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-amber-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-400 rounded"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%/mois</span>
+                        <span className="text-3xs font-bold text-amber-600">%</span>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>Immobilisation Garage</span>
-                        <span className="text-3xs text-amber-700 font-bold">&le; 10j</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min={1}
-                          value={targets.target_max_downtime_days || 10}
-                          onChange={(e) => setTargets({ ...targets, target_max_downtime_days: Number(e.target.value) })}
-                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">jours</span>
-                      </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={targets.target_monthly_churn_rate ?? 20}
+                        onChange={(e) => setTargets({ ...targets, target_monthly_churn_rate: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%/mois</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>SLA Vidange / AdBleu</span>
-                        <span className="text-3xs text-emerald-700 font-bold">&le; 1h</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        3. Immobilisation Garage (&le; 10j)
                       </label>
-                      <div className="relative">
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                        <span className="text-3xs text-amber-700 font-bold uppercase tracking-wider">Poids :</span>
                         <input
                           type="number"
-                          step={0.5}
-                          min={0.5}
-                          value={targets.target_max_vidange_hours ?? 1.0}
-                          onChange={(e) => setTargets({ ...targets, target_max_vidange_hours: Number(e.target.value) })}
-                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={targets.weight_fleet_maintenance ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_fleet_maintenance: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-amber-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-400 rounded"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
+                        <span className="text-3xs font-bold text-amber-600">%</span>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                        <span>SLA Mission Terrain</span>
-                        <span className="text-3xs text-emerald-700 font-bold">&le; 3h</span>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={targets.target_max_downtime_days || 10}
+                        onChange={(e) => setTargets({ ...targets, target_max_downtime_days: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">jours</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        4. SLA Vidange / AdBleu (&le; 1h)
                       </label>
-                      <div className="relative">
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                        <span className="text-3xs text-amber-700 font-bold uppercase tracking-wider">Poids :</span>
                         <input
                           type="number"
                           step={0.5}
-                          min={0.5}
-                          value={targets.target_max_field_mission_hours ?? 3.0}
-                          onChange={(e) => setTargets({ ...targets, target_max_field_mission_hours: Number(e.target.value) })}
-                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                          min={0}
+                          max={100}
+                          value={targets.weight_fleet_vidange ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_fleet_vidange: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-amber-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-400 rounded"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
+                        <span className="text-3xs font-bold text-amber-600">%</span>
                       </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0.5}
+                        value={targets.target_max_vidange_hours ?? 1.0}
+                        onChange={(e) => setTargets({ ...targets, target_max_vidange_hours: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        5. SLA Mission Terrain (&le; 3h)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                        <span className="text-3xs text-amber-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          step={0.5}
+                          min={0}
+                          max={100}
+                          value={targets.weight_fleet_mission ?? 20}
+                          onChange={(e) => setTargets({ ...targets, weight_fleet_mission: Number(e.target.value) })}
+                          className="w-10 text-right font-bold text-xs text-amber-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-amber-600">%</span>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0.5}
+                        value={targets.target_max_field_mission_hours ?? 3.0}
+                        onChange={(e) => setTargets({ ...targets, target_max_field_mission_hours: Number(e.target.value) })}
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">h moy</span>
                     </div>
                   </div>
 
                   <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1.5 text-2xs">
-                    <div className="flex justify-between text-gray-600">
-                      <span>5 KPIs Pondérés :</span>
-                      <strong className="text-gray-900 font-mono">20% Cash · 20% Churn · 20% Garage · 20% Vidange · 20% Terrain</strong>
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span>Pondération KPI :</span>
+                      <strong className="text-gray-900 font-mono text-3xs">
+                        {targets.weight_fleet_cash ?? 20}% Cash · {targets.weight_fleet_churn ?? 20}% Churn · {targets.weight_fleet_maintenance ?? 20}% Garage · {targets.weight_fleet_vidange ?? 20}% Vidange · {targets.weight_fleet_mission ?? 20}% Terrain
+                      </strong>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-gray-100 text-amber-700 font-bold">
                       <span>Prime Mensuelle Équipe :</span>
@@ -1258,17 +1551,43 @@ export default function SettingsView() {
                       <p className="text-3xs text-green-700 font-semibold">Hamza Rassid &amp; Ayoub Rassid</p>
                     </div>
                   </div>
-                  <span className="text-3xs font-black px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
-                    💰 1 000 DH / mois
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      title="Total des pondérations de cette équipe"
+                      className={`text-3xs px-2 py-0.5 font-bold rounded-full border ${
+                        Math.round(fieldWeightSum) === 100
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-amber-100 text-amber-800 border-amber-300"
+                      }`}
+                    >
+                      {Math.round(fieldWeightSum * 10) / 10}% {Math.round(fieldWeightSum) === 100 ? "✓" : "≠100%"}
+                    </span>
+                    <span className="text-3xs font-black px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                      💰 1 000 DH
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>1. Temps Moyen d&apos;Exécution Mission</span>
-                      <span className="text-3xs text-emerald-700 font-bold">AVG &le; 3h</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        1. Temps Moyen d&apos;Exécution Mission (AVG &le; 3h)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-green-200 shadow-2xs">
+                        <span className="text-3xs text-green-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={0}
+                          max={100}
+                          value={targets.weight_field_mission ?? 33.3}
+                          onChange={(e) => setTargets({ ...targets, weight_field_mission: Number(e.target.value) })}
+                          className="w-12 text-right font-bold text-xs text-green-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-green-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-green-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1283,10 +1602,24 @@ export default function SettingsView() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>2. % Attestations de Location Générées à Temps</span>
-                      <span className="text-3xs text-emerald-700 font-bold">&ge; 90%</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        2. % Attestations de Location à Temps (&ge; 90%)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-green-200 shadow-2xs">
+                        <span className="text-3xs text-green-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={0}
+                          max={100}
+                          value={targets.weight_field_attestation ?? 33.3}
+                          onChange={(e) => setTargets({ ...targets, weight_field_attestation: Number(e.target.value) })}
+                          className="w-12 text-right font-bold text-xs text-green-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-green-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-green-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1301,10 +1634,24 @@ export default function SettingsView() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center justify-between">
-                      <span>3. % de Tickets Résolus</span>
-                      <span className="text-3xs text-emerald-700 font-bold">&ge; 95%</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        3. % de Tickets Résolus (&ge; 95%)
+                      </label>
+                      <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-green-200 shadow-2xs">
+                        <span className="text-3xs text-green-700 font-bold uppercase tracking-wider">Poids :</span>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={0}
+                          max={100}
+                          value={targets.weight_field_tickets ?? 33.4}
+                          onChange={(e) => setTargets({ ...targets, weight_field_tickets: Number(e.target.value) })}
+                          className="w-12 text-right font-bold text-xs text-green-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-green-400 rounded"
+                        />
+                        <span className="text-3xs font-bold text-green-600">%</span>
+                      </div>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1319,9 +1666,11 @@ export default function SettingsView() {
                   </div>
 
                   <div className="p-3 bg-white rounded-xl border border-green-100 space-y-1.5 text-2xs">
-                    <div className="flex justify-between text-gray-600">
-                      <span>3 KPIs Pondérés :</span>
-                      <strong className="text-gray-900 font-mono">1/3 Missions (≤3h) · 1/3 Attest. (90%) · 1/3 Tickets (95%)</strong>
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span>Pondération KPI :</span>
+                      <strong className="text-gray-900 font-mono text-3xs">
+                        {targets.weight_field_mission ?? 33.3}% Missions · {targets.weight_field_attestation ?? 33.3}% Attest. · {targets.weight_field_tickets ?? 33.4}% Tickets
+                      </strong>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-gray-100 text-green-700 font-bold">
                       <span>Prime Mensuelle Équipe :</span>
