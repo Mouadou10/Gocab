@@ -10,12 +10,13 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Car, X, Check, FileText } from "lucide-react";
+import { Search, Car, X, Check, FileText, Flag } from "lucide-react";
 import toast from "react-hot-toast";
 import { Vehicle } from "./VehicleDrawer";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 import { VidangeStats } from "@/lib/vidangeStats";
+import RedFlagBadge from "./RedFlagBadge";
 
 export interface MaintenanceTicket {
   id: string;
@@ -23,6 +24,8 @@ export interface MaintenanceTicket {
   plate_number: string;
   driver_name: string | null;
   driver_phone: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
   ticket_type: string;
   description: string;
   status: string;
@@ -640,6 +643,35 @@ export default function TicketDrawer({
               />
             </div>
           </div>
+
+          {/* Red Flag Alert Banner for Driver */}
+          {(() => {
+            const vObj = vehicles.find((v) => v.id === selectedVehicleId) || vehicle;
+            const isFlagged = Boolean(vObj?.is_driver_red_flagged || vObj?.driverProfile?.isRedFlagged);
+            if (!isFlagged) return null;
+            const reason = vObj?.driver_red_flag_reason || vObj?.driverProfile?.redFlagReason;
+            return (
+              <div className="p-3 bg-red-500/10 border-2 border-red-500/30 rounded-xl flex items-start gap-2.5 animate-pulse">
+                <div className="p-1.5 bg-red-600 text-white rounded-lg shrink-0">
+                  <Flag className="w-4 h-4 fill-current" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-red-900 uppercase">Attention : Chauffeur Red Flag</span>
+                    <RedFlagBadge reason={reason} />
+                  </div>
+                  <p className="text-xs text-red-700 mt-1">
+                    Ce conducteur fait l&apos;objet d&apos;un signalement Red Flag actif.
+                  </p>
+                  {reason && (
+                    <p className="text-3xs sm:text-xs text-red-800 mt-0.5 font-medium italic bg-white/70 px-2 py-0.5 rounded border border-red-200 inline-block">
+                      Motif : {reason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Working Car Suggestion Pill if driver has an active working car not currently selected */}
           {(() => {

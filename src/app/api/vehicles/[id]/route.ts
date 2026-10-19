@@ -7,6 +7,7 @@ import { extractVidangeStatsFromTickets } from "@/lib/vidangeStats";
 import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
 import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
 import { touchSyncState } from "@/lib/sync";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 /**
  * GET /api/vehicles/[id]
@@ -142,8 +143,23 @@ export async function GET(
       grandTotalSpentMad = totalExpensesMad;
     }
 
+    const redFlagsLookup = await getActiveRedFlagsLookup();
+    const flagCheck = redFlagsLookup.checkDriver({
+      id: vehicle.driverProfile?.id,
+      name: vehicle.assigned_driver_name || vehicle.driverProfile?.fullName,
+      phone: vehicle.assigned_driver_phone || vehicle.driverProfile?.phoneSanitized,
+      cin: vehicle.driverProfile?.cinNumber,
+    });
+
+    const isDriverRedFlagged = Boolean(vehicle.driverProfile?.isRedFlagged || flagCheck.isRedFlagged);
+    const driverRedFlagReason = vehicle.driverProfile?.redFlagReason || flagCheck.reason;
+
     return NextResponse.json({
-      vehicle,
+      vehicle: {
+        ...vehicle,
+        is_driver_red_flagged: isDriverRedFlagged,
+        driver_red_flag_reason: driverRedFlagReason,
+      },
       vidangeStats,
       bonsDeCommande,
       attestations,

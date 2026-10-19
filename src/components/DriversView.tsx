@@ -32,6 +32,7 @@ import DriverCSVUploader from "./DriverCSVUploader";
 import AddDriverModal from "./AddDriverModal";
 import DriverDrawer from "./DriverDrawer";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
+import RedFlagBadge from "./RedFlagBadge";
 
 interface Vehicle {
   id: string;
@@ -58,6 +59,10 @@ interface DriverProfile {
   defaultStage: string;
   assignedVehicleId: string | null;
   assignedVehicle?: Vehicle | null;
+  isRedFlagged?: boolean;
+  redFlagReason?: string | null;
+  redFlaggedAt?: string | null;
+  redFlaggedBy?: string | null;
 }
 
 // Module-level in-memory cache for instant 0ms tab switching
@@ -67,7 +72,7 @@ export default function DriversView() {
   const [drivers, setDrivers] = useState<DriverProfile[]>(() => globalCachedDrivers || []);
   const [isLoading, setIsLoading] = useState(!globalCachedDrivers || globalCachedDrivers.length === 0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterAssignment, setFilterAssignment] = useState<"ALL" | "ASSIGNED" | "UNASSIGNED">("ALL");
+  const [filterAssignment, setFilterAssignment] = useState<"ALL" | "ASSIGNED" | "UNASSIGNED" | "RED_FLAG">("ALL");
   const [filterStage, setFilterStage] = useState<string>("ALL");
 
   // Modals & Drawers
@@ -119,6 +124,7 @@ export default function DriversView() {
       // Assignment
       if (filterAssignment === "ASSIGNED" && !d.assignedVehicleId) return false;
       if (filterAssignment === "UNASSIGNED" && d.assignedVehicleId) return false;
+      if (filterAssignment === "RED_FLAG" && !d.isRedFlagged) return false;
 
       // Stage
       if (filterStage !== "ALL" && d.defaultStage !== filterStage) return false;
@@ -131,6 +137,7 @@ export default function DriversView() {
   const totalDrivers = drivers.length;
   const assignedCount = drivers.filter((d) => d.assignedVehicleId).length;
   const unassignedCount = totalDrivers - assignedCount;
+  const redFlagCount = drivers.filter((d) => d.isRedFlagged).length;
   const totalArrearsMAD = drivers.reduce((acc, d) => acc + (d.currentArrearsMAD || 0), 0);
   const kycVerifiedRate = totalDrivers > 0 ? Math.round((drivers.filter((d) => d.isKycVerified).length / totalDrivers) * 100) : 0;
 
@@ -261,6 +268,18 @@ export default function DriversView() {
             >
               En Attente ({unassignedCount})
             </button>
+            <button
+              onClick={() => setFilterAssignment("RED_FLAG")}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                filterAssignment === "RED_FLAG"
+                  ? "bg-red-600 text-white font-bold shadow-2xs"
+                  : "text-red-700 hover:bg-red-50 hover:text-red-800"
+              }`}
+              title="Filtrer uniquement les chauffeurs sous Red Flag"
+            >
+              <span>🚩</span>
+              <span>Red Flags ({redFlagCount})</span>
+            </button>
           </div>
 
           <button
@@ -319,16 +338,31 @@ export default function DriversView() {
                     <tr
                       key={driver.id}
                       onClick={() => setSelectedDriver(driver)}
-                      className="hover:bg-navy/5 cursor-pointer transition-colors"
+                      className={`hover:bg-navy/5 cursor-pointer transition-colors ${
+                        driver.isRedFlagged ? "bg-red-50/40 hover:bg-red-50/70 border-l-4 border-l-red-600" : ""
+                      }`}
                     >
                       {/* Driver Name */}
                       <td className="py-4 px-6 font-semibold text-navy">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-navy/10 text-navy font-bold text-xs flex items-center justify-center flex-shrink-0">
-                            {driver.fullName.charAt(0)}
+                          <div
+                            className={`w-9 h-9 rounded-xl font-bold text-xs flex items-center justify-center flex-shrink-0 ${
+                              driver.isRedFlagged
+                                ? "bg-red-600 text-white shadow-2xs"
+                                : "bg-navy/10 text-navy"
+                            }`}
+                          >
+                            {driver.isRedFlagged ? "🚩" : driver.fullName.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-gray-900">{driver.fullName}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className={`text-sm font-bold ${driver.isRedFlagged ? "text-red-950 font-black" : "text-gray-900"}`}>
+                                {driver.fullName}
+                              </p>
+                              {driver.isRedFlagged && (
+                                <RedFlagBadge reason={driver.redFlagReason} size="xs" />
+                              )}
+                            </div>
                             <span className="text-2xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-medium">
                               {driver.contractType}
                             </span>

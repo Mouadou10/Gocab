@@ -586,6 +586,8 @@ export async function POST(request: NextRequest) {
           collectedAmount: 0,
           expectedMAD,
           status: "MORNING_SET",
+          isRedFlagged: Boolean(driver.isRedFlagged),
+          redFlagReason: driver.redFlagReason || null,
         });
       } else {
         // === EVENING SNAPSHOT & RECONCILIATION ===
@@ -678,6 +680,8 @@ export async function POST(request: NextRequest) {
           collectedAmount: collected,
           expectedMAD,
           status: payStatus,
+          isRedFlagged: Boolean(driver.isRedFlagged),
+          redFlagReason: driver.redFlagReason || null,
         });
       }
     }

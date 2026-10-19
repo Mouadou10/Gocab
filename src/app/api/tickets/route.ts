@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +127,19 @@ export async function GET(request: Request) {
       }
     }
 
+    const redFlagsLookup = await getActiveRedFlagsLookup();
+
     const enrichedTickets = tickets.map((t) => {
+      const flagCheck = redFlagsLookup.checkDriver({
+        name: t.driver_name,
+        phone: t.driver_phone,
+      });
+
+      let extra: any = {
+        is_driver_red_flagged: flagCheck.isRedFlagged,
+        driver_red_flag_reason: flagCheck.reason,
+      };
+
       if (t.ticket_type === "Accident") {
         const claim = accidentClaimsMap[t.vehicle_id];
         const claimStep =
@@ -149,12 +162,16 @@ export async function GET(request: Request) {
 
         return {
           ...t,
+          ...extra,
           status: effectiveStatus,
           accident_claim_id: claim?.id || null,
           accident_step: claimStep,
         };
       }
-      return t;
+      return {
+        ...t,
+        ...extra,
+      };
     });
 
     return NextResponse.json({ tickets: enrichedTickets });

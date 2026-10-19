@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 const DAILY_OPPORTUNITY_COST_MAD = 250; // 250 MAD / day lost revenue per inactive vehicle
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     if (toParam) dateFilter.lte = new Date(`${toParam}T23:59:59.999Z`);
     const hasDateFilter = Object.keys(dateFilter).length > 0;
 
-    const [vehicles, expenses, drivers, leads, tickets, inspections, tasks, settingsRecord] = await Promise.all([
+    const [vehicles, expenses, drivers, leads, tickets, inspections, tasks, settingsRecord, redFlagsLookup] = await Promise.all([
       prisma.vehicle.findMany({
         include: {
           driverProfile: true,
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
       prisma.fieldInspectionNew.findMany(),
       prisma.fieldTask.findMany(),
       prisma.setting.findUnique({ where: { key: "department_weekly_targets" } }),
+      getActiveRedFlagsLookup(),
     ]);
 
     // Parse custom department targets
@@ -118,6 +120,15 @@ export async function GET(request: NextRequest) {
       const directExpensesMAD = v.expenses.reduce((sum, e) => sum + (e.amount_mad || 0), 0);
       const totalCostMAD = directExpensesMAD + opportunityLossMAD;
 
+      const rfCheck = redFlagsLookup.checkDriver({
+        id: v.driverProfile?.id,
+        name: v.driverProfile?.fullName || v.assigned_driver_name,
+        phone: v.driverProfile?.phoneSanitized || v.assigned_driver_phone,
+        cin: v.driverProfile?.cinNumber,
+      });
+      const is_driver_red_flagged = Boolean(v.driverProfile?.isRedFlagged || rfCheck.isRedFlagged);
+      const driver_red_flag_reason = v.driverProfile?.redFlagReason || rfCheck.reason || null;
+
       return {
         id: v.id,
         plate_number: v.plate_number,
@@ -127,6 +138,8 @@ export async function GET(request: NextRequest) {
         status: v.status,
         driver_name: v.driverProfile?.fullName || v.assigned_driver_name || null,
         driver_phone: v.driverProfile?.phoneSanitized || v.assigned_driver_phone || null,
+        is_driver_red_flagged,
+        driver_red_flag_reason,
         driver_arrears_mad:
           morningPayments.length > 0
             ? (() => {

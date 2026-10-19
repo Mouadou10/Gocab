@@ -55,6 +55,7 @@ import {
 import toast from "react-hot-toast";
 import AddExpenseModal from "./AddExpenseModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
+import RedFlagBadge from "./RedFlagBadge";
 
 interface FinancialSummary {
   total_fleet: number;
@@ -82,6 +83,8 @@ interface VehicleFinancialItem {
   status: string;
   driver_name: string | null;
   driver_phone: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
   driver_arrears_mad: number;
   inactive_days: number;
   opportunity_loss_mad: number;
@@ -593,7 +596,12 @@ export default function DashboardView() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-0.5">
-                        <p className="font-bold text-sm text-red-950">{driver.fullName}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-sm text-red-950">{driver.fullName}</p>
+                          {driver.isRedFlagged && (
+                            <RedFlagBadge reason={driver.redFlagReason} />
+                          )}
+                        </div>
                         <p className="text-2xs font-mono text-gray-500">{driver.phoneSanitized}</p>
                         {driver.vehicle && (
                           <span className="font-mono font-bold text-2xs bg-white text-navy px-2 py-0.5 rounded-md border border-red-200 inline-block mt-1">
@@ -809,9 +817,16 @@ export default function DashboardView() {
                         <td className="py-3.5 px-4">
                           {v.driver_name ? (
                             <div>
-                              <p className="font-semibold text-gray-800">{v.driver_name}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className={`font-semibold ${v.is_driver_red_flagged ? "text-red-900 font-bold" : "text-gray-800"}`}>
+                                  {v.driver_name}
+                                </p>
+                                {v.is_driver_red_flagged && (
+                                  <RedFlagBadge reason={v.driver_red_flag_reason} />
+                                )}
+                              </div>
                               {v.driver_arrears_mad > 0 && (
-                                <span className="text-2xs text-red-600 font-bold">
+                                <span className="text-2xs text-red-600 font-bold block mt-0.5">
                                   Impayés : {v.driver_arrears_mad.toLocaleString()} MAD
                                 </span>
                               )}

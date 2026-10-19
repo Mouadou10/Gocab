@@ -34,6 +34,7 @@ import {
   Paperclip,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import RedFlagBadge from "./RedFlagBadge";
 import {
   GOCAB_WHATSAPP_TEMPLATES,
   formatDisplayPhone,
@@ -50,6 +51,8 @@ interface DriverSummary {
   defaultStage: string;
   plateNumber: string;
   vehicleModel: string;
+  isRedFlagged?: boolean;
+  redFlagReason?: string | null;
 }
 
 interface LeadSummary {
@@ -868,7 +871,9 @@ export default function WhatsAppCrmView() {
                   <div className="relative shrink-0 mt-0.5">
                     <div
                       className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${
-                        conv.contactType === "DRIVER"
+                        conv.driver?.isRedFlagged
+                          ? "bg-red-100 text-red-900 ring-2 ring-red-500 shadow-sm"
+                          : conv.contactType === "DRIVER"
                           ? "bg-amber-100 text-amber-800 ring-1 ring-amber-300/50"
                           : conv.contactType === "LEAD"
                           ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300/50"
@@ -882,28 +887,36 @@ export default function WhatsAppCrmView() {
                         .join("")
                         .toUpperCase() || "WA"}
                     </div>
-                    {conv.contactType === "DRIVER" && (
+                    {conv.driver?.isRedFlagged ? (
+                      <span className="absolute -bottom-1 -right-1 text-[9px] bg-red-600 text-white rounded-full px-1 py-0.2 shadow-2xs font-bold animate-pulse">
+                        🚩
+                      </span>
+                    ) : conv.contactType === "DRIVER" ? (
                       <span className="absolute -bottom-1 -right-1 text-[9px] bg-amber-500 text-white rounded-full px-1 py-0.2 shadow-2xs font-bold">
                         🚖
                       </span>
-                    )}
-                    {conv.contactType === "LEAD" && (
+                    ) : conv.contactType === "LEAD" ? (
                       <span className="absolute -bottom-1 -right-1 text-[9px] bg-blue-500 text-white rounded-full px-1 py-0.2 shadow-2xs font-bold">
                         💼
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <h3
-                        className={`text-xs font-bold truncate ${
-                          isSelected ? "text-emerald-950 font-black" : "text-gray-900"
-                        }`}
-                      >
-                        {conv.contactName}
-                      </h3>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3
+                          className={`text-xs font-bold truncate ${
+                            isSelected ? "text-emerald-950 font-black" : "text-gray-900"
+                          }`}
+                        >
+                          {conv.contactName}
+                        </h3>
+                        {conv.driver?.isRedFlagged && (
+                          <span className="text-xs" title={`Red Flag : ${conv.driver.redFlagReason || "Actif"}`}>🚩</span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-gray-400 shrink-0 font-medium">
                         {conv.lastMessageAt
                           ? new Date(conv.lastMessageAt).toLocaleTimeString("fr-FR", {
@@ -931,6 +944,9 @@ export default function WhatsAppCrmView() {
 
                     {/* Metadata & Bot Workflow tags */}
                     <div className="flex items-center flex-wrap gap-1 mt-1">
+                      {conv.driver?.isRedFlagged && (
+                        <RedFlagBadge reason={conv.driver.redFlagReason} />
+                      )}
                       {conv.workflowState === "ROUTED_DRIVER_SUPPORT" && (
                         <span className="px-1.5 py-0.2 bg-amber-600 text-white text-[9px] font-extrabold rounded-md">
                           1️⃣ Support Flotte
@@ -1001,6 +1017,9 @@ export default function WhatsAppCrmView() {
                     <h3 className="text-sm font-black text-gray-900 truncate">
                       {activeConversation.contactName}
                     </h3>
+                    {activeConversation.driver?.isRedFlagged && (
+                      <RedFlagBadge reason={activeConversation.driver.redFlagReason} />
+                    )}
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
                         activeConversation.contactType === "DRIVER"
@@ -1608,6 +1627,26 @@ export default function WhatsAppCrmView() {
           {/* DRIVER SPECIFIC CRM DOSSIER */}
           {activeConversation.driver && (
             <div className="space-y-3.5">
+              {/* Red Flag Warning Box */}
+              {activeConversation.driver.isRedFlagged && (
+                <div className="p-3 bg-red-500/10 border-2 border-red-500/30 rounded-2xl space-y-1.5 animate-pulse">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-red-900 uppercase tracking-wide">
+                      Alerte Sécurité Flotte
+                    </span>
+                    <RedFlagBadge reason={activeConversation.driver.redFlagReason} />
+                  </div>
+                  <p className="text-xs text-red-800 font-bold">
+                    Ce conducteur fait l&apos;objet d&apos;un signalement <strong>RED FLAG</strong>.
+                  </p>
+                  {activeConversation.driver.redFlagReason && (
+                    <p className="text-3xs sm:text-xs text-red-700 bg-white/80 px-2 py-1 rounded-lg border border-red-200 font-medium">
+                      Motif : {activeConversation.driver.redFlagReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
                   <Car className="w-3.5 h-3.5 text-amber-600" />

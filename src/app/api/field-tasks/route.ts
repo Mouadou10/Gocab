@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { touchSyncState } from "@/lib/sync";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 export const dynamic = "force-dynamic";
 
@@ -200,15 +201,31 @@ export async function GET(request: Request) {
       ];
     }
 
-    const tasks = await prisma.fieldTask.findMany({
-      where,
-      orderBy: [
-        { scheduled_time: "asc" },
-        { created_at: "desc" },
-      ],
+    const [tasks, redFlagsLookup] = await Promise.all([
+      prisma.fieldTask.findMany({
+        where,
+        orderBy: [
+          { scheduled_time: "asc" },
+          { created_at: "desc" },
+        ],
+      }),
+      getActiveRedFlagsLookup(),
+    ]);
+
+    const enrichedTasks = tasks.map((task) => {
+      const flagCheck = redFlagsLookup.checkDriver({
+        name: task.driver_name,
+        phone: task.driver_phone,
+      });
+
+      return {
+        ...task,
+        is_driver_red_flagged: flagCheck.isRedFlagged,
+        driver_red_flag_reason: flagCheck.reason,
+      };
     });
 
-    return NextResponse.json({ tasks });
+    return NextResponse.json({ tasks: enrichedTasks });
   } catch (error) {
     console.error("GET /api/field-tasks error:", error);
     return NextResponse.json({ error: "Failed to fetch field tasks" }, { status: 500 });

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import WhatsAppDirectModal from "./WhatsAppDirectModal";
+import RedFlagBadge from "./RedFlagBadge";
 
 export interface Vehicle {
   id: string;
@@ -318,6 +319,9 @@ export default function DriverDrawer({
             <div className="flex-1 mr-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold">{driver.fullName}</h2>
+                {isRedFlagged && (
+                  <RedFlagBadge reason={redFlagReason} />
+                )}
                 {driver.isKycVerified && (
                   <span className="p-1 bg-emerald-500/20 text-emerald-300 rounded-full" title="KYC Vérifié">
                     <ShieldCheck className="w-4 h-4" />
@@ -384,9 +388,9 @@ export default function DriverDrawer({
                     <AlertTriangle className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs font-black uppercase tracking-wider text-rose-900">Chauffeur Signalé (Red Flag)</p>
-                      <span className="px-2 py-0.5 bg-rose-200/80 text-rose-900 font-bold text-3xs rounded-full">Actif</span>
+                      <RedFlagBadge reason={redFlagReason} />
                     </div>
                     <p className="text-xs font-bold text-rose-800 mt-1">{redFlagReason || "Signalé par le gestionnaire de flotte"}</p>
                     {(driver.redFlaggedBy || driver.redFlaggedAt) && (

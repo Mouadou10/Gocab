@@ -19,6 +19,7 @@ import {
   Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import RedFlagBadge from "./RedFlagBadge";
 
 interface MatchedDriver {
   driverId: string;
@@ -30,6 +31,8 @@ interface MatchedDriver {
   collectedAmount: number;
   expectedMAD?: number;
   status: "PAID" | "PARTIAL" | "UNPAID" | "MORNING_SET";
+  isRedFlagged?: boolean;
+  redFlagReason?: string | null;
 }
 
 interface UnmatchedRow {
@@ -465,9 +468,14 @@ export default function BalanceReconciliationModal({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredMatched.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/80">
+                        <tr key={idx} className={`hover:bg-gray-50/80 ${item.isRedFlagged ? "bg-red-50/30" : ""}`}>
                           <td className="py-2 px-4 font-semibold text-navy">
-                            <div>{item.fullName}</div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{item.fullName}</span>
+                              {item.isRedFlagged && (
+                                <RedFlagBadge reason={item.redFlagReason} />
+                              )}
+                            </div>
                             <div className="text-3xs text-gray-400 font-mono">{item.phone}</div>
                           </td>
                           <td className="py-2 px-3 font-mono font-bold text-2xs text-gray-700">

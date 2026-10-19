@@ -1,4 +1,5 @@
 import React from 'react';
+import RedFlagBadge from '../RedFlagBadge';
 
 type LifecycleTrackerProps = {
   vehicles: any[]; // Using any to accommodate the relation fields easily for now
@@ -7,6 +8,7 @@ type LifecycleTrackerProps = {
 export default function LifecycleTracker({ vehicles }: LifecycleTrackerProps) {
   
   const getRiskLevel = (vehicle: any) => {
+    if (vehicle.driverProfile?.isRedFlagged || vehicle.is_driver_red_flagged) return 'CRITICAL (Red Flag)';
     if (vehicle.driverProfile?.defaultStage === 'TELEMATIC_BLOCK_EXECUTED') return 'CRITICAL (Blocked)';
     if (vehicle.driverProfile?.currentArrearsMAD > 0) return 'CRITICAL (Arrears)';
     if (vehicle.status === 'GARAGE_ACC') return 'WARNING (Garage)';
@@ -46,6 +48,8 @@ export default function LifecycleTracker({ vehicles }: LifecycleTrackerProps) {
             {vehicles.slice(0, 15).map((vehicle) => {
               const risk = getRiskLevel(vehicle);
               const driverName = vehicle.driverProfile?.fullName || vehicle.assigned_driver_name || 'Unassigned';
+              const isRedFlag = Boolean(vehicle.driverProfile?.isRedFlagged || vehicle.is_driver_red_flagged);
+              const redFlagReason = vehicle.driverProfile?.redFlagReason || vehicle.driver_red_flag_reason;
               const vidangeTarget = vehicle.lastVidangeOdoKM + 8000;
               
               return (
@@ -57,7 +61,12 @@ export default function LifecycleTracker({ vehicles }: LifecycleTrackerProps) {
                     {vehicle.hub_city}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                    {driverName}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{driverName}</span>
+                      {isRedFlag && (
+                        <RedFlagBadge reason={redFlagReason} />
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 

@@ -24,8 +24,10 @@ import {
   User,
   ShieldCheck,
   PlusCircle,
+  Flag,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import RedFlagBadge from "./RedFlagBadge";
 
 export const EXPENSE_CATEGORIES = [
   { key: "REPAIR", label: "🔧 Réparation / Garage", group: "Maintenance & Réparations" },
@@ -48,6 +50,8 @@ interface VehicleOption {
   status: string;
   assigned_driver_name?: string | null;
   hub_city?: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
 }
 
 interface AddExpenseModalProps {

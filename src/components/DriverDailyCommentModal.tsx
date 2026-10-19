@@ -16,8 +16,10 @@ import {
   AlertCircle,
   History,
   FileText,
+  Flag,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import RedFlagBadge from "./RedFlagBadge";
 
 export interface DriverCommentItem {
   id: string;
@@ -43,6 +45,8 @@ interface DriverDailyCommentModalProps {
     } | null;
     comments?: DriverCommentItem[];
     todayComment?: string | null;
+    isRedFlagged?: boolean;
+    redFlagReason?: string | null;
   } | null;
   targetDate: string; // YYYY-MM-DD
   currentUserName: string;
@@ -217,6 +221,9 @@ export default function DriverDailyCommentModal({
               <h2 className="text-base sm:text-lg font-black tracking-tight">
                 {driver.fullName}
               </h2>
+              {driver.isRedFlagged && (
+                <RedFlagBadge reason={driver.redFlagReason} />
+              )}
               {driver.vehicle?.plate_number && (
                 <span className="font-mono text-2xs font-black bg-white/15 px-2 py-0.5 rounded-lg border border-white/20">
                   🚗 {driver.vehicle.plate_number}
@@ -249,6 +256,30 @@ export default function DriverDailyCommentModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          {/* Red Flag Warning Banner */}
+          {driver.isRedFlagged && (
+            <div className="bg-red-500/10 border-2 border-red-500/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-pulse">
+              <div className="p-2 bg-red-600 text-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
+                <Flag className="w-5 h-5 fill-current" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black text-red-900 uppercase tracking-wider">
+                    Chauffeur Fiché Red Flag
+                  </span>
+                  <RedFlagBadge reason={driver.redFlagReason} />
+                </div>
+                <p className="text-xs text-red-800 font-semibold mt-1">
+                  Ce chauffeur fait l&apos;objet d&apos;un signalement critique. Toute note ou échange doit faire l&apos;objet d&apos;une attention renforcée.
+                </p>
+                {driver.redFlagReason && (
+                  <p className="text-xs text-red-700 mt-1 bg-white/90 rounded-lg px-2.5 py-1 border border-red-200 inline-block font-medium">
+                    Motif : {driver.redFlagReason}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           {/* Section 1: Write Comment for Active Date */}
           <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-3">
             <div className="flex items-center justify-between">

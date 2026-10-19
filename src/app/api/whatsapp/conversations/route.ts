@@ -258,6 +258,8 @@ export async function GET(request: NextRequest) {
               defaultStage: driver.defaultStage,
               plateNumber: resolvedPlate || "Non assigné",
               vehicleModel: resolvedModel,
+              isRedFlagged: Boolean(driver.isRedFlagged),
+              redFlagReason: driver.redFlagReason || null,
             }
           : resolvedPlate
           ? {
@@ -270,6 +272,8 @@ export async function GET(request: NextRequest) {
               defaultStage: "NOMINAL",
               plateNumber: resolvedPlate,
               vehicleModel: resolvedModel,
+              isRedFlagged: Boolean(matchedVehicle?.driverProfile?.isRedFlagged),
+              redFlagReason: matchedVehicle?.driverProfile?.redFlagReason || null,
             }
           : null,
         lead: lead

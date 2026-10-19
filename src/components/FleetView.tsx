@@ -47,6 +47,7 @@ import VehicleCSVUploader from "./VehicleCSVUploader";
 import AddExpenseModal from "./AddExpenseModal";
 import VehicleExpensesDrawer from "./VehicleExpensesDrawer";
 import AttestationModal, { AttestationData } from "./AttestationModal";
+import RedFlagBadge from "./RedFlagBadge";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -326,6 +327,9 @@ export default function FleetView() {
   const blockedCount = vehicles.filter((v) =>
     ["impounded", "police_immobilization", "impounded by police", "Blocked", "missing_document"].includes(v.status)
   ).length;
+  const redFlaggedCount = vehicles.filter(
+    (v) => Boolean(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged)
+  ).length;
   const totalFleetSpend = vehicles.reduce((sum, v) => sum + (v.total_expenses_mad || 0), 0);
 
   // Client-side quick filtering
@@ -346,6 +350,7 @@ export default function FleetView() {
       )
         return false;
       if (activeQuickTab === "EXPIRED" && !expiredVehicleIds.has(v.id)) return false;
+      if (activeQuickTab === "RED_FLAG" && !(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged)) return false;
       return true;
     });
   }, [vehicles, activeQuickTab, expiredVehicleIds]);
@@ -746,6 +751,7 @@ export default function FleetView() {
             { id: "GARAGE", label: "🔧 Au garage", count: inGarageCount },
             { id: "BLOCKED", label: "🛑 Fourrière / Bloqués", count: blockedCount },
             { id: "EXPIRED", label: "🚨 Non conformes", count: expiredVehicleIds.size },
+            { id: "RED_FLAG", label: "🚩 Red Flags", count: redFlaggedCount },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -884,12 +890,17 @@ export default function FleetView() {
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                 {filteredVehicles.map((v) => {
                   const isExpired = expiredVehicleIds.has(v.id);
+                  const isRedFlag = Boolean(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged);
 
                   return (
                     <tr
                       key={v.id}
                       className={`hover:bg-slate-50/80 transition-colors ${
-                        isExpired ? "bg-rose-50/20" : ""
+                        isRedFlag
+                          ? "bg-red-50/25 border-l-4 border-l-red-500"
+                          : isExpired
+                          ? "bg-rose-50/20"
+                          : ""
                       }`}
                     >
                       {/* 1. Immatriculation */}
@@ -961,9 +972,22 @@ export default function FleetView() {
                         </select>
 
                         {v.assigned_driver_name ? (
-                          <div className="text-[11px] text-slate-700 font-semibold mt-1 flex items-center gap-1">
-                            <span>👤</span>
-                            <span className="truncate max-w-[150px]">{v.assigned_driver_name}</span>
+                          <div className="mt-1 space-y-0.5">
+                            <div className="text-[11px] text-slate-800 font-semibold flex items-center gap-1.5 flex-wrap">
+                              <span>👤</span>
+                              <span className="truncate max-w-[140px]">{v.assigned_driver_name}</span>
+                              {(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged) && (
+                                <RedFlagBadge reason={v.driver_red_flag_reason || v.driverProfile?.redFlagReason} />
+                              )}
+                            </div>
+                            {(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged) && (v.driver_red_flag_reason || v.driverProfile?.redFlagReason) && (
+                              <div
+                                className="text-[10px] text-red-600 font-medium truncate max-w-[180px]"
+                                title={`Motif Red Flag : ${v.driver_red_flag_reason || v.driverProfile?.redFlagReason}`}
+                              >
+                                ⚠️ {v.driver_red_flag_reason || v.driverProfile?.redFlagReason}
+                              </div>
+                            )}
                           </div>
                         ) : v.historical_driver_name ? (
                           <div className="mt-1 space-y-0.5">

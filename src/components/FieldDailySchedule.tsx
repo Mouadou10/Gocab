@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MoroccanPlateBadge, FieldTask } from "./FieldSupervisorView";
+import RedFlagBadge from "./RedFlagBadge";
 
 export interface FieldSupervisorInfo {
   id: string;
@@ -857,6 +858,9 @@ export default function FieldDailySchedule({
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <MoroccanPlateBadge plate={task.plate_number} />
+                          {task.is_driver_red_flagged && (
+                            <RedFlagBadge reason={task.driver_red_flag_reason} />
+                          )}
                           <span
                             className={`px-2 py-0.5 rounded-full text-3xs font-bold ${
                               isRecovery
@@ -913,8 +917,11 @@ export default function FieldDailySchedule({
 
                         {/* Driver & Description */}
                         {task.driver_name && (
-                          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 flex-wrap">
                             <span>👤 {task.driver_name}</span>
+                            {task.is_driver_red_flagged && (
+                              <RedFlagBadge reason={task.driver_red_flag_reason} />
+                            )}
                             {task.driver_phone && (
                               <span className="text-3xs text-slate-400 font-mono">({task.driver_phone})</span>
                             )}
@@ -1229,8 +1236,11 @@ export default function FieldDailySchedule({
                       </div>
 
                       {t.driver_name && (
-                        <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                        <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
                           <span>👤 {t.driver_name}</span>
+                          {t.is_driver_red_flagged && (
+                            <RedFlagBadge reason={t.driver_red_flag_reason} />
+                          )}
                         </div>
                       )}
 

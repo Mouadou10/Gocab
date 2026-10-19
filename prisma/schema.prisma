@@ -553,3 +553,29 @@ model VehicleIssue {
   @@index([status])
 }
 
+/// Insurance / Fleet repair reminders: vehicles scheduled for repairs with photos, reminder dates and agent alerts.
+model RepairReminder {
+  id                  String    @id @default(uuid())
+  vehicle_id          String?
+  plate_number        String
+  driver_name         String?
+  driver_phone        String?
+  reminder_date       String    // YYYY-MM-DD
+  reminder_time       String?   // HH:mm
+  garage_name         String?   // Target garage / workshop
+  repair_type         String    @default("Carrosserie") // Carrosserie, Peinture, Mecanique, Pare-brise, Pneumatiques, Revision, Autre
+  title               String
+  description         String
+  photos              String?   @default("[]") // JSON: [{ id, name, fileUrl, fileType, size, uploaded_at }]
+  estimated_cost_mad  Float?    @default(0.0)
+  priority            String    @default("Normal") // Normal, Urgent, Critical
+  status              String    @default("PENDING") // PENDING, DUE, IN_REPAIR, COMPLETED, CANCELLED
+  agent_notes         String?
+  created_by          String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  @@index([plate_number, status])
+  @@index([reminder_date, status])
+}
+

@@ -45,6 +45,7 @@ import TicketKanbanCard from "./TicketKanbanCard";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
+import RedFlagBadge from "./RedFlagBadge";
 
 // Extend with SLA fields added in Sprint 2
 export type MaintenanceTicket = BaseMaintenanceTicket & {
@@ -748,10 +749,17 @@ export default function SupportTicketsView() {
                 (chat.driver?.plateNumber && chat.driver.plateNumber !== "Non assigné"
                   ? chat.driver.plateNumber
                   : "Matricule en cours");
+              const isChatRedFlagged = Boolean(chat.driver?.isRedFlagged || chat.isRedFlagged);
+              const chatRfReason = chat.driver?.redFlagReason || chat.redFlagReason;
+
               return (
                 <div
                   key={chat.id}
-                  className="bg-white p-3 rounded-xl border border-slate-200/80 hover:border-amber-400 transition-all shadow-2xs flex flex-col justify-between gap-2"
+                  className={`p-3 rounded-xl border transition-all shadow-2xs flex flex-col justify-between gap-2 ${
+                    isChatRedFlagged
+                      ? "bg-red-50/40 border-red-300 hover:border-red-500"
+                      : "bg-white border-slate-200/80 hover:border-amber-400"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -759,9 +767,12 @@ export default function SupportTicketsView() {
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-950 border border-amber-300 rounded-md text-[11px] font-black font-mono">
                           🚗 {plate}
                         </span>
-                        <span className="text-xs font-extrabold text-slate-900 truncate">
+                        <span className={`text-xs font-extrabold truncate ${isChatRedFlagged ? "text-red-900" : "text-slate-900"}`}>
                           {chat.contactName}
                         </span>
+                        {isChatRedFlagged && (
+                          <RedFlagBadge reason={chatRfReason} />
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-600 truncate mt-1">
                         {chat.lastMessage || "Demande support ouverte"}

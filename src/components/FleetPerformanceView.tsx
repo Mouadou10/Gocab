@@ -39,6 +39,7 @@ import {
   FileSpreadsheet,
   FileText,
   History,
+  Flag,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
@@ -46,6 +47,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import BalanceReconciliationModal from "./BalanceReconciliationModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 import DriverDailyCommentModal, { DriverCommentItem } from "./DriverDailyCommentModal";
+import RedFlagBadge from "./RedFlagBadge";
 
 interface DriverDailyItem {
   id: string;
@@ -53,6 +55,8 @@ interface DriverDailyItem {
   phoneSanitized: string;
   cinNumber: string;
   contractType: "DAILY" | "WEEKLY";
+  isRedFlagged?: boolean;
+  redFlagReason?: string | null;
   vehicle: {
     id: string;
     plate_number: string;
@@ -235,7 +239,7 @@ export default function FleetPerformanceView() {
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<"ALL" | "RED" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
+  const [filterType, setFilterType] = useState<"ALL" | "RED" | "RED_FLAGS" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
 
   // Local inputs state for editing cleared amounts
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
@@ -543,6 +547,7 @@ export default function FleetPerformanceView() {
     if (!matchesSearch) return false;
 
     if (filterType === "RED" && !d.isCriticalRed) return false;
+    if (filterType === "RED_FLAGS" && !d.isRedFlagged) return false;
     if (filterType === "UNPAID" && d.isPaidToday) return false;
     if (filterType === "DAILY" && d.contractType !== "DAILY") return false;
     if (filterType === "WEEKLY" && d.contractType !== "WEEKLY") return false;
@@ -1403,6 +1408,17 @@ export default function FleetPerformanceView() {
             <span>🔴 Alerte Rouge ({summary?.criticalRedCount || 0})</span>
           </button>
           <button
+            onClick={() => setFilterType("RED_FLAGS")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+              filterType === "RED_FLAGS"
+                ? "bg-red-700 text-white shadow-2xs font-black"
+                : "bg-red-50 text-red-800 border border-red-300 hover:bg-red-100 font-extrabold"
+            }`}
+          >
+            <Flag className="w-3.5 h-3.5 fill-current" />
+            <span>🚩 Red Flags ({drivers.filter((d) => d.isRedFlagged).length})</span>
+          </button>
+          <button
             onClick={() => setFilterType("UNPAID")}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               filterType === "UNPAID" ? "bg-amber-600 text-white shadow-2xs" : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
@@ -1503,6 +1519,8 @@ export default function FleetPerformanceView() {
                       className={`transition-colors ${
                         isRed
                           ? "bg-red-50/90 hover:bg-red-100/90 border-l-4 border-l-red-600"
+                          : driver.isRedFlagged
+                          ? "bg-red-50/40 hover:bg-red-100/50 border-l-4 border-l-red-500"
                           : driver.isPaidToday
                           ? "bg-emerald-50/30 hover:bg-emerald-50/60"
                           : "hover:bg-gray-50"
@@ -1511,9 +1529,14 @@ export default function FleetPerformanceView() {
                       {/* Driver Info */}
                       <td className="py-4 px-6 font-semibold">
                         <div className="space-y-0.5">
-                          <p className={`font-bold text-sm ${isRed ? "text-red-900" : "text-navy"}`}>
-                            {driver.fullName}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={`font-bold text-sm ${isRed || driver.isRedFlagged ? "text-red-900" : "text-navy"}`}>
+                              {driver.fullName}
+                            </p>
+                            {driver.isRedFlagged && (
+                              <RedFlagBadge reason={driver.redFlagReason} />
+                            )}
+                          </div>
                           <p className="font-mono text-2xs text-gray-500 flex items-center gap-1">
                             <Phone className="w-3 h-3 text-gray-400" />
                             {driver.phoneSanitized} · CIN: {driver.cinNumber}

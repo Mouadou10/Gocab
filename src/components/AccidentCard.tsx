@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Plus,
 } from "lucide-react";
+import RedFlagBadge from "./RedFlagBadge";
 
 export interface AccidentComment {
   id: string;
@@ -65,6 +66,8 @@ export interface AccidentClaim {
   driver_id: string | null;
   driver_name: string | null;
   driver_phone: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
   severity: "HARD" | "SOFT" | null;
   fault: "DRIVER" | "THIRD_PARTY" | null;
   timeline_step: "NEW_ACCIDENT" | "CAR_IN_GARAGE" | "STARTING_REPAIR" | "INSURANCE_DOCS" | "READY_FOR_PICKUP" | "VEHICLE_BACK";
@@ -77,6 +80,8 @@ export interface AccidentClaim {
     make_model: string;
   };
   driver?: {
+    isRedFlagged?: boolean;
+    redFlagReason?: string | null;
     accidentClaims?: any[];
   } | null;
   fieldTask?: {
@@ -809,7 +814,9 @@ export default function AccidentCard({
   const waLink = getWhatsAppLink(claim.driver_phone);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden flex flex-col justify-between">
+    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border overflow-hidden flex flex-col justify-between ${
+      claim.is_driver_red_flagged || claim.driver?.isRedFlagged ? "border-red-300 ring-1 ring-red-200" : "border-gray-200"
+    }`}>
       {/* 1. Header with Moroccan Plate, Model & Downtime Badge */}
       <div>
         <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-wrap items-start justify-between gap-3 bg-gradient-to-r from-gray-50/70 to-white">
@@ -819,6 +826,9 @@ export default function AccidentCard({
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-700 border border-red-200 flex items-center gap-1 shadow-2xs">
                 <span>💥</span> Sinistre
               </span>
+              {(claim.is_driver_red_flagged || claim.driver?.isRedFlagged) && (
+                <RedFlagBadge reason={claim.driver_red_flag_reason || claim.driver?.redFlagReason} />
+              )}
             </div>
 
             <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
@@ -880,14 +890,23 @@ export default function AccidentCard({
         </div>
 
         {/* 2. Driver Info & Fast Contact Chips */}
-        <div className="px-4 sm:px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-full bg-navy/10 text-navy flex items-center justify-center font-bold text-xs shrink-0">
-              <User className="w-3.5 h-3.5" />
+        <div className={`px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2.5 ${
+          claim.is_driver_red_flagged || claim.driver?.isRedFlagged ? "bg-red-50/40" : "bg-gray-50/60"
+        }`}>
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+              claim.is_driver_red_flagged || claim.driver?.isRedFlagged ? "bg-red-600 text-white" : "bg-navy/10 text-navy"
+            }`}>
+              {claim.is_driver_red_flagged || claim.driver?.isRedFlagged ? "🚩" : <User className="w-3.5 h-3.5" />}
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-gray-900 truncate">
-                {claim.driver_name || "Chauffeur non assigné"}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-gray-900 truncate">
+                  {claim.driver_name || "Chauffeur non assigné"}
+                </span>
+                {(claim.is_driver_red_flagged || claim.driver?.isRedFlagged) && (
+                  <RedFlagBadge reason={claim.driver_red_flag_reason || claim.driver?.redFlagReason} />
+                )}
               </div>
               {claim.driver_phone && (
                 <div className="text-2xs text-gray-500 font-mono">

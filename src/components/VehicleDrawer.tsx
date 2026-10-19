@@ -19,7 +19,8 @@ import AddExpenseModal, { EXPENSE_CATEGORIES } from "./AddExpenseModal";
 import AttestationModal, { AttestationData } from "./AttestationModal";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
-import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck } from "lucide-react";
+import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck, Flag } from "lucide-react";
+import RedFlagBadge from "./RedFlagBadge";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -61,7 +62,16 @@ export interface Vehicle {
   assigned_supervisor?: string | null;
   assigned_collector?: string | null;
   is_current_working_car?: boolean;
-  driverProfile?: { id: string; fullName: string; phoneSanitized: string; cinNumber?: string | null } | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
+  driverProfile?: {
+    id: string;
+    fullName: string;
+    phoneSanitized: string;
+    cinNumber?: string | null;
+    isRedFlagged?: boolean;
+    redFlagReason?: string | null;
+  } | null;
   total_expenses_mad?: number;
   notes: string | null;
   created_at: string;
@@ -335,6 +345,15 @@ export default function VehicleDrawer({
     setTimeout(onClose, 300);
   }
 
+  const selectedDriverProfile = availableDrivers.find((d: any) => d.id === assignedDriverId) || vehicle?.driverProfile;
+  const isDriverRedFlagged = Boolean(
+    selectedDriverProfile?.isRedFlagged ||
+    vehicle?.is_driver_red_flagged ||
+    (selectedDriverProfile && selectedDriverProfile.isRedFlagged)
+  );
+  const redFlagReason = selectedDriverProfile?.redFlagReason || vehicle?.driver_red_flag_reason || vehicle?.driverProfile?.redFlagReason;
+  const currentDriverDisplayName = selectedDriverProfile?.fullName || assignedDriverName || vehicle?.assigned_driver_name;
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
@@ -354,9 +373,14 @@ export default function VehicleDrawer({
         {/* Header */}
         <div className="bg-navy px-6 py-5 flex items-center justify-between text-white">
           <div>
-            <h3 className="text-base font-bold tracking-tight flex items-center gap-2">
-              <span>🚗</span> {vehicle ? `Edit Vehicle (${vehicle.plate_number})` : "Register New Vehicle"}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold tracking-tight flex items-center gap-2">
+                <span>🚗</span> {vehicle ? `Edit Vehicle (${vehicle.plate_number})` : "Register New Vehicle"}
+              </h3>
+              {isDriverRedFlagged && (
+                <RedFlagBadge reason={redFlagReason} />
+              )}
+            </div>
             <p className="text-xs text-white/70 mt-0.5">
               Enter vehicle identification and compliance expiry dates
             </p>
@@ -376,6 +400,31 @@ export default function VehicleDrawer({
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-xl">
               {errorMsg}
+            </div>
+          )}
+
+          {/* Red Flag Warning Alert Banner */}
+          {isDriverRedFlagged && (
+            <div className="bg-red-500/10 border-2 border-red-500/30 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-pulse">
+              <div className="p-2 bg-red-600 text-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
+                <Flag className="w-5 h-5 fill-current" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black text-red-900 uppercase tracking-wider">
+                    Alerte Sécurité Flotte : Chauffeur Red Flag
+                  </span>
+                  <RedFlagBadge reason={redFlagReason} />
+                </div>
+                <p className="text-xs font-semibold text-red-800 mt-1">
+                  Le chauffeur associé à ce véhicule ({currentDriverDisplayName ? <strong>{currentDriverDisplayName}</strong> : "non spécifié"}) est fiché <strong>RED FLAG</strong>.
+                </p>
+                {redFlagReason && (
+                  <p className="text-xs text-red-700 mt-1 bg-white/80 rounded-lg px-2.5 py-1 border border-red-200 inline-block font-medium">
+                    Motif : {redFlagReason}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -578,18 +627,27 @@ export default function VehicleDrawer({
 
             <div className="grid grid-cols-1 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Assign Driver
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Assign Driver
+                  </label>
+                  {isDriverRedFlagged && (
+                    <RedFlagBadge reason={redFlagReason} />
+                  )}
+                </div>
                 <select
                   value={assignedDriverId}
                   onChange={(e) => setAssignedDriverId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
+                  className={`w-full border rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:outline-none ${
+                    isDriverRedFlagged
+                      ? "border-red-400 bg-red-50/40 text-red-950 focus:ring-red-500/30"
+                      : "border-gray-300 focus:ring-navy/30"
+                  }`}
                 >
                   <option value="">-- Unassigned --</option>
                   {availableDrivers.map((d: any) => (
-                    <option key={d.id} value={d.id}>
-                      {d.fullName} ({d.phoneSanitized})
+                    <option key={d.id} value={d.id} className={d.isRedFlagged ? "text-red-700 font-bold bg-red-50" : ""}>
+                      {d.isRedFlagged ? "🚩 [RED FLAG] " : ""}{d.fullName} ({d.phoneSanitized}){d.isRedFlagged ? ` — ⚠️ ${d.redFlagReason || "Signalement actif"}` : ""}
                     </option>
                   ))}
                   {/* Keep the old text-based fallback visible if no driver profile is linked but name exists */}
@@ -597,6 +655,17 @@ export default function VehicleDrawer({
                     <option value="" disabled>Legacy: {assignedDriverName}</option>
                   )}
                 </select>
+                {isDriverRedFlagged && (
+                  <div className="mt-2 p-2.5 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2">
+                    <span className="text-sm">🚩</span>
+                    <div className="flex-1">
+                      <p className="font-bold">Attention : Conducteur sous surveillance Red Flag</p>
+                      <p className="text-3xs sm:text-xs text-red-700 mt-0.5">
+                        {redFlagReason || "Ce chauffeur a été signalé (impayés, sinistres fréquents ou problème d'intégrité)."}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {vehicle?.historical_driver_name && !assignedDriverId && !assignedDriverName && (
                   <div className="mt-2 p-2 bg-amber-50/90 border border-amber-200/90 rounded-xl text-3xs sm:text-xs text-amber-900 flex items-center gap-1.5">
                     <span>🕒</span>

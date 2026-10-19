@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MaintenanceTicket } from "./TicketDrawer";
+import RedFlagBadge from "./RedFlagBadge";
 
 interface TicketKanbanCardProps {
   ticket: MaintenanceTicket;
@@ -167,7 +168,9 @@ export default function TicketKanbanCard({
       className={`
         bg-white rounded-2xl shadow-xs border flex flex-col gap-3 relative group transition-all duration-200 p-4
         ${
-          isDragging
+          ticket.is_driver_red_flagged
+            ? "border-red-300 ring-1 ring-red-200/60"
+            : isDragging
             ? "opacity-50 border-blue-600 ring-4 ring-blue-500/20 scale-[1.02] shadow-xl z-50"
             : "border-gray-200/90 hover:border-gray-300 hover:shadow-md"
         }
@@ -175,7 +178,7 @@ export default function TicketKanbanCard({
     >
       {/* 1. Header: Drag Handle, Moroccan Plate, Priority Badge */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <div
             {...attributes}
             {...listeners}
@@ -186,6 +189,9 @@ export default function TicketKanbanCard({
           </div>
 
           <MoroccanPlateBadge plate={ticket.plate_number} />
+          {ticket.is_driver_red_flagged && (
+            <RedFlagBadge reason={ticket.driver_red_flag_reason} />
+          )}
         </div>
 
         {/* Priority Badge */}
@@ -347,15 +353,24 @@ export default function TicketKanbanCard({
 
       {/* 5. Driver Interactive Contact Capsule */}
       {(ticket.driver_name || ticket.driver_phone) && (
-        <div className="flex items-center justify-between bg-slate-50 border border-slate-200/70 rounded-xl px-3 py-2 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-              {ticket.driver_name ? ticket.driver_name.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
+        <div className={`flex items-center justify-between border rounded-xl px-3 py-2 text-xs ${
+          ticket.is_driver_red_flagged ? "bg-red-50/70 border-red-200" : "bg-slate-50 border-slate-200/70"
+        }`}>
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+              ticket.is_driver_red_flagged ? "bg-red-600 text-white" : "bg-slate-200 text-slate-700"
+            }`}>
+              {ticket.is_driver_red_flagged ? "🚩" : ticket.driver_name ? ticket.driver_name.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
             </div>
-            <div className="truncate">
-              <span className="font-bold text-slate-800 text-xs truncate block">
-                {ticket.driver_name || "Chauffeur"}
-              </span>
+            <div className="truncate min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-slate-800 text-xs truncate">
+                  {ticket.driver_name || "Chauffeur"}
+                </span>
+                {ticket.is_driver_red_flagged && (
+                  <RedFlagBadge reason={ticket.driver_red_flag_reason} />
+                )}
+              </div>
               {ticket.driver_phone && (
                 <span className="font-mono text-[10px] text-slate-500 block truncate">
                   {ticket.driver_phone}

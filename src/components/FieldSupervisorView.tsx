@@ -20,6 +20,7 @@ import CarModel3D from "./CarModel3D";
 import FieldMobileQuickActions from "./FieldMobileQuickActions";
 import AttestationModal, { AttestationData } from "./AttestationModal";
 import FieldDailySchedule from "./FieldDailySchedule";
+import RedFlagBadge from "./RedFlagBadge";
 import {
   Phone,
   MessageCircle,
@@ -57,6 +58,8 @@ export interface FieldTask {
   plate_number: string | null;
   driver_name: string | null;
   driver_phone: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
   description: string;
   status: string;
   priority: string;
@@ -82,6 +85,8 @@ interface CheckupDue {
   make_model: string;
   assigned_driver_name: string | null;
   assigned_driver_phone: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
   previous_health_score: number | null;
   previous_inspection_date: string | null;
   document_name?: string | null;
@@ -750,7 +755,9 @@ export default function FieldSupervisorView() {
       <div
         key={task.id}
         className={`bg-white dark:bg-slate-900 rounded-2xl border p-4 sm:p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-3.5 relative ${
-          isCompleted
+          task.is_driver_red_flagged
+            ? "border-red-300 dark:border-red-800 ring-1 ring-red-400/40 bg-red-50/10"
+            : isCompleted
             ? "border-emerald-200 dark:border-emerald-950/60 bg-emerald-50/20 dark:bg-emerald-950/10 opacity-90"
             : isFailed
             ? "border-red-200 dark:border-red-950/60 bg-red-50/10"
@@ -764,6 +771,9 @@ export default function FieldSupervisorView() {
           <div className="flex flex-wrap items-start justify-between gap-2.5 mb-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <MoroccanPlateBadge plate={task.plate_number} />
+              {task.is_driver_red_flagged && (
+                <RedFlagBadge reason={task.driver_red_flag_reason} />
+              )}
 
               {/* Task Type Badge */}
               <span
@@ -861,17 +871,31 @@ export default function FieldSupervisorView() {
           </div>
 
           {/* Row 2: Driver & Assignment Strip */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 rounded-xl bg-gray-50/80 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-800/80 mb-2.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-full bg-navy/10 text-navy dark:bg-white/10 dark:text-white flex items-center justify-center font-bold text-xs shrink-0">
-                <User className="w-3 h-3" />
+          <div className={`flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 rounded-xl border mb-2.5 ${
+            task.is_driver_red_flagged ? "bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-900/50" : "bg-gray-50/80 dark:bg-slate-800/50 border-gray-100 dark:border-slate-800/80"
+          }`}>
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                task.is_driver_red_flagged ? "bg-red-600 text-white" : "bg-navy/10 text-navy dark:bg-white/10 dark:text-white"
+              }`}>
+                {task.is_driver_red_flagged ? "🚩" : <User className="w-3 h-3" />}
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                  {task.driver_name || "Chauffeur non renseigné"}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                    {task.driver_name || "Chauffeur non renseigné"}
+                  </span>
+                  {task.is_driver_red_flagged && (
+                    <RedFlagBadge reason={task.driver_red_flag_reason} />
+                  )}
                 </div>
                 {task.driver_phone && (
                   <div className="text-3xs text-gray-500 font-mono">{task.driver_phone}</div>
+                )}
+                {task.is_driver_red_flagged && task.driver_red_flag_reason && (
+                  <div className="text-[10px] text-red-600 dark:text-red-400 font-medium truncate max-w-[200px]" title={task.driver_red_flag_reason}>
+                    ⚠️ {task.driver_red_flag_reason}
+                  </div>
                 )}
               </div>
               {task.assigned_to && (
@@ -1349,11 +1373,18 @@ export default function FieldSupervisorView() {
                       )}
 
                       {/* Driver Row */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-xl bg-gray-50/80 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-800/80 mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
+                      <div className={`flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-xl border mb-2 ${
+                        vehicle.is_driver_red_flagged ? "bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-900/50" : "bg-gray-50/80 dark:bg-slate-800/50 border-gray-100 dark:border-slate-800/80"
+                      }`}>
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <User className="w-3.5 h-3.5 text-gray-400" />
-                          <div className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                            {vehicle.assigned_driver_name || "Sans chauffeur"}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                              {vehicle.assigned_driver_name || "Sans chauffeur"}
+                            </span>
+                            {vehicle.is_driver_red_flagged && (
+                              <RedFlagBadge reason={vehicle.driver_red_flag_reason} />
+                            )}
                           </div>
                         </div>
 

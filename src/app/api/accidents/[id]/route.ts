@@ -7,6 +7,7 @@ import {
   sendVehicleBackTelegramAlert,
 } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,21 @@ export async function GET(req: Request, context: any) {
       return NextResponse.json({ success: false, error: "Claim not found" }, { status: 404 });
     }
     
-    return NextResponse.json({ success: true, claim });
+    const redFlagsLookup = await getActiveRedFlagsLookup();
+    const flagCheck = redFlagsLookup.checkDriver({
+      id: claim.driver_id || claim.driver?.id,
+      name: claim.driver_name || claim.driver?.fullName,
+      phone: claim.driver_phone || claim.driver?.phoneSanitized,
+      cin: claim.driver?.cinNumber,
+    });
+
+    const enrichedClaim = {
+      ...claim,
+      is_driver_red_flagged: Boolean(claim.driver?.isRedFlagged || flagCheck.isRedFlagged),
+      driver_red_flag_reason: claim.driver?.redFlagReason || flagCheck.reason,
+    };
+
+    return NextResponse.json({ success: true, claim: enrichedClaim });
   } catch (error: any) {
     console.error("Error fetching accident claim:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -399,3 +399,29 @@ CREATE TABLE IF NOT EXISTS "VehicleIssue" (
 
 CREATE INDEX IF NOT EXISTS "VehicleIssue_plate_number_status_idx" ON "VehicleIssue"("plate_number", "status");
 CREATE INDEX IF NOT EXISTS "VehicleIssue_status_idx" ON "VehicleIssue"("status");
+
+-- Insurance & Fleet Repair Reminders (Vehicles scheduled for repair with photos)
+CREATE TABLE IF NOT EXISTS "RepairReminder" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "vehicle_id" TEXT,
+    "plate_number" TEXT NOT NULL,
+    "driver_name" TEXT,
+    "driver_phone" TEXT,
+    "reminder_date" TEXT NOT NULL,
+    "reminder_time" TEXT,
+    "garage_name" TEXT,
+    "repair_type" TEXT NOT NULL DEFAULT 'Carrosserie',
+    "title" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "photos" TEXT DEFAULT '[]',
+    "estimated_cost_mad" REAL DEFAULT 0.0,
+    "priority" TEXT NOT NULL DEFAULT 'Normal',
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "agent_notes" TEXT,
+    "created_by" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS "RepairReminder_plate_number_status_idx" ON "RepairReminder"("plate_number", "status");
+CREATE INDEX IF NOT EXISTS "RepairReminder_reminder_date_status_idx" ON "RepairReminder"("reminder_date", "status");

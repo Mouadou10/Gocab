@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-guard";
 import { logAudit } from "@/lib/services/auditLogger";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 /**
  * GET /api/vehicles
@@ -47,19 +48,29 @@ export async function GET(request: Request) {
       ];
     }
 
-    const vehicles = await prisma.vehicle.findMany({
-      where,
-      include: {
-        driverProfile: {
-          select: { id: true, fullName: true, phoneSanitized: true, cinNumber: true }
+    const [vehicles, redFlagsLookup] = await Promise.all([
+      prisma.vehicle.findMany({
+        where,
+        include: {
+          driverProfile: {
+            select: {
+              id: true,
+              fullName: true,
+              phoneSanitized: true,
+              cinNumber: true,
+              isRedFlagged: true,
+              redFlagReason: true,
+            },
+          },
+          expenses: {
+            where: { is_archived: false },
+            select: { amount_mad: true, category: true },
+          },
         },
-        expenses: {
-          where: { is_archived: false },
-          select: { amount_mad: true, category: true }
-        }
-      },
-      orderBy: { created_at: "desc" },
-    });
+        orderBy: { created_at: "desc" },
+      }),
+      getActiveRedFlagsLookup(),
+    ]);
 
     const enrichedVehicles = vehicles.map((v: any) => {
       const totalExpenseMad = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount_mad || 0), 0);
@@ -69,10 +80,23 @@ export async function GET(request: Request) {
          (v.status || "").toLowerCase().includes("service") ||
          v.driverProfile)
       );
+
+      const flagCheck = redFlagsLookup.checkDriver({
+        id: v.driverProfile?.id,
+        name: v.assigned_driver_name || v.driverProfile?.fullName,
+        phone: v.assigned_driver_phone || v.driverProfile?.phoneSanitized,
+        cin: v.driverProfile?.cinNumber,
+      });
+
+      const isDriverRedFlagged = Boolean(v.driverProfile?.isRedFlagged || flagCheck.isRedFlagged);
+      const driverRedFlagReason = v.driverProfile?.redFlagReason || flagCheck.reason;
+
       return {
         ...v,
         is_current_working_car: isWorkingCar,
         total_expenses_mad: totalExpenseMad,
+        is_driver_red_flagged: isDriverRedFlagged,
+        driver_red_flag_reason: driverRedFlagReason,
       };
     });
 

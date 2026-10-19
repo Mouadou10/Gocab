@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import AccidentCard, { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
+import RepairReminderModal from "./RepairReminderModal";
+import RepairReminderCard, { RepairReminderItem } from "./RepairReminderCard";
 import toast from "react-hot-toast";
 import {
   Car,
@@ -11,6 +13,12 @@ import {
   Search,
   Filter,
   RotateCcw,
+  Calendar,
+  Bell,
+  Wrench,
+  Camera,
+  AlertTriangle,
+  Plus,
 } from "lucide-react";
 
 interface VehicleItem {
@@ -20,14 +28,29 @@ interface VehicleItem {
   hub_city?: string;
   status?: string;
   assigned_driver_name?: string | null;
+  assigned_driver_phone?: string | null;
+  is_driver_red_flagged?: boolean;
+  driver_red_flag_reason?: string | null;
 }
 
 export default function InsuranceView() {
   const [claims, setClaims] = useState<AccidentClaim[]>([]);
+  const [reminders, setReminders] = useState<RepairReminderItem[]>([]);
+  const [remindersSummary, setRemindersSummary] = useState({
+    total: 0,
+    pending: 0,
+    due_today: 0,
+    overdue: 0,
+    due_or_overdue: 0,
+    in_repair: 0,
+    completed: 0,
+  });
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [filterReminderStatus, setFilterReminderStatus] = useState<"ALL" | "DUE" | "PENDING" | "IN_REPAIR" | "COMPLETED">("ALL");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Split into 2 pages: "open" (active claims) and "restored" (completed/restored vehicles)
-  const [activeTab, setActiveTab] = useState<"open" | "restored">("open");
+  // Tabs: "open" (active claims), "reminders" (repair reminders), "restored" (completed/restored vehicles)
+  const [activeTab, setActiveTab] = useState<"open" | "reminders" | "restored">("open");
 
   // Filter and Search Toolbar States
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +92,21 @@ export default function InsuranceView() {
     }
   }, []);
 
+  const fetchReminders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/insurance/repair-reminders");
+      const data = await res.json();
+      if (data.success) {
+        setReminders(data.reminders || []);
+        if (data.summary) {
+          setRemindersSummary(data.summary);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch repair reminders:", err);
+    }
+  }, []);
+
   const fetchVehicles = useCallback(async () => {
     try {
       const res = await fetch("/api/vehicles");
@@ -81,8 +119,9 @@ export default function InsuranceView() {
 
   useEffect(() => {
     fetchClaims();
+    fetchReminders();
     fetchVehicles();
-  }, [fetchClaims, fetchVehicles]);
+  }, [fetchClaims, fetchReminders, fetchVehicles]);
 
   const handleReportAccident = async () => {
     if (!newVehicleId) return;
@@ -200,98 +239,133 @@ export default function InsuranceView() {
             Suivi des véhicules accidentés, étapes du garage et restitution flotte.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setIsReporting(!isReporting);
-            if (isReporting) {
-              setNewVehicleId("");
-              setVehicleSearch("");
-              setIsDropdownOpen(false);
-            }
-          }}
-          className="px-4 py-2.5 bg-red-600 text-white font-bold text-sm rounded-xl hover:bg-red-700 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
-        >
-          <span>{isReporting ? "✕ Annuler" : "🚨 Déclarer un Accident"}</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setIsReminderModalOpen(true)}
+            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Calendar className="w-4 h-4 text-white" />
+            <span>⏰ Programmer Rappel Réparation</span>
+          </button>
+          <button
+            onClick={() => {
+              setIsReporting(!isReporting);
+              if (isReporting) {
+                setNewVehicleId("");
+                setVehicleSearch("");
+                setIsDropdownOpen(false);
+              }
+            }}
+            className="px-4 py-2.5 bg-red-600 text-white font-bold text-sm rounded-xl hover:bg-red-700 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <span>{isReporting ? "✕ Annuler" : "🚨 Déclarer un Accident"}</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Summary Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {/* Card 1: Total Active Accidents */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
             <Car className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-2xl font-black text-navy">{totalActive}</div>
-            <div className="text-xs font-bold text-gray-600 truncate">Véhicules Accidentés</div>
+            <div className="text-xl font-black text-navy">{totalActive}</div>
+            <div className="text-2xs font-bold text-gray-600 truncate">Véhicules Accidentés</div>
             <div className="text-3xs text-red-600 font-semibold">Hors service actif</div>
           </div>
         </div>
 
         {/* Card 2: Severity Split */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-2xl font-black text-navy flex items-baseline gap-1.5">
+            <div className="text-xl font-black text-navy flex items-baseline gap-1">
               <span className="text-red-600">{hardCount}</span>
               <span className="text-xs font-medium text-gray-400">/</span>
               <span className="text-amber-600">{softCount}</span>
             </div>
-            <div className="text-xs font-bold text-gray-600 truncate">Lourde / Légère</div>
-            <div className="text-3xs text-gray-400 font-medium">Répartition structurelle</div>
+            <div className="text-2xs font-bold text-gray-600 truncate">Lourde / Légère</div>
+            <div className="text-3xs text-gray-400 font-medium">Répartition</div>
           </div>
         </div>
 
         {/* Card 3: Average Downtime */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
             <Clock className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-2xl font-black text-navy">
-              {avgDowntimeDays} <span className="text-xs font-bold text-gray-500">jours</span>
+            <div className="text-xl font-black text-navy">
+              {avgDowntimeDays} <span className="text-xs font-bold text-gray-500">j</span>
             </div>
-            <div className="text-xs font-bold text-gray-600 truncate">Durée Moyenne d&apos;Arrêt</div>
-            <div className="text-3xs text-gray-400 font-medium">Temps d&apos;immobilisation</div>
+            <div className="text-2xs font-bold text-gray-600 truncate">Durée d&apos;Arrêt</div>
+            <div className="text-3xs text-gray-400 font-medium">Temps immobilisé</div>
           </div>
         </div>
 
         {/* Card 4: Insurance Docs Pending */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
             <FileText className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-2xl font-black text-navy">{insuranceDocsCount}</div>
-            <div className="text-xs font-bold text-gray-600 truncate">Attente Assurance</div>
+            <div className="text-xl font-black text-navy">{insuranceDocsCount}</div>
+            <div className="text-2xs font-bold text-gray-600 truncate">Attente Assurance</div>
             <div className="text-3xs text-purple-700 font-semibold">Devis / Expertises</div>
           </div>
         </div>
 
-        {/* Card 5: Ready for Pickup & Missions Telegram */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3.5 col-span-2 sm:col-span-1">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-            <span className="text-xl">🚗</span>
+        {/* Card 5: Ready for Pickup */}
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+            <span className="text-lg">🚗</span>
           </div>
           <div className="min-w-0">
-            <div className="text-2xl font-black text-navy flex items-baseline gap-1.5">
-              <span className="text-emerald-600">{readyForPickupCount}</span>
-              {activeTelegramMissionsCount > 0 && (
-                <span
-                  className="text-2xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex items-center gap-0.5"
-                  title={`${activeTelegramMissionsCount} mission(s) terrain Telegram active(s)`}
-                >
-                  <span>📱</span>
-                  <span>{activeTelegramMissionsCount}</span>
+            <div className="text-xl font-black text-navy">{readyForPickupCount}</div>
+            <div className="text-2xs font-bold text-gray-600 truncate">Prêts Récupération</div>
+            <div className="text-3xs text-emerald-700 font-semibold truncate">
+              {readyForPickupCount > 0 ? "Alerte envoyée" : "En attente"}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 6: Repair Reminders (New) */}
+        <div
+          onClick={() => setActiveTab("reminders")}
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs flex items-center gap-3 ${
+            remindersSummary.due_or_overdue > 0
+              ? "bg-red-50/70 border-red-300 hover:border-red-500 animate-pulse"
+              : activeTab === "reminders"
+              ? "bg-amber-50/70 border-amber-300"
+              : "bg-white border-gray-200 hover:border-amber-300"
+          }`}
+          title="Cliquez pour voir les rappels de réparations et dépôts au garage"
+        >
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+              remindersSummary.due_or_overdue > 0
+                ? "bg-red-600 text-white border-red-500"
+                : "bg-amber-50 text-amber-600 border-amber-200"
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xl font-black text-navy flex items-baseline gap-1">
+              <span>{reminders.length}</span>
+              {remindersSummary.due_or_overdue > 0 && (
+                <span className="text-3xs font-extrabold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
+                  {remindersSummary.due_or_overdue} dû(s)
                 </span>
               )}
             </div>
-            <div className="text-xs font-bold text-gray-600 truncate">Prêts Récupération</div>
-            <div className="text-3xs text-emerald-700 font-semibold truncate">
-              {readyForPickupCount > 0 ? "Alerte Telegram transmise" : "En attente fin garage"}
+            <div className="text-2xs font-bold text-gray-700 truncate">Rappels Réparations</div>
+            <div className="text-3xs text-amber-700 font-semibold truncate">
+              {remindersSummary.due_or_overdue > 0 ? "⚠️ Dépôt urgent requis" : "Passages garage"}
             </div>
           </div>
         </div>
@@ -397,9 +471,13 @@ export default function InsuranceView() {
                                 <div className="text-xs font-bold text-gray-800">
                                   {v.make_model || "Véhicule"}
                                 </div>
-                                <div className="text-3xs text-gray-400 flex items-center gap-1.5">
+                                <div className="text-3xs text-gray-400 flex items-center gap-1.5 flex-wrap">
                                   <span>📍 {v.hub_city || "Casablanca"}</span>
-                                  {v.assigned_driver_name && <span>· 👤 {v.assigned_driver_name}</span>}
+                                  {v.assigned_driver_name && (
+                                    <span className={v.is_driver_red_flagged ? "text-red-600 font-bold" : ""}>
+                                      · 👤 {v.assigned_driver_name} {v.is_driver_red_flagged ? "🚩 [RED FLAG]" : ""}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -544,12 +622,12 @@ export default function InsuranceView() {
         </div>
       </div>
 
-      {/* Tabs: Dossiers En Cours vs Véhicules Rétablis */}
-      <div className="flex items-center gap-3 border-b border-gray-200 pb-3 mb-6">
+      {/* Tabs: Dossiers En Cours vs Rappels Réparations vs Véhicules Rétablis */}
+      <div className="flex items-center gap-3 border-b border-gray-200 pb-3 mb-6 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab("open")}
-          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
+          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
             activeTab === "open"
               ? "bg-navy text-white shadow-md shadow-navy/20"
               : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
@@ -568,8 +646,34 @@ export default function InsuranceView() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("reminders")}
+          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
+            activeTab === "reminders"
+              ? "bg-navy text-white shadow-md shadow-navy/20"
+              : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+          }`}
+        >
+          <span>⏰</span>
+          <span>Rappels Réparations & Dépôt Garage</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
+              remindersSummary.due_or_overdue > 0
+                ? "bg-red-600 text-white animate-pulse"
+                : activeTab === "reminders"
+                ? "bg-white/20 text-white"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {remindersSummary.due_or_overdue > 0
+              ? `⚠️ ${remindersSummary.due_or_overdue} Dû(s)`
+              : reminders.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("restored")}
-          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
+          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
             activeTab === "restored"
               ? "bg-navy text-white shadow-md shadow-navy/20"
               : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
@@ -627,6 +731,140 @@ export default function InsuranceView() {
                 </div>
               )}
             </div>
+          ) : activeTab === "reminders" ? (
+            <div className="space-y-5">
+              {/* Reminders Filter & Action Toolbar */}
+              <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setFilterReminderStatus("ALL")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      filterReminderStatus === "ALL"
+                        ? "bg-navy text-white shadow-2xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Tous ({reminders.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReminderStatus("DUE")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                      filterReminderStatus === "DUE"
+                        ? "bg-red-600 text-white shadow-2xs font-black"
+                        : "bg-red-50 text-red-800 border border-red-200 hover:bg-red-100"
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3 text-red-600" />
+                    <span>🚨 Échus / À déposer ({remindersSummary.due_or_overdue})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReminderStatus("PENDING")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      filterReminderStatus === "PENDING"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+                    }`}
+                  >
+                    ⏳ En attente ({remindersSummary.pending})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReminderStatus("IN_REPAIR")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      filterReminderStatus === "IN_REPAIR"
+                        ? "bg-purple-600 text-white shadow-2xs"
+                        : "bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100"
+                    }`}
+                  >
+                    🔧 Au garage ({remindersSummary.in_repair})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReminderStatus("COMPLETED")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      filterReminderStatus === "COMPLETED"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                    }`}
+                  >
+                    ✅ Réparés ({remindersSummary.completed})
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsReminderModalOpen(true)}
+                    className="px-4 py-2 bg-navy hover:bg-navy/90 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ml-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Nouveau Rappel Réparation</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Reminders Cards Grid */}
+              {(() => {
+                const filteredRemindersList = reminders.filter((r) => {
+                  if (filterReminderStatus === "DUE" && !r.is_due_or_overdue) return false;
+                  if (filterReminderStatus === "PENDING" && r.status !== "PENDING") return false;
+                  if (filterReminderStatus === "IN_REPAIR" && r.status !== "IN_REPAIR") return false;
+                  if (filterReminderStatus === "COMPLETED" && r.status !== "COMPLETED") return false;
+
+                  if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase().trim();
+                    const matchPlate = r.plate_number.toLowerCase().includes(q);
+                    const matchModel = r.vehicle_make_model?.toLowerCase().includes(q) || false;
+                    const matchDriver = r.driver_name?.toLowerCase().includes(q) || false;
+                    const matchGarage = r.garage_name?.toLowerCase().includes(q) || false;
+                    const matchType = r.repair_type.toLowerCase().includes(q);
+                    const matchTitle = r.title.toLowerCase().includes(q);
+                    if (!matchPlate && !matchModel && !matchDriver && !matchGarage && !matchType && !matchTitle) return false;
+                  }
+
+                  return true;
+                });
+
+                if (filteredRemindersList.length === 0) {
+                  return (
+                    <div className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center text-gray-400 space-y-3">
+                      <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+                        <Calendar className="w-7 h-7" />
+                      </div>
+                      <h3 className="text-base font-bold text-gray-800">
+                        Aucun rappel de réparation trouvé
+                      </h3>
+                      <p className="text-xs text-gray-500 max-w-md mx-auto">
+                        Programmez un rappel pour qu&apos;un véhicule aille au garage avec photos des chocs, date d&apos;échéance et alerte automatique.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsReminderModalOpen(true)}
+                        className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm inline-flex items-center gap-1.5 cursor-pointer mt-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Programmer un Rappel Réparation</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {filteredRemindersList.map((reminder) => (
+                      <RepairReminderCard
+                        key={reminder.id}
+                        reminder={reminder}
+                        onUpdate={fetchReminders}
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
           ) : (
             <div>
               {historyFiltered.length === 0 ? (
@@ -662,6 +900,14 @@ export default function InsuranceView() {
           )}
         </div>
       )}
+
+      {/* Repair Reminder Modal */}
+      <RepairReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={() => setIsReminderModalOpen(false)}
+        onSuccess={fetchReminders}
+        vehicles={vehicles}
+      />
     </div>
   );
 }

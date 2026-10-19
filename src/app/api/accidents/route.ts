@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 export async function GET() {
   try {
@@ -235,10 +236,23 @@ export async function GET() {
       }
     }
 
-    const claimsWithTasks = finalClaims.map((claim) => ({
-      ...claim,
-      fieldTask: fieldTasksByClaimId.get(claim.id) || null,
-    }));
+    const redFlagsLookup = await getActiveRedFlagsLookup();
+
+    const claimsWithTasks = finalClaims.map((claim) => {
+      const flagCheck = redFlagsLookup.checkDriver({
+        id: claim.driver_id || claim.driver?.id,
+        name: claim.driver_name || claim.driver?.fullName,
+        phone: claim.driver_phone || claim.driver?.phoneSanitized,
+        cin: claim.driver?.cinNumber,
+      });
+
+      return {
+        ...claim,
+        is_driver_red_flagged: Boolean(claim.driver?.isRedFlagged || flagCheck.isRedFlagged),
+        driver_red_flag_reason: claim.driver?.redFlagReason || flagCheck.reason,
+        fieldTask: fieldTasksByClaimId.get(claim.id) || null,
+      };
+    });
 
     return NextResponse.json({ success: true, claims: claimsWithTasks });
   } catch (error: any) {

@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     const daysCount = daysInRange.length;
 
     // Fetch all drivers with assigned vehicle and payment ledger in date range
-    const [drivers, allVehicles] = await Promise.all([
+    const [drivers, allVehicles, redFlagsLookup] = await Promise.all([
       prisma.driverProfile.findMany({
         where: {
           is_archived: false,
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
           assigned_collector: true,
         },
       }),
+      getActiveRedFlagsLookup(),
     ]);
 
     // Build fallback lookup maps for vehicles by driver phone and name
@@ -277,6 +279,15 @@ export async function GET(request: NextRequest) {
       const todayComments = driverComments.filter((c) => c.commentDate === targetDateKey);
       const todayComment = todayComments[0] || null;
 
+      const rfCheck = redFlagsLookup.checkDriver({
+        id: driver.id,
+        name: driver.fullName,
+        phone: driver.phoneSanitized,
+        cin: driver.cinNumber,
+      });
+      const isRedFlagged = Boolean(driver.isRedFlagged || rfCheck.isRedFlagged);
+      const redFlagReason = driver.redFlagReason || rfCheck.reason || null;
+
       driverList.push({
         id: driver.id,
         fullName: driver.fullName,
@@ -292,6 +303,8 @@ export async function GET(request: NextRequest) {
         excelBalance: rawExcelBalance,
         consecutiveUnpaidDays: (hasMorningCsv || hasEveningCsv) ? unpaidDays : 0,
         isCriticalRed,
+        isRedFlagged,
+        redFlagReason,
         expectedTodayMAD,
         clearedTodayMAD,
         isPaidToday,
