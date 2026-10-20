@@ -5,6 +5,7 @@ import {
   sendFieldTaskCancelledTelegramAlert,
   sendFieldTaskCompletedTelegramAlert,
   sendFieldTaskAssignedTelegramAlert,
+  sendFieldTaskTelegramAlert,
 } from "@/lib/services/telegramService";
 
 /**
@@ -275,5 +276,35 @@ export async function DELETE(
   } catch (error: any) {
     console.error("DELETE /api/field-tasks/[id] error:", error);
     return NextResponse.json({ error: error?.message || "Failed to delete field task" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/field-tasks/[id]
+ * Re-dispatches or sends Telegram alert for a specific mission on demand
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const task = await prisma.fieldTask.findUnique({ where: { id } });
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const sender = body.sender || "Agent GoCab";
+
+    await sendFieldTaskTelegramAlert({
+      ...task,
+      triggered_by: sender,
+    });
+
+    return NextResponse.json({ success: true, message: "Alerte Telegram envoyée avec succès" });
+  } catch (error: any) {
+    console.error("POST /api/field-tasks/[id] error:", error);
+    return NextResponse.json({ error: error?.message || "Erreur lors de l'envoi Telegram" }, { status: 500 });
   }
 }

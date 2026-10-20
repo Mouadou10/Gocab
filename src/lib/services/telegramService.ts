@@ -30,9 +30,26 @@ async function getTelegramConfig() {
 }
 
 /**
- * Sends a generic message to the configured Telegram chat/group
+ * Returns the base public URL of the CRM web application
  */
-export async function sendTelegramMessage(text: string, customToken?: string, customChatId?: string): Promise<{ success: boolean; error?: string }> {
+export function getAppBaseUrl(): string {
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, "");
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "https://gocab-crm.vercel.app";
+}
+
+/**
+ * Sends a message to the configured Telegram chat/group with optional inline keyboard buttons
+ */
+export async function sendTelegramMessage(
+  text: string,
+  replyMarkup?: any,
+  customToken?: string,
+  customChatId?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const config = await getTelegramConfig();
     const token = customToken || config.botToken;
@@ -42,20 +59,27 @@ export async function sendTelegramMessage(text: string, customToken?: string, cu
       return { success: false, error: "Token du bot ou Chat ID non configuré." };
     }
 
+    const payload: any = {
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    };
+
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
 
     if (!response.ok || !data.ok) {
+      console.warn("Telegram API response warning:", data);
       return { success: false, error: data.description || "Erreur Telegram API." };
     }
 
@@ -78,6 +102,9 @@ export async function sendFieldTaskTelegramAlert(task: {
   description: string;
   priority?: string;
   triggered_by?: string | null;
+  assigned_to?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
 }): Promise<void> {
   try {
     const config = await getTelegramConfig();
@@ -102,7 +129,9 @@ export async function sendFieldTaskTelegramAlert(task: {
       `🚗 <b>Véhicule :</b> <code>${task.plate_number || "Non assigné"}</code>`,
       `👤 <b>Chauffeur :</b> <b>${task.driver_name || "Non spécifié"}</b>`,
       task.driver_phone ? `📞 <b>Téléphone :</b> <a href="tel:${task.driver_phone}">${task.driver_phone}</a>` : null,
-      task.triggered_by ? `👮 <b>Déclenché par :</b> <b>${task.triggered_by}</b>` : null,
+      task.assigned_to ? `👮 <b>Assigné à :</b> <b>${task.assigned_to}</b> (Superviseur Terrain)` : null,
+      task.scheduled_time ? `🕒 <b>Créneau horaire :</b> <b>${task.scheduled_time}</b>` : null,
+      task.triggered_by ? `🧑‍💼 <b>Déclenché par :</b> <b>${task.triggered_by}</b>` : null,
       `⚠️ <b>Priorité :</b> ${task.priority === "Critical" ? "🔴 Critique" : task.priority === "Urgent" ? "🟠 Urgent" : "🟡 Normal"}`,
       `\n📝 <b>Détails de la mission :</b>`,
       `<i>${task.description}</i>`,
@@ -112,7 +141,30 @@ export async function sendFieldTaskTelegramAlert(task: {
       .filter(Boolean)
       .join("\n");
 
-    await sendTelegramMessage(message);
+    const baseUrl = getAppBaseUrl();
+    const taskParam = task.id ? `taskId=${task.id}` : "";
+    const agentParam = task.assigned_to ? `agent=${encodeURIComponent(task.assigned_to)}` : "";
+    const query = [taskParam, agentParam].filter(Boolean).join("&");
+    const missionUrl = `${baseUrl}/field-missions${query ? `?${query}` : ""}`;
+    const agendaUrl = `${baseUrl}/field-missions${agentParam ? `?${agentParam}` : ""}`;
+
+    const inlineKeyboard: any[][] = [
+      [
+        { text: "📱 Ouvrir la Mission", url: missionUrl },
+        { text: "📋 Agenda Terrain", url: agendaUrl },
+      ],
+    ];
+
+    if (task.driver_phone) {
+      const cleanPhone = task.driver_phone.replace(/[^0-9]/g, "");
+      const waNumber = cleanPhone.startsWith("0") ? "212" + cleanPhone.slice(1) : cleanPhone.startsWith("212") ? cleanPhone : "212" + cleanPhone;
+      inlineKeyboard.push([
+        { text: "📞 Appeler Chauffeur", url: `tel:${task.driver_phone}` },
+        { text: "💬 WhatsApp Chauffeur", url: `https://wa.me/${waNumber}?text=${encodeURIComponent(`Bonjour ${task.driver_name || ""}, je vous contacte de la part de GoCab concernant votre véhicule ${task.plate_number || ""}.`)}` },
+      ]);
+    }
+
+    await sendTelegramMessage(message, { inline_keyboard: inlineKeyboard });
   } catch (err) {
     console.error("Failed to send field task Telegram alert:", err);
   }
@@ -248,7 +300,15 @@ export async function sendCarReadyTelegramAlert(data: {
       .filter(Boolean)
       .join("\n");
 
-    await sendTelegramMessage(message);
+    const baseUrl = getAppBaseUrl();
+    const inlineKeyboard = [
+      [
+        { text: "🚗 Reprendre Véhicule", url: `${baseUrl}/field-missions?search=${encodeURIComponent(data.plate_number)}` },
+        { text: "📋 Agenda Terrain", url: `${baseUrl}/field-missions${data.assigned_to ? `?agent=${encodeURIComponent(data.assigned_to)}` : ""}` },
+      ],
+    ];
+
+    await sendTelegramMessage(message, { inline_keyboard: inlineKeyboard });
   } catch (err) {
     console.error("Failed to send car ready Telegram alert:", err);
   }
@@ -319,7 +379,15 @@ export async function sendInsuranceMissionTelegramAlert(mission: {
       .filter(Boolean)
       .join("\n");
 
-    await sendTelegramMessage(message);
+    const baseUrl = getAppBaseUrl();
+    const inlineKeyboard = [
+      [
+        { text: "📱 Traiter la Mission", url: `${baseUrl}/field-missions?search=${encodeURIComponent(mission.plate_number)}` },
+        { text: "📋 Agenda Terrain", url: `${baseUrl}/field-missions${mission.assigned_to ? `?agent=${encodeURIComponent(mission.assigned_to)}` : ""}` },
+      ],
+    ];
+
+    await sendTelegramMessage(message, { inline_keyboard: inlineKeyboard });
   } catch (err) {
     console.error("Failed to send insurance mission Telegram alert:", err);
   }
@@ -478,7 +546,15 @@ export async function sendFieldTaskAssignedTelegramAlert(data: {
       .filter(Boolean)
       .join("\n");
 
-    await sendTelegramMessage(message);
+    const baseUrl = getAppBaseUrl();
+    const inlineKeyboard = [
+      [
+        { text: "📱 Voir ma Mission", url: `${baseUrl}/field-missions?agent=${encodeURIComponent(data.assigned_to)}` },
+        { text: "📋 Agenda Terrain", url: `${baseUrl}/field-missions` },
+      ],
+    ];
+
+    await sendTelegramMessage(message, { inline_keyboard: inlineKeyboard });
   } catch (err) {
     console.error("Failed to send field task assigned Telegram alert:", err);
   }

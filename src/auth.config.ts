@@ -19,7 +19,8 @@ export const authConfig: NextAuthConfig = {
       const isPublic =
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/_next") ||
-        pathname.startsWith("/favicon");
+        pathname.startsWith("/favicon") ||
+        pathname.startsWith("/field-missions");
 
       if (isPublic) return true;
 
