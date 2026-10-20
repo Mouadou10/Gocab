@@ -16,7 +16,7 @@ async function syncRecoveryTasksAndOrphans() {
   lastSyncTimestamp = now;
 
   try {
-    // 1. Auto-clean orphaned tasks whose linked_ticket_id is no longer present in MaintenanceTicket
+    // 1. Auto-clean orphaned tasks whose linked_ticket_id is no longer present in MaintenanceTicket or AccidentClaim
     const tasksWithLinkedTickets = await prisma.fieldTask.findMany({
       where: { linked_ticket_id: { not: null } },
       select: { id: true, linked_ticket_id: true, vehicle_id: true, plate_number: true, task_type: true },
@@ -24,11 +24,20 @@ async function syncRecoveryTasksAndOrphans() {
 
     if (tasksWithLinkedTickets.length > 0) {
       const allLinkedTicketIds = tasksWithLinkedTickets.map((t) => t.linked_ticket_id as string);
-      const existingTickets = await prisma.maintenanceTicket.findMany({
-        where: { id: { in: allLinkedTicketIds } },
-        select: { id: true },
-      });
-      const validTicketIds = new Set(existingTickets.map((t) => t.id));
+      const [existingTickets, existingClaims] = await Promise.all([
+        prisma.maintenanceTicket.findMany({
+          where: { id: { in: allLinkedTicketIds } },
+          select: { id: true },
+        }),
+        prisma.accidentClaim.findMany({
+          where: { id: { in: allLinkedTicketIds } },
+          select: { id: true },
+        }),
+      ]);
+      const validTicketIds = new Set([
+        ...existingTickets.map((t) => t.id),
+        ...existingClaims.map((c) => c.id),
+      ]);
       const orphanedTasks = tasksWithLinkedTickets.filter((t) => !validTicketIds.has(t.linked_ticket_id!));
 
       if (orphanedTasks.length > 0) {
@@ -156,6 +165,46 @@ async function syncRecoveryTasksAndOrphans() {
             },
           }).catch(() => {});
         }
+      }
+    }
+    // 4. Auto-sync any open READY_FOR_PICKUP accident claims into FieldTask (GARAGE_PICKUP)
+    const readyAccidentClaims = await prisma.accidentClaim.findMany({
+      where: { timeline_step: "READY_FOR_PICKUP" },
+      include: { vehicle: true },
+    });
+
+    for (const claim of readyAccidentClaims) {
+      const plate = claim.vehicle?.plate_number || "Inconnu";
+      const existingTask = await prisma.fieldTask.findFirst({
+        where: {
+          OR: [
+            { linked_ticket_id: claim.id },
+            {
+              task_type: "GARAGE_PICKUP",
+              status: { in: ["PENDING", "IN_PROGRESS"] },
+              OR: [
+                { vehicle_id: claim.vehicle_id },
+                { plate_number: plate },
+              ],
+            },
+          ],
+        },
+      });
+
+      if (!existingTask) {
+        await prisma.fieldTask.create({
+          data: {
+            task_type: "GARAGE_PICKUP",
+            vehicle_id: claim.vehicle_id,
+            plate_number: plate,
+            driver_name: claim.driver_name,
+            driver_phone: claim.driver_phone,
+            description: `Reprise au garage du véhicule réparé (Dossier Sinistre)`,
+            linked_ticket_id: claim.id,
+            status: "PENDING",
+            priority: "Urgent",
+          },
+        }).catch((err) => console.error("Failed to auto-sync GARAGE_PICKUP field task:", err));
       }
     }
   } catch (err: any) {

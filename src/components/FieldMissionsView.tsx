@@ -317,35 +317,43 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
   // Filter tasks based on agent, date, tab, search
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      // Agent filter (if selected)
-      if (selectedAgent && selectedAgent !== "ALL") {
-        const matchesAgent =
-          t.assigned_to === selectedAgent ||
-          (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase())) ||
-          (selectedAgent.toLowerCase().includes((t.assigned_to || "").toLowerCase()) && Boolean(t.assigned_to));
-        if (!matchesAgent) return false;
-      }
-
-      // Date filter: if task is scheduled for this date, or if unscheduled and pending
-      if (selectedDate) {
-        const matchesDate = t.scheduled_date === selectedDate || (!t.scheduled_date && t.status !== "COMPLETED");
-        if (!matchesDate) return false;
-      }
-
-      // Status tab filter
-      if (activeTab === "PENDING" && t.status !== "PENDING") return false;
-      if (activeTab === "IN_PROGRESS" && t.status !== "IN_PROGRESS") return false;
-      if (activeTab === "COMPLETED" && t.status !== "COMPLETED") return false;
-
-      // Search query
-      if (searchQuery.trim()) {
+      // 1. Search query (if searching, allow searching across ALL tasks without agent restrictions)
+      const hasSearch = searchQuery.trim().length > 0;
+      if (hasSearch) {
         const q = searchQuery.toLowerCase().trim();
         const inPlate = (t.plate_number || "").toLowerCase().includes(q);
         const inDriver = (t.driver_name || "").toLowerCase().includes(q);
         const inPhone = (t.driver_phone || "").toLowerCase().includes(q);
         const inDesc = (t.description || "").toLowerCase().includes(q);
         if (!inPlate && !inDriver && !inPhone && !inDesc) return false;
+        // Search match found! Skip date/agent restrictions so user can find any vehicle immediately
+        return true;
       }
+
+      // 2. Agent filter (if selected)
+      if (selectedAgent === "UNASSIGNED") {
+        if (t.assigned_to) return false;
+      } else if (selectedAgent && selectedAgent !== "ALL") {
+        const matchesAgent =
+          t.assigned_to === selectedAgent ||
+          (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase())) ||
+          (selectedAgent.toLowerCase().includes((t.assigned_to || "").toLowerCase()) && Boolean(t.assigned_to));
+        
+        // Also show unassigned tasks waiting for assignment so field agents can see and claim them
+        const isUnassignedPending = !t.assigned_to && t.status !== "COMPLETED";
+        if (!matchesAgent && !isUnassignedPending) return false;
+      }
+
+      // 3. Date filter: if task is scheduled for this date, or if unscheduled and pending
+      if (selectedDate) {
+        const matchesDate = t.scheduled_date === selectedDate || (!t.scheduled_date && t.status !== "COMPLETED");
+        if (!matchesDate) return false;
+      }
+
+      // 4. Status tab filter
+      if (activeTab === "PENDING" && t.status !== "PENDING") return false;
+      if (activeTab === "IN_PROGRESS" && t.status !== "IN_PROGRESS") return false;
+      if (activeTab === "COMPLETED" && t.status !== "COMPLETED") return false;
 
       return true;
     });
@@ -355,9 +363,11 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
   const agentTasks = useMemo(() => {
     return tasks.filter((t) => {
       if (!selectedAgent || selectedAgent === "ALL") return true;
+      if (selectedAgent === "UNASSIGNED") return !t.assigned_to;
       return (
         t.assigned_to === selectedAgent ||
-        (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase()))
+        (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase())) ||
+        (!t.assigned_to && t.status !== "COMPLETED")
       );
     });
   }, [tasks, selectedAgent]);
@@ -709,7 +719,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
               </span>
             </label>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
               <button
                 type="button"
                 onClick={() => setSelectedAgent("ALL")}
@@ -721,6 +731,29 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
               >
                 <span className="truncate">Tous les agents</span>
                 <span className="text-[10px] opacity-70 ml-1">{tasks.length}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAgent("UNASSIGNED")}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border text-left flex items-center justify-between ${
+                  selectedAgent === "UNASSIGNED"
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700/60"
+                }`}
+              >
+                <span className="truncate">⏳ À assigner</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1 ${
+                    selectedAgent === "UNASSIGNED"
+                      ? "bg-white/20 text-white"
+                      : tasks.filter((t) => !t.assigned_to && t.status !== "COMPLETED").length > 0
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 font-extrabold"
+                      : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  {tasks.filter((t) => !t.assigned_to && t.status !== "COMPLETED").length}
+                </span>
               </button>
 
               {supervisors.map((sup) => {
@@ -1040,7 +1073,34 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                       </div>
                     </div>
 
-                    {task.assigned_to && (
+                    {!task.assigned_to ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const agentToAssign =
+                            selectedAgent && selectedAgent !== "ALL" && selectedAgent !== "UNASSIGNED"
+                              ? selectedAgent
+                              : telegramUser || "Ayoub Rassid";
+                          try {
+                            const res = await fetch(`/api/field-tasks/${task.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ assigned_to: agentToAssign, status: "IN_PROGRESS" }),
+                            });
+                            if (res.ok) {
+                              toast.success(`✋ Mission prise en charge par ${agentToAssign} !`);
+                              fetchTasks(true);
+                            }
+                          } catch {
+                            toast.error("Erreur d'attribution");
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                        title="Prendre en charge cette mission"
+                      >
+                        <span>✋ Prendre en charge</span>
+                      </button>
+                    ) : (
                       <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <User className="w-3 h-3 text-slate-400" />
                         <span>{task.assigned_to}</span>
