@@ -14,7 +14,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { formatDisplayPhone, normalizeWhatsAppPhone } from "@/lib/whatsapp";
+import {
+  formatDisplayPhone,
+  normalizeWhatsAppPhone,
+  APPROVED_360_TEMPLATES,
+  formatLeadWhatsAppMessage,
+} from "@/lib/whatsapp";
 
 export interface WhatsAppDirectTarget {
   phoneNumber: string;
@@ -60,12 +65,26 @@ export default function WhatsAppDirectModal({
 
     setIsSending(true);
     try {
+      let templateNameToSend: string | undefined = undefined;
+      let templateLangToSend: string | undefined = undefined;
+      if (target.contactType === "LEAD" || messageText.includes("التدريب")) {
+        if (messageText.includes("الجمعة")) {
+          templateNameToSend = "vendredi";
+          templateLangToSend = "ar";
+        } else {
+          templateNameToSend = "formation";
+          templateLangToSend = "ar";
+        }
+      }
+
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: target.phoneNumber,
           text: messageText.trim(),
+          templateName: templateNameToSend,
+          templateLanguage: templateLangToSend,
           senderName: "GoCab Operations",
         }),
       });
@@ -75,10 +94,15 @@ export default function WhatsAppDirectModal({
         const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setSentSuccessAt(timeNow);
         setDeliveryMode(data.mode || "360DIALOG_WABA");
-        toast.success("✓ Message WhatsApp envoyé directement avec succès !", {
-          icon: "🚀",
-          duration: 4000,
-        });
+        toast.success(
+          templateNameToSend
+            ? `✓ Modèle 360dialog "${templateNameToSend}" envoyé avec succès !`
+            : "✓ Message WhatsApp envoyé directement avec succès !",
+          {
+            icon: "🚀",
+            duration: 4000,
+          }
+        );
       } else {
         const errorDetail =
           data.apiError ||
@@ -94,24 +118,41 @@ export default function WhatsAppDirectModal({
     }
   };
 
-  const quickTemplates = [
-    {
-      title: "💰 Relance Impayé",
-      text: `Bonjour ${target.contactName},\n\nNous vous contactons concernant votre versement GoCab (${target.plateNumber ? `véhicule ${target.plateNumber}` : "votre contrat"}).\nVotre solde d'impayé actuel est de : ${target.arrearsMAD || 0} MAD.\nMerci de procéder à la régularisation dès aujourd'hui afin d'éviter toute suspension de contrat.\n\nL'équipe GoCab Operations.`,
-    },
-    {
-      title: "🚨 Alerte 3e Jour",
-      text: `Bonjour ${target.contactName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule ${target.plateNumber || ""}.\nSolde dû : ${target.arrearsMAD || 0} MAD.\nSans versement immédiat avant 18h, le protocole d'immobilisation et de récupération du véhicule sera automatiquement enclenché.\n\nL'équipe GoCab Contentieux.`,
-    },
-    {
-      title: "🎓 Convocation Formation",
-      text: `Bonjour ${target.contactName},\n\nVotre session de formation chauffeur GoCab est programmée au siège GoCab.\nDocuments obligatoires à présenter :\n- CIN originale\n- Permis de conduire\n- Fiche anthropométrique récente\n\nMerci de nous confirmer votre présence par retour de message.\nGoCab Recrutement.`,
-    },
-    {
-      title: "📁 Documents Manquants",
-      text: `Bonjour ${target.contactName},\n\nAfin de finaliser votre dossier chauffeur GoCab et vous attribuer votre véhicule, merci de nous transmettre les pièces manquantes directement en photo sur ce numéro WhatsApp.\n\nL'équipe GoCab.`,
-    },
-  ];
+  const quickTemplates = target.contactType === "LEAD"
+    ? APPROVED_360_TEMPLATES.map((tmpl) => ({
+        title: `${tmpl.icon} ${tmpl.title}`,
+        text: formatLeadWhatsAppMessage(tmpl.template, {
+          name: target.contactName,
+          city: "Casablanca",
+          templateId: tmpl.id,
+        }),
+      }))
+    : [
+        {
+          title: "💰 Relance Impayé",
+          text: `Bonjour ${target.contactName},\n\nNous vous contactons concernant votre versement GoCab (${target.plateNumber ? `véhicule ${target.plateNumber}` : "votre contrat"}).\nVotre solde d'impayé actuel est de : ${target.arrearsMAD || 0} MAD.\nMerci de procéder à la régularisation dès aujourd'hui afin d'éviter toute suspension de contrat.\n\nL'équipe GoCab Operations.`,
+        },
+        {
+          title: "🚨 Alerte 3e Jour",
+          text: `Bonjour ${target.contactName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule ${target.plateNumber || ""}.\nSolde dû : ${target.arrearsMAD || 0} MAD.\nSans versement immédiat avant 18h, le protocole d'immobilisation et de récupération du véhicule sera automatiquement enclenché.\n\nL'équipe GoCab Contentieux.`,
+        },
+        {
+          title: "🎓 Formation (360dialog ar)",
+          text: formatLeadWhatsAppMessage(APPROVED_360_TEMPLATES[0].template, {
+            name: target.contactName,
+            city: "Casablanca",
+            templateId: "formation",
+          }),
+        },
+        {
+          title: "🕌 Formation Vendredi (360dialog ar)",
+          text: formatLeadWhatsAppMessage(APPROVED_360_TEMPLATES[1].template, {
+            name: target.contactName,
+            city: "Casablanca",
+            templateId: "vendredi",
+          }),
+        },
+      ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/60 backdrop-blur-xs animate-fadeIn">

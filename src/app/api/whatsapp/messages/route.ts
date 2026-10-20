@@ -61,7 +61,16 @@ export async function POST(request: NextRequest) {
   try {
     await ensureWhatsAppTables();
     const body = await request.json();
-    const { conversationId, phoneNumber, text, senderName, mediaUrl, mediaType } = body;
+    const {
+      conversationId,
+      phoneNumber,
+      text,
+      senderName,
+      mediaUrl,
+      mediaType,
+      templateName,
+      templateLanguage,
+    } = body;
 
     const messageText = (text && text.trim()) || (mediaUrl ? "📷 Photo" : "");
     if (!messageText && !mediaUrl) {
@@ -94,6 +103,8 @@ export async function POST(request: NextRequest) {
       senderName: senderName || "GoCab Operations",
       mediaUrl: mediaUrl || undefined,
       mediaType: mediaType || (mediaUrl ? "image" : undefined),
+      templateName: templateName || undefined,
+      templateLanguage: templateLanguage || undefined,
     });
 
     return NextResponse.json({

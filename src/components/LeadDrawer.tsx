@@ -18,6 +18,9 @@ import {
   getTemplateForLeadStatus,
   formatLeadWhatsAppMessage,
   generateWhatsAppWebURL,
+  APPROVED_360_TEMPLATES,
+  getApproved360Template,
+  resolve360TemplateByDate,
   LEAD_STATUS_TEMPLATES,
   LeadStatusTemplateDef,
 } from "@/lib/whatsapp";
@@ -269,91 +272,77 @@ export default function LeadDrawer({
   // Active status key based on board
   const activeStatusKey = boardType === "leads" ? (brandStatus || "NEW_LEADS") : (trainingStatus || "Scheduled");
 
+  // Determine approved 360dialog template ("formation" vs "vendredi")
+  const default360Tpl = resolve360TemplateByDate(trainingDate || recallDate);
+
   // Re-generate or update template text when active status or context fields change
   useEffect(() => {
     if (isManualEdit) return;
 
-    const resolvedTemplate = getTemplateForLeadStatus(
-      boardType,
-      activeStatusKey,
-      whatsappTemplate,
-      whatsappMissingDocsTemplate
-    );
+    // Default to approved 360dialog template
+    const targetTplId = (selectedTemplateId === "formation" || selectedTemplateId === "vendredi")
+      ? selectedTemplateId
+      : default360Tpl.id;
 
-    setSelectedTemplateId(resolvedTemplate.id);
+    const activeTpl = getApproved360Template(targetTplId);
+    setSelectedTemplateId(activeTpl.id);
 
-    const formatted = formatLeadWhatsAppMessage(resolvedTemplate.template, {
+    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
       name: lead.raw_name,
       city: city || lead.city || "Casablanca",
       date: trainingDate || recallDate || "",
       time: recallTime ? recallTime : undefined,
       missingDocs: missingDocsList,
-      amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
+      templateId: activeTpl.id,
     });
 
     setWaMessageText(formatted);
   }, [
-    activeStatusKey,
-    boardType,
-    city,
     trainingDate,
     recallDate,
     recallTime,
+    city,
+    isManualEdit,
+    lead.raw_name,
+    lead.city,
     hasCin,
     hasFiche,
     hasConfirmation,
     hasPermis,
-    preorderAmount,
-    whatsappTemplate,
-    whatsappMissingDocsTemplate,
-    isManualEdit,
   ]);
 
-  // Handle template selection from dropdown
+  // Handle template selection from dropdown (Only approved 360dialog templates: "formation" or "vendredi")
   const handleSelectCustomTemplate = (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    const found = LEAD_STATUS_TEMPLATES.find((t) => t.id === templateId);
-    if (found) {
-      let tmplText = found.template;
-      if (found.id === "LEADS_TRAINING_FIXED" && whatsappTemplate?.trim()) {
-        tmplText = whatsappTemplate.trim();
-      } else if (found.id === "TRAINING_PENDING_KYC" && whatsappMissingDocsTemplate?.trim()) {
-        tmplText = whatsappMissingDocsTemplate.trim();
-      }
+    const activeTpl = getApproved360Template(templateId);
+    setSelectedTemplateId(activeTpl.id);
 
-      const formatted = formatLeadWhatsAppMessage(tmplText, {
-        name: lead.raw_name,
-        city: city || lead.city || "Casablanca",
-        date: trainingDate || recallDate || "",
-        time: recallTime ? recallTime : undefined,
-        missingDocs: missingDocsList,
-        amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
-      });
-      setWaMessageText(formatted);
-      setIsManualEdit(false);
-    }
-  };
-
-  // Reset template to active status default
-  const handleResetTemplate = () => {
-    setIsManualEdit(false);
-    const resolvedTemplate = getTemplateForLeadStatus(
-      boardType,
-      activeStatusKey,
-      whatsappTemplate,
-      whatsappMissingDocsTemplate
-    );
-    setSelectedTemplateId(resolvedTemplate.id);
-    const formatted = formatLeadWhatsAppMessage(resolvedTemplate.template, {
+    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
       name: lead.raw_name,
       city: city || lead.city || "Casablanca",
       date: trainingDate || recallDate || "",
       time: recallTime ? recallTime : undefined,
       missingDocs: missingDocsList,
-      amount: preorderAmount ? `${preorderAmount} MAD` : undefined,
+      templateId: activeTpl.id,
     });
     setWaMessageText(formatted);
-    toast.success("Modèle réinitialisé au statut actif");
+    setIsManualEdit(false);
+  };
+
+  // Reset template to default approved 360dialog template
+  const handleResetTemplate = () => {
+    setIsManualEdit(false);
+    const activeTpl = resolve360TemplateByDate(trainingDate || recallDate);
+    setSelectedTemplateId(activeTpl.id);
+    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
+      name: lead.raw_name,
+      city: city || lead.city || "Casablanca",
+      date: trainingDate || recallDate || "",
+      time: recallTime ? recallTime : undefined,
+      missingDocs: missingDocsList,
+      templateId: activeTpl.id,
+    });
+    setWaMessageText(formatted);
+    toast.success(`Modèle réinitialisé à "${activeTpl.title}"`);
   };
 
   // Fetch recent message history with this lead
@@ -388,7 +377,7 @@ export default function LeadDrawer({
     fetchRecentWaMessages();
   }, [lead?.sanitized_phone]);
 
-  // Send message via GoCab WhatsApp CRM API (Meta Cloud API / DB CRM)
+  // Send message via GoCab WhatsApp CRM API (Meta Cloud API / 360dialog Official Template)
   const handleSendWhatsAppApi = async () => {
     if (!waMessageText.trim()) {
       toast.error("Le message WhatsApp est vide");
@@ -396,12 +385,15 @@ export default function LeadDrawer({
     }
     setIsSendingWa(true);
     try {
+      const templateNameToUse = selectedTemplateId === "vendredi" ? "vendredi" : "formation";
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: lead.sanitized_phone,
           text: waMessageText.trim(),
+          templateName: templateNameToUse,
+          templateLanguage: "ar",
           senderName: session?.user?.name || session?.user?.email || "GoCab Operations",
         }),
       });
@@ -410,8 +402,8 @@ export default function LeadDrawer({
       if (res.ok && data.success) {
         const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setWaSentSuccessAt(timeNow);
-        setWaDeliveryMode(data.mode || "SENT");
-        toast.success("✓ Message WhatsApp envoyé avec succès !");
+        setWaDeliveryMode(data.mode || "360DIALOG_WABA");
+        toast.success(`✓ Modèle officiel 360dialog "${templateNameToUse}" envoyé avec succès !`);
         fetchRecentWaMessages();
         // Consigner l'envoi dans le journal d'activité
         fetch(`/api/leads/${lead.id}/activity`, {
@@ -419,12 +411,12 @@ export default function LeadDrawer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "WHATSAPP_SENT",
-            detail: `Message WhatsApp envoyé : "${waMessageText.slice(0, 60)}${waMessageText.length > 60 ? "..." : ""}"`,
+            detail: `Modèle 360dialog (${templateNameToUse}) envoyé : "${waMessageText.slice(0, 60)}${waMessageText.length > 60 ? "..." : ""}"`,
             agent: session?.user?.name || session?.user?.email || "Agent",
           }),
         }).then(() => fetchActivityLog()).catch(() => {});
       } else {
-        toast.error(data.error || "Échec d'envoi du message WhatsApp");
+        toast.error(data.error || data.apiError || "Échec d'envoi du message WhatsApp");
       }
     } catch (err: any) {
       console.error("Send WhatsApp error:", err);
@@ -1273,14 +1265,15 @@ export default function LeadDrawer({
               </button>
             </div>
 
-            {/* Template Selector & Status Indicator */}
+            {/* Template Selector & 360dialog Approved Badge */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-2xs">
-                <label className="font-bold text-emerald-950 flex items-center gap-1">
-                  <span>⚡</span> Modèle adapté au statut :
+                <label className="font-bold text-emerald-950 flex items-center gap-1.5">
+                  <span>⚡</span> Modèles officiels 360dialog :
                 </label>
-                <span className="font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
-                  {activeStatusKey || "Statut actuel"}
+                <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  2 Modèles Approuvés (ar)
                 </span>
               </div>
 
@@ -1288,38 +1281,21 @@ export default function LeadDrawer({
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => handleSelectCustomTemplate(e.target.value)}
-                  className="w-full bg-white border border-emerald-200 rounded-xl px-2.5 py-1.5 text-xs text-gray-800 font-medium focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                  className="w-full bg-white border border-emerald-200 rounded-xl px-2.5 py-1.5 text-xs text-gray-800 font-semibold focus:ring-2 focus:ring-emerald-400 focus:outline-none"
                 >
-                  <optgroup label="Modèle recommandé pour ce statut">
-                    {(() => {
-                      const matched = getTemplateForLeadStatus(
-                        boardType,
-                        activeStatusKey,
-                        whatsappTemplate,
-                        whatsappMissingDocsTemplate
-                      );
-                      return (
-                        <option value={matched.id}>
-                          {matched.icon} {matched.title} (Recommandé)
-                        </option>
-                      );
-                    })()}
-                  </optgroup>
-                  <optgroup label="Autres modèles disponibles">
-                    {LEAD_STATUS_TEMPLATES.map((tmpl) => (
-                      <option key={tmpl.id} value={tmpl.id}>
-                        {tmpl.icon} {tmpl.title} ({tmpl.category})
-                      </option>
-                    ))}
-                  </optgroup>
+                  {APPROVED_360_TEMPLATES.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.icon} {tmpl.title} · {tmpl.language.toUpperCase()} ({tmpl.category})
+                    </option>
+                  ))}
                 </select>
 
                 {isManualEdit && (
                   <button
                     type="button"
                     onClick={handleResetTemplate}
-                    title="Réinitialiser au texte initial du statut"
-                    className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-3xs font-bold shrink-0 transition-colors"
+                    title="Réinitialiser au texte initial approuvé 360dialog"
+                    className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-3xs font-bold shrink-0 transition-colors cursor-pointer"
                   >
                     ↺ Reset
                   </button>
@@ -1365,7 +1341,11 @@ export default function LeadDrawer({
                   <span>✓</span> Message WhatsApp envoyé à {waSentSuccessAt}
                 </span>
                 <span className="text-3xs font-mono bg-white px-1.5 py-0.5 rounded text-emerald-800">
-                  {waDeliveryMode === "META_CLOUD_API" ? "Meta API Direct" : "GoCab CRM"}
+                  {waDeliveryMode === "360DIALOG_WABA"
+                    ? "360dialog WABA"
+                    : waDeliveryMode === "META_GRAPH_API" || waDeliveryMode === "META_CLOUD_API"
+                    ? "Meta API Direct"
+                    : "GoCab CRM"}
                 </span>
               </div>
             )}

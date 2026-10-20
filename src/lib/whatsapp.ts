@@ -13,6 +13,78 @@ export const DEFAULT_MISSING_DOCS_TEMPLATE =
   "Bonjour {name},\n\nAfin de finaliser votre dossier chauffeur GoCab ({city}) et de vous attribuer votre véhicule, merci de nous transmettre les documents manquants suivants :\n{missing_docs}\n\nVous pouvez nous envoyer des photos bien lisibles directement sur ce numéro WhatsApp.\n\nL'équipe GoCab Recrutement.";
 
 /**
+ * Official Approved 360dialog / WhatsApp Business Cloud API Templates for Lead Acquisition
+ * Sourced directly from Meta WhatsApp Business Manager (Status: Approved, Lang: ar, Category: MARKETING)
+ */
+export interface Approved360TemplateDef {
+  id: "formation" | "vendredi";
+  name: "formation" | "vendredi";
+  language: "ar";
+  category: "MARKETING";
+  title: string;
+  badge: string;
+  icon: string;
+  description: string;
+  defaultTime: string;
+  template: string;
+}
+
+export const APPROVED_360_TEMPLATES: Approved360TemplateDef[] = [
+  {
+    id: "formation",
+    name: "formation",
+    language: "ar",
+    category: "MARKETING",
+    title: "formation (Session Standard)",
+    badge: "Approuvé 360dialog",
+    icon: "🎓",
+    description: "Session de formation standard (15h00) — Modèle marketing arabe officiel approuvé 360dialog",
+    defaultTime: "3:00 مساءً (15h00)",
+    template:
+      "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time} في مقر GoCab ({city}).\n\nالوثائق المطلوبة:\n- البطاقة الوطنية (CIN)\n- رخصة السياقة (Permis)\n- حسن السيرة (Fiche anthropométrique)\n\nشكراً لكم ونتطلع للقائكم.",
+  },
+  {
+    id: "vendredi",
+    name: "vendredi",
+    language: "ar",
+    category: "MARKETING",
+    title: "vendredi (Session Vendredi)",
+    badge: "Approuvé 360dialog",
+    icon: "🕌",
+    description: "Session de formation spéciale du vendredi (11h00) — Modèle marketing arabe officiel approuvé 360dialog",
+    defaultTime: "11:00 صباحاً (11h00)",
+    template:
+      "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم الجمعة {date} على الساعة {time} في مقر GoCab ({city}).\n\nالوثائق المطلوبة:\n- البطاقة الوطنية (CIN)\n- رخصة السياقة (Permis)\n- حسن السيرة (Fiche anthropométrique)\n\nشكراً لكم ونتطلع للقائكم يوم الجمعة إن شاء الله.",
+  },
+];
+
+/**
+ * Returns the approved 360dialog template by ID, falling back to "formation"
+ */
+export function getApproved360Template(templateId?: string | null): Approved360TemplateDef {
+  if (templateId === "vendredi") {
+    return APPROVED_360_TEMPLATES[1];
+  }
+  return APPROVED_360_TEMPLATES[0];
+}
+
+/**
+ * Automatically resolves whether to use "vendredi" or "formation" based on training date
+ */
+export function resolve360TemplateByDate(
+  trainingDate?: string | Date | null
+): Approved360TemplateDef {
+  if (!trainingDate) return APPROVED_360_TEMPLATES[0];
+  try {
+    const d = typeof trainingDate === "string" ? new Date(trainingDate) : trainingDate;
+    if (!isNaN(d.getTime()) && d.getDay() === 5) {
+      return APPROVED_360_TEMPLATES[1]; // Friday
+    }
+  } catch (_) {}
+  return APPROVED_360_TEMPLATES[0];
+}
+
+/**
  * Normalizes phone numbers to comparable digits-only format (e.g. 2126XXXXXXXX).
  */
 export function normalizeWhatsAppPhone(phone: string): string {
@@ -283,6 +355,7 @@ export interface SubstitutionContext {
   time?: string;
   missingDocs?: string[];
   amount?: string;
+  templateId?: string;
 }
 
 /**
@@ -321,9 +394,23 @@ export function formatLeadWhatsAppMessage(
   }
   text = text.replace(/\{date\}|\{\{date\}\}/gi, dateFormatted);
 
-  // Time
-  const timeFormatted = ctx.time ? ` à ${ctx.time}` : "";
-  text = text.replace(/\{time\}|\{\{time\}\}/gi, timeFormatted || "15:00");
+  // Time formatting - intelligent handling of Arabic vs French templates
+  const isArabic = /[\u0600-\u06FF]/.test(rawTemplate) || ctx.templateId === "formation" || ctx.templateId === "vendredi";
+  let defaultTimeStr = "15:00";
+  if (ctx.templateId === "vendredi" || rawTemplate.includes("الجمعة")) {
+    defaultTimeStr = "11:00 صباحاً";
+  } else if (isArabic) {
+    defaultTimeStr = "3:00 مساءً (15h00)";
+  }
+
+  const rawTime = ctx.time?.trim();
+  let timeReplacement = "";
+  if (isArabic) {
+    timeReplacement = rawTime ? rawTime.replace(/^à\s*/i, "") : defaultTimeStr;
+  } else {
+    timeReplacement = rawTime ? (rawTime.startsWith("à ") ? rawTime : ` à ${rawTime}`) : " à 15:00";
+  }
+  text = text.replace(/\{time\}|\{\{time\}\}/gi, timeReplacement);
 
   // Missing documents
   let missingDocsString = "";

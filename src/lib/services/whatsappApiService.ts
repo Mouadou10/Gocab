@@ -19,6 +19,8 @@ export interface SendMessageOptions {
   text: string;
   senderName?: string;
   templateKey?: string;
+  templateName?: string;
+  templateLanguage?: string;
   interactiveButtons?: Array<{ id: string; title: string }>;
   mediaUrl?: string;
   mediaType?: "image" | "document" | "audio" | "video";
@@ -589,7 +591,23 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   let apiError: string | null = null;
   let deliveryMode = "CRM_LIVE_SIMULATION";
 
-  const buildPayload = (useInteractive: boolean) => {
+  const buildPayload = (useInteractive: boolean, asTemplate = false) => {
+    // If sending an official approved template (e.g. 360dialog / Meta approved "formation" or "vendredi")
+    if (asTemplate && opts.templateName) {
+      return {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhone,
+        type: "template",
+        template: {
+          name: opts.templateName,
+          language: {
+            code: opts.templateLanguage || "ar",
+          },
+        },
+      };
+    }
+
     if (opts.mediaUrl) {
       const mediaIdMatch = opts.mediaUrl.match(/\/api\/whatsapp\/media\/([a-zA-Z0-9_-]+)/);
       const mediaId = mediaIdMatch ? mediaIdMatch[1] : undefined;
@@ -647,28 +665,63 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
       try {
         const d360Base = config.d360ApiUrl.replace(/\/$/, "");
         const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
-        let d360Res = await fetch(`${d360Base}/messages`, {
-          method: "POST",
-          headers: {
-            "D360-API-KEY": config.d360ApiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildPayload(hasInteractive)),
-        });
+        const hasTemplate = Boolean(opts.templateName);
 
-        let d360Data = await d360Res.json().catch(() => null);
+        let d360Res: Response;
+        let d360Data: any;
 
-        // Fallback to standard text if interactive button payload was rejected
-        if (!d360Res.ok && hasInteractive) {
+        if (hasTemplate) {
+          // Send official approved WhatsApp template message (bypasses 24h customer window)
           d360Res = await fetch(`${d360Base}/messages`, {
             method: "POST",
             headers: {
               "D360-API-KEY": config.d360ApiKey,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(buildPayload(false)),
+            body: JSON.stringify(buildPayload(false, true)),
           });
           d360Data = await d360Res.json().catch(() => null);
+
+          // If template dispatch was rejected, fallback to text payload
+          if (!d360Res.ok) {
+            console.warn("360dialog template attempt warning, trying text fallback:", d360Res.status, d360Data);
+            const fallbackRes = await fetch(`${d360Base}/messages`, {
+              method: "POST",
+              headers: {
+                "D360-API-KEY": config.d360ApiKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(buildPayload(false, false)),
+            });
+            const fallbackData = await fallbackRes.json().catch(() => null);
+            if (fallbackRes.ok && fallbackData?.messages?.[0]) {
+              d360Res = fallbackRes;
+              d360Data = fallbackData;
+            }
+          }
+        } else {
+          d360Res = await fetch(`${d360Base}/messages`, {
+            method: "POST",
+            headers: {
+              "D360-API-KEY": config.d360ApiKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(buildPayload(hasInteractive, false)),
+          });
+          d360Data = await d360Res.json().catch(() => null);
+
+          // Fallback to standard text if interactive button payload was rejected
+          if (!d360Res.ok && hasInteractive) {
+            d360Res = await fetch(`${d360Base}/messages`, {
+              method: "POST",
+              headers: {
+                "D360-API-KEY": config.d360ApiKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(buildPayload(false, false)),
+            });
+            d360Data = await d360Res.json().catch(() => null);
+          }
         }
 
         if (d360Res.ok && d360Data?.messages && d360Data.messages[0]) {
@@ -701,19 +754,59 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     } else if (config.phoneNumberId && config.accessToken) {
       try {
         const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
-        const metaRes = await fetch(
-          `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${config.accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(buildPayload(hasInteractive)),
-          }
-        );
+        const hasTemplate = Boolean(opts.templateName);
 
-        const metaData = await metaRes.json().catch(() => null);
+        let metaRes: Response;
+        let metaData: any;
+
+        if (hasTemplate) {
+          metaRes = await fetch(
+            `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${config.accessToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(buildPayload(false, true)),
+            }
+          );
+          metaData = await metaRes.json().catch(() => null);
+
+          if (!metaRes.ok) {
+            console.warn("Meta template warning, trying text fallback:", metaData);
+            const fallbackRes = await fetch(
+              `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${config.accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(buildPayload(false, false)),
+              }
+            );
+            const fallbackData = await fallbackRes.json().catch(() => null);
+            if (fallbackRes.ok && fallbackData?.messages?.[0]) {
+              metaRes = fallbackRes;
+              metaData = fallbackData;
+            }
+          }
+        } else {
+          metaRes = await fetch(
+            `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${config.accessToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(buildPayload(hasInteractive, false)),
+            }
+          );
+          metaData = await metaRes.json().catch(() => null);
+        }
+
         if (metaRes.ok && metaData?.messages && metaData.messages[0]) {
           waMessageId = metaData.messages[0].id;
           status = "SENT";

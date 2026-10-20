@@ -37,6 +37,9 @@ import toast from "react-hot-toast";
 import RedFlagBadge from "./RedFlagBadge";
 import {
   GOCAB_WHATSAPP_TEMPLATES,
+  APPROVED_360_TEMPLATES,
+  getApproved360Template,
+  formatLeadWhatsAppMessage,
   formatDisplayPhone,
   normalizeWhatsAppPhone,
 } from "@/lib/whatsapp";
@@ -406,6 +409,23 @@ export default function WhatsAppCrmView() {
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
+      // Auto-detect if sending an approved 360dialog template for leads
+      let templateNameToSend: string | undefined = undefined;
+      let templateLangToSend: string | undefined = undefined;
+      const isLead =
+        activeConversation.contactType === "LEAD" ||
+        activeConversation.routedDepartment === "LEAD_ACQUISITION";
+
+      if (isLead || messageText.includes("التدريب") || messageText.includes("GoCab")) {
+        if (messageText.includes("الجمعة")) {
+          templateNameToSend = "vendredi";
+          templateLangToSend = "ar";
+        } else if (messageText.includes("التدريب")) {
+          templateNameToSend = "formation";
+          templateLangToSend = "ar";
+        }
+      }
+
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -413,6 +433,8 @@ export default function WhatsAppCrmView() {
           conversationId: activeConversation.id,
           phoneNumber: activeConversation.phoneNumber,
           text: messageText,
+          templateName: templateNameToSend,
+          templateLanguage: templateLangToSend,
           mediaUrl: uploadedMediaUrl || undefined,
           mediaType: uploadedMediaUrl ? "image" : undefined,
         }),
@@ -486,6 +508,28 @@ export default function WhatsAppCrmView() {
     setInputMessage(text);
     setShowTemplatesDropdown(false);
     toast.success(`Modèle "${tpl.title}" appliqué`, { icon: "✨" });
+    textareaRef.current?.focus();
+  };
+
+  // Quick 360dialog Approved Template insertion for Lead Acquisition
+  const handleApply360Template = (tplId: "formation" | "vendredi") => {
+    if (!activeConversation) return;
+
+    const tpl = getApproved360Template(tplId);
+    const name = activeConversation.contactName || activeConversation.lead?.name || "Chauffeur";
+    const city = activeConversation.lead?.city || "Casablanca";
+    const trainingDate = "";
+
+    const text = formatLeadWhatsAppMessage(tpl.template, {
+      name,
+      city,
+      date: trainingDate,
+      templateId: tpl.id,
+    });
+
+    setInputMessage(text);
+    setShowTemplatesDropdown(false);
+    toast.success(`Modèle 360dialog "${tpl.title}" appliqué`, { icon: "✨" });
     textareaRef.current?.focus();
   };
 
@@ -1413,17 +1457,38 @@ export default function WhatsAppCrmView() {
             <div className="px-4 py-2 bg-white/95 border-t border-gray-100 flex items-center gap-2 overflow-x-auto scrollbar-none shadow-2xs">
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
                 <Sparkles className="w-3 h-3 text-amber-500" />
-                Modèles :
+                {activeConversation.contactType === "LEAD" ||
+                activeConversation.routedDepartment === "LEAD_ACQUISITION"
+                  ? "Modèles 360dialog approuvés :"
+                  : "Modèles :"}
               </span>
-              {GOCAB_WHATSAPP_TEMPLATES.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  onClick={() => handleApplyTemplate(tpl)}
-                  className="px-2.5 py-1 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-gray-700 text-[11px] font-semibold rounded-xl shrink-0 transition-all border border-gray-200 cursor-pointer shadow-2xs"
-                >
-                  {tpl.title}
-                </button>
-              ))}
+              {activeConversation.contactType === "LEAD" ||
+              activeConversation.routedDepartment === "LEAD_ACQUISITION" ? (
+                APPROVED_360_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => handleApply360Template(tpl.id)}
+                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 hover:border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-xl shrink-0 transition-all border border-emerald-200 cursor-pointer shadow-2xs flex items-center gap-1.5"
+                    title={`Modèle officiel 360dialog approuvé (${tpl.language.toUpperCase()})`}
+                  >
+                    <span>{tpl.icon}</span>
+                    <span>{tpl.title}</span>
+                    <span className="text-[9px] bg-emerald-200/80 text-emerald-900 px-1 py-0.2 rounded font-mono font-bold">
+                      360dialog ar
+                    </span>
+                  </button>
+                ))
+              ) : (
+                GOCAB_WHATSAPP_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => handleApplyTemplate(tpl)}
+                    className="px-2.5 py-1 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-gray-700 text-[11px] font-semibold rounded-xl shrink-0 transition-all border border-gray-200 cursor-pointer shadow-2xs"
+                  >
+                    {tpl.title}
+                  </button>
+                ))
+              )}
             </div>
 
             {/* Chat Input Footer */}
@@ -1793,26 +1858,31 @@ export default function WhatsAppCrmView() {
               </div>
 
               <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-bold text-gray-400 uppercase">Actions Recrutement</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center justify-between">
+                  <span>Modèles 360dialog approuvés</span>
+                  <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded border border-emerald-200">
+                    ar (MARKETING)
+                  </span>
+                </span>
                 <button
-                  onClick={() => {
-                    const tpl = GOCAB_WHATSAPP_TEMPLATES.find((t) => t.id === "TRAINING_INVITATION");
-                    if (tpl) handleApplyTemplate(tpl);
-                  }}
-                  className="w-full py-2 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer"
+                  onClick={() => handleApply360Template("formation")}
+                  className="w-full py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer border border-emerald-200/80 shadow-2xs"
+                  title="Appliquer le modèle officiel approuvé formation (360dialog)"
                 >
-                  <span>🎓 Convoquer en formation</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span className="flex items-center gap-1.5">
+                    <span>🎓</span> Formation (Session Standard)
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-emerald-700" />
                 </button>
                 <button
-                  onClick={() => {
-                    const tpl = GOCAB_WHATSAPP_TEMPLATES.find((t) => t.id === "MISSING_DOCS");
-                    if (tpl) handleApplyTemplate(tpl);
-                  }}
-                  className="w-full py-2 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer"
+                  onClick={() => handleApply360Template("vendredi")}
+                  className="w-full py-2 px-2.5 bg-teal-50 hover:bg-teal-100 text-teal-950 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer border border-teal-200/80 shadow-2xs"
+                  title="Appliquer le modèle officiel approuvé vendredi (360dialog)"
                 >
-                  <span>📄 Relancer documents</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span className="flex items-center gap-1.5">
+                    <span>🕌</span> Formation Vendredi (11h00)
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-teal-700" />
                 </button>
               </div>
             </div>
