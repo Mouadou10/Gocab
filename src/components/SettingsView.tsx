@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 import { getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
 
 const ALL_TABS: { id: TabType; label: string; icon: string; description: string }[] = [
   { id: "dashboard", label: "Home", icon: "📊", description: "KPI overview & command metrics" },
@@ -28,6 +28,7 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
   { id: "tickets", label: "Support", icon: "🔧", description: "Maintenance & 24h SLA tickets" },
   { id: "performance", label: "Perf", icon: "📈", description: "Fleet performance, collections & waivers" },
   { id: "field", label: "Field", icon: "🛡️", description: "Field supervisor inspections & recoveries" },
+  { id: "field-missions", label: "Missions Telegram", icon: "📱", description: "Missions terrain & dispatch interactif Telegram pour les agents" },
   { id: "insurance", label: "Insurance", icon: "📝", description: "Accident claims & insurance tracking" },
   { id: "whatsapp", label: "WhatsApp CRM", icon: "💬", description: "WhatsApp live chat CRM & automated notifications" },
   { id: "settings", label: "Settings", icon: "⚙️", description: "Role permissions & system settings" },
@@ -37,10 +38,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
   ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
   FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
+  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
-  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {

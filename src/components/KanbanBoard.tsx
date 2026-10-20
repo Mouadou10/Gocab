@@ -33,6 +33,7 @@ import FleetView from "./FleetView";
 import SupportTicketsView from "./SupportTicketsView";
 import FleetPerformanceView from "./FleetPerformanceView";
 import FieldSupervisorView from "./FieldSupervisorView";
+import FieldMissionsView from "./FieldMissionsView";
 import SharedVehicleHubView from "./SharedVehicleHubView";
 import LeadDrawer from "./LeadDrawer";
 import SettingsView from "./SettingsView";
@@ -84,10 +85,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
   ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "flagged-drivers", "whatsapp"],
   FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "tickets", "whatsapp"],
+  FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
-  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "insurance", "whatsapp", "settings"],
+  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -112,7 +113,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:                 "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
@@ -172,6 +173,9 @@ export default function KanbanBoard() {
   }
   if (!allowedTabs.includes("flagged-drivers")) {
     allowedTabs = [...allowedTabs, "flagged-drivers"];
+  }
+  if (!allowedTabs.includes("field-missions")) {
+    allowedTabs = [...allowedTabs, "field-missions"];
   }
 
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
@@ -1498,6 +1502,28 @@ export default function KanbanBoard() {
               </button>
             )}
 
+            {allowedTabs.includes("field-missions") && (
+              <button
+                onClick={() => handleSelectTab("field-missions")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "field-missions"
+                    ? "bg-sky-600 text-white shadow-sm font-bold ring-1 ring-sky-500"
+                    : "text-gray-600 hover:text-sky-700 hover:bg-sky-50"
+                }`}
+              >
+                📱 {t.fieldMissions || "Missions Telegram"}
+                <span
+                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                    activeTab === "field-missions"
+                      ? "bg-white text-sky-700"
+                      : "bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300"
+                  }`}
+                >
+                  NEW
+                </span>
+              </button>
+            )}
+
             {allowedTabs.includes("insurance") && (
               <button
                 onClick={() => handleSelectTab("insurance")}
@@ -1935,6 +1961,8 @@ export default function KanbanBoard() {
           <FleetPerformanceView />
         ) : activeTab === "field" ? (
           <FieldSupervisorView />
+        ) : activeTab === "field-missions" ? (
+          <FieldMissionsView standalone={false} onBackToAgenda={() => handleSelectTab("field")} />
         ) : activeTab === "insurance" ? (
           <InsuranceView />
         ) : activeTab === "whatsapp" ? (

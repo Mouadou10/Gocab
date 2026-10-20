@@ -17,6 +17,7 @@ export interface Translations {
   support: string;
   perf: string;
   field: string;
+  fieldMissions: string;
   insurance: string;
   vehicleOps: string;
   settings: string;
@@ -120,6 +121,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     support: "Support",
     perf: "Collections & Perf",
     field: "Field",
+    fieldMissions: "Telegram Missions",
     insurance: "Insurance",
     vehicleOps: "Fleet Log",
     settings: "Settings",
@@ -218,6 +220,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     support: "Support",
     perf: "Encaissements & Perf",
     field: "Terrain",
+    fieldMissions: "Missions Telegram",
     insurance: "Assurance",
     vehicleOps: "Journal Flotte",
     settings: "Paramètres",
@@ -316,6 +319,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     support: "الدعم الفني",
     perf: "التحصيل والأداء",
     field: "الميدان",
+    fieldMissions: "مهام تيليجرام",
     insurance: "التأمين",
     vehicleOps: "سجل الأسطول",
     settings: "الإعدادات",

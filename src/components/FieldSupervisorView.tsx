@@ -49,6 +49,7 @@ import {
   X,
   History,
   AlertCircle,
+  Smartphone,
 } from "lucide-react";
 
 export interface FieldTask {
@@ -1522,6 +1523,18 @@ export default function FieldSupervisorView() {
               }`}
             >
               {totalActiveTasks}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "field-missions" }))}
+            className="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-900/60 border border-sky-200 dark:border-sky-800 shadow-2xs"
+          >
+            <Smartphone className="w-4 h-4 text-sky-600" />
+            <span>📱 Missions Telegram</span>
+            <span className="text-[9px] bg-sky-600 text-white px-1.5 py-0.5 rounded-full font-black">
+              LIVE
             </span>
           </button>
         </div>
