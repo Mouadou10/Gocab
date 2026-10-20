@@ -171,7 +171,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
   const [createDesc, setCreateDesc] = useState<string>("");
   const [createPriority, setCreatePriority] = useState<string>("Urgent");
   const [createAssignedTo, setCreateAssignedTo] = useState<string>(initialAgent || "Ayoub Rassid");
-  const [createScheduledTime, setCreateScheduledTime] = useState<string>("09:00");
+  const [createScheduledTime, setCreateScheduledTime] = useState<string>("");
   const [createDuration, setCreateDuration] = useState<number>(1.0);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
 
@@ -508,19 +508,24 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
           priority: createPriority,
           assigned_to: createAssignedTo || "Ayoub Rassid",
           scheduled_date: selectedDate,
-          scheduled_time: createScheduledTime,
+          scheduled_time: createScheduledTime ? createScheduledTime.trim() : null,
           duration_hours: createDuration,
           triggered_by: telegramUser ? `Agent Telegram (${telegramUser})` : "Agent Terrain",
         }),
       });
 
       if (res.ok) {
-        toast.success("✅ Mission créée et envoyée sur Telegram !");
+        toast.success(
+          createScheduledTime
+            ? `✅ Mission planifiée à ${createScheduledTime} et envoyée sur Telegram !`
+            : "✅ Mission créée (heure libre) et envoyée sur Telegram !"
+        );
         setIsCreateModalOpen(false);
         setCreateDesc("");
         setCreatePlate("");
         setCreateDriver("");
         setCreatePhone("");
+        setCreateScheduledTime("");
         setCreateVehicleId(null);
         fetchTasks(true);
       } else {
@@ -954,11 +959,50 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                         </span>
                       )}
 
-                      {task.scheduled_time && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                          <Clock className="w-3 h-3" />
+                      {task.scheduled_time ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                          <Clock className="w-3 h-3 text-slate-500" />
                           <span>{task.scheduled_time} ({task.duration_hours || 1}h)</span>
                         </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 px-2 py-0.5 rounded-md">
+                          <Clock className="w-3 h-3 text-sky-600" />
+                          <span>⚡ Heure libre</span>
+                        </span>
+                      )}
+
+                      {/* Quick time adjustment for field agents */}
+                      {task.status !== "COMPLETED" && (
+                        <select
+                          value={task.scheduled_time || ""}
+                          onChange={async (e) => {
+                            const newTime = e.target.value;
+                            try {
+                              const res = await fetch(`/api/field-tasks/${task.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  scheduled_time: newTime || null,
+                                }),
+                              });
+                              if (res.ok) {
+                                toast.success(newTime ? `Créneau fixé à ${newTime}` : "Créneau passé en Heure libre");
+                                fetchTasks(true);
+                              }
+                            } catch {
+                              toast.error("Erreur mise à jour créneau");
+                            }
+                          }}
+                          className="text-[10px] font-bold bg-transparent border-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer p-0 underline decoration-dotted"
+                          title="Modifier le créneau horaire de la mission"
+                        >
+                          <option value="">⚡ Libre</option>
+                          {["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"].map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </div>
 
@@ -1655,6 +1699,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                   onChange={(e) => setCreateScheduledTime(e.target.value)}
                   className="w-full p-2 text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
                 >
+                  <option value="">⚡ Heure libre (Au choix de l&apos;agent)</option>
                   {["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"].map((t) => (
                     <option key={t} value={t}>
                       {t} (1h)

@@ -142,7 +142,9 @@ export async function sendFieldTaskTelegramAlert(task: {
       `👤 <b>Chauffeur :</b> <b>${task.driver_name || "Non spécifié"}</b>`,
       task.driver_phone ? `📞 <b>Téléphone :</b> <a href="tel:${task.driver_phone}">${task.driver_phone}</a>` : null,
       task.assigned_to ? `👮 <b>Assigné à :</b> <b>${task.assigned_to}</b> (Superviseur Terrain)` : null,
-      task.scheduled_time ? `🕒 <b>Créneau horaire :</b> <b>${task.scheduled_time}</b>` : null,
+      task.scheduled_time
+        ? `🕒 <b>Créneau horaire :</b> <b>${task.scheduled_time}</b>`
+        : `🕒 <b>Créneau horaire :</b> <b>⚡ Heure libre (Au choix de l'agent)</b>`,
       task.triggered_by ? `🧑‍💼 <b>Déclenché par :</b> <b>${task.triggered_by}</b>` : null,
       `⚠️ <b>Priorité :</b> ${task.priority === "Critical" ? "🔴 Critique" : task.priority === "Urgent" ? "🟠 Urgent" : "🟡 Normal"}`,
       `\n📝 <b>Détails de la mission :</b>`,

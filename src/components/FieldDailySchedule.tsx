@@ -629,13 +629,17 @@ export default function FieldDailySchedule({
           priority: createPriority,
           assigned_to: agentName,
           scheduled_date: selectedDate,
-          scheduled_time: createSlotTime,
+          scheduled_time: createSlotTime ? createSlotTime : null,
           duration_hours: createDuration,
         }),
       });
 
       if (res.ok) {
-        toast.success(`Mission créée, planifiée à ${createSlotTime} et envoyée sur Telegram à ${agentName} !`);
+        toast.success(
+          createSlotTime
+            ? `Mission créée, planifiée à ${createSlotTime} et envoyée sur Telegram à ${agentName} !`
+            : `Mission créée (heure libre) et envoyée sur Telegram à ${agentName} !`
+        );
         setIsCreateModalOpen(false);
         setCreateDesc("");
         setCreatePlate("");
@@ -1801,6 +1805,7 @@ export default function FieldDailySchedule({
                     onChange={(e) => setCreateSlotTime(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
                   >
+                    <option value="">⚡ Heure libre (Au choix de l&apos;agent)</option>
                     {WORKING_HOURS.map((h) => (
                       <option key={h} value={h}>
                         {h} {scheduledTasksMap[h] ? "(Occupé)" : "(Libre)"}
