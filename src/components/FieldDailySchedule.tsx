@@ -884,6 +884,10 @@ export default function FieldDailySchedule({
                                 ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
                                 : task.task_type === "GARAGE_PICKUP"
                                 ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                : task.task_type === "REPAIR" || task.task_type === "EMERGENCY_REPAIR"
+                                ? "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300"
+                                : task.task_type === "OTHER"
+                                ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                                 : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                             }`}
                           >
@@ -891,6 +895,10 @@ export default function FieldDailySchedule({
                               ? "🚨 Récupération"
                               : task.task_type === "GARAGE_PICKUP"
                               ? "🔧 Retrait Garage"
+                              : task.task_type === "REPAIR" || task.task_type === "EMERGENCY_REPAIR"
+                              ? "🛠️ Dépôt Garage"
+                              : task.task_type === "OTHER"
+                              ? "📌 Autre Mission"
                               : "📋 Checkup Terrain"}
                           </span>
 
@@ -1232,10 +1240,22 @@ export default function FieldDailySchedule({
                                 ? "bg-red-100 text-red-700"
                                 : t.task_type === "GARAGE_PICKUP"
                                 ? "bg-amber-100 text-amber-700"
+                                : t.task_type === "REPAIR" || t.task_type === "EMERGENCY_REPAIR"
+                                ? "bg-orange-100 text-orange-700"
+                                : t.task_type === "OTHER"
+                                ? "bg-slate-100 text-slate-700"
                                 : "bg-blue-100 text-blue-700"
                             }`}
                           >
-                            {isRec ? "🚨 Récupération" : t.task_type === "GARAGE_PICKUP" ? "🔧 Retrait Garage" : "Contrôle"}
+                            {isRec
+                              ? "🚨 Récupération"
+                              : t.task_type === "GARAGE_PICKUP"
+                              ? "🔧 Retrait Garage"
+                              : t.task_type === "REPAIR" || t.task_type === "EMERGENCY_REPAIR"
+                              ? "🛠️ Dépôt Garage"
+                              : t.task_type === "OTHER"
+                              ? "📌 Autre Mission"
+                              : "Contrôle"}
                           </span>
 
                           {/* Delete button or confirmation */}
@@ -1387,6 +1407,12 @@ export default function FieldDailySchedule({
                           className={`px-2 py-0.5 rounded text-3xs font-bold ${
                             poolTasks[0].task_type === "VEHICLE_RECOVERY"
                               ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                              : poolTasks[0].task_type === "GARAGE_PICKUP"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              : poolTasks[0].task_type === "REPAIR" || poolTasks[0].task_type === "EMERGENCY_REPAIR"
+                              ? "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300"
+                              : poolTasks[0].task_type === "OTHER"
+                              ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                               : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                           }`}
                         >
@@ -1394,6 +1420,10 @@ export default function FieldDailySchedule({
                             ? "🚨 Récupération"
                             : poolTasks[0].task_type === "GARAGE_PICKUP"
                             ? "🔧 Retrait Garage"
+                            : poolTasks[0].task_type === "REPAIR" || poolTasks[0].task_type === "EMERGENCY_REPAIR"
+                            ? "🛠️ Dépôt Garage"
+                            : poolTasks[0].task_type === "OTHER"
+                            ? "📌 Autre Mission"
                             : "📋 Contrôle"}
                         </span>
                       </div>
@@ -1805,10 +1835,12 @@ export default function FieldDailySchedule({
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: "VEHICLE_RECOVERY", label: "🚨 Récupération Véhicule" },
-                    { id: "GARAGE_PICKUP", label: "🔧 Retrait Garage (Accident)" },
-                    { id: "MONTHLY_CHECKUP", label: "📋 Contrôle Technique" },
+                    { id: "VEHICLE_RECOVERY", label: "🚨 Récupération Véhicule (Blocage)" },
+                    { id: "REPAIR", label: "🛠️ Dépôt Garage (Réparation Urgence)" },
+                    { id: "GARAGE_PICKUP", label: "🔧 Retrait / Sortie Garage (Réparé)" },
+                    { id: "MONTHLY_CHECKUP", label: "📋 Contrôle Technique / Mensuel" },
                     { id: "FIELD_VISIT", label: "🚗 Visite / Constat Terrain" },
+                    { id: "OTHER", label: "📌 Autre Mission Terrain" },
                   ].map((t) => (
                     <button
                       type="button"

@@ -158,8 +158,13 @@ const CHECKPOINT_LABELS: Record<string, { label: string; icon: string; hint: str
 
 const TASK_TYPE_CONFIG: Record<string, { icon: string; label: string; color: string; bg: string; border: string }> = {
   VEHICLE_RECOVERY: { icon: "🚨", label: "Récupération de Véhicule", color: "text-red-700", bg: "bg-red-50", border: "border-red-200" },
+  REPAIR: { icon: "🛠️", label: "Dépôt Garage / Réparation", color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200" },
+  EMERGENCY_REPAIR: { icon: "🛠️", label: "Dépôt Garage Urgence", color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200" },
   GARAGE_PICKUP: { icon: "🔧", label: "Retrait au Garage", color: "text-amber-800", bg: "bg-amber-50", border: "border-amber-200" },
   MONTHLY_CHECKUP: { icon: "📋", label: "Contrôle Mensuel", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
+  FIELD_INSPECTION: { icon: "📋", label: "Constat / Expertise", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+  FIELD_VISIT: { icon: "📋", label: "Visite Terrain", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+  OTHER: { icon: "📌", label: "Autre Mission", color: "text-slate-700", bg: "bg-slate-100", border: "border-slate-200" },
 };
 
 const ARABIC_LETTER_MAP: Record<string, string> = {

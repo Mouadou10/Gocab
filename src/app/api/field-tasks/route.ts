@@ -345,6 +345,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Resolve vehicle for any other task type if plate was specified
+    if (!resolvedVehicleId && resolvedPlate && resolvedPlate !== "Véhicule non assigné") {
+      const v = await prisma.vehicle.findFirst({
+        where: {
+          plate_number: resolvedPlate,
+        },
+      }).catch(() => null);
+      if (v) {
+        resolvedVehicleId = v.id;
+        resolvedPlate = v.plate_number;
+      }
+    }
+
     // Create or update the FieldTask on the Vehicle Recovery Page (Field Supervisor)
     let task;
     if (cleanType === "VEHICLE_RECOVERY") {

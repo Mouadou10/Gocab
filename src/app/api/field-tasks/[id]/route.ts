@@ -101,6 +101,14 @@ export async function PATCH(
       }
     }
 
+    // When a REPAIR / EMERGENCY_REPAIR task is completed (car dropped at emergency garage), set vehicle status to Maintenance
+    if (body.status === "COMPLETED" && (task.task_type === "REPAIR" || task.task_type === "EMERGENCY_REPAIR") && task.vehicle_id) {
+      await prisma.vehicle.update({
+        where: { id: task.vehicle_id },
+        data: { status: "Maintenance" },
+      }).catch((e) => console.warn("Failed to set vehicle to Maintenance on repair field task completion:", e));
+    }
+
     // When a GARAGE_PICKUP task is completed, restore vehicle to Actif
     if (body.status === "COMPLETED" && task.task_type === "GARAGE_PICKUP" && task.vehicle_id) {
       await prisma.vehicle.update({

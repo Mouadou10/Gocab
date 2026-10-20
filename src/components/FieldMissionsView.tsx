@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -64,6 +64,20 @@ const TASK_TYPE_META: Record<string, { label: string; icon: string; color: strin
     badgeBg: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
     border: "border-l-red-500",
   },
+  REPAIR: {
+    label: "Dépôt Garage / Réparation",
+    icon: "🛠️",
+    color: "text-orange-800 dark:text-orange-300",
+    badgeBg: "bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800",
+    border: "border-l-orange-500",
+  },
+  EMERGENCY_REPAIR: {
+    label: "Dépôt Garage Urgence",
+    icon: "🛠️",
+    color: "text-orange-800 dark:text-orange-300",
+    badgeBg: "bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800",
+    border: "border-l-orange-500",
+  },
   GARAGE_PICKUP: {
     label: "Reprise au Garage",
     icon: "🔧",
@@ -84,6 +98,20 @@ const TASK_TYPE_META: Record<string, { label: string; icon: string; color: strin
     color: "text-purple-700 dark:text-purple-300",
     badgeBg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
     border: "border-l-purple-500",
+  },
+  FIELD_VISIT: {
+    label: "Constat / Expertise",
+    icon: "📋",
+    color: "text-purple-700 dark:text-purple-300",
+    badgeBg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+    border: "border-l-purple-500",
+  },
+  OTHER: {
+    label: "Autre Mission",
+    icon: "📌",
+    color: "text-slate-700 dark:text-slate-300",
+    badgeBg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    border: "border-l-slate-500",
   },
 };
 
@@ -146,6 +174,65 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
   const [createScheduledTime, setCreateScheduledTime] = useState<string>("09:00");
   const [createDuration, setCreateDuration] = useState<number>(1.0);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
+
+  // Vehicles for autocomplete selection
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [createVehicleId, setCreateVehicleId] = useState<string | null>(null);
+  const [isPlateDropdownOpen, setIsPlateDropdownOpen] = useState(false);
+  const plateDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load vehicles list for instant search
+  useEffect(() => {
+    async function loadVehicles() {
+      try {
+        const res = await fetch("/api/vehicles");
+        if (res.ok) {
+          const data = await res.json();
+          setVehicles(data.vehicles || []);
+        }
+      } catch (err) {
+        console.error("Failed to load vehicles in missions view:", err);
+      }
+    }
+    loadVehicles();
+  }, []);
+
+  // Dismiss plate popover on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (plateDropdownRef.current && !plateDropdownRef.current.contains(event.target as Node)) {
+        setIsPlateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filter vehicle suggestions
+  const plateSuggestions = useMemo(() => {
+    const q = createPlate.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!q) {
+      return vehicles.slice(0, 8);
+    }
+    return vehicles
+      .filter((v) => {
+        const pClean = (v.plate_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const dName = (v.assigned_driver_name || v.driverProfile?.fullName || "").toLowerCase();
+        const model = (v.make_model || "").toLowerCase();
+        return pClean.includes(q) || dName.includes(createPlate.toLowerCase()) || model.includes(createPlate.toLowerCase());
+      })
+      .slice(0, 8);
+  }, [vehicles, createPlate]);
+
+  const handleSelectVehicle = (v: any) => {
+    setCreatePlate(v.plate_number || "");
+    setCreateVehicleId(v.id || null);
+    const dName = v.assigned_driver_name || v.driverProfile?.fullName || "";
+    const dPhone = v.assigned_driver_phone || v.driverProfile?.phoneSanitized || "";
+    if (dName) setCreateDriver(dName);
+    if (dPhone) setCreatePhone(dPhone);
+    setIsPlateDropdownOpen(false);
+  };
 
   // Initialize Telegram WebApp if loaded inside Telegram
   useEffect(() => {
@@ -413,6 +500,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           task_type: createTaskType,
+          vehicle_id: createVehicleId || null,
           plate_number: createPlate.trim() || null,
           driver_name: createDriver.trim() || null,
           driver_phone: createPhone.trim() || null,
@@ -433,6 +521,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
         setCreatePlate("");
         setCreateDriver("");
         setCreatePhone("");
+        setCreateVehicleId(null);
         fetchTasks(true);
       } else {
         const d = await res.json().catch(() => ({}));
@@ -1346,12 +1435,14 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                 Type d&apos;intervention
               </label>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {[
                   { type: "VEHICLE_RECOVERY", label: "🚨 Récupération", desc: "Impayé / Blocage" },
+                  { type: "REPAIR", label: "🛠️ Réparation Urgence", desc: "Emmener au garage" },
                   { type: "GARAGE_PICKUP", label: "🔧 Reprise Garage", desc: "Véhicule réparé" },
                   { type: "MONTHLY_CHECKUP", label: "🔍 Contrôle Mensuel", desc: "Visite technique" },
                   { type: "FIELD_INSPECTION", label: "📋 Constat Sinistre", desc: "Expertise terrain" },
+                  { type: "OTHER", label: "📌 Autre Mission", desc: "Sur mesure / Divers" },
                 ].map((item) => (
                   <button
                     key={item.type}
@@ -1359,8 +1450,8 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                     onClick={() => setCreateTaskType(item.type)}
                     className={`p-2 rounded-xl border text-left transition-all ${
                       createTaskType === item.type
-                        ? "bg-blue-50 text-blue-800 border-blue-400 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 font-bold"
-                        : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                        ? "bg-blue-50 text-blue-800 border-blue-400 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 font-bold ring-1 ring-blue-400/40"
+                        : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     <div className="text-xs font-bold leading-tight">{item.label}</div>
@@ -1370,19 +1461,126 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
               </div>
             </div>
 
-            {/* Plate & Driver */}
+            {/* Quick Context Chips for REPAIR & OTHER */}
+            {createTaskType === "REPAIR" && (
+              <div className="p-2.5 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-xl space-y-1.5 animate-fadeIn">
+                <div className="flex items-center gap-1.5 text-orange-800 dark:text-orange-300 font-extrabold text-xs">
+                  <Wrench className="w-3.5 h-3.5 text-orange-600" />
+                  <span>Dépôt au Garage d&apos;Urgence</span>
+                </div>
+                <p className="text-[11px] text-orange-700 dark:text-orange-300/80 leading-tight">
+                  Sélectionnez le véhicule dans la flotte ci-dessous pour ordonner à l&apos;agent de le déposer au garage d&apos;urgence.
+                </p>
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {[
+                    "🛠️ Garage d'urgence Hard Auto Services",
+                    "🚨 Panne moteur / Remorquage",
+                    "⚠️ Problème freins / Sécurité urgente",
+                    "💥 Dépôt carrosserie suite choc",
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setCreateDesc((prev) => (prev ? `${prev} · ${chip}` : chip));
+                      }}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-200 hover:bg-orange-100 transition-all cursor-pointer"
+                    >
+                      + {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {createTaskType === "OTHER" && (
+              <div className="p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-1.5 animate-fadeIn">
+                <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-extrabold text-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Autre Mission Personnalisée</span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-tight">
+                  Intervention sur mesure hors catégories habituelles. Renseignez le motif et les instructions ci-dessous.
+                </p>
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {[
+                    "📄 Livraison contrat / Documents",
+                    "🔑 Récupération double des clés",
+                    "📍 Vérification stationnement / GPS",
+                    "🤝 Entretien chauffeur sur place",
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setCreateDesc((prev) => (prev ? `${prev} · ${chip}` : chip));
+                      }}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer"
+                    >
+                      + {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Plate & Driver with Autocomplete Fleet Picker */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Matricule
+              <div ref={plateDropdownRef} className="relative">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center justify-between">
+                  <span>Matricule *</span>
+                  {vehicles.length > 0 && (
+                    <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                      {vehicles.length} flotte
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
                   placeholder="26517-Y-6 ou WW..."
                   value={createPlate}
-                  onChange={(e) => setCreatePlate(e.target.value.toUpperCase())}
-                  className="w-full p-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                  onFocus={() => setIsPlateDropdownOpen(true)}
+                  onChange={(e) => {
+                    setCreatePlate(e.target.value.toUpperCase());
+                    setIsPlateDropdownOpen(true);
+                  }}
+                  className="w-full p-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white uppercase focus:ring-2 focus:ring-blue-500/20"
                 />
+
+                {/* Suggestions Popover */}
+                {isPlateDropdownOpen && plateSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-48 overflow-y-auto z-50 py-1 divide-y divide-slate-100 dark:divide-slate-700 text-left animate-fadeIn">
+                    <div className="px-2.5 py-1 bg-slate-50 dark:bg-slate-900/60 text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Véhicules en flotte</span>
+                      <span>{plateSuggestions.length} trouvés</span>
+                    </div>
+                    {plateSuggestions.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSelectVehicle(v);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between gap-1.5 cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-300 block">
+                            🚗 {v.plate_number}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">
+                            {v.make_model || "Véhicule GoCab"}
+                          </span>
+                        </div>
+                        {v.assigned_driver_name && (
+                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[90px] shrink-0 text-right">
+                            👤 {v.assigned_driver_name.split(" ")[0]}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

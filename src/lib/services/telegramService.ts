@@ -113,13 +113,25 @@ export async function sendFieldTaskTelegramAlert(task: {
     }
 
     const isRecovery = task.task_type === "VEHICLE_RECOVERY";
-    const headerEmoji = isRecovery ? "🚨" : task.task_type === "MONTHLY_CHECKUP" ? "🔍" : "🔧";
+    const isRepair = task.task_type === "REPAIR" || task.task_type === "EMERGENCY_REPAIR";
+    const isOther = task.task_type === "OTHER";
+    const isGaragePickup = task.task_type === "GARAGE_PICKUP";
+    const isMonthlyCheckup = task.task_type === "MONTHLY_CHECKUP";
+    const isFieldInspection = task.task_type === "FIELD_INSPECTION";
+
+    const headerEmoji = isRecovery ? "🚨" : isRepair ? "🛠️" : isOther ? "📌" : isMonthlyCheckup ? "🔍" : isFieldInspection ? "📋" : isGaragePickup ? "🔧" : "🚗";
     const typeLabel = isRecovery
-      ? "RÉCUPÉRATION VÉHICULE (Vehicle Recovery)"
-      : task.task_type === "MONTHLY_CHECKUP"
+      ? "RÉCUPÉRATION VÉHICULE (Impayé / Blocage)"
+      : isRepair
+      ? "DÉPÔT GARAGE / RÉPARATION URGENCE"
+      : isGaragePickup
+      ? "REPRISE GARAGE (Véhicule Réparé)"
+      : isMonthlyCheckup
       ? "CONTRÔLE MENSUEL"
-      : task.task_type === "GARAGE_PICKUP"
-      ? "REPRISE GARAGE"
+      : isFieldInspection
+      ? "CONSTAT SINISTRE / EXPERTISE"
+      : isOther
+      ? "AUTRE MISSION TERRAIN"
       : task.task_type;
 
     const message = [
@@ -464,8 +476,14 @@ export async function sendFieldTaskCompletedTelegramAlert(data: {
         ? "🔧"
         : data.task_type === "VEHICLE_RECOVERY"
         ? "🚨"
+        : data.task_type === "REPAIR" || data.task_type === "EMERGENCY_REPAIR"
+        ? "🛠️"
+        : data.task_type === "OTHER"
+        ? "📌"
         : data.task_type === "MONTHLY_CHECKUP"
         ? "🔍"
+        : data.task_type === "FIELD_INSPECTION"
+        ? "📋"
         : "🚗";
 
     const typeLabel =
@@ -473,8 +491,14 @@ export async function sendFieldTaskCompletedTelegramAlert(data: {
         ? "REPRISE AU GARAGE (Véhicule Réparé)"
         : data.task_type === "VEHICLE_RECOVERY"
         ? "RÉCUPÉRATION VÉHICULE"
+        : data.task_type === "REPAIR" || data.task_type === "EMERGENCY_REPAIR"
+        ? "DÉPÔT AU GARAGE D'URGENCE"
+        : data.task_type === "OTHER"
+        ? "AUTRE MISSION TERRAIN"
         : data.task_type === "MONTHLY_CHECKUP"
         ? "CONTRÔLE MENSUEL"
+        : data.task_type === "FIELD_INSPECTION"
+        ? "CONSTAT SINISTRE"
         : "MISSION TERRAIN";
 
     const checklistItems = [];
