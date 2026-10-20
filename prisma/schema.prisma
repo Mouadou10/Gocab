@@ -73,6 +73,8 @@ model Vehicle {
   assigned_collector          String?   // Fleet Performance agent who collects cash for this vehicle
   
   notes                       String?   // Fleet operational notes
+  documents                   String?   @default("[]") // JSON string: [{ id, name, fileUrl, fileType, category, size, author, created_at }]
+
   
   // New Fields from VehicleAsset (Dashboard Spec)
   isInsuranceActive Boolean   @default(false)

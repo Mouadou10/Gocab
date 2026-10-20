@@ -231,6 +231,10 @@ export async function PATCH(
     if (body.assigned_driver_name !== undefined) updateData.assigned_driver_name = body.assigned_driver_name;
     if (body.assigned_driver_phone !== undefined) updateData.assigned_driver_phone = body.assigned_driver_phone;
     if (body.notes !== undefined) updateData.notes = body.notes;
+    if (body.documents !== undefined) {
+      updateData.documents = typeof body.documents === "string" ? body.documents : JSON.stringify(body.documents);
+    }
+
 
     if (body.assigned_supervisor !== undefined) {
       updateData.assigned_supervisor = body.assigned_supervisor ? body.assigned_supervisor.trim() : null;

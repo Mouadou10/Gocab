@@ -76,6 +76,7 @@ async function syncSchema() {
       "ALTER TABLE FieldTask ADD COLUMN duration_hours REAL DEFAULT 1.0",
       "ALTER TABLE Vehicle ADD COLUMN historical_driver_name TEXT",
       "ALTER TABLE Vehicle ADD COLUMN historical_driver_phone TEXT",
+      "ALTER TABLE Vehicle ADD COLUMN documents TEXT DEFAULT '[]'",
       "ALTER TABLE DriverProfile ADD COLUMN isRedFlagged BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE DriverProfile ADD COLUMN redFlagReason TEXT",
       "ALTER TABLE DriverProfile ADD COLUMN redFlaggedAt DATETIME",

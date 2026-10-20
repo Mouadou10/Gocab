@@ -186,6 +186,7 @@ CREATE TABLE "Vehicle" (
     "assigned_supervisor" TEXT,
     "assigned_collector" TEXT,
     "notes" TEXT,
+    "documents" TEXT DEFAULT '[]',
     "isInsuranceActive" BOOLEAN NOT NULL DEFAULT false,
     "lastVidangeOdoKM" INTEGER NOT NULL DEFAULT 0,
     "adBlueLevelPct" INTEGER NOT NULL DEFAULT 100,

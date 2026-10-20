@@ -19,7 +19,8 @@ import AddExpenseModal, { EXPENSE_CATEGORIES } from "./AddExpenseModal";
 import AttestationModal, { AttestationData } from "./AttestationModal";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
-import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck, Flag } from "lucide-react";
+import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck, Flag, Paperclip } from "lucide-react";
+import VehicleDocumentsModal from "./VehicleDocumentsModal";
 import RedFlagBadge from "./RedFlagBadge";
 
 const HUB_CITIES = [
@@ -73,6 +74,7 @@ export interface Vehicle {
     redFlagReason?: string | null;
   } | null;
   total_expenses_mad?: number;
+  documents?: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -157,6 +159,7 @@ export default function VehicleDrawer({
   const [isBcModalOpen, setIsBcModalOpen] = useState(false);
   const [selectedBc, setSelectedBc] = useState<BonDeCommandeData | null>(null);
   const [isNewBcModalOpen, setIsNewBcModalOpen] = useState(false);
+  const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -909,6 +912,14 @@ export default function VehicleDrawer({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
+                        onClick={() => setIsDocsModalOpen(true)}
+                        className="flex items-center gap-1 text-xs font-bold text-purple-800 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 shadow-2xs transition-colors"
+                      >
+                        <Paperclip className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Pièces Jointes & Photos</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setIsNewBcModalOpen(true)}
                         className="flex items-center gap-1 text-xs font-bold text-navy bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs transition-colors"
                       >
@@ -1083,6 +1094,20 @@ export default function VehicleDrawer({
               date: getFormattedToday(),
             }}
             readOnly={false}
+          />
+        )}
+
+        {/* Vehicle Documents & Photos Modal */}
+        {vehicle && (
+          <VehicleDocumentsModal
+            isOpen={isDocsModalOpen}
+            onClose={() => setIsDocsModalOpen(false)}
+            vehicle={vehicle}
+            onDocumentsUpdated={(updatedDocs) => {
+              if (vehicle) {
+                vehicle.documents = JSON.stringify(updatedDocs);
+              }
+            }}
           />
         )}
 

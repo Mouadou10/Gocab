@@ -39,6 +39,7 @@ import {
   Fuel,
   TrendingUp,
   ShieldAlert,
+  Paperclip,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import VehicleDrawer, { Vehicle } from "./VehicleDrawer";
@@ -47,6 +48,7 @@ import VehicleCSVUploader from "./VehicleCSVUploader";
 import AddExpenseModal from "./AddExpenseModal";
 import VehicleExpensesDrawer from "./VehicleExpensesDrawer";
 import AttestationModal, { AttestationData } from "./AttestationModal";
+import VehicleDocumentsModal, { VehicleDocument } from "./VehicleDocumentsModal";
 import RedFlagBadge from "./RedFlagBadge";
 
 const HUB_CITIES = [
@@ -164,6 +166,40 @@ export default function FleetView() {
   // Quick Attestation Modal state
   const [attestationVehicleData, setAttestationVehicleData] = useState<AttestationData | null>(null);
   const [isAttestationModalOpen, setIsAttestationModalOpen] = useState(false);
+
+  // Vehicle Documents Modal state
+  const [docModalVehicle, setDocModalVehicle] = useState<Vehicle | null>(null);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+
+  const getVehicleDocCount = (v: Vehicle) => {
+    if (!v.documents) return 0;
+    try {
+      const parsed = JSON.parse(v.documents);
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const handleDocumentsUpdated = (updatedDocs: VehicleDocument[]) => {
+    if (!docModalVehicle) return;
+    const serialized = JSON.stringify(updatedDocs);
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === docModalVehicle.id
+          ? { ...v, documents: serialized }
+          : v
+      )
+    );
+    setDocModalVehicle((prev) => (prev ? { ...prev, documents: serialized } : null));
+    if (globalCachedVehicles) {
+      globalCachedVehicles = globalCachedVehicles.map((v) =>
+        v.id === docModalVehicle.id
+          ? { ...v, documents: serialized }
+          : v
+      );
+    }
+  };
 
   function handleQuickAttestation(vehicle: Vehicle) {
     const todayFormatted = new Intl.DateTimeFormat("fr-FR", {
@@ -1097,6 +1133,28 @@ export default function FleetView() {
                           <button
                             type="button"
                             onClick={() => {
+                              setDocModalVehicle(v);
+                              setIsDocModalOpen(true);
+                            }}
+                            className={`px-2 py-1 rounded-lg text-xs transition-colors font-bold flex items-center gap-1 cursor-pointer shadow-2xs ${
+                              getVehicleDocCount(v) > 0
+                                ? "bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-800 border border-purple-200"
+                                : "bg-slate-50 hover:bg-slate-600 hover:text-white text-slate-700 border border-slate-200"
+                            }`}
+                            title="Documents & Photos (Carte grise, assurance, constat, photos, PDF...)"
+                          >
+                            <Paperclip className="w-3 h-3" />
+                            <span>Docs</span>
+                            {getVehicleDocCount(v) > 0 && (
+                              <span className="ml-0.5 px-1.5 py-0.2 bg-purple-200/90 text-purple-900 rounded-full text-3xs font-black">
+                                {getVehicleDocCount(v)}
+                              </span>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
                               setEditingVehicle(v);
                               setIsDrawerOpen(true);
                             }}
@@ -1192,6 +1250,19 @@ export default function FleetView() {
           onSaveSuccess={() => {
             fetchVehicles();
           }}
+        />
+      )}
+
+      {/* Vehicle Documents & Photos Modal */}
+      {docModalVehicle && (
+        <VehicleDocumentsModal
+          isOpen={isDocModalOpen}
+          onClose={() => {
+            setIsDocModalOpen(false);
+            setDocModalVehicle(null);
+          }}
+          vehicle={docModalVehicle}
+          onDocumentsUpdated={handleDocumentsUpdated}
         />
       )}
     </div>
