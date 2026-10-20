@@ -236,24 +236,65 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Standardized set of training attendance statuses across GoCab (synchronized with TrainingScorecard)
+    const ATTENDED_STATUSES = [
+      "Attended",
+      "Attended and not interested",
+      "Pending",
+      "Refused the offer",
+      "Assign vehicle",
+      "Preorder",
+      "Accept offer",
+    ];
+
+    const isAttendedLead = (l: any) =>
+      l.board_column === "VEHICLE_ASSIGNMENT" ||
+      (l.training_status && ATTENDED_STATUSES.includes(l.training_status));
+
     // Filter leads treated in date range or scheduled for training session in date range
-    const leadsTreatedInRange = allLeads.filter((l) => {
+    const isLeadInDateRange = (l: any) => {
+      // If reminder_date is set, the scheduled session date strictly defines its period
       if (l.reminder_date) {
         const rd = new Date(l.reminder_date);
-        if (!isNaN(rd.getTime()) && rd >= startDate && rd <= endDate) {
-          return true;
+        if (!isNaN(rd.getTime())) {
+          return rd >= startDate && rd <= endDate;
         }
       }
-      const ts = l.status_changed_at || l.updated_at || l.created_at;
+      // If no reminder_date is set, fallback to status_changed_at or created_at
+      const ts = l.status_changed_at || l.created_at;
       if (!ts) return false;
       const d = new Date(ts);
       return d >= startDate && d <= endDate;
-    });
+    };
+
+    const leadsTreatedInRange = allLeads.filter(isLeadInDateRange);
 
     // Apply user filter if a specific user is chosen in slicer
     let targetUser: any = null;
+    let userFixedLeadIds = new Set<string>();
     if (userId && userId !== "ALL") {
       targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        const uName = (targetUser.fullName || targetUser.name || "").toLowerCase();
+        try {
+          const logs = await prisma.leadActivityLog.findMany({
+            where: {
+              OR: [
+                { detail: { contains: "Training fixed" } },
+                { detail: { contains: "TRAINING_PIPELINE" } },
+              ],
+            },
+            select: { lead_id: true, agent: true },
+          });
+          logs.forEach((log) => {
+            if ((log.agent || "").toLowerCase().includes(uName)) {
+              userFixedLeadIds.add(log.lead_id);
+            }
+          });
+        } catch {
+          // Fallback gracefully
+        }
+      }
     }
 
     const filteredLeadsInRange = leadsTreatedInRange.filter((l) => {
@@ -262,7 +303,13 @@ export async function GET(request: NextRequest) {
       const uEmail = (targetUser.email || "").toLowerCase();
       const h = (l.handled_by || "").toLowerCase();
       const n = (l.notes || "").toLowerCase();
-      return h.includes(uName) || h.includes(uEmail) || n.includes(uName) || n.includes(uEmail);
+      return (
+        h.includes(uName) ||
+        h.includes(uEmail) ||
+        n.includes(uName) ||
+        n.includes(uEmail) ||
+        userFixedLeadIds.has(l.id)
+      );
     });
 
     // ── Global Funnel Numbers ──────────────────────────────────────────
@@ -272,19 +319,7 @@ export async function GET(request: NextRequest) {
     ).length;
 
     // Attended persons (candidates showing up at training)
-    const attendedPersons = filteredLeadsInRange.filter(
-      (l) =>
-        l.training_status &&
-        [
-          "Attended",
-          "Attended and not interested",
-          "Pending",
-          "Refused the offer",
-          "Assign vehicle",
-          "Preorder",
-          "Accept offer",
-        ].includes(l.training_status)
-    ).length;
+    const attendedPersons = filteredLeadsInRange.filter(isAttendedLead).length;
 
     const leadConversionRate = callsDone > 0 ? Number(((trainingFixed / callsDone) * 100).toFixed(1)) : 0;
 
@@ -293,19 +328,7 @@ export async function GET(request: NextRequest) {
       (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT" || l.brand_status === "Training fixed"
     );
 
-    const attendedCount = trainingLeads.filter(
-      (l) =>
-        l.training_status &&
-        [
-          "Attended",
-          "Attended and not interested",
-          "Pending",
-          "Refused the offer",
-          "Assign vehicle",
-          "Preorder",
-          "Accept offer",
-        ].includes(l.training_status)
-    ).length;
+    const attendedCount = trainingLeads.filter(isAttendedLead).length;
 
     const assignedVehiclesCount = trainingLeads.filter(
       (l) => l.board_column === "VEHICLE_ASSIGNMENT" || l.training_status === "Assign vehicle" || l.training_status === "Accept offer"
@@ -396,20 +419,11 @@ export async function GET(request: NextRequest) {
     // Attended candidates from training fixed by the traffic team (sourced from the training pipeline)
     // Note: In GoCab's workflow, once a candidate arrives at training, Ayoub Gsaib conducts the session
     // and registers presence/preorders, which updates handled_by to 'ayoub gsaib'.
-    // We fall back to the training pipeline counts in range so the Traffic Acquisition team gets credit for downstream conversions.
+    // We credit the Traffic Acquisition team for all downstream attendees and conversions originating from their pipeline.
     const directTrafficAttended = activeTrafficLeads.filter(
       (l) =>
         (l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT") &&
-        l.training_status &&
-        [
-          "Attended",
-          "Attended and not interested",
-          "Pending",
-          "Refused the offer",
-          "Assign vehicle",
-          "Preorder",
-          "Accept offer",
-        ].includes(l.training_status)
+        isAttendedLead(l)
     ).length;
 
     const directTrafficPreorders = activeTrafficLeads.filter(
@@ -423,9 +437,14 @@ export async function GET(request: NextRequest) {
 
     const totalTrainingPreorders = preordersCount + assignedVehiclesCount;
 
-    const trafficAttendedPersons = directTrafficAttended > 0 ? directTrafficAttended : attendedCount;
+    // Synchronized: Traffic team gets full credit for all candidates who attend the training sessions fixed by them
+    const trafficAttendedPersons = targetUser
+      ? directTrafficAttended
+      : Math.max(directTrafficAttended, attendedCount);
     // Align with Onboarding conversions: Traffic team gets credit for all downstream conversions (preorders + assignments)
-    const trafficPreordersAssigned = Math.max(directTrafficPreorders, totalTrainingPreorders);
+    const trafficPreordersAssigned = targetUser
+      ? directTrafficPreorders
+      : Math.max(directTrafficPreorders, totalTrainingPreorders);
 
     const trafficTrainingFixedRate = trafficCallsDone > 0 ? Number(((trafficTrainingFixed / trafficCallsDone) * 100).toFixed(1)) : 0;
     const trafficAttendedRate = trafficTrainingFixed > 0 ? Number(((trafficAttendedPersons / trafficTrainingFixed) * 100).toFixed(1)) : 0;
@@ -455,19 +474,7 @@ export async function GET(request: NextRequest) {
       ? filteredLeadsInRange
       : trainingLeads;
 
-    const onboardingAttendedCount = activeOnboardingLeads.filter(
-      (l) =>
-        l.training_status &&
-        [
-          "Attended",
-          "Attended and not interested",
-          "Pending",
-          "Refused the offer",
-          "Assign vehicle",
-          "Preorder",
-          "Accept offer",
-        ].includes(l.training_status)
-    ).length;
+    const onboardingAttendedCount = activeOnboardingLeads.filter(isAttendedLead).length;
 
     const onboardingPreordersCount = activeOnboardingLeads.filter((l) => l.training_status === "Preorder").length;
     const onboardingAssignedCount = activeOnboardingLeads.filter(
@@ -538,18 +545,7 @@ export async function GET(request: NextRequest) {
         entry.scheduledCount++;
       }
 
-      const isAttended = Boolean(
-        l.training_status &&
-        [
-          "Attended",
-          "Attended and not interested",
-          "Pending",
-          "Refused the offer",
-          "Assign vehicle",
-          "Preorder",
-          "Accept offer",
-        ].includes(l.training_status)
-      );
+      const isAttended = isAttendedLead(l);
 
       if (isAttended) {
         entry.attendedCount++;

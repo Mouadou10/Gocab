@@ -269,10 +269,21 @@ export default function TrainingScorecard({
   );
   const totalConverted = converted.length;
 
+  // Attended statuses — all candidates who physically showed up to the training session
+  // Synchronized 1:1 with the KPI performance analytics definition
+  const ATTENDED_STATUSES = [
+    'Attended',
+    'Attended and not interested',
+    'Pending',
+    'Refused the offer',
+    'Assign vehicle',
+    'Preorder',
+    'Accept offer',
+  ];
+
   // Attendance count
   const attendedCount = filteredLeads.filter(l =>
-    l.training_status === 'Attended' ||
-    l.training_status === 'Attended and not interested' ||
+    (l.training_status && ATTENDED_STATUSES.includes(l.training_status)) ||
     CONVERSION_STATUSES.includes(l.training_status) ||
     l.board_column === 'VEHICLE_ASSIGNMENT'
   ).length;
