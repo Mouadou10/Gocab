@@ -50,6 +50,7 @@ export interface InsuranceNoteItem {
 export interface InsuranceDossierInfo {
   claim_number?: string;
   insurance_company?: string;
+  garage_name?: string;
   policy_number?: string;
   claim_status?: string;
   declaration_date?: string;

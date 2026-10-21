@@ -635,6 +635,18 @@ export default function InsuranceView() {
                   const isSelected = claim.id === selectedClaim?.id;
                   const daysInStatus = calculateDaysInStatus(claim.step_updated_at || claim.created_at);
 
+                  // Extract garage name & insurance from claim comments if present
+                  let garageName = "Emergence";
+                  try {
+                    if (claim.comments) {
+                      const parsed = JSON.parse(claim.comments);
+                      if (Array.isArray(parsed)) {
+                        const meta = parsed.find((c: any) => c.id === "INSURANCE_DOSSIER_META");
+                        if (meta?.garage_name) garageName = meta.garage_name;
+                      }
+                    }
+                  } catch {}
+
                   // Color based on days in status
                   const daysColor =
                     daysInStatus <= 3
@@ -662,12 +674,17 @@ export default function InsuranceView() {
                       {/* Left: Plate Number & Status Icon */}
                       <div className="min-w-0 flex items-center gap-2.5">
                         <span className="text-base shrink-0">{stepDef.icon}</span>
-                        <div>
+                        <div className="min-w-0">
                           <div className="font-mono font-black text-sm text-navy tracking-wide flex items-center gap-1.5">
                             <span>{claim.vehicle?.plate_number}</span>
                           </div>
-                          <div className="text-3xs font-semibold text-gray-500 truncate mt-0.5">
-                            {stepDef.label}
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className="text-3xs font-semibold text-gray-500 truncate">
+                              {stepDef.label}
+                            </span>
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.2 rounded border border-amber-200">
+                              <span>🏬</span> {garageName}
+                            </span>
                           </div>
                         </div>
                       </div>

@@ -53,9 +53,9 @@ interface InsuranceVehicleDetailProps {
 }
 
 export const INSURANCE_COMPANIES = [
+  "Sanlam",
   "Wafa Assurance",
   "RMA Watanya",
-  "Sanlam Maroc",
   "AXA Assurances Maroc",
   "Saham Assurance",
   "AtlantaSanad",
@@ -63,6 +63,9 @@ export const INSURANCE_COMPANIES = [
   "CAT (Compagnie d'Assurances Transport)",
   "Autre Compagnie",
 ];
+
+export const GARAGE_OPTIONS = ["Emergence", "Zri9a", "Hard auto"] as const;
+export type GarageOption = (typeof GARAGE_OPTIONS)[number];
 
 export const INSURANCE_DOSSIER_STATUSES = [
   { id: "DECLARED", label: "1. Déclaration enregistrée", color: "bg-blue-100 text-blue-800 border-blue-200" },
@@ -108,8 +111,9 @@ export default function InsuranceVehicleDetail({
 
   // Insurance Dossier Form States
   const [claimNumber, setClaimNumber] = useState(dossierMeta?.claim_number || "");
-  const [insuranceCompany, setInsuranceCompany] = useState(dossierMeta?.insurance_company || "Wafa Assurance");
-  const [policyNumber, setPolicyNumber] = useState(dossierMeta?.policy_number || claim.vehicle.plate_number ? "" : "");
+  const [insuranceCompany, setInsuranceCompany] = useState(dossierMeta?.insurance_company || "Sanlam");
+  const [garageName, setGarageName] = useState(dossierMeta?.garage_name || "Emergence");
+  const [policyNumber, setPolicyNumber] = useState(dossierMeta?.policy_number || (claim.vehicle as any).insurance_policy_number || "");
   const [insuranceStatus, setInsuranceStatus] = useState(dossierMeta?.claim_status || "DECLARED");
   const [declarationDate, setDeclarationDate] = useState(dossierMeta?.declaration_date || "");
   const [expertName, setExpertName] = useState(dossierMeta?.expert_name || "");
@@ -137,7 +141,8 @@ export default function InsuranceVehicleDetail({
     const meta = parsed.find((c: any) => c.id === "INSURANCE_DOSSIER_META") as InsuranceDossierInfo | undefined;
 
     setClaimNumber(meta?.claim_number || "");
-    setInsuranceCompany(meta?.insurance_company || (claim as any).vehicle?.insurance_policy_number ? "Wafa Assurance" : "Wafa Assurance");
+    setInsuranceCompany(meta?.insurance_company || "Sanlam");
+    setGarageName(meta?.garage_name || "Emergence");
     setPolicyNumber(meta?.policy_number || (claim as any).vehicle?.insurance_policy_number || "");
     setInsuranceStatus(meta?.claim_status || "DECLARED");
     setDeclarationDate(meta?.declaration_date || (claim.created_at ? claim.created_at.split("T")[0] : ""));
@@ -257,6 +262,7 @@ export default function InsuranceVehicleDetail({
           insurance_dossier: {
             claim_number: claimNumber,
             insurance_company: insuranceCompany,
+            garage_name: garageName,
             policy_number: policyNumber,
             claim_status: insuranceStatus,
             declaration_date: declarationDate,
@@ -563,11 +569,15 @@ export default function InsuranceVehicleDetail({
                   <span className="text-white/70 text-xs">({(claim.vehicle as any).year})</span>
                 )}
               </div>
-              <div className="text-2xs text-white/75 flex items-center gap-2">
+              <div className="text-2xs text-white/75 flex items-center gap-2 flex-wrap">
                 <span>📍 {(claim.vehicle as any).hub_city || "Casablanca"}</span>
                 {(claim.vehicle as any).current_mileage > 0 && (
                   <span>· 🛣️ {((claim.vehicle as any).current_mileage).toLocaleString()} KM</span>
                 )}
+                <span>· 🛡️ {insuranceCompany || "Sanlam"}</span>
+                <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-200 border border-amber-300/30 font-bold">
+                  🏬 Garage: {garageName || "Emergence"}
+                </span>
               </div>
             </div>
           </div>
@@ -811,6 +821,22 @@ export default function InsuranceVehicleDetail({
                   >
                     {INSURANCE_COMPANIES.map((c) => (
                       <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Garage de Réparation */}
+                <div>
+                  <label className="block text-2xs font-bold text-gray-700 mb-1">
+                    Garage de Réparation <span className="text-amber-600 font-extrabold">*</span>
+                  </label>
+                  <select
+                    value={garageName}
+                    onChange={(e) => setGarageName(e.target.value)}
+                    className="w-full px-3 py-2 bg-amber-50/70 border border-amber-300 rounded-xl font-bold text-amber-950 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 focus:outline-none cursor-pointer"
+                  >
+                    {GARAGE_OPTIONS.map((g) => (
+                      <option key={g} value={g}>{g}</option>
                     ))}
                   </select>
                 </div>
@@ -1128,8 +1154,13 @@ export default function InsuranceVehicleDetail({
 
             {/* Visual 6-Step Stepper */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
-              <h5 className="text-xs font-black text-navy uppercase tracking-wider flex items-center justify-between">
-                <span>Avancement du Véhicule au Garage</span>
+              <h5 className="text-xs font-black text-navy uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-2">
+                  <span>Avancement du Véhicule au Garage</span>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-2xs font-bold font-mono">
+                    🏬 Garage : {garageName || "Emergence"}
+                  </span>
+                </span>
                 <span className="text-2xs font-normal text-gray-400">Cliquez sur une étape pour changer</span>
               </h5>
 
@@ -1444,6 +1475,12 @@ export default function InsuranceVehicleDetail({
                   <span className="text-3xs text-gray-400 uppercase block font-bold">Arrêt Total Dossier</span>
                   <span className="font-bold text-gray-800">{totalDays} jours</span>
                 </div>
+                <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-xl">
+                  <span className="text-3xs text-amber-800 uppercase block font-bold">Garage de Réparation</span>
+                  <span className="font-extrabold text-amber-950 text-xs flex items-center gap-1">
+                    <span>🏬</span> {garageName || "Emergence"}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1455,9 +1492,13 @@ export default function InsuranceVehicleDetail({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
-                  <span className="text-3xs text-gray-500 uppercase block font-bold mb-1">Police Assurance</span>
-                  <div className="font-mono font-bold text-gray-900">
-                    {(claim.vehicle as any).insurance_policy_number || "Non renseignée"}
+                  <span className="text-3xs text-gray-500 uppercase block font-bold mb-1">Assureur & Police</span>
+                  <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                    <span>🛡️</span>
+                    <span>{insuranceCompany || "Sanlam"}</span>
+                  </div>
+                  <div className="font-mono text-2xs text-gray-600 mt-0.5">
+                    {(claim.vehicle as any).insurance_policy_number || policyNumber || "Police N/A"}
                   </div>
                   <div className="text-3xs text-gray-400 mt-1">
                     Expire le : {(claim.vehicle as any).insurance_expiry_date ? new Date((claim.vehicle as any).insurance_expiry_date).toLocaleDateString("fr-FR") : "N/A"}

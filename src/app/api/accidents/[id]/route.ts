@@ -98,7 +98,8 @@ export async function PATCH(req: Request, context: any) {
         type: "INSURANCE_INFO",
         timeline_step: "INSURANCE_DOCS",
         claim_number: dossier.claim_number?.trim() || existingDossier.claim_number || "",
-        insurance_company: dossier.insurance_company?.trim() || existingDossier.insurance_company || "",
+        insurance_company: dossier.insurance_company?.trim() || existingDossier.insurance_company || "Sanlam",
+        garage_name: dossier.garage_name?.trim() || existingDossier.garage_name || "Emergence",
         policy_number: dossier.policy_number?.trim() || existingDossier.policy_number || "",
         claim_status: dossier.claim_status || existingDossier.claim_status || "DECLARED",
         declaration_date: dossier.declaration_date || existingDossier.declaration_date || "",
@@ -124,7 +125,7 @@ export async function PATCH(req: Request, context: any) {
       existingComments.unshift({
         id: crypto.randomUUID(),
         timeline_step: currentClaim.timeline_step,
-        comment: `🛡️ Dossier Assureur mis à jour par ${author} · Réf: ${updatedDossier.claim_number || "Non spécifiée"} (Compagnie: ${updatedDossier.insurance_company || "N/A"}) · Statut: ${updatedDossier.claim_status}`,
+        comment: `🛡️ Dossier Assureur mis à jour par ${author} · Réf: ${updatedDossier.claim_number || "Non spécifiée"} (Compagnie: ${updatedDossier.insurance_company} · Garage: ${updatedDossier.garage_name}) · Statut: ${updatedDossier.claim_status}`,
         author: author,
         created_at: new Date().toISOString(),
       });
