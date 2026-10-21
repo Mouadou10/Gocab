@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import AccidentCard, { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
+import { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
+import InsuranceVehicleDetail from "./InsuranceVehicleDetail";
 import RepairReminderModal from "./RepairReminderModal";
 import RepairReminderCard, { RepairReminderItem } from "./RepairReminderCard";
 import toast from "react-hot-toast";
@@ -14,11 +15,12 @@ import {
   Filter,
   RotateCcw,
   Calendar,
-  Bell,
-  Wrench,
-  Camera,
   AlertTriangle,
   Plus,
+  RefreshCw,
+  CheckCircle2,
+  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 
 interface VehicleItem {
@@ -35,6 +37,8 @@ interface VehicleItem {
 
 export default function InsuranceView() {
   const [claims, setClaims] = useState<AccidentClaim[]>([]);
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+
   const [reminders, setReminders] = useState<RepairReminderItem[]>([]);
   const [remindersSummary, setRemindersSummary] = useState({
     total: 0,
@@ -49,14 +53,14 @@ export default function InsuranceView() {
   const [filterReminderStatus, setFilterReminderStatus] = useState<"ALL" | "DUE" | "PENDING" | "IN_REPAIR" | "COMPLETED">("ALL");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Tabs: "open" (active claims), "reminders" (repair reminders), "restored" (completed/restored vehicles)
-  const [activeTab, setActiveTab] = useState<"open" | "reminders" | "restored">("open");
+  // Tabs: "master-detail" (main insurance & claims view) vs "reminders" (repair reminders list)
+  const [viewMode, setViewMode] = useState<"master-detail" | "reminders">("master-detail");
 
-  // Filter and Search Toolbar States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStage, setFilterStage] = useState<string>("ALL");
-  const [filterSeverity, setFilterSeverity] = useState<string>("ALL");
-  const [filterFault, setFilterFault] = useState<string>("ALL");
+  // Left List Filter: "open" (in progress) vs "restored" (completed) vs "all"
+  const [leftTabFilter, setLeftTabFilter] = useState<"open" | "restored" | "all">("open");
+
+  // Search by immat or driver on the left list
+  const [searchImmat, setSearchImmat] = useState("");
 
   // States for reporting a new accident with searchable combobox
   const [isReporting, setIsReporting] = useState(false);
@@ -65,6 +69,9 @@ export default function InsuranceView() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Mobile detail view toggle
+  const [showMobileDetail, setShowMobileDetail] = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -83,7 +90,7 @@ export default function InsuranceView() {
       const res = await fetch("/api/accidents");
       const data = await res.json();
       if (data.success) {
-        setClaims(data.claims);
+        setClaims(data.claims || []);
       }
     } catch (err) {
       console.error("Failed to fetch claims:", err);
@@ -123,6 +130,61 @@ export default function InsuranceView() {
     fetchVehicles();
   }, [fetchClaims, fetchReminders, fetchVehicles]);
 
+  // Separate active claims and completed (Vehicle Back) claims
+  const activeClaims = claims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
+  const historyClaims = claims.filter((c) => c.timeline_step === "VEHICLE_BACK");
+
+  // KPI Calculations
+  const totalActive = activeClaims.length;
+  const hardCount = activeClaims.filter((c) => c.severity === "HARD").length;
+  const softCount = activeClaims.filter((c) => c.severity === "SOFT").length;
+  const insuranceDocsCount = activeClaims.filter((c) => c.timeline_step === "INSURANCE_DOCS").length;
+  const readyForPickupCount = activeClaims.filter((c) => c.timeline_step === "READY_FOR_PICKUP").length;
+
+  const totalDowntimeDays = activeClaims.reduce((sum, c) => {
+    const diffTime = Math.abs(new Date().getTime() - new Date(c.created_at).getTime());
+    return sum + Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  }, 0);
+  const avgDowntimeDays = totalActive > 0 ? Math.round(totalDowntimeDays / totalActive) : 0;
+
+  // Calculate days in status helper
+  const calculateDaysInStatus = (dateStr?: string | null) => {
+    if (!dateStr) return 0;
+    const diffTime = Math.abs(new Date().getTime() - new Date(dateStr).getTime());
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  // Filter vehicles on the left list
+  const getFilteredClaims = () => {
+    let baseList = claims;
+    if (leftTabFilter === "open") baseList = activeClaims;
+    else if (leftTabFilter === "restored") baseList = historyClaims;
+
+    if (!searchImmat.trim()) return baseList;
+    const q = searchImmat.toLowerCase().trim();
+    return baseList.filter((c) => {
+      const matchPlate = c.vehicle?.plate_number?.toLowerCase().includes(q);
+      const matchModel = c.vehicle?.make_model?.toLowerCase().includes(q) || false;
+      const matchDriver = c.driver_name?.toLowerCase().includes(q) || false;
+      return matchPlate || matchModel || matchDriver;
+    });
+  };
+
+  const filteredLeftClaims = getFilteredClaims();
+
+  // Auto-select first vehicle if none or invalid
+  useEffect(() => {
+    if (filteredLeftClaims.length > 0) {
+      const exists = filteredLeftClaims.some((c) => c.id === selectedClaimId);
+      if (!exists && (!selectedClaimId || !claims.some((c) => c.id === selectedClaimId))) {
+        setSelectedClaimId(filteredLeftClaims[0].id);
+      }
+    }
+  }, [filteredLeftClaims, selectedClaimId, claims]);
+
+  // Selected claim object
+  const selectedClaim = claims.find((c) => c.id === selectedClaimId) || (filteredLeftClaims.length > 0 ? filteredLeftClaims[0] : null);
+
   const handleReportAccident = async () => {
     if (!newVehicleId) return;
     try {
@@ -132,122 +194,77 @@ export default function InsuranceView() {
         body: JSON.stringify({ vehicle_id: newVehicleId }),
       });
       if (res.ok) {
+        const data = await res.json();
         toast.success("Dossier accident ouvert avec succès !");
         setIsReporting(false);
         setNewVehicleId("");
         setVehicleSearch("");
         setIsDropdownOpen(false);
-        setActiveTab("open");
-        fetchClaims();
-        fetchVehicles();
+        setLeftTabFilter("open");
+        await fetchClaims();
+        if (data.claim?.id) {
+          setSelectedClaimId(data.claim.id);
+        }
       } else {
         toast.error("Échec de la création du dossier d'accident");
       }
     } catch (err) {
-      console.error("Error reporting accident:", err);
       toast.error("Erreur réseau");
     }
   };
 
-  // Separate active claims and completed (Vehicle Back) claims
-  const activeClaims = claims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
-  const historyClaims = claims.filter((c) => c.timeline_step === "VEHICLE_BACK");
-
-  // KPI Calculations based on active claims
-  const totalActive = activeClaims.length;
-  const hardCount = activeClaims.filter((c) => c.severity === "HARD").length;
-  const softCount = activeClaims.filter((c) => c.severity === "SOFT").length;
-  const insuranceDocsCount = activeClaims.filter((c) => c.timeline_step === "INSURANCE_DOCS").length;
-  const readyForPickupCount = activeClaims.filter((c) => c.timeline_step === "READY_FOR_PICKUP").length;
-  const activeTelegramMissionsCount = activeClaims.filter((c) => c.fieldTask && c.fieldTask.status !== "COMPLETED").length;
-
-  const totalDowntimeDays = activeClaims.reduce((sum, c) => {
-    const diffTime = Math.abs(new Date().getTime() - new Date(c.created_at).getTime());
-    return sum + Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  }, 0);
-  const avgDowntimeDays = totalActive > 0 ? Math.round(totalDowntimeDays / totalActive) : 0;
-
-  // Filter Claims Helper
-  const filterClaimsList = (list: AccidentClaim[]) => {
-    return list.filter((claim) => {
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchPlate = claim.vehicle.plate_number.toLowerCase().includes(q);
-        const matchModel = claim.vehicle.make_model?.toLowerCase().includes(q) || false;
-        const matchDriver = claim.driver_name?.toLowerCase().includes(q) || false;
-        const matchPhone = claim.driver_phone?.toLowerCase().includes(q) || false;
-        if (!matchPlate && !matchModel && !matchDriver && !matchPhone) return false;
-      }
-
-      // Stage filter
-      if (filterStage !== "ALL" && claim.timeline_step !== filterStage) {
-        return false;
-      }
-
-      // Severity filter
-      if (filterSeverity !== "ALL" && claim.severity !== filterSeverity) {
-        return false;
-      }
-
-      // Fault filter
-      if (filterFault !== "ALL" && claim.fault !== filterFault) {
-        return false;
-      }
-
-      return true;
-    });
-  };
-
-  const activeFiltered = filterClaimsList(activeClaims);
-  const historyFiltered = filterClaimsList(historyClaims);
-
-  const hasActiveFilters =
-    searchQuery.trim() !== "" ||
-    filterStage !== "ALL" ||
-    filterSeverity !== "ALL" ||
-    filterFault !== "ALL";
-
-  const handleResetFilters = () => {
-    setSearchQuery("");
-    setFilterStage("ALL");
-    setFilterSeverity("ALL");
-    setFilterFault("ALL");
-  };
-
-  // Filter vehicles by search query in the searchable combobox
-  const filteredVehicles = vehicles.filter((v) => {
+  // Filter vehicles for reporting dropdown
+  const filteredVehiclesToReport = vehicles.filter((v) => {
     if (!vehicleSearch.trim()) return true;
     const q = vehicleSearch.toLowerCase().trim();
     return (
       v.plate_number.toLowerCase().includes(q) ||
       (v.make_model && v.make_model.toLowerCase().includes(q)) ||
-      (v.hub_city && v.hub_city.toLowerCase().includes(q)) ||
-      (v.assigned_driver_name && v.assigned_driver_name.toLowerCase().includes(q))
+      (v.hub_city && v.hub_city.toLowerCase().includes(q))
     );
   });
 
-  const selectedVehicle = vehicles.find((v) => v.id === newVehicleId);
+  const selectedVehicleToReport = vehicles.find((v) => v.id === newVehicleId);
 
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div className="w-full h-full flex flex-col space-y-4">
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 1. TOP HEADER & KPI METRICS                                            */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h2 className="text-xl font-bold text-navy">Assurance & Gestion des Accidents</h2>
-          <p className="text-sm text-gray-500">
-            Suivi des véhicules accidentés, étapes du garage et restitution flotte.
+          <h2 className="text-xl font-black text-navy flex items-center gap-2">
+            <span>Assurance & Gestion des Sinistres</span>
+            <span className="text-3xs bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
+              Portail Partagé Assureur
+            </span>
+          </h2>
+          <p className="text-xs text-gray-500">
+            Suivi des véhicules accidentés, expertise chiffrée, accord de prise en charge et garage.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
+
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setIsReminderModalOpen(true)}
-            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+            type="button"
+            onClick={() => setViewMode(viewMode === "reminders" ? "master-detail" : "reminders")}
+            className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+              viewMode === "reminders"
+                ? "bg-amber-600 text-white ring-2 ring-amber-400"
+                : remindersSummary.due_or_overdue > 0
+                ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 animate-pulse"
+                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+            }`}
           >
-            <Calendar className="w-4 h-4 text-white" />
-            <span>⏰ Programmer Rappel Réparation</span>
+            <Calendar className="w-3.5 h-3.5 text-amber-600" />
+            <span>Rappels Réparations</span>
+            <span className="text-3xs font-mono font-black px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900">
+              {remindersSummary.due_or_overdue > 0 ? `⚠️ ${remindersSummary.due_or_overdue} dû(s)` : reminders.length}
+            </span>
           </button>
+
           <button
+            type="button"
             onClick={() => {
               setIsReporting(!isReporting);
               if (isReporting) {
@@ -256,151 +273,107 @@ export default function InsuranceView() {
                 setIsDropdownOpen(false);
               }
             }}
-            className="px-4 py-2.5 bg-red-600 text-white font-bold text-sm rounded-xl hover:bg-red-700 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+            className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <span>{isReporting ? "✕ Annuler" : "🚨 Déclarer un Accident"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={fetchClaims}
+            className="p-2 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 rounded-xl transition-colors cursor-pointer"
+            title="Actualiser les données"
+          >
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* KPI Summary Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {/* Card 1: Total Active Accidents */}
-        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
-            <Car className="w-5 h-5" />
+      {/* KPI Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100 font-bold">
+            🚨
           </div>
           <div className="min-w-0">
-            <div className="text-xl font-black text-navy">{totalActive}</div>
-            <div className="text-2xs font-bold text-gray-600 truncate">Véhicules Accidentés</div>
-            <div className="text-3xs text-red-600 font-semibold">Hors service actif</div>
+            <div className="text-base font-black text-navy">{totalActive}</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Véhicules Accidentés</div>
           </div>
         </div>
 
-        {/* Card 2: Severity Split */}
-        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
-            <ShieldAlert className="w-5 h-5" />
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+            <Clock className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-xl font-black text-navy flex items-baseline gap-1">
+            <div className="text-base font-black text-navy">{avgDowntimeDays} j</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Arrêt Moyen</div>
+          </div>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+            <ShieldAlert className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-base font-black text-navy flex items-baseline gap-1">
               <span className="text-red-600">{hardCount}</span>
-              <span className="text-xs font-medium text-gray-400">/</span>
+              <span className="text-3xs text-gray-400">/</span>
               <span className="text-amber-600">{softCount}</span>
             </div>
-            <div className="text-2xs font-bold text-gray-600 truncate">Lourde / Légère</div>
-            <div className="text-3xs text-gray-400 font-medium">Répartition</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Lourde / Légère</div>
           </div>
         </div>
 
-        {/* Card 3: Average Downtime */}
-        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
-            <Clock className="w-5 h-5" />
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+            <FileText className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-xl font-black text-navy">
-              {avgDowntimeDays} <span className="text-xs font-bold text-gray-500">j</span>
-            </div>
-            <div className="text-2xs font-bold text-gray-600 truncate">Durée d&apos;Arrêt</div>
-            <div className="text-3xs text-gray-400 font-medium">Temps immobilisé</div>
+            <div className="text-base font-black text-navy">{insuranceDocsCount}</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Attente Assurance</div>
           </div>
         </div>
 
-        {/* Card 4: Insurance Docs Pending */}
-        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-            <FileText className="w-5 h-5" />
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-yellow-50 text-yellow-700 flex items-center justify-center shrink-0 border border-yellow-200">
+            <span className="text-sm">⏳</span>
           </div>
           <div className="min-w-0">
-            <div className="text-xl font-black text-navy">{insuranceDocsCount}</div>
-            <div className="text-2xs font-bold text-gray-600 truncate">Attente Assurance</div>
-            <div className="text-3xs text-purple-700 font-semibold">Devis / Expertises</div>
+            <div className="text-base font-black text-navy">{readyForPickupCount}</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Prêt Récupération</div>
           </div>
         </div>
 
-        {/* Card 5: Ready for Pickup */}
-        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-            <span className="text-lg">🚗</span>
+        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+            <CheckCircle2 className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-xl font-black text-navy">{readyForPickupCount}</div>
-            <div className="text-2xs font-bold text-gray-600 truncate">Prêts Récupération</div>
-            <div className="text-3xs text-emerald-700 font-semibold truncate">
-              {readyForPickupCount > 0 ? "Alerte envoyée" : "En attente"}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 6: Repair Reminders (New) */}
-        <div
-          onClick={() => setActiveTab("reminders")}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs flex items-center gap-3 ${
-            remindersSummary.due_or_overdue > 0
-              ? "bg-red-50/70 border-red-300 hover:border-red-500 animate-pulse"
-              : activeTab === "reminders"
-              ? "bg-amber-50/70 border-amber-300"
-              : "bg-white border-gray-200 hover:border-amber-300"
-          }`}
-          title="Cliquez pour voir les rappels de réparations et dépôts au garage"
-        >
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-              remindersSummary.due_or_overdue > 0
-                ? "bg-red-600 text-white border-red-500"
-                : "bg-amber-50 text-amber-600 border-amber-200"
-            }`}
-          >
-            <Calendar className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-xl font-black text-navy flex items-baseline gap-1">
-              <span>{reminders.length}</span>
-              {remindersSummary.due_or_overdue > 0 && (
-                <span className="text-3xs font-extrabold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
-                  {remindersSummary.due_or_overdue} dû(s)
-                </span>
-              )}
-            </div>
-            <div className="text-2xs font-bold text-gray-700 truncate">Rappels Réparations</div>
-            <div className="text-3xs text-amber-700 font-semibold truncate">
-              {remindersSummary.due_or_overdue > 0 ? "⚠️ Dépôt urgent requis" : "Passages garage"}
-            </div>
+            <div className="text-base font-black text-navy">{historyClaims.length}</div>
+            <div className="text-3xs font-bold text-gray-500 uppercase truncate">Véhicules Rétablis</div>
           </div>
         </div>
       </div>
 
-      {/* Searchable Combobox for Reporting Accident */}
+      {/* Reporting Combobox Box */}
       {isReporting && (
-        <div className="bg-white p-5 rounded-2xl border border-red-200 shadow-sm mb-6 animate-fadeIn">
-          <div className="flex flex-col md:flex-row md:items-end gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-red-200 shadow-sm animate-fadeIn">
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
             <div className="flex-1 max-w-xl" ref={dropdownRef}>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider flex items-center justify-between">
-                <span>
-                  Sélectionner le véhicule <span className="text-red-500">*</span>
-                </span>
-                <span className="text-3xs text-gray-400 font-normal">
-                  {vehicles.length} véhicules au parc
-                </span>
+              <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider flex items-center justify-between">
+                <span>Sélectionner le véhicule à déclarer en accident <span className="text-red-500">*</span></span>
+                <span className="text-3xs text-gray-400 font-normal">{vehicles.length} véhicules</span>
               </label>
 
-              {selectedVehicle ? (
-                <div className="p-3 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono font-black text-xs text-navy bg-white px-2.5 py-1 rounded-lg border border-red-200 shadow-2xs">
-                      🚗 {selectedVehicle.plate_number}
+              {selectedVehicleToReport ? (
+                <div className="p-2.5 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono font-black text-xs text-navy bg-white px-2 py-1 rounded-lg border border-red-200 shadow-2xs">
+                      🚗 {selectedVehicleToReport.plate_number}
                     </span>
-                    <div>
-                      <div className="text-xs font-bold text-gray-800">
-                        {selectedVehicle.make_model || "Modèle non spécifié"}
-                      </div>
-                      <div className="text-2xs text-gray-500 flex items-center gap-2">
-                        <span>📍 {selectedVehicle.hub_city || "Casablanca"}</span>
-                        {selectedVehicle.assigned_driver_name && (
-                          <span>· 👤 {selectedVehicle.assigned_driver_name}</span>
-                        )}
-                      </div>
+                    <div className="text-xs font-bold text-gray-800">
+                      {selectedVehicleToReport.make_model || "Modèle non spécifié"}
                     </div>
                   </div>
                   <button
@@ -410,49 +383,36 @@ export default function InsuranceView() {
                       setVehicleSearch("");
                       setIsDropdownOpen(true);
                     }}
-                    className="text-xs font-bold text-red-600 hover:text-red-800 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                    className="text-xs font-bold text-red-600 hover:text-red-800 bg-white px-2.5 py-1 rounded-lg border border-red-200 transition-colors shadow-2xs cursor-pointer"
                   >
-                    <span>✕</span>
-                    <span>Changer</span>
+                    Changer
                   </button>
                 </div>
               ) : (
                 <div className="relative">
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
-                      🔍
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="Rechercher par immatriculation (ex: 26552, WW990...) ou modèle..."
-                      value={vehicleSearch}
-                      onFocus={() => setIsDropdownOpen(true)}
-                      onChange={(e) => {
-                        setVehicleSearch(e.target.value);
-                        setIsDropdownOpen(true);
-                      }}
-                      className="w-full pl-10 pr-9 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-900 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:outline-none transition-all placeholder:text-gray-400"
-                    />
-                    {vehicleSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setVehicleSearch("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">
+                    🔍
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Tapez l'immatriculation (ex: 26552, WW990...) ou le modèle..."
+                    value={vehicleSearch}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    onChange={(e) => {
+                      setVehicleSearch(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    className="w-full pl-8 pr-8 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:outline-none"
+                  />
 
-                  {/* Filtered Dropdown Popover */}
                   {isDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto z-50 divide-y divide-gray-100 animate-fadeIn">
-                      {filteredVehicles.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-gray-400">
-                          Aucun véhicule trouvé pour &quot;{vehicleSearch}&quot;
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-gray-100 animate-fadeIn">
+                      {filteredVehiclesToReport.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-gray-400">
+                          Aucun véhicule trouvé
                         </div>
                       ) : (
-                        filteredVehicles.map((v) => (
+                        filteredVehiclesToReport.map((v) => (
                           <button
                             key={v.id}
                             type="button"
@@ -461,29 +421,13 @@ export default function InsuranceView() {
                               setIsDropdownOpen(false);
                               setVehicleSearch("");
                             }}
-                            className="w-full p-2.5 text-left hover:bg-red-50/60 transition-colors flex items-center justify-between group cursor-pointer"
+                            className="w-full p-2 text-left hover:bg-red-50/60 transition-colors flex items-center justify-between text-xs"
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span className="font-mono font-bold text-xs bg-gray-100 group-hover:bg-red-100 group-hover:text-red-700 px-2 py-1 rounded text-navy transition-colors">
-                                {v.plate_number}
-                              </span>
-                              <div>
-                                <div className="text-xs font-bold text-gray-800">
-                                  {v.make_model || "Véhicule"}
-                                </div>
-                                <div className="text-3xs text-gray-400 flex items-center gap-1.5 flex-wrap">
-                                  <span>📍 {v.hub_city || "Casablanca"}</span>
-                                  {v.assigned_driver_name && (
-                                    <span className={v.is_driver_red_flagged ? "text-red-600 font-bold" : ""}>
-                                      · 👤 {v.assigned_driver_name} {v.is_driver_red_flagged ? "🚩 [RED FLAG]" : ""}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-600 group-hover:bg-red-200/50 group-hover:text-red-700">
-                              {v.status || "Actif"}
+                            <span className="font-mono font-bold bg-gray-100 px-2 py-0.5 rounded text-navy">
+                              {v.plate_number}
                             </span>
+                            <span className="text-gray-600 truncate max-w-xs">{v.make_model}</span>
+                            <span className="text-3xs text-gray-400">{v.hub_city || "Casablanca"}</span>
                           </button>
                         ))
                       )}
@@ -495,21 +439,22 @@ export default function InsuranceView() {
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleReportAccident}
                 disabled={!newVehicleId}
-                className="px-6 py-2.5 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-5 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
-                <span>🚨</span>
-                <span>Créer Dossier Accident</span>
+                <span>🚨 Ouvrir Dossier</span>
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setIsReporting(false);
                   setNewVehicleId("");
                   setVehicleSearch("");
                   setIsDropdownOpen(false);
                 }}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                className="px-3.5 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl font-bold text-xs transition-colors cursor-pointer"
               >
                 Annuler
               </button>
@@ -518,386 +463,270 @@ export default function InsuranceView() {
         </div>
       )}
 
-      {/* Search & Quick Filters Toolbar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200 shadow-xs mb-6 space-y-3">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Live Search Input */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filtrer par immatriculation, chauffeur, téléphone ou modèle de véhicule..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-navy/20 focus:border-navy focus:outline-none transition-all"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Filter Dropdowns */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Stage Filter */}
-            <select
-              value={filterStage}
-              onChange={(e) => setFilterStage(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer transition-all"
-            >
-              <option value="ALL">Toutes les étapes</option>
-              {TIMELINE_STEPS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.stepNum}. {s.shortLabel} - {s.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Severity Filter */}
-            <select
-              value={filterSeverity}
-              onChange={(e) => setFilterSeverity(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer transition-all"
-            >
-              <option value="ALL">Toutes gravités</option>
-              <option value="HARD">🛑 Lourde (Structure)</option>
-              <option value="SOFT">⚠️ Légère (Carrosserie)</option>
-            </select>
-
-            {/* Fault Filter */}
-            <select
-              value={filterFault}
-              onChange={(e) => setFilterFault(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer transition-all"
-            >
-              <option value="ALL">Toutes responsabilités</option>
-              <option value="DRIVER">👤 Chauffeur</option>
-              <option value="THIRD_PARTY">🚗 Tiers</option>
-            </select>
-
-            {/* Reset Filters */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                title="Effacer tous les filtres"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Effacer</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Filtered Count Info */}
-        <div className="flex items-center justify-between text-2xs text-gray-500 pt-2 border-t border-gray-100">
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-gray-400" />
-            <span>
-              {activeTab === "open" ? (
-                <>
-                  Affichage de <strong className="text-navy">{activeFiltered.length}</strong> sur{" "}
-                  <strong>{activeClaims.length}</strong> dossier{activeClaims.length > 1 ? "s" : ""} en cours
-                </>
-              ) : (
-                <>
-                  Affichage de <strong className="text-navy">{historyFiltered.length}</strong> sur{" "}
-                  <strong>{historyClaims.length}</strong> véhicule{historyClaims.length > 1 ? "s" : ""} rétabli{historyClaims.length > 1 ? "s" : ""}
-                </>
-              )}
-            </span>
-          </div>
-
-          {hasActiveFilters && (
-            <span className="text-navy font-bold flex items-center gap-1">
-              <span>●</span> Filtres actifs
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs: Dossiers En Cours vs Rappels Réparations vs Véhicules Rétablis */}
-      <div className="flex items-center gap-3 border-b border-gray-200 pb-3 mb-6 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab("open")}
-          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
-            activeTab === "open"
-              ? "bg-navy text-white shadow-md shadow-navy/20"
-              : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>🚨</span>
-          <span>Dossiers En Cours</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-              activeTab === "open" ? "bg-white/20 text-white" : "bg-red-100 text-red-700"
-            }`}
-          >
-            {activeFiltered.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("reminders")}
-          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
-            activeTab === "reminders"
-              ? "bg-navy text-white shadow-md shadow-navy/20"
-              : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>⏰</span>
-          <span>Rappels Réparations & Dépôt Garage</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-              remindersSummary.due_or_overdue > 0
-                ? "bg-red-600 text-white animate-pulse"
-                : activeTab === "reminders"
-                ? "bg-white/20 text-white"
-                : "bg-amber-100 text-amber-800"
-            }`}
-          >
-            {remindersSummary.due_or_overdue > 0
-              ? `⚠️ ${remindersSummary.due_or_overdue} Dû(s)`
-              : reminders.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("restored")}
-          className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer shrink-0 ${
-            activeTab === "restored"
-              ? "bg-navy text-white shadow-md shadow-navy/20"
-              : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>✅</span>
-          <span>Véhicules Rétablis</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-              activeTab === "restored" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
-            }`}
-          >
-            {historyFiltered.length}
-          </span>
-        </button>
-      </div>
-
-      {/* Main Content Area */}
-      {isLoading ? (
-        <div className="text-gray-400 text-sm py-12 text-center flex items-center justify-center gap-2">
-          <Clock className="w-4 h-4 animate-spin text-navy" />
-          <span>Chargement des dossiers d&apos;assurance...</span>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto pr-2 pb-10 scrollbar-thin">
-          {activeTab === "open" ? (
-            <div>
-              {activeFiltered.length === 0 ? (
-                <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center text-gray-400 text-sm">
-                  <div className="text-4xl mb-3">🎉</div>
-                  <div className="font-bold text-gray-700 text-base mb-1">
-                    {hasActiveFilters
-                      ? "Aucun dossier ne correspond à vos filtres"
-                      : "Aucun dossier d'accident en cours"}
-                  </div>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto mb-3">
-                    {hasActiveFilters
-                      ? "Essayez de modifier ou d'effacer vos critères de recherche."
-                      : "Tous les véhicules sont en service ou rétablis. Utilisez \"Déclarer un Accident\" en cas de nouvel incident."}
-                  </p>
-                  {hasActiveFilters && (
-                    <button
-                      onClick={handleResetFilters}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Effacer les filtres
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {activeFiltered.map((claim) => (
-                    <AccidentCard key={claim.id} claim={claim} onUpdate={fetchClaims} />
-                  ))}
-                </div>
-              )}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 2. REPAIR REMINDERS VIEW MODE (IF TOGGLED)                             */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === "reminders" ? (
+        <div className="space-y-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-xs animate-fadeIn">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-amber-600" />
+              <h3 className="text-base font-black text-navy">
+                Rappels de Réparations & Dépôt au Garage
+              </h3>
             </div>
-          ) : activeTab === "reminders" ? (
-            <div className="space-y-5">
-              {/* Reminders Filter & Action Toolbar */}
-              <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => setFilterReminderStatus("ALL")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      filterReminderStatus === "ALL"
-                        ? "bg-navy text-white shadow-2xs"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    Tous ({reminders.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterReminderStatus("DUE")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
-                      filterReminderStatus === "DUE"
-                        ? "bg-red-600 text-white shadow-2xs font-black"
-                        : "bg-red-50 text-red-800 border border-red-200 hover:bg-red-100"
-                    }`}
-                  >
-                    <AlertTriangle className="w-3 h-3 text-red-600" />
-                    <span>🚨 Échus / À déposer ({remindersSummary.due_or_overdue})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterReminderStatus("PENDING")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      filterReminderStatus === "PENDING"
-                        ? "bg-amber-600 text-white shadow-2xs"
-                        : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
-                    }`}
-                  >
-                    ⏳ En attente ({remindersSummary.pending})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterReminderStatus("IN_REPAIR")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      filterReminderStatus === "IN_REPAIR"
-                        ? "bg-purple-600 text-white shadow-2xs"
-                        : "bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100"
-                    }`}
-                  >
-                    🔧 Au garage ({remindersSummary.in_repair})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterReminderStatus("COMPLETED")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      filterReminderStatus === "COMPLETED"
-                        ? "bg-emerald-600 text-white shadow-2xs"
-                        : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
-                    }`}
-                  >
-                    ✅ Réparés ({remindersSummary.completed})
-                  </button>
-                </div>
+            <button
+              type="button"
+              onClick={() => setViewMode("master-detail")}
+              className="text-xs font-bold text-navy hover:underline flex items-center gap-1"
+            >
+              <span>← Retour au suivi des véhicules</span>
+            </button>
+          </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsReminderModalOpen(true)}
-                    className="px-4 py-2 bg-navy hover:bg-navy/90 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ml-auto"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Nouveau Rappel Réparation</span>
-                  </button>
-                </div>
-              </div>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(["ALL", "DUE", "PENDING", "IN_REPAIR", "COMPLETED"] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setFilterReminderStatus(st)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    filterReminderStatus === st
+                      ? "bg-navy text-white shadow-2xs"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {st === "ALL" && `Tous (${reminders.length})`}
+                  {st === "DUE" && `🚨 Échus / À déposer (${remindersSummary.due_or_overdue})`}
+                  {st === "PENDING" && `⏳ En attente (${remindersSummary.pending})`}
+                  {st === "IN_REPAIR" && `🔧 Au garage (${remindersSummary.in_repair})`}
+                  {st === "COMPLETED" && `✅ Réparés (${remindersSummary.completed})`}
+                </button>
+              ))}
+            </div>
 
-              {/* Reminders Cards Grid */}
-              {(() => {
-                const filteredRemindersList = reminders.filter((r) => {
+            <button
+              type="button"
+              onClick={() => setIsReminderModalOpen(true)}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ml-auto"
+            >
+              <Plus className="w-4 h-4 text-white" />
+              <span>Programmer Rappel Réparation</span>
+            </button>
+          </div>
+
+          {/* Grid of reminders */}
+          {reminders.length === 0 ? (
+            <div className="text-center py-12 text-xs text-gray-400">
+              Aucun rappel de réparation programmé.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {reminders
+                .filter((r) => {
                   if (filterReminderStatus === "DUE" && !r.is_due_or_overdue) return false;
                   if (filterReminderStatus === "PENDING" && r.status !== "PENDING") return false;
                   if (filterReminderStatus === "IN_REPAIR" && r.status !== "IN_REPAIR") return false;
                   if (filterReminderStatus === "COMPLETED" && r.status !== "COMPLETED") return false;
-
-                  if (searchQuery.trim()) {
-                    const q = searchQuery.toLowerCase().trim();
-                    const matchPlate = r.plate_number.toLowerCase().includes(q);
-                    const matchModel = r.vehicle_make_model?.toLowerCase().includes(q) || false;
-                    const matchDriver = r.driver_name?.toLowerCase().includes(q) || false;
-                    const matchGarage = r.garage_name?.toLowerCase().includes(q) || false;
-                    const matchType = r.repair_type.toLowerCase().includes(q);
-                    const matchTitle = r.title.toLowerCase().includes(q);
-                    if (!matchPlate && !matchModel && !matchDriver && !matchGarage && !matchType && !matchTitle) return false;
-                  }
-
                   return true;
-                });
-
-                if (filteredRemindersList.length === 0) {
-                  return (
-                    <div className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center text-gray-400 space-y-3">
-                      <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
-                        <Calendar className="w-7 h-7" />
-                      </div>
-                      <h3 className="text-base font-bold text-gray-800">
-                        Aucun rappel de réparation trouvé
-                      </h3>
-                      <p className="text-xs text-gray-500 max-w-md mx-auto">
-                        Programmez un rappel pour qu&apos;un véhicule aille au garage avec photos des chocs, date d&apos;échéance et alerte automatique.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setIsReminderModalOpen(true)}
-                        className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm inline-flex items-center gap-1.5 cursor-pointer mt-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Programmer un Rappel Réparation</span>
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {filteredRemindersList.map((reminder) => (
-                      <RepairReminderCard
-                        key={reminder.id}
-                        reminder={reminder}
-                        onUpdate={fetchReminders}
-                      />
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div>
-              {historyFiltered.length === 0 ? (
-                <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center text-gray-400 text-sm">
-                  <div className="text-4xl mb-3">📋</div>
-                  <div className="font-bold text-gray-700 text-base mb-1">
-                    {hasActiveFilters
-                      ? "Aucun véhicule rétabli ne correspond à vos filtres"
-                      : "Aucun véhicule rétabli dans l'historique"}
-                  </div>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto mb-3">
-                    {hasActiveFilters
-                      ? "Essayez de modifier ou d'effacer vos critères de recherche."
-                      : "Lorsqu'un véhicule termine son cycle de réparation et revient en service, il apparaît ici."}
-                  </p>
-                  {hasActiveFilters && (
-                    <button
-                      onClick={handleResetFilters}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Effacer les filtres
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {historyFiltered.map((claim) => (
-                    <AccidentCard key={claim.id} claim={claim} onUpdate={fetchClaims} />
-                  ))}
-                </div>
-              )}
+                })
+                .map((r) => (
+                  <RepairReminderCard key={r.id} reminder={r} onUpdate={fetchReminders} />
+                ))}
             </div>
           )}
+        </div>
+      ) : (
+        /* ────────────────────────────────────────────────────────────────────── */
+        /* 3. MASTER-DETAIL 2-PANEL SPLIT VIEW                                    */
+        /* ────────────────────────────────────────────────────────────────────── */
+        <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden min-h-[620px] h-[calc(100vh-160px)]">
+          {/* ==================================================================== */}
+          {/* LEFT SIDE: SMALLER PANEL (ONLY IMMAT & DAYS IN THIS STATUS)         */}
+          {/* ==================================================================== */}
+          <div
+            className={`w-full md:w-80 lg:w-96 shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col overflow-hidden shadow-xs transition-all ${
+              showMobileDetail ? "hidden md:flex" : "flex"
+            }`}
+          >
+            {/* Top of Left Side: Search & Filter Tabs */}
+            <div className="p-3.5 bg-gray-50 border-b border-gray-200 space-y-2.5">
+              {/* Filter Tabs */}
+              <div className="flex items-center gap-1 p-1 bg-gray-200/70 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setLeftTabFilter("open")}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer ${
+                    leftTabFilter === "open"
+                      ? "bg-white text-navy shadow-xs font-black"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span>En cours</span>{" "}
+                  <span className="text-3xs bg-red-100 text-red-700 px-1.5 py-0.2 rounded-full font-bold">
+                    {activeClaims.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLeftTabFilter("restored")}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer ${
+                    leftTabFilter === "restored"
+                      ? "bg-white text-navy shadow-xs font-black"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span>Rétablis</span>{" "}
+                  <span className="text-3xs bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full font-bold">
+                    {historyClaims.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLeftTabFilter("all")}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer ${
+                    leftTabFilter === "all"
+                      ? "bg-white text-navy shadow-xs font-black"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span>Tous ({claims.length})</span>
+                </button>
+              </div>
+
+              {/* Search by Immat */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Rechercher par immat..."
+                  value={searchImmat}
+                  onChange={(e) => setSearchImmat(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
+                />
+                {searchImmat && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchImmat("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List of Vehicles: ONLY IMMAT & NUMBER OF DAYS IN THIS STATUS */}
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100 scrollbar-thin">
+              {isLoading ? (
+                <div className="p-8 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+                  <Clock className="w-4 h-4 animate-spin text-navy" />
+                  <span>Chargement des véhicules...</span>
+                </div>
+              ) : filteredLeftClaims.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-400">
+                  Aucun véhicule trouvé pour ces critères.
+                </div>
+              ) : (
+                filteredLeftClaims.map((claim) => {
+                  const isSelected = claim.id === selectedClaim?.id;
+                  const daysInStatus = calculateDaysInStatus(claim.step_updated_at || claim.created_at);
+
+                  // Color based on days in status
+                  const daysColor =
+                    daysInStatus <= 3
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : daysInStatus <= 7
+                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                      : "bg-red-50 text-red-800 border-red-300 font-black";
+
+                  const stepDef = TIMELINE_STEPS.find((s) => s.id === claim.timeline_step) || TIMELINE_STEPS[0];
+
+                  return (
+                    <button
+                      key={claim.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedClaimId(claim.id);
+                        setShowMobileDetail(true);
+                      }}
+                      className={`w-full p-3.5 text-left transition-all cursor-pointer flex items-center justify-between gap-3 group border-l-4 ${
+                        isSelected
+                          ? "bg-emerald-50/80 border-emerald-600 shadow-xs"
+                          : "border-transparent hover:bg-gray-50"
+                      }`}
+                    >
+                      {/* Left: Plate Number & Status Icon */}
+                      <div className="min-w-0 flex items-center gap-2.5">
+                        <span className="text-base shrink-0">{stepDef.icon}</span>
+                        <div>
+                          <div className="font-mono font-black text-sm text-navy tracking-wide flex items-center gap-1.5">
+                            <span>{claim.vehicle?.plate_number}</span>
+                          </div>
+                          <div className="text-3xs font-semibold text-gray-500 truncate mt-0.5">
+                            {stepDef.label}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: EXACT REQUIREMENT — NUMBER OF DAYS FOR VEHICLE WITHIN THIS STATUS */}
+                      <div className="shrink-0 flex items-center gap-2 text-right">
+                        <div
+                          className={`px-2.5 py-1 rounded-xl border text-2xs font-extrabold shadow-2xs flex items-center gap-1 ${daysColor}`}
+                          title={`${daysInStatus} jours passés dans l'étape "${stepDef.label}"`}
+                        >
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span>{daysInStatus} jour{daysInStatus > 1 ? "s" : ""}</span>
+                        </div>
+
+                        <ChevronRight
+                          className={`w-4 h-4 transition-transform ${
+                            isSelected ? "text-emerald-700 translate-x-0.5" : "text-gray-300 group-hover:text-gray-500"
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Left Side Footer Counter */}
+            <div className="p-3 bg-gray-50 border-t border-gray-200 text-3xs font-semibold text-gray-500 flex items-center justify-between">
+              <span>{filteredLeftClaims.length} véhicule(s) affiché(s)</span>
+              <span>GoCab Fleet Intelligence</span>
+            </div>
+          </div>
+
+          {/* ==================================================================== */}
+          {/* RIGHT SIDE: FULL DISPLAY OF VEHICLE, STATUSES, DOCS & INSURANCE PART */}
+          {/* ==================================================================== */}
+          <div
+            className={`flex-1 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xs flex flex-col ${
+              !showMobileDetail ? "hidden md:flex" : "flex"
+            }`}
+          >
+            {selectedClaim ? (
+              <InsuranceVehicleDetail
+                claim={selectedClaim}
+                onUpdate={fetchClaims}
+                onCloseMobile={() => setShowMobileDetail(false)}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-gray-400 space-y-3">
+                <div className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-2xl">
+                  🚗
+                </div>
+                <h3 className="text-base font-bold text-gray-700">Sélectionnez un véhicule</h3>
+                <p className="text-xs text-gray-500 max-w-sm">
+                  Cliquez sur une immatriculation à gauche pour afficher la fiche complète, le suivi de l&apos;assureur, les photos et les documents.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

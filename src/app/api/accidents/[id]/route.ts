@@ -74,6 +74,158 @@ export async function PATCH(req: Request, context: any) {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // ACTION: UPDATE INSURANCE DOSSIER (PORTAIL SUIVI ASSUREUR)
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "UPDATE_INSURANCE_DOSSIER") {
+      const dossier = body.insurance_dossier || {};
+      const author = body.author || "Compagnie d'Assurance";
+
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+        if (!Array.isArray(existingComments)) existingComments = [];
+      } catch {
+        existingComments = [];
+      }
+
+      // Find or create insurance dossier meta entry in comments
+      const dossierIndex = existingComments.findIndex((c: any) => c.id === "INSURANCE_DOSSIER_META");
+      const existingDossier = dossierIndex >= 0 ? existingComments[dossierIndex] : {};
+      const existingNotes = existingDossier.insurance_notes || [];
+
+      const updatedDossier = {
+        id: "INSURANCE_DOSSIER_META",
+        type: "INSURANCE_INFO",
+        timeline_step: "INSURANCE_DOCS",
+        claim_number: dossier.claim_number?.trim() || existingDossier.claim_number || "",
+        insurance_company: dossier.insurance_company?.trim() || existingDossier.insurance_company || "",
+        policy_number: dossier.policy_number?.trim() || existingDossier.policy_number || "",
+        claim_status: dossier.claim_status || existingDossier.claim_status || "DECLARED",
+        declaration_date: dossier.declaration_date || existingDossier.declaration_date || "",
+        expert_name: dossier.expert_name?.trim() || existingDossier.expert_name || "",
+        expert_phone: dossier.expert_phone?.trim() || existingDossier.expert_phone || "",
+        expertise_date: dossier.expertise_date || existingDossier.expertise_date || "",
+        estimated_amount: typeof dossier.estimated_amount === "number" ? dossier.estimated_amount : existingDossier.estimated_amount || 0,
+        covered_amount: typeof dossier.covered_amount === "number" ? dossier.covered_amount : existingDossier.covered_amount || 0,
+        franchise_amount: typeof dossier.franchise_amount === "number" ? dossier.franchise_amount : existingDossier.franchise_amount || 0,
+        payout_status: dossier.payout_status || existingDossier.payout_status || "PENDING",
+        insurance_notes: existingNotes,
+        updated_at: new Date().toISOString(),
+        updated_by: author,
+      };
+
+      if (dossierIndex >= 0) {
+        existingComments[dossierIndex] = updatedDossier;
+      } else {
+        existingComments.push(updatedDossier);
+      }
+
+      // Append audit comment
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: currentClaim.timeline_step,
+        comment: `🛡️ Dossier Assureur mis à jour par ${author} · Réf: ${updatedDossier.claim_number || "Non spécifiée"} (Compagnie: ${updatedDossier.insurance_company || "N/A"}) · Statut: ${updatedDossier.claim_status}`,
+        author: author,
+        created_at: new Date().toISOString(),
+      });
+
+      // Also sync vehicle policy number if provided
+      if (updatedDossier.policy_number && currentClaim.vehicle_id) {
+        await prisma.vehicle.update({
+          where: { id: currentClaim.vehicle_id },
+          data: { insurance_policy_number: updatedDossier.policy_number },
+        }).catch(() => {});
+      }
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(existingComments) },
+        include: {
+          vehicle: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
+        },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: ADD NOTE SPECIFIC TO INSURANCE FOLLOW-UP
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "ADD_INSURANCE_NOTE") {
+      const noteText = body.note?.trim();
+      const author = body.author || "Assureur";
+      if (!noteText) {
+        return NextResponse.json({ success: false, error: "Note text required" }, { status: 400 });
+      }
+
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+        if (!Array.isArray(existingComments)) existingComments = [];
+      } catch {
+        existingComments = [];
+      }
+
+      let dossierIndex = existingComments.findIndex((c: any) => c.id === "INSURANCE_DOSSIER_META");
+      if (dossierIndex === -1) {
+        existingComments.push({
+          id: "INSURANCE_DOSSIER_META",
+          type: "INSURANCE_INFO",
+          timeline_step: "INSURANCE_DOCS",
+          insurance_notes: [],
+          updated_at: new Date().toISOString(),
+        });
+        dossierIndex = existingComments.length - 1;
+      }
+
+      const currentDossier = existingComments[dossierIndex];
+      const currentNotes = currentDossier.insurance_notes || [];
+
+      const newNote = {
+        id: crypto.randomUUID(),
+        note: noteText,
+        author: author,
+        created_at: new Date().toISOString(),
+      };
+      currentNotes.unshift(newNote);
+      currentDossier.insurance_notes = currentNotes;
+      currentDossier.updated_at = new Date().toISOString();
+      currentDossier.updated_by = author;
+      existingComments[dossierIndex] = currentDossier;
+
+      // Add to general comment feed as well
+      existingComments.unshift({
+        id: crypto.randomUUID(),
+        timeline_step: "INSURANCE_DOCS",
+        comment: `💬 Note Assureur par ${author} : "${noteText}"`,
+        author: author,
+        created_at: new Date().toISOString(),
+      });
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: { comments: JSON.stringify(existingComments) },
+        include: {
+          vehicle: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
+        },
+      });
+
+      touchSyncState("tickets").catch(() => {});
+      return NextResponse.json({ success: true, claim: updatedClaim });
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // ACTION: DIRECT DISPATCH OF FIELD TASK & TELEGRAM MISSION
     // ─────────────────────────────────────────────────────────────
     if (body.action === "DISPATCH_TELEGRAM_MISSION") {

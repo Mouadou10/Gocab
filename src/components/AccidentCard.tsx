@@ -33,10 +33,36 @@ import RedFlagBadge from "./RedFlagBadge";
 
 export interface AccidentComment {
   id: string;
-  comment: string;
   timeline_step: string;
+  comment?: string;
   author?: string | null;
   created_at: string;
+  [key: string]: any;
+}
+
+export interface InsuranceNoteItem {
+  id: string;
+  note: string;
+  author: string;
+  created_at: string;
+}
+
+export interface InsuranceDossierInfo {
+  claim_number?: string;
+  insurance_company?: string;
+  policy_number?: string;
+  claim_status?: string;
+  declaration_date?: string;
+  expert_name?: string;
+  expert_phone?: string;
+  expertise_date?: string;
+  estimated_amount?: number;
+  covered_amount?: number;
+  franchise_amount?: number;
+  payout_status?: string;
+  insurance_notes?: InsuranceNoteItem[];
+  updated_at?: string;
+  updated_by?: string;
 }
 
 export interface AccidentDocument {
