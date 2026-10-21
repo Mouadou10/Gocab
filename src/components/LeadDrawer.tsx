@@ -8,9 +8,12 @@
  * and WhatsApp invitation/thank-you redirects.
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
+import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
 import {
   generateTrainingInviteURL,
   generateThankYouURL,
@@ -93,6 +96,7 @@ interface Lead {
   notes?: string | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  national_blacklist_match?: any | null;
 }
 
 interface LeadDrawerProps {
@@ -121,6 +125,11 @@ export default function LeadDrawer({
   const [phone, setPhone] = useState(lead.sanitized_phone || "");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const nationalMatch = useMemo(
+    () => lead.national_blacklist_match || matchNationalBlacklist(rawName || lead.raw_name),
+    [rawName, lead.raw_name, lead.national_blacklist_match]
+  );
 
   useEffect(() => {
     setRawName(lead.raw_name || "");
@@ -658,7 +667,12 @@ export default function LeadDrawer({
         {/* Header */}
         <div className="bg-navy px-6 py-4 flex items-center justify-between text-white">
           <div>
-            <h3 className="text-base font-bold tracking-tight">{rawName || lead.raw_name}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold tracking-tight">{rawName || lead.raw_name}</h3>
+              {nationalMatch.isBlacklisted && (
+                <NationalBlacklistBadge match={nationalMatch} size="sm" />
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <a
                 href={`tel:${phone || lead.sanitized_phone}`}
@@ -701,6 +715,14 @@ export default function LeadDrawer({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* National Blacklist Alert Banner (If Matched) */}
+          {nationalMatch.isBlacklisted && (
+            <NationalBlacklistAlertBanner
+              match={nationalMatch}
+              candidateName={rawName || lead.raw_name}
+            />
+          )}
+
           {/* Contact Information (Editable Name & Phone) */}
           <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">

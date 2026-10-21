@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import {
   normalizeWhatsAppPhone,
   findOrCreateConversation,
@@ -234,10 +235,13 @@ export async function GET(request: NextRequest) {
         ? "ROUTED_LEAD_ACQUISITION"
         : conv.workflow_state || "NONE";
 
+      const resolvedContactName = driver?.fullName || lead?.raw_name || conv.contact_name;
+      const nationalMatch = matchNationalBlacklist(resolvedContactName);
+
       return {
         id: conv.id,
         phoneNumber: conv.phone_number,
-        contactName: driver?.fullName || lead?.raw_name || conv.contact_name,
+        contactName: resolvedContactName,
         contactType: resolvedContactType,
         workflowState: resolvedWorkflowState,
         routedDepartment: resolvedDepartment,
@@ -247,6 +251,7 @@ export async function GET(request: NextRequest) {
         lastMessageAt: conv.last_message_at,
         unreadCount: conv.unread_count,
         isPinned: conv.is_pinned,
+        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
         driver: driver
           ? {
               id: driver.id,
@@ -258,8 +263,9 @@ export async function GET(request: NextRequest) {
               defaultStage: driver.defaultStage,
               plateNumber: resolvedPlate || "Non assigné",
               vehicleModel: resolvedModel,
-              isRedFlagged: Boolean(driver.isRedFlagged),
-              redFlagReason: driver.redFlagReason || null,
+              isRedFlagged: Boolean(driver.isRedFlagged || nationalMatch.isBlacklisted),
+              redFlagReason: driver.redFlagReason || (nationalMatch.isBlacklisted ? nationalMatch.warningDetailText : null),
+              national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
             }
           : resolvedPlate
           ? {
@@ -272,8 +278,9 @@ export async function GET(request: NextRequest) {
               defaultStage: "NOMINAL",
               plateNumber: resolvedPlate,
               vehicleModel: resolvedModel,
-              isRedFlagged: Boolean(matchedVehicle?.driverProfile?.isRedFlagged),
-              redFlagReason: matchedVehicle?.driverProfile?.redFlagReason || null,
+              isRedFlagged: Boolean(matchedVehicle?.driverProfile?.isRedFlagged || nationalMatch.isBlacklisted),
+              redFlagReason: matchedVehicle?.driverProfile?.redFlagReason || (nationalMatch.isBlacklisted ? nationalMatch.warningDetailText : null),
+              national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
             }
           : null,
         lead: lead
@@ -287,6 +294,7 @@ export async function GET(request: NextRequest) {
               trainingStatus: lead.training_status || null,
               presenceConfirmed: lead.presence_confirmed || false,
               notes: lead.notes || null,
+              national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
             }
           : null,
       };

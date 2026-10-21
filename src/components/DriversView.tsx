@@ -33,6 +33,7 @@ import AddDriverModal from "./AddDriverModal";
 import DriverDrawer from "./DriverDrawer";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 import RedFlagBadge from "./RedFlagBadge";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
 
 interface Vehicle {
   id: string;
@@ -63,6 +64,7 @@ interface DriverProfile {
   redFlagReason?: string | null;
   redFlaggedAt?: string | null;
   redFlaggedBy?: string | null;
+  national_blacklist_match?: any | null;
 }
 
 // Module-level in-memory cache for instant 0ms tab switching
@@ -364,9 +366,12 @@ export default function DriversView() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`text-sm font-bold ${driver.isRedFlagged ? "text-red-950 font-black" : "text-gray-900"}`}>
+                              <p className={`text-sm font-bold ${driver.isRedFlagged || driver.national_blacklist_match?.isBlacklisted ? "text-red-950 font-black" : "text-gray-900"}`}>
                                 {driver.fullName}
                               </p>
+                              {driver.national_blacklist_match?.isBlacklisted && (
+                                <NationalBlacklistBadge match={driver.national_blacklist_match} size="xs" />
+                              )}
                               {driver.isRedFlagged && (
                                 <RedFlagBadge reason={driver.redFlagReason} size="xs" />
                               )}

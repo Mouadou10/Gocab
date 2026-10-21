@@ -14,6 +14,7 @@ import React, { useState, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { generateTrainingInviteURL, generateThankYouURL } from "@/lib/whatsapp";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
 
 interface Lead {
   id: string;
@@ -37,6 +38,7 @@ interface Lead {
   is_resident?: boolean | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  national_blacklist_match?: any | null;
 }
 
 const getTrainingStatusBadge = (status: string | null, boardColumn?: string) => {
@@ -253,9 +255,14 @@ export default function LeadCard({
       <div onClick={onClick} className="px-3.5 pb-2.5 pt-0.5 space-y-1.5">
         {/* Name + Phone */}
         <div>
-          <p className="font-bold text-slate-900 text-xs leading-snug group-hover:text-navy transition-colors truncate">
-            {lead.raw_name}
-          </p>
+          <div className="flex items-center gap-1.5 justify-between">
+            <p className="font-bold text-slate-900 text-xs leading-snug group-hover:text-navy transition-colors truncate">
+              {lead.raw_name}
+            </p>
+            {lead.national_blacklist_match?.isBlacklisted && (
+              <NationalBlacklistBadge match={lead.national_blacklist_match} size="xs" />
+            )}
+          </div>
           <p className="text-[11px] text-slate-500 font-mono mt-0.5 tracking-tight flex items-center gap-1.5">
             <span>{lead.sanitized_phone}</span>
           </p>

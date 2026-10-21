@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import RedFlagBadge from "./RedFlagBadge";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
+import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
 import {
   GOCAB_WHATSAPP_TEMPLATES,
   APPROVED_360_TEMPLATES,
@@ -85,6 +87,7 @@ interface ConversationItem {
   isPinned: boolean;
   driver: DriverSummary | null;
   lead: LeadSummary | null;
+  national_blacklist_match?: any | null;
 }
 
 interface MessageItem {
@@ -988,6 +991,9 @@ export default function WhatsAppCrmView() {
 
                     {/* Metadata & Bot Workflow tags */}
                     <div className="flex items-center flex-wrap gap-1 mt-1">
+                      {conv.national_blacklist_match?.isBlacklisted && (
+                        <NationalBlacklistBadge match={conv.national_blacklist_match} size="xs" />
+                      )}
                       {conv.driver?.isRedFlagged && (
                         <RedFlagBadge reason={conv.driver.redFlagReason} />
                       )}
@@ -1061,6 +1067,9 @@ export default function WhatsAppCrmView() {
                     <h3 className="text-sm font-black text-gray-900 truncate">
                       {activeConversation.contactName}
                     </h3>
+                    {activeConversation.national_blacklist_match?.isBlacklisted && (
+                      <NationalBlacklistBadge match={activeConversation.national_blacklist_match} size="sm" />
+                    )}
                     {activeConversation.driver?.isRedFlagged && (
                       <RedFlagBadge reason={activeConversation.driver.redFlagReason} />
                     )}
@@ -1688,6 +1697,14 @@ export default function WhatsAppCrmView() {
             <h3 className="text-sm font-black text-gray-900">{activeConversation.contactName}</h3>
             <p className="text-xs font-mono text-gray-500">{formatDisplayPhone(activeConversation.phoneNumber)}</p>
           </div>
+
+          {/* National Blacklist Alert Banner (Liste Noire Région Casa-Settat) */}
+          {activeConversation.national_blacklist_match?.isBlacklisted && (
+            <NationalBlacklistAlertBanner
+              match={activeConversation.national_blacklist_match}
+              candidateName={activeConversation.contactName}
+            />
+          )}
 
           {/* DRIVER SPECIFIC CRM DOSSIER */}
           {activeConversation.driver && (

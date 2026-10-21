@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  matchNationalBlacklist,
+  NationalBlacklistMatchResult,
+} from "./nationalBlacklistMatcher";
 
 export interface RedFlagInfo {
   id: string;
@@ -8,6 +12,15 @@ export interface RedFlagInfo {
   reason?: string | null;
   redFlaggedAt?: Date | null;
   redFlaggedBy?: string | null;
+  nationalBlacklistMatch?: NationalBlacklistMatchResult | null;
+}
+
+export interface CheckDriverResult {
+  isRedFlagged: boolean;
+  reason: string | null;
+  info: RedFlagInfo | null;
+  isNationalBlacklisted?: boolean;
+  nationalBlacklistMatch?: NationalBlacklistMatchResult | null;
 }
 
 export interface RedFlagsLookup {
@@ -20,13 +33,17 @@ export interface RedFlagsLookup {
     name?: string | null;
     phone?: string | null;
     cin?: string | null;
-  }) => { isRedFlagged: boolean; reason: string | null; info: RedFlagInfo | null };
+  }) => CheckDriverResult;
 }
 
+export { matchNationalBlacklist };
+
 /**
- * Returns pre-indexed lookup maps of all currently active Red Flag drivers.
- * Used across vehicles, accident claims, tickets, field missions, and WhatsApp
- * to guarantee every single driver display signals their Red Flag status.
+ * Returns pre-indexed lookup maps of all currently active Red Flag drivers,
+ * seamlessly merged with the National Blacklist (Liste Noire Région Casa-Settat).
+ *
+ * Used across vehicles, accident claims, tickets, field missions, WhatsApp,
+ * and onboarding leads to guarantee immediate warning on blacklisted candidates.
  */
 export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
   const flaggedDrivers = await prisma.driverProfile.findMany({
@@ -48,6 +65,7 @@ export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
   const byCin = new Map<string, RedFlagInfo>();
 
   for (const d of flaggedDrivers) {
+    const nationalMatch = matchNationalBlacklist(d.fullName);
     const info: RedFlagInfo = {
       id: d.id,
       fullName: d.fullName,
@@ -56,6 +74,7 @@ export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
       reason: d.redFlagReason,
       redFlaggedAt: d.redFlaggedAt,
       redFlaggedBy: d.redFlaggedBy,
+      nationalBlacklistMatch: nationalMatch.isBlacklisted ? nationalMatch : null,
     };
 
     byId.set(d.id, info);
@@ -82,7 +101,7 @@ export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
     name?: string | null;
     phone?: string | null;
     cin?: string | null;
-  }) => {
+  }): CheckDriverResult => {
     let match: RedFlagInfo | undefined;
 
     if (opts.id && byId.has(opts.id)) {
@@ -100,11 +119,40 @@ export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
       match = byName.get(opts.name.trim().toLowerCase());
     }
 
+    // Always check candidate name against the National Blacklist (even if not in internal red flags)
+    const nationalMatch = opts.name ? matchNationalBlacklist(opts.name) : null;
+
     if (match) {
+      const combinedReason = nationalMatch?.isBlacklisted
+        ? `${match.reason || "Signalé"} · 🚨 LISTE NOIRE: ${nationalMatch.matchedEntry?.reason}`
+        : match.reason || "Chauffeur signalé pour arriérés ou comportement à risque";
+
       return {
         isRedFlagged: true,
-        reason: match.reason || "Chauffeur signalé pour arriérés ou comportement à risque",
-        info: match,
+        reason: combinedReason,
+        info: {
+          ...match,
+          nationalBlacklistMatch: nationalMatch?.isBlacklisted ? nationalMatch : match.nationalBlacklistMatch,
+        },
+        isNationalBlacklisted: Boolean(nationalMatch?.isBlacklisted || match.nationalBlacklistMatch?.isBlacklisted),
+        nationalBlacklistMatch: nationalMatch?.isBlacklisted ? nationalMatch : match.nationalBlacklistMatch,
+      };
+    }
+
+    if (nationalMatch && nationalMatch.isBlacklisted) {
+      return {
+        isRedFlagged: true,
+        reason: nationalMatch.warningDetailText,
+        info: {
+          id: `national-${nationalMatch.matchedEntry?.id}`,
+          fullName: opts.name || nationalMatch.matchedEntry?.fullName || "",
+          phoneSanitized: opts.phone || "",
+          cinNumber: opts.cin || "",
+          reason: nationalMatch.warningDetailText,
+          nationalBlacklistMatch: nationalMatch,
+        },
+        isNationalBlacklisted: true,
+        nationalBlacklistMatch: nationalMatch,
       };
     }
 
@@ -112,6 +160,8 @@ export async function getActiveRedFlagsLookup(): Promise<RedFlagsLookup> {
       isRedFlagged: false,
       reason: null,
       info: null,
+      isNationalBlacklisted: false,
+      nationalBlacklistMatch: null,
     };
   };
 

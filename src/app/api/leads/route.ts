@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
 import { requireAuth } from "@/lib/api-auth";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,15 @@ export async function GET() {
       ],
     });
 
-    setCachedLeads(leads);
+    const enrichedLeads = leads.map((lead) => {
+      const nationalMatch = matchNationalBlacklist(lead.raw_name);
+      return {
+        ...lead,
+        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
+      };
+    });
+
+    setCachedLeads(enrichedLeads);
 
     // Auto-transition 'To Recall' in background without blocking the read query
     const now = new Date();
@@ -62,7 +71,7 @@ export async function GET() {
     }).catch(() => {});
 
     return NextResponse.json(
-      { leads },
+      { leads: enrichedLeads },
       {
         headers: {
           "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
@@ -202,7 +211,15 @@ export async function POST(request: Request) {
     invalidateLeadsCache();
     touchSyncState("leads").catch(() => {});
 
-    return NextResponse.json({ lead }, { status: 201 });
+    const nationalMatch = matchNationalBlacklist(lead.raw_name);
+
+    return NextResponse.json({
+      lead: {
+        ...lead,
+        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
+      },
+      warning: nationalMatch.isBlacklisted ? nationalMatch.warningDetailText : null,
+    }, { status: 201 });
   } catch (error: any) {
     console.error("Error creating lead:", error);
     return NextResponse.json(

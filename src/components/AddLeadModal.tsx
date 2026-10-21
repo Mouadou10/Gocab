@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/context/LanguageContext";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
+import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
 
 const MOROCCAN_CITIES = [
   "Casablanca",
@@ -73,6 +75,7 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
 
   const [existingLead, setExistingLead] = useState<any | null>(null);
   const [name, setName] = useState("");
+  const nationalMatch = useMemo(() => matchNationalBlacklist(name), [name]);
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("Casablanca");
   const [campaignSource, setCampaignSource] = useState("Direct Phone Call");
@@ -361,6 +364,13 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
               </div>
             </div>
           </div>
+
+          {/* Real-time National Blacklist Warning */}
+          {nationalMatch.isBlacklisted && (
+            <div className="pt-1">
+              <NationalBlacklistAlertBanner match={nationalMatch} candidateName={name} />
+            </div>
+          )}
 
           {/* Status Selection based on chosen pipeline */}
           {pipeline === "training" ? (

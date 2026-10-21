@@ -13,7 +13,7 @@
  * - Visite Technique Expiration
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import AddExpenseModal, { EXPENSE_CATEGORIES } from "./AddExpenseModal";
 import AttestationModal, { AttestationData } from "./AttestationModal";
@@ -22,6 +22,9 @@ import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog
 import { Plus, DollarSign, Receipt, Calendar, FileText, Printer, Shield, CheckCircle, Clock, AlertCircle, Wrench, Droplet, FileCheck, Flag, Paperclip } from "lucide-react";
 import VehicleDocumentsModal from "./VehicleDocumentsModal";
 import RedFlagBadge from "./RedFlagBadge";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
+import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -356,6 +359,10 @@ export default function VehicleDrawer({
   );
   const redFlagReason = selectedDriverProfile?.redFlagReason || vehicle?.driver_red_flag_reason || vehicle?.driverProfile?.redFlagReason;
   const currentDriverDisplayName = selectedDriverProfile?.fullName || assignedDriverName || vehicle?.assigned_driver_name;
+  const nationalMatch = useMemo(
+    () => matchNationalBlacklist(currentDriverDisplayName),
+    [currentDriverDisplayName]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -634,15 +641,20 @@ export default function VehicleDrawer({
                   <label className="block text-xs font-semibold text-gray-700">
                     Assign Driver
                   </label>
-                  {isDriverRedFlagged && (
-                    <RedFlagBadge reason={redFlagReason} />
-                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {nationalMatch.isBlacklisted && (
+                      <NationalBlacklistBadge match={nationalMatch} size="xs" />
+                    )}
+                    {isDriverRedFlagged && (
+                      <RedFlagBadge reason={redFlagReason} />
+                    )}
+                  </div>
                 </div>
                 <select
                   value={assignedDriverId}
                   onChange={(e) => setAssignedDriverId(e.target.value)}
                   className={`w-full border rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:outline-none ${
-                    isDriverRedFlagged
+                    nationalMatch.isBlacklisted || isDriverRedFlagged
                       ? "border-red-400 bg-red-50/40 text-red-950 focus:ring-red-500/30"
                       : "border-gray-300 focus:ring-navy/30"
                   }`}
@@ -658,7 +670,18 @@ export default function VehicleDrawer({
                     <option value="" disabled>Legacy: {assignedDriverName}</option>
                   )}
                 </select>
-                {isDriverRedFlagged && (
+
+                {/* National Blacklist Alert Banner */}
+                {nationalMatch.isBlacklisted && (
+                  <div className="mt-2.5">
+                    <NationalBlacklistAlertBanner
+                      match={nationalMatch}
+                      candidateName={currentDriverDisplayName}
+                    />
+                  </div>
+                )}
+
+                {isDriverRedFlagged && !nationalMatch.isBlacklisted && (
                   <div className="mt-2 p-2.5 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2">
                     <span className="text-sm">🚩</span>
                     <div className="flex-1">

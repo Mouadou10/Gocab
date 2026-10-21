@@ -11,6 +11,7 @@ import { requireAuth } from "@/lib/api-auth";
 import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconciliation";
 import { touchSyncState } from "@/lib/sync";
 import { invalidateDriverCache } from "@/lib/driverCache";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 export async function GET(
   request: NextRequest,
@@ -39,7 +40,14 @@ export async function GET(
       return NextResponse.json({ error: "Driver not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ driver });
+    const nationalMatch = matchNationalBlacklist(driver.fullName);
+
+    return NextResponse.json({
+      driver: {
+        ...driver,
+        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
+      },
+    });
   } catch (error: any) {
     console.error("GET /api/drivers/[id] error:", error);
     return NextResponse.json({ error: error?.message || "Failed to fetch driver" }, { status: 500 });
@@ -186,7 +194,13 @@ export async function PATCH(
     }
 
     invalidateDriverCache();
-    return NextResponse.json({ driver: updatedDriver });
+    const updatedNationalMatch = matchNationalBlacklist(updatedDriver.fullName);
+    return NextResponse.json({
+      driver: {
+        ...updatedDriver,
+        national_blacklist_match: updatedNationalMatch.isBlacklisted ? updatedNationalMatch : null,
+      },
+    });
   } catch (error: any) {
     console.error("PATCH /api/drivers/[id] error:", error);
     return NextResponse.json({ error: error?.message || "Failed to update driver" }, { status: 500 });

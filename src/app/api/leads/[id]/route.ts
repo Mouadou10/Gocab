@@ -13,6 +13,7 @@ import { LeadUpdateSchema } from "@/lib/validations";
 import { touchSyncState } from "@/lib/sync";
 import { logManyLeadActivities } from "@/lib/activity-log";
 import { invalidateLeadsCache } from "@/lib/leads-cache";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 export async function PATCH(
   request: NextRequest,
@@ -368,6 +369,8 @@ export async function PATCH(
 
         let driverId = existingDriver?.id;
 
+        const nationalMatch = matchNationalBlacklist(updatedLead.raw_name);
+
         if (!existingDriver) {
           const newDriver = await prisma.driverProfile.create({
             data: {
@@ -382,18 +385,30 @@ export async function PATCH(
               currentArrearsMAD: 0.0,
               defaultStage: "NOMINAL",
               assignedVehicleId: vehicleId,
+              isRedFlagged: nationalMatch.isBlacklisted,
+              redFlagReason: nationalMatch.isBlacklisted ? nationalMatch.warningDetailText : null,
+              redFlaggedAt: nationalMatch.isBlacklisted ? new Date() : null,
+              redFlaggedBy: nationalMatch.isBlacklisted ? "Système (Liste Noire Nationale Région Casa-Settat)" : null,
             },
           });
           driverId = newDriver.id;
           console.log(`✨ Auto-converted Lead ${updatedLead.raw_name} to DriverProfile (${updatedLead.sanitized_phone})`);
         } else {
-          // Update KYC status and vehicle
+          // Update KYC status and vehicle, and red flag if blacklisted
           await prisma.driverProfile.update({
             where: { id: existingDriver.id },
             data: {
               fullName: updatedLead.raw_name,
               isKycVerified: true,
               assignedVehicleId: vehicleId || existingDriver.assignedVehicleId,
+              ...(nationalMatch.isBlacklisted && !existingDriver.isRedFlagged
+                ? {
+                    isRedFlagged: true,
+                    redFlagReason: nationalMatch.warningDetailText,
+                    redFlaggedAt: new Date(),
+                    redFlaggedBy: "Système (Liste Noire Nationale Région Casa-Settat)",
+                  }
+                : {}),
             },
           });
         }
@@ -416,7 +431,13 @@ export async function PATCH(
     }
     // ───────────────────────────────────────────────────────────────────────
 
-    return NextResponse.json({ lead: updatedLead });
+    const leadNationalMatch = matchNationalBlacklist(updatedLead.raw_name);
+    return NextResponse.json({
+      lead: {
+        ...updatedLead,
+        national_blacklist_match: leadNationalMatch.isBlacklisted ? leadNationalMatch : null,
+      },
+    });
   } catch (error) {
     console.error("Error updating lead:", error);
     try {

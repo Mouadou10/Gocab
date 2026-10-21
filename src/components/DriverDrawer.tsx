@@ -7,7 +7,7 @@
  * update vehicle assignment, manage arrears & stage, or delete profile.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   X,
   Phone,
@@ -26,10 +26,14 @@ import {
   Send,
   AlertTriangle,
   Archive,
+  ShieldAlert,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import WhatsAppDirectModal from "./WhatsAppDirectModal";
 import RedFlagBadge from "./RedFlagBadge";
+import NationalBlacklistBadge from "./NationalBlacklistBadge";
+import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 export interface Vehicle {
   id: string;
@@ -62,6 +66,7 @@ export interface DriverProfile {
   redFlagReason?: string | null;
   redFlaggedAt?: string | null;
   redFlaggedBy?: string | null;
+  national_blacklist_match?: any | null;
   comments?: Array<{
     id: string;
     driverId?: string;
@@ -109,6 +114,11 @@ export default function DriverDrawer({
   const [isFlagModalOpen, setIsFlagModalOpen] = useState(false);
   const [flagModalReason, setFlagModalReason] = useState("");
   const [isTogglingFlag, setIsTogglingFlag] = useState(false);
+
+  const nationalMatch = useMemo(
+    () => driver?.national_blacklist_match || matchNationalBlacklist(fullName || driver?.fullName),
+    [fullName, driver?.fullName, driver?.national_blacklist_match]
+  );
 
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -355,6 +365,9 @@ export default function DriverDrawer({
             <div className="flex-1 mr-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold">{driver.fullName}</h2>
+                {nationalMatch?.isBlacklisted && (
+                  <NationalBlacklistBadge match={nationalMatch} size="sm" />
+                )}
                 {isRedFlagged && (
                   <RedFlagBadge reason={redFlagReason} />
                 )}
@@ -416,6 +429,14 @@ export default function DriverDrawer({
 
           {/* Drawer Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* National Blacklist Alert Banner (Liste Noire Région Casa-Settat) */}
+            {nationalMatch?.isBlacklisted && (
+              <NationalBlacklistAlertBanner
+                match={nationalMatch}
+                candidateName={fullName || driver.fullName}
+              />
+            )}
+
             {/* Red Flag Warning Banner */}
             {isRedFlagged && (
               <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start justify-between gap-3 shadow-2xs animate-fadeIn">

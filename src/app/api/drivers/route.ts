@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
+import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 import { getDriverCache, setDriverCache, invalidateDriverCache } from "@/lib/driverCache";
 
@@ -102,12 +103,20 @@ export async function GET(request: NextRequest) {
       orderBy: { fullName: "asc" }
     });
 
+    const enrichedDrivers = drivers.map((d) => {
+      const nationalMatch = matchNationalBlacklist(d.fullName);
+      return {
+        ...d,
+        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
+      };
+    });
+
     if (isSimpleFetch) {
-      setDriverCache(drivers);
+      setDriverCache(enrichedDrivers);
     }
 
     return NextResponse.json(
-      { drivers },
+      { drivers: enrichedDrivers },
       {
         headers: {
           "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
@@ -187,6 +196,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const nationalMatch = matchNationalBlacklist(fullName.trim());
+
     // Create Driver
     const driver = await prisma.driverProfile.create({
       data: {
@@ -201,6 +212,10 @@ export async function POST(request: NextRequest) {
         defaultStage: defaultStage || "NOMINAL",
         monthlyTripCount: 0,
         assignedVehicleId: assignedVehicleId || null,
+        isRedFlagged: nationalMatch.isBlacklisted,
+        redFlagReason: nationalMatch.isBlacklisted ? nationalMatch.warningDetailText : null,
+        redFlaggedAt: nationalMatch.isBlacklisted ? new Date() : null,
+        redFlaggedBy: nationalMatch.isBlacklisted ? "Système (Liste Noire Nationale Région Casa-Settat)" : null,
       },
       include: {
         assignedVehicle: true,
