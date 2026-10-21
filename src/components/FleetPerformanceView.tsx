@@ -104,6 +104,9 @@ interface PortfolioStats {
   target85PercentMAD?: number;
   remainingFor85PercentMAD?: number;
   is85PercentWeeklyAchieved?: boolean;
+  target95PercentMAD?: number;
+  remainingFor95PercentMAD?: number;
+  is95PercentMonthlyAchieved?: boolean;
   arrearsMAD: number;
   criticalRedCount: number;
   collectionPercentage: number;
@@ -124,6 +127,9 @@ interface DailySummary {
   target85PercentMAD?: number;
   remainingFor85PercentMAD?: number;
   is85PercentWeeklyAchieved?: boolean;
+  target95PercentMAD?: number;
+  remainingFor95PercentMAD?: number;
+  is95PercentMonthlyAchieved?: boolean;
   collectionPercentage?: number;
   criticalRedCount: number;
   hasMorningCsv?: boolean;
@@ -834,7 +840,7 @@ export default function FleetPerformanceView() {
                   <span className={`text-[10px] block font-semibold ${
                     selectedManager.toLowerCase().includes("aziz") ? "text-gold/90" : "text-indigo-600"
                   }`}>
-                    Cible Hebdo 85% : {Math.round(portfolios.aziz.targetMAD * 0.85).toLocaleString()} MAD ({((portfolios.aziz.clearedMAD / portfolios.aziz.targetMAD) * 100).toFixed(0)}%)
+                    Hebdo 85% : {Math.round(portfolios.aziz.targetMAD * 0.85).toLocaleString()} MAD · Mois 95% : {Math.round(portfolios.aziz.targetMAD * 0.95).toLocaleString()} MAD ({((portfolios.aziz.clearedMAD / portfolios.aziz.targetMAD) * 100).toFixed(0)}%)
                   </span>
                 ) : null}
               </div>
@@ -897,7 +903,7 @@ export default function FleetPerformanceView() {
                   <span className={`text-[10px] block font-semibold ${
                     selectedManager.toLowerCase().includes("mehdi") ? "text-gold/90" : "text-indigo-600"
                   }`}>
-                    Cible Hebdo 85% : {Math.round(portfolios.mehdi.targetMAD * 0.85).toLocaleString()} MAD ({((portfolios.mehdi.clearedMAD / portfolios.mehdi.targetMAD) * 100).toFixed(0)}%)
+                    Hebdo 85% : {Math.round(portfolios.mehdi.targetMAD * 0.85).toLocaleString()} MAD · Mois 95% : {Math.round(portfolios.mehdi.targetMAD * 0.95).toLocaleString()} MAD ({((portfolios.mehdi.clearedMAD / portfolios.mehdi.targetMAD) * 100).toFixed(0)}%)
                   </span>
                 ) : null}
               </div>
@@ -960,7 +966,7 @@ export default function FleetPerformanceView() {
                   <span className={`text-[10px] block font-semibold ${
                     selectedManager === "ALL" ? "text-gold/90" : "text-indigo-600"
                   }`}>
-                    Cible Hebdo 85% : {Math.round((summary.totalMorningTargetMAD || summary.totalExpectedTodayMAD || 0) * 0.85).toLocaleString()} MAD ({(((summary.totalClearedTodayMAD || 0) / (summary.totalMorningTargetMAD || summary.totalExpectedTodayMAD || 1)) * 100).toFixed(0)}%)
+                    Hebdo 85% : {Math.round((summary.totalMorningTargetMAD || summary.totalExpectedTodayMAD || 0) * 0.85).toLocaleString()} MAD · Mois 95% : {Math.round((summary.totalMorningTargetMAD || summary.totalExpectedTodayMAD || 0) * 0.95).toLocaleString()} MAD ({(((summary.totalClearedTodayMAD || 0) / (summary.totalMorningTargetMAD || summary.totalExpectedTodayMAD || 1)) * 100).toFixed(0)}%)
                   </span>
                 ) : null}
               </div>
@@ -997,9 +1003,9 @@ export default function FleetPerformanceView() {
                 )}
               </p>
               <p className="text-2xs opacity-80 mt-0.5">
-                {selectedManager.toLowerCase().includes("aziz") && "Les KPIs (Cible Journalière 50%-60%, Cible Hebdo 85% Fin de Semaine, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mohamed Aziz."}
-                {selectedManager.toLowerCase().includes("mehdi") && "Les KPIs (Cible Journalière 50%-60%, Cible Hebdo 85% Fin de Semaine, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mehdi Elyattouti."}
-                {selectedManager === "ALL" && "Les indicateurs ci-dessous agrègent l'ensemble des encaissements et la cible hebdomadaire (85% fin de semaine) de tous les gestionnaires réunis."}
+                {selectedManager.toLowerCase().includes("aziz") && "Les KPIs (Cible Journalière 50%-60%, Cible Hebdo 85%, Cible Mensuelle 95%, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mohamed Aziz."}
+                {selectedManager.toLowerCase().includes("mehdi") && "Les KPIs (Cible Journalière 50%-60%, Cible Hebdo 85%, Cible Mensuelle 95%, Encaissé, Impayés, Alerte 3e jour) et la liste ci-dessous sont exclusivement calculés pour Mehdi Elyattouti."}
+                {selectedManager === "ALL" && "Les indicateurs ci-dessous agrègent l'ensemble des encaissements et les cibles (Hebdo 85%, Mensuelle 95%) de tous les gestionnaires réunis."}
               </p>
             </div>
           </div>
@@ -1092,7 +1098,7 @@ export default function FleetPerformanceView() {
             </span>
           </div>
 
-          {/* New Objective: Weekly Target 85% by end of week */}
+          {/* Objective: Weekly Target 85% by end of week */}
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
             <span className={summary?.hasMorningCsv || isRangeMode ? "font-bold text-indigo-700 flex items-center gap-1" : "font-medium text-gray-400"}>
               <span>🏁</span> Objectif Hebdo (85%) :
@@ -1103,9 +1109,21 @@ export default function FleetPerformanceView() {
                 : "—"}
             </span>
           </div>
+
+          {/* Objective: Monthly Target 95% by end of month */}
+          <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
+            <span className={summary?.hasMorningCsv || isRangeMode ? "font-bold text-purple-700 flex items-center gap-1" : "font-medium text-gray-400"}>
+              <span>👑</span> Objectif Mensuel (95%) :
+            </span>
+            <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-purple-900 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200" : "font-bold text-gray-300"}>
+              {summary?.hasMorningCsv || isRangeMode
+                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.95).toLocaleString()} MAD`
+                : "—"}
+            </span>
+          </div>
         </div>
 
-        {/* Collected Today / in Period with 50%–60% & 85% Weekly Target Progress */}
+        {/* Collected Today / in Period with 50%–60%, 85% Weekly & 95% Monthly Target Progress */}
         {(() => {
           const hasCsv = summary?.hasMorningCsv ?? false;
           const target = (summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0);
@@ -1114,6 +1132,7 @@ export default function FleetPerformanceView() {
           const isMinTargetAchieved = pct >= 50;
           const isMaxTargetAchieved = pct >= 60;
           const isWeekly85Achieved = pct >= 85;
+          const isMonthly95Achieved = pct >= 95;
 
           return (
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
@@ -1131,6 +1150,8 @@ export default function FleetPerformanceView() {
                   className={`text-3xs font-black px-2 py-0.5 rounded-full ${
                     target === 0 && cleared === 0
                       ? "bg-gray-100 text-gray-400"
+                      : isMonthly95Achieved
+                      ? "bg-purple-100 text-purple-900 border border-purple-300 animate-pulse"
                       : isWeekly85Achieved
                       ? "bg-indigo-100 text-indigo-900 border border-indigo-300 animate-pulse-subtle"
                       : isMaxTargetAchieved
@@ -1142,11 +1163,13 @@ export default function FleetPerformanceView() {
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {isWeekly85Achieved
-                    ? `🏆 ${pct.toFixed(1)}% / 85% Hebdo`
+                  {isMonthly95Achieved
+                    ? `👑 ${pct.toFixed(1)}% / 95% Mois Atteint !`
+                    : isWeekly85Achieved
+                    ? `🏆 ${pct.toFixed(1)}% / 85% Hebdo (Cible 95%)`
                     : isMaxTargetAchieved
-                    ? `✅ ${pct.toFixed(1)}% / 60% (Cible 85%)`
-                    : `${pct.toFixed(1)}% / 50–60% (Cible 85%)`}
+                    ? `✅ ${pct.toFixed(1)}% / 60% (Cibles: 85% · 95%)`
+                    : `${pct.toFixed(1)}% / 50–60% (Cibles: 85% · 95%)`}
                 </span>
               </div>
               <p className="text-2xl font-black text-emerald-600 mt-1">
@@ -1159,13 +1182,16 @@ export default function FleetPerformanceView() {
                 )}
               </p>
               <div className="relative w-full h-2.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                {/* 50%–60% Goal Zone Markers and 85% Weekly Target Marker */}
+                {/* 50%–60% Goal Zone Markers, 85% Weekly Target Marker & 95% Monthly Target Marker */}
                 <div className="absolute left-[50%] top-0 bottom-0 w-0.5 bg-amber-500 z-10" title="Seuil Min 50%" />
                 <div className="absolute left-[60%] top-0 bottom-0 w-0.5 bg-emerald-600 z-10" title="Cible 60%" />
                 <div className="absolute left-[85%] top-0 bottom-0 w-0.5 bg-indigo-600 z-10" title="Objectif Hebdo Fin de Semaine (85%)" />
+                <div className="absolute left-[95%] top-0 bottom-0 w-0.5 bg-purple-600 z-10" title="Objectif Mensuel Fin de Mois (95%)" />
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    isWeekly85Achieved
+                    isMonthly95Achieved
+                      ? "bg-gradient-to-r from-emerald-500 via-indigo-600 to-purple-600"
+                      : isWeekly85Achieved
                       ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600"
                       : isMaxTargetAchieved
                       ? "bg-gradient-to-r from-emerald-500 to-teal-500"
@@ -1184,19 +1210,25 @@ export default function FleetPerformanceView() {
                 <span className="truncate">
                   {!hasCsv && !isRangeMode && target === 0
                     ? "En attente du CSV matin pour fixer l'objectif"
+                    : isMonthly95Achieved
+                    ? "👑 Exceptionnel : Objectif Mensuel 95% Atteint !"
                     : isWeekly85Achieved
-                    ? "🎉 Objectif Hebdo 85% Atteint (Excellence Superviseur) !"
+                    ? `🏆 85% Hebdo atteint ! Reste ${Math.max(0, Math.round(target * 0.95) - cleared).toLocaleString()} MAD pour 95% Mois`
                     : isMaxTargetAchieved
-                    ? `✅ 60% validé ! Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD pour 85% Hebdo`
+                    ? `✅ 60% validé ! Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD (85%) · ${Math.max(0, Math.round(target * 0.95) - cleared).toLocaleString()} MAD (95%)`
                     : isMinTargetAchieved
-                    ? `✅ 50% atteint ! Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD pour 85% Hebdo`
-                    : `Reste ${Math.max(0, Math.round(target * 0.5) - cleared).toLocaleString()} MAD pour 50% · Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD pour 85%`}
+                    ? `✅ 50% atteint ! Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD (85%) · ${Math.max(0, Math.round(target * 0.95) - cleared).toLocaleString()} MAD (95%)`
+                    : `Reste ${Math.max(0, Math.round(target * 0.5) - cleared).toLocaleString()} MAD pour 50% · Reste ${Math.max(0, Math.round(target * 0.85) - cleared).toLocaleString()} MAD pour 85% · Reste ${Math.max(0, Math.round(target * 0.95) - cleared).toLocaleString()} MAD pour 95%`}
                 </span>
                 <span className="font-bold text-gray-400 flex items-center gap-1 shrink-0">
                   <span>50%–60%</span>
                   <span className="text-gray-300">|</span>
                   <span className="text-indigo-600 font-extrabold bg-indigo-50 px-1 py-0.2 rounded border border-indigo-200">
                     Hebdo: 85%
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-purple-700 font-extrabold bg-purple-50 px-1 py-0.2 rounded border border-purple-200">
+                    Mois: 95%
                   </span>
                 </span>
               </p>
