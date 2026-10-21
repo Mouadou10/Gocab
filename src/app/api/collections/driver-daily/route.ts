@@ -264,7 +264,21 @@ export async function GET(request: NextRequest) {
 
       const firstPayment = driver.payments[0];
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
-      const manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
+      let manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
+
+      // Default any driver appearing without fleet manager to Mohamed Aziz
+      if (!manager || !manager.trim() || manager.toLowerCase() === "unassigned") {
+        manager = "Mohamed Aziz";
+        if (resolvedVehicle?.id) {
+          prisma.vehicle.update({
+            where: { id: resolvedVehicle.id },
+            data: {
+              assigned_collector: "Mohamed Aziz",
+              assigned_supervisor: "Mohamed Aziz",
+            },
+          }).catch(() => {});
+        }
+      }
 
       // Comments for this driver (linked to specific date + full history)
       const targetDateKey = endDateStr || startDateStr;
@@ -322,13 +336,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Count total vehicles per manager from all active vehicles
+    // Count total vehicles per manager from all active vehicles (unassigned default to Aziz)
     let azizVehiclesCount = 0;
     let mehdiVehiclesCount = 0;
     for (const v of allVehicles) {
       const mgr = (v.assigned_collector || v.assigned_supervisor || "").toLowerCase();
-      if (mgr.includes("mehdi")) mehdiVehiclesCount++;
-      else if (mgr.includes("aziz")) azizVehiclesCount++;
+      if (mgr.includes("mehdi")) {
+        mehdiVehiclesCount++;
+      } else {
+        azizVehiclesCount++;
+      }
     }
 
     // Collect all managers present in active driver list
@@ -360,18 +377,22 @@ export async function GET(request: NextRequest) {
     }
     const managers = Array.from(managerCounts.values()).sort((a, b) => b.count - a.count);
 
-    // Filter by manager if requested
+    // Filter by manager if requested (drivers without manager are assigned to Aziz)
     const managerParam = searchParams.get("manager");
     let targetDriverSet = driverList;
     if (managerParam && managerParam !== "ALL") {
       const targetM = managerParam.trim().toLowerCase();
-      targetDriverSet = driverList.filter((d) =>
-        d.manager ? d.manager.toLowerCase().includes(targetM) || targetM.includes(d.manager.toLowerCase()) : false
-      );
+      if (targetM.includes("aziz")) {
+        targetDriverSet = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi"));
+      } else {
+        targetDriverSet = driverList.filter((d) =>
+          d.manager ? d.manager.toLowerCase().includes(targetM) || targetM.includes(d.manager.toLowerCase()) : false
+        );
+      }
     }
 
-    // Calculate individual portfolio stats for Aziz and Mehdi
-    const azizDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("aziz"));
+    // Calculate individual portfolio stats for Aziz and Mehdi (all non-mehdi drivers assigned to Aziz)
+    const azizDrivers = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi"));
     const mehdiDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi"));
 
     const calcPortfolioMetrics = (subset: typeof driverList, totalVehicles: number) => {

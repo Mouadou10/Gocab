@@ -1040,18 +1040,16 @@ export default function FleetView() {
                           <div className="text-[10px] text-slate-400 italic mt-0.5">Non assigné</div>
                         )}
 
-                        {(v.assigned_collector || v.assigned_supervisor) && (
-                          <div className="mt-1 flex items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] text-slate-700 font-bold">
-                              <span>🛡️</span>
-                              <span>
-                                {(v.assigned_collector || v.assigned_supervisor || "").toLowerCase().includes("mehdi")
-                                  ? "Mehdi Elyattouti"
-                                  : v.assigned_collector || v.assigned_supervisor}
-                              </span>
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] text-slate-700 font-bold">
+                            <span>🛡️</span>
+                            <span>
+                              {(v.assigned_collector || v.assigned_supervisor || "").toLowerCase().includes("mehdi")
+                                ? "Mehdi Elyattouti"
+                                : "Mohamed Aziz"}
                             </span>
-                          </div>
-                        )}
+                          </span>
+                        </div>
                       </td>
 
                       {/* 5. Kilométrage */}

@@ -179,6 +179,8 @@ export async function POST(request: Request) {
         technical_inspection_expiry: technical_inspection_expiry ? new Date(technical_inspection_expiry) : null,
         assigned_driver_name: assigned_driver_name ? assigned_driver_name.trim() : null,
         assigned_driver_phone: assigned_driver_phone ? assigned_driver_phone.trim() : null,
+        assigned_supervisor: body.assigned_supervisor || body.assigned_collector || "Mohamed Aziz",
+        assigned_collector: body.assigned_collector || body.assigned_supervisor || "Mohamed Aziz",
         notes: notes ? notes.trim() : null,
       },
     });

@@ -123,10 +123,10 @@ export default function VehicleDrawer({
   const [assignedDriverPhone, setAssignedDriverPhone] = useState(vehicle?.assigned_driver_phone || "");
   const [assignedDriverId, setAssignedDriverId] = useState(vehicle?.driverProfile?.id || "");
   const [assignedSupervisor, setAssignedSupervisor] = useState(
-    vehicle?.assigned_supervisor || vehicle?.assigned_collector || ""
+    vehicle?.assigned_supervisor || vehicle?.assigned_collector || "Mohamed Aziz"
   );
   const [assignedCollector, setAssignedCollector] = useState(
-    vehicle?.assigned_collector || vehicle?.assigned_supervisor || ""
+    vehicle?.assigned_collector || vehicle?.assigned_supervisor || "Mohamed Aziz"
   );
   const [notes, setNotes] = useState(vehicle?.notes || "");
 
@@ -315,8 +315,8 @@ export default function VehicleDrawer({
         autorisation_expiry_date: autorisationExpiry || null,
         technical_inspection_expiry: technicalInspectionExpiry || null,
         assigned_driver_id: assignedDriverId || null,
-        assigned_supervisor: assignedSupervisor || null,
-        assigned_collector: assignedCollector || assignedSupervisor || null,
+        assigned_supervisor: assignedSupervisor || "Mohamed Aziz",
+        assigned_collector: assignedCollector || assignedSupervisor || "Mohamed Aziz",
         notes: notes || null,
       };
 

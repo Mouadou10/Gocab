@@ -711,12 +711,12 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Map vehicles to assigned Fleet Performance Manager ("aziz" vs "mehdi" vs "unassigned")
+    // Map vehicles to assigned Fleet Performance Manager ("aziz" vs "mehdi", unassigned default to "aziz")
     const vehicleCollectorMap = new Map<string, string>();
     const plateCollectorMap = new Map<string, string>();
     allFleetVehicles.forEach((v) => {
-      const norm = (v.assigned_collector || "").toLowerCase();
-      const col = norm.includes("aziz") ? "aziz" : norm.includes("mehdi") ? "mehdi" : "unassigned";
+      const norm = (v.assigned_collector || (v as any).assigned_supervisor || "").toLowerCase();
+      const col = norm.includes("mehdi") ? "mehdi" : "aziz";
       vehicleCollectorMap.set(v.id, col);
       plateCollectorMap.set(v.plate_number, col);
     });

@@ -546,7 +546,10 @@ export default function FleetPerformanceView() {
     if (selectedManager !== "ALL") {
       const targetM = selectedManager.trim().toLowerCase();
       const driverM = (d.manager || "").trim().toLowerCase();
-      if (!driverM.includes(targetM) && !targetM.includes(driverM)) {
+      const effectiveManager = driverM || "mohamed aziz";
+      if (targetM.includes("aziz")) {
+        if (effectiveManager.includes("mehdi")) return false;
+      } else if (!effectiveManager.includes(targetM) && !targetM.includes(effectiveManager)) {
         return false;
       }
     }
@@ -1707,12 +1710,10 @@ export default function FleetPerformanceView() {
                             <p className="text-2xs text-gray-400 truncate max-w-[120px]">
                               {driver.vehicle.make_model}
                             </p>
-                            {driver.manager && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                <User className="w-2.5 h-2.5 text-slate-500" />
-                                {driver.manager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : driver.manager}
-                              </span>
-                            )}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                              <User className="w-2.5 h-2.5 text-slate-500" />
+                              {driver.manager && driver.manager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : "Mohamed Aziz"}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-2xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200">
