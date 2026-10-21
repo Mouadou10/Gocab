@@ -853,11 +853,11 @@ export default function PowerBiDashboardView() {
     if (!activeFleet) return [];
     return [
       {
-        name: "1. Cash (50%-60%)",
+        name: "1. Cash (50%-60% · Hebdo 85%)",
         Attainment: Math.min(130, activeFleet.collectionAttainmentPct ?? 0),
         Cible: 100,
         actualLabel: `${activeFleet.collectionRecoveryRate ?? 0}%`,
-        targetLabel: "50% - 60%",
+        targetLabel: "50%-60%/j (85% Hebdo)",
         isCompliant: activeFleet.isCollectionCompliant ?? false,
       },
       {
@@ -2285,19 +2285,25 @@ export default function PowerBiDashboardView() {
                       </p>
                       <span
                         className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                          (activeFleet?.collectionRecoveryRate ?? 0) >= 50
+                          (activeFleet?.collectionRecoveryRate ?? 0) >= 85
+                            ? "bg-indigo-200 text-indigo-900 font-extrabold"
+                            : (activeFleet?.collectionRecoveryRate ?? 0) >= 50
                             ? "bg-emerald-200 text-emerald-900"
                             : "bg-amber-200 text-amber-900"
                         }`}
                       >
-                        {(activeFleet?.collectionRecoveryRate ?? 0) >= 50 ? "✓ 50%–60%" : "⚠️ < 50%"}
+                        {(activeFleet?.collectionRecoveryRate ?? 0) >= 85
+                          ? "🏆 85% Hebdo"
+                          : (activeFleet?.collectionRecoveryRate ?? 0) >= 50
+                          ? "✓ 50%–60%"
+                          : "⚠️ < 50%"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-2xl font-black text-gray-900 font-mono">
                         {activeFleet?.collectionRecoveryRate ?? 0}%
                       </span>
-                      <span className="text-3xs font-bold text-gray-600">Cible : 50%–60%</span>
+                      <span className="text-3xs font-bold text-gray-600">Cible : 50%–60%/j · <strong className="text-indigo-700">85% Hebdo</strong></span>
                     </div>
                     <div className="relative w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
