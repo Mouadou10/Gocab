@@ -194,14 +194,15 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Range logic: sum across days in range
+        const workingDays = daysInRange.filter((d) => d.dayOfWeek >= 1 && d.dayOfWeek <= 6).length;
         if (contract === "WEEKLY") {
           const mondayCount = daysInRange.filter((d) => d.dayOfWeek === 1).length;
-          expectedTodayMAD = Math.max(
-            mondayCount * 1800,
-            mondayCount === 0 && daysCount >= 7 ? 1800 : 0
-          );
+          if (mondayCount > 0 && daysCount % 7 === 0) {
+            expectedTodayMAD = mondayCount * 1800;
+          } else {
+            expectedTodayMAD = workingDays * 300;
+          }
         } else {
-          const workingDays = daysInRange.filter((d) => d.dayOfWeek >= 1 && d.dayOfWeek <= 6).length;
           expectedTodayMAD = workingDays * 300;
         }
       }
@@ -387,7 +388,9 @@ export async function GET(request: NextRequest) {
         arrMAD += d.currentArrearsMAD || 0;
         if (d.isCriticalRed) redCount++;
       }
-      const effTarget = hasMorningCsv && mDebt > 0 ? mDebt : expMAD;
+      // In range mode, the target is ALWAYS the sum of expected contract targets across the period (expMAD).
+      // On a single day (!isRange), if a morning CSV was uploaded, we use morning debt (mDebt); otherwise expMAD.
+      const effTarget = isRange ? expMAD : (hasMorningCsv && mDebt > 0 ? mDebt : expMAD);
       return {
         vehicleCount: totalVehicles,
         driverCount: subset.length,
@@ -429,10 +432,13 @@ export async function GET(request: NextRequest) {
       if (d.isCriticalRed) subCriticalRedCount++;
     }
 
-    const effectiveTargetMAD =
-      hasMorningCsv && subMorningTargetMAD > 0
+    // In range mode, the effective target is ALWAYS the sum of expected contract targets across the period (subExpectedContractMAD).
+    // On a single day (!isRange), if a morning CSV was uploaded, we use morning debt (subMorningTargetMAD); otherwise subExpectedContractMAD.
+    const effectiveTargetMAD = isRange
+      ? subExpectedContractMAD
+      : (hasMorningCsv && subMorningTargetMAD > 0
         ? subMorningTargetMAD
-        : subExpectedContractMAD;
+        : subExpectedContractMAD);
     const remainingToCollectMAD = Math.max(0, effectiveTargetMAD - subClearedTodayMAD);
     const target60PercentMAD = Math.round(effectiveTargetMAD * 0.6);
     const collectionPercentage =
@@ -480,8 +486,8 @@ export async function GET(request: NextRequest) {
         is95PercentMonthlyAchieved: effectiveTargetMAD > 0 ? (subClearedTodayMAD / effectiveTargetMAD) >= 0.95 : false,
         collectionPercentage,
         criticalRedCount: subCriticalRedCount,
-        hasMorningCsv,
-        hasEveningCsv,
+        hasMorningCsv: !isRange && hasMorningCsv,
+        hasEveningCsv: !isRange && hasEveningCsv,
         isRange,
         daysCount,
         startDate: startDateStr,

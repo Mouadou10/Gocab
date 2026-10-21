@@ -1240,17 +1240,29 @@ export default function FleetPerformanceView() {
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-2xs font-bold text-gray-500 uppercase">
-              {selectedManager.toLowerCase().includes("aziz")
+              {isRangeMode
+                ? `Reste Période (${daysCount}j)`
+                : selectedManager.toLowerCase().includes("aziz")
                 ? "Reste à Encaisser (Aziz)"
                 : selectedManager.toLowerCase().includes("mehdi")
                 ? "Reste à Encaisser (Mehdi)"
                 : "Reste à Encaisser (Flotte)"}
             </span>
-            {!summary?.hasMorningCsv && !isRangeMode && (
-              <span className="text-3xs font-black bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                En attente CSV
-              </span>
-            )}
+            <span
+              className={`text-3xs font-black px-2 py-0.5 rounded-full ${
+                isRangeMode
+                  ? "bg-amber-100 text-amber-900"
+                  : summary?.hasMorningCsv
+                  ? "bg-amber-100 text-amber-900"
+                  : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {isRangeMode
+                ? `Cible – Encaissé`
+                : summary?.hasMorningCsv
+                ? "Solde Net"
+                : "En attente CSV"}
+            </span>
           </div>
           <p className="text-2xl font-black text-amber-600 mt-1">
             {summary?.hasMorningCsv || isRangeMode ? (
@@ -1266,14 +1278,12 @@ export default function FleetPerformanceView() {
             <div className="flex items-center justify-between">
               <span>
                 {isRangeMode
-                  ? `Sur la période : ${daysCount} jours sélectionné(s)`
+                  ? `Impayés Actuels Flotte :`
                   : summary?.hasMorningCsv
                   ? "Flotte active (avec véhicule) :"
                   : "En attente de l'import CSV du matin"}
               </span>
-              {summary?.hasMorningCsv && (
-                <span className="font-bold text-gray-700">{(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD</span>
-              )}
+              <span className="font-bold text-gray-700">{(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD</span>
             </div>
             {summary?.unassignedArrearsMAD && summary.unassignedArrearsMAD > 0 && selectedManager === "ALL" ? (
               <div
