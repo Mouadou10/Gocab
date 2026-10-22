@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getMoroccanWorkingDays, getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
+import { getTargetsForRange, parseTargetHistory } from "@/lib/target-history";
 
 export const dynamic = "force-dynamic";
 
@@ -136,12 +137,19 @@ export async function GET(request: NextRequest) {
     const fullMonthInfo = getWorkingDaysInFullMonth(endDate.getFullYear(), endDate.getMonth());
     const workingDaysInMonth = fullMonthInfo.workingDays;
 
-    // 1. Fetch system targets from Weekly Department Goals & Thresholds
+    // 1. Fetch system targets from Weekly Department Goals & Thresholds and Target History
     let targets = { ...DEFAULT_TARGETS };
+    let targetHistorySetting: any = null;
     try {
-      const setting = await prisma.setting.findUnique({
-        where: { key: "department_weekly_targets" },
-      });
+      const [setting, historySetting] = await Promise.all([
+        prisma.setting.findUnique({
+          where: { key: "department_weekly_targets" },
+        }),
+        prisma.setting.findUnique({
+          where: { key: "department_target_history" },
+        }),
+      ]);
+      targetHistorySetting = historySetting;
       if (setting?.value) {
         const parsed = JSON.parse(setting.value);
         const calls = Number(parsed.target_daily_calls) || DEFAULT_TARGETS.target_daily_calls;
@@ -415,17 +423,21 @@ export async function GET(request: NextRequest) {
 
     const attendanceRate = trainingFixed > 0 ? Number(((attendedPersons / trainingFixed) * 100).toFixed(1)) : 0;
 
-    // ── Cascading Targets based on Moroccan Working Days ───────────────
-    const dailyCallsTarget = targets.target_daily_calls || 50;
-    const dailyTrainingFixedTarget = Math.round(dailyCallsTarget * 0.30);
-    const dailyAttendedTarget = Math.round(dailyTrainingFixedTarget * 0.65);
-    const dailyPreordersTarget = Math.round(dailyTrainingFixedTarget * 0.25);
+    // ── Date-Effective Targets Resolution (Moroccan Business Calendar) ─
+    // Resolves exact operational targets fixed during the selected period
+    const historyList = parseTargetHistory(targetHistorySetting?.value, targets);
+    const targetRangeInfo = getTargetsForRange(startDate, endDate, historyList, targets);
 
-    const scaledCallsTarget = dailyCallsTarget * workingDays;
-    const scaledTrainingTarget = Math.round(scaledCallsTarget * 0.30);
-    const scaledAttendedTarget = Math.round(scaledTrainingTarget * 0.65);
-    const scaledPreordersTarget = Math.round(scaledTrainingTarget * 0.25);
-    const scaledTasksTarget = targets.target_daily_tasks * workingDays;
+    const dailyCallsTarget = targetRangeInfo.dailyCallsTarget;
+    const dailyTrainingFixedTarget = targetRangeInfo.dailyTrainingTarget;
+    const dailyAttendedTarget = targetRangeInfo.dailyAttendedTarget;
+    const dailyPreordersTarget = targetRangeInfo.dailyPreordersTarget;
+
+    const scaledCallsTarget = targetRangeInfo.scaledCallsTarget;
+    const scaledTrainingTarget = targetRangeInfo.scaledTrainingTarget;
+    const scaledAttendedTarget = targetRangeInfo.scaledAttendedTarget;
+    const scaledPreordersTarget = targetRangeInfo.scaledPreordersTarget;
+    const scaledTasksTarget = targetRangeInfo.scaledTasksTarget;
 
     const monthlyCallsTarget = dailyCallsTarget * workingDaysInMonth;
     const monthlyTrainingTarget = Math.round(monthlyCallsTarget * 0.30);

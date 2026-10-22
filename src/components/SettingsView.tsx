@@ -14,6 +14,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import toast from "react-hot-toast";
 import { getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
+import { TargetSnapshot, parseTargetHistory } from "@/lib/target-history";
 
 type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
 
@@ -203,6 +204,10 @@ export default function SettingsView() {
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
 
+  // Date-Effective Target History State
+  const [targetHistory, setTargetHistory] = useState<TargetSnapshot[]>([]);
+  const [effectiveDate, setEffectiveDate] = useState<string>(new Date().toISOString().split("T")[0]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -237,6 +242,12 @@ export default function SettingsView() {
         const usersData = await usersRes.json();
 
         if (settingsData.settings) {
+          if (settingsData.settings.department_target_history) {
+            try {
+              const hist = parseTargetHistory(settingsData.settings.department_target_history);
+              setTargetHistory(hist);
+            } catch (e) {}
+          }
           if (settingsData.settings.department_weekly_targets) {
             try {
               const parsed = JSON.parse(settingsData.settings.department_weekly_targets);
@@ -467,11 +478,17 @@ export default function SettingsView() {
         body: JSON.stringify({
           key: "department_weekly_targets",
           value: JSON.stringify(targets),
+          effective_date: effectiveDate,
         }),
       });
 
       if (res.ok) {
-        toast.success("🎯 Weekly Department Targets saved! KPIs & Alerts updated.");
+        toast.success(`🎯 Objectifs sauvegardés avec succès (Date d'effet : ${effectiveDate})`);
+        const sRes = await fetch("/api/settings");
+        const sData = await sRes.json();
+        if (sData.settings?.department_target_history) {
+          setTargetHistory(parseTargetHistory(sData.settings.department_target_history));
+        }
       } else {
         toast.error("Failed to save targets.");
       }
@@ -974,18 +991,28 @@ export default function SettingsView() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                  <span className="text-3xs text-slate-500 font-bold uppercase tracking-wider">Date d&apos;Effet :</span>
+                  <input
+                    type="date"
+                    value={effectiveDate}
+                    onChange={(e) => setEffectiveDate(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-navy cursor-pointer"
+                    title="Date à partir de laquelle ces objectifs s'appliquent"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setTargets(DEFAULT_TARGETS)}
-                  className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl"
+                  className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl cursor-pointer"
                 >
                   Valeurs par Défaut
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                  className="px-5 py-2 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
                   {isSaving ? "Enregistrement…" : "💾 Enregistrer Cibles & Pondérations"}
                 </button>
@@ -1040,6 +1067,80 @@ export default function SettingsView() {
                   </div>
                 </div>
               </div>
+
+              {/* Date-Effective Target History Timeline Card */}
+              {targetHistory && targetHistory.length > 0 && (
+                <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📜</span>
+                      <h5 className="font-bold text-xs text-slate-800">
+                        Historique des Objectifs Opérationnels par Période (Date d&apos;Effet)
+                      </h5>
+                    </div>
+                    <span className="text-3xs text-slate-500 font-medium">
+                      Les KPIs passés (Leads, Formation, Primes) conservent automatiquement l&apos;objectif exact fixé à leur date.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {[...targetHistory].reverse().map((snap, idx) => {
+                      const isCurrent = idx === 0;
+                      return (
+                        <div
+                          key={snap.effective_date}
+                          className={`p-3 rounded-xl border text-xs transition-all ${
+                            isCurrent
+                              ? "bg-blue-50/60 border-blue-200 text-blue-950 shadow-2xs"
+                              : "bg-slate-50/70 border-slate-200/70 text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-bold text-xs flex items-center gap-1.5">
+                              <span>🗓️</span>
+                              <span>
+                                {new Date(snap.effective_date + "T12:00:00").toLocaleDateString("fr-FR", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </span>
+                            <span
+                              className={`text-3xs font-extrabold px-2 py-0.5 rounded-full ${
+                                isCurrent
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {isCurrent ? "En vigueur" : "Historique"}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1.5 text-3xs font-semibold pt-1 border-t border-slate-200/50">
+                            <div>
+                              <span className="text-slate-400">Appels : </span>
+                              <strong className="text-slate-900">{snap.target_daily_calls} /j</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Formations : </span>
+                              <strong className="text-amber-700">{snap.target_daily_training_fixed} /j</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Présents : </span>
+                              <strong className="text-emerald-700">{snap.target_daily_attended} /j</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Véhicules : </span>
+                              <strong className="text-purple-700">{snap.target_daily_preorders} /j</strong>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Pillar 1: Traffic Acquisition Team (Nour & Kaoutar) */}
               <div className="border border-blue-200 bg-blue-50/50 rounded-2xl p-5 space-y-4 shadow-2xs">

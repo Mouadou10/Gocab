@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getMoroccanWorkingDays } from '@/lib/moroccoCalendar';
+import { TargetSnapshot, getTargetForDate, getTargetsForRange, parseTargetHistory } from '@/lib/target-history';
 
 interface LeadsScorecardProps {
   leads: any[];
@@ -13,19 +14,26 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
   const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
   const [targetConversionRate, setTargetConversionRate] = useState(20);
+  const [targetHistory, setTargetHistory] = useState<TargetSnapshot[]>([]);
+  const [currentTargets, setCurrentTargets] = useState<any>(null);
 
   useEffect(() => {
     // Default to today
     const today = new Date().toISOString().split('T')[0];
     setDateFilter(today);
 
-    // Fetch objectives from Operations Manager Settings parameters
+    // Fetch objectives and date-effective history from Settings parameters
     fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
+        if (data.settings?.department_target_history) {
+          const parsedHistory = parseTargetHistory(data.settings.department_target_history);
+          setTargetHistory(parsedHistory);
+        }
         if (data.settings?.department_weekly_targets) {
           try {
             const targets = JSON.parse(data.settings.department_weekly_targets);
+            setCurrentTargets(targets);
             if (targets.target_daily_calls) {
               setDailyCallsTarget(Number(targets.target_daily_calls));
             } else if (targets.target_weekly_leads) {
@@ -94,9 +102,11 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
         year: 'numeric',
       });
 
-  // Dynamic Target Scaling based on Moroccan Calendar
+  // Dynamic Target Scaling based on Date-Effective Targets & Moroccan Calendar
   let workingDays = 1;
   let scaledCallsTarget = dailyCallsTarget;
+  let activeTrainingTarget = dailyTrainingTarget;
+  let activeConversionRateTarget = targetConversionRate;
   let targetLabel = `/ ${dailyCallsTarget} cible du jour`;
   let rhythmLabel = 'Rythme journalier';
 
@@ -113,11 +123,22 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
       }
     });
     if (minDate && maxDate) {
-      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, maxDate).workingDays);
+      const rangeTargets = getTargetsForRange(minDate, maxDate, targetHistory, currentTargets);
+      workingDays = rangeTargets.workingDays;
+      scaledCallsTarget = rangeTargets.scaledCallsTarget;
+      activeTrainingTarget = rangeTargets.scaledTrainingTarget;
+      activeConversionRateTarget = rangeTargets.targetLeadConversionRate;
+      targetLabel = `/ ${scaledCallsTarget} cible (${workingDays}j)`;
+      rhythmLabel = `Rythme global (${workingDays}j ouvrés)`;
     }
-    scaledCallsTarget = dailyCallsTarget * workingDays;
-    targetLabel = `/ ${scaledCallsTarget} cible (${workingDays}j)`;
-    rhythmLabel = `Rythme global (${workingDays}j ouvrés)`;
+  } else if (dateFilter) {
+    // Exact operational target fixed for this specific date (e.g. Yesterday = 80 calls & 24 fixed; Today = 133 calls & 40 fixed)
+    const dayTarget = getTargetForDate(dateFilter, targetHistory, currentTargets);
+    scaledCallsTarget = dayTarget.target_daily_calls;
+    activeTrainingTarget = dayTarget.target_daily_training_fixed;
+    activeConversionRateTarget = dayTarget.target_lead_conversion_rate || targetConversionRate;
+    targetLabel = `/ ${scaledCallsTarget} cible du jour`;
+    rhythmLabel = isToday ? 'Rythme journalier' : isYesterday ? 'Bilan d\'hier' : `Bilan du ${displayDate}`;
   }
 
   const rawCallProgress = scaledCallsTarget > 0 ? (totalCalled / scaledCallsTarget) * 100 : 0;
@@ -342,11 +363,11 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
                 <span>Taux de Conversion</span>
               </span>
               <span className={`px-2 py-0.5 rounded-full text-3xs font-extrabold ${
-                conversionRateNum >= targetConversionRate
+                conversionRateNum >= activeConversionRateTarget
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-blue-100 text-blue-800"
               }`}>
-                Obj. {targetConversionRate}%
+                Obj. {activeConversionRateTarget}%
               </span>
             </div>
 
@@ -363,12 +384,12 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
             <div className="w-full bg-slate-200/80 rounded-full h-2.5 overflow-hidden p-0.5 shadow-inner">
               <div
                 className={`h-full rounded-full transition-all duration-700 ease-out ${
-                  conversionRateNum >= targetConversionRate
+                  conversionRateNum >= activeConversionRateTarget
                     ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
                     : 'bg-gradient-to-r from-blue-500 to-teal-400'
                 }`}
                 style={{
-                  width: `${Math.min(100, targetConversionRate > 0 ? (conversionRateNum / targetConversionRate) * 100 : 0)}%`,
+                  width: `${Math.min(100, activeConversionRateTarget > 0 ? (conversionRateNum / activeConversionRateTarget) * 100 : 0)}%`,
                 }}
               />
             </div>
@@ -377,7 +398,7 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
           <div className="mt-3 pt-2.5 border-t border-emerald-100/60 flex items-center justify-between text-3xs text-slate-500 font-medium">
             <span>{trainingFixed} sur {totalCalled} leads</span>
             <span className="font-bold text-emerald-800">
-              Cible : {trainingFixed}/{dailyTrainingTarget} fixées
+              Cible : {trainingFixed}/{activeTrainingTarget} fixées
             </span>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getMoroccanWorkingDays } from '@/lib/moroccoCalendar';
+import { TargetSnapshot, getTargetForDate, getTargetsForRange, parseTargetHistory } from '@/lib/target-history';
 
 /**
  * TrainingScorecard — shows daily training pipeline metrics.
@@ -51,6 +52,8 @@ export default function TrainingScorecard({
   const [endDate, setEndDate] = useState<string>(initialDates.end);
   const [dailyPreordersTarget, setDailyPreordersTarget] = useState(9);
   const [targetConversionRate, setTargetConversionRate] = useState(25);
+  const [targetHistory, setTargetHistory] = useState<TargetSnapshot[]>([]);
+  const [currentTargets, setCurrentTargets] = useState<any>(null);
 
   // Synchronize internal date range with selectedDate prop from parent (KanbanBoard)
   useEffect(() => {
@@ -87,13 +90,18 @@ export default function TrainingScorecard({
       setEndDate(today);
     }
 
-    // Fetch objectives from Settings
+    // Fetch objectives and date-effective history from Settings
     fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
+        if (data.settings?.department_target_history) {
+          const parsedHistory = parseTargetHistory(data.settings.department_target_history);
+          setTargetHistory(parsedHistory);
+        }
         if (data.settings?.department_weekly_targets) {
           try {
             const targets = JSON.parse(data.settings.department_weekly_targets);
+            setCurrentTargets(targets);
             if (targets.target_daily_preorders !== undefined && targets.target_daily_preorders !== null) {
               setDailyPreordersTarget(Number(targets.target_daily_preorders));
             } else if (targets.target_kyc_completion_rate) {
@@ -319,25 +327,26 @@ export default function TrainingScorecard({
   const attendedCount = filteredLeads.filter(isAttended).length;
   const attendanceRate = totalInTraining > 0 ? ((attendedCount / totalInTraining) * 100).toFixed(1) : '0';
 
-  // ── Dynamic Period Scaling based on Moroccan Business Calendar ──────
+  // ── Dynamic Period Scaling based on Date-Effective Targets & Moroccan Calendar ──
   let workingDays = 1;
+  let activeDailyTarget = dailyPreordersTarget;
+  let scaled = dailyPreordersTarget;
   let periodTargetLabel = `/ ${dailyPreordersTarget} obj. jour`;
   let periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${dailyPreordersTarget}/j)`;
 
   if (startDate && endDate) {
     if (startDate === endDate) {
+      const dayTarget = getTargetForDate(startDate, targetHistory, currentTargets);
+      activeDailyTarget = dayTarget.target_daily_preorders;
+      scaled = activeDailyTarget;
       workingDays = 1;
-      periodTargetLabel = `/ ${dailyPreordersTarget} obj. jour`;
-      periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${dailyPreordersTarget}/j)`;
+      periodTargetLabel = `/ ${scaled} obj. jour`;
+      periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled}/j)`;
     } else {
-      try {
-        const s = new Date(startDate + 'T00:00:00');
-        const e = new Date(endDate + 'T23:59:59');
-        workingDays = Math.max(1, getMoroccanWorkingDays(s, e).workingDays);
-      } catch {
-        workingDays = 1;
-      }
-      const scaled = dailyPreordersTarget * workingDays;
+      const rangeTargets = getTargetsForRange(startDate, endDate, targetHistory, currentTargets);
+      workingDays = rangeTargets.workingDays;
+      scaled = rangeTargets.scaledPreordersTarget;
+      activeDailyTarget = rangeTargets.dailyPreordersTarget;
       if (isThisWeekSelected) {
         periodTargetLabel = `/ ${scaled} obj. semaine (${workingDays}j)`;
       } else if (isThisMonthSelected) {
@@ -362,44 +371,39 @@ export default function TrainingScorecard({
       }
     });
     if (minDate && maxDate) {
-      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, maxDate).workingDays);
+      const rangeTargets = getTargetsForRange(minDate, maxDate, targetHistory, currentTargets);
+      workingDays = rangeTargets.workingDays;
+      scaled = rangeTargets.scaledPreordersTarget;
+      activeDailyTarget = rangeTargets.dailyPreordersTarget;
     } else {
       workingDays = 1;
+      scaled = dailyPreordersTarget;
     }
-    const scaled = dailyPreordersTarget * workingDays;
     periodTargetLabel = `/ ${scaled} obj. cumul (${workingDays}j)`;
     periodDescription = `${totalConverted} convertis en précommande / véhicule sur ${workingDays} jours ouvrés (cible : ${scaled})`;
   } else if (startDate && !endDate) {
-    try {
-      const s = new Date(startDate + 'T00:00:00');
-      workingDays = Math.max(1, getMoroccanWorkingDays(s, new Date()).workingDays);
-    } catch {
-      workingDays = 1;
-    }
-    const scaled = dailyPreordersTarget * workingDays;
+    const rangeTargets = getTargetsForRange(startDate, new Date(), targetHistory, currentTargets);
+    workingDays = rangeTargets.workingDays;
+    scaled = rangeTargets.scaledPreordersTarget;
     periodTargetLabel = `/ ${scaled} obj. (${workingDays}j ouvrés)`;
     periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled} sur ${workingDays} jours)`;
   } else if (!startDate && endDate) {
-    try {
-      let minDate = new Date();
-      trainingLeads.forEach(l => {
-        const dStr = l.reminder_date || l.created_at;
-        if (dStr) {
-          const d = new Date(dStr);
-          if (!isNaN(d.getTime()) && d < minDate) minDate = d;
-        }
-      });
-      const e = new Date(endDate + 'T23:59:59');
-      workingDays = Math.max(1, getMoroccanWorkingDays(minDate, e).workingDays);
-    } catch {
-      workingDays = 1;
-    }
-    const scaled = dailyPreordersTarget * workingDays;
+    let minDate = new Date();
+    trainingLeads.forEach(l => {
+      const dStr = l.reminder_date || l.created_at;
+      if (dStr) {
+        const d = new Date(dStr);
+        if (!isNaN(d.getTime()) && d < minDate) minDate = d;
+      }
+    });
+    const rangeTargets = getTargetsForRange(minDate, endDate, targetHistory, currentTargets);
+    workingDays = rangeTargets.workingDays;
+    scaled = rangeTargets.scaledPreordersTarget;
     periodTargetLabel = `/ ${scaled} obj. (${workingDays}j ouvrés)`;
     periodDescription = `${totalConverted} convertis en précommande / véhicule (cible : ${scaled} sur ${workingDays} jours)`;
   }
 
-  const periodTarget = dailyPreordersTarget * workingDays;
+  const periodTarget = scaled;
   const rawProgress = periodTarget > 0 ? (totalConverted / periodTarget) * 100 : 0;
   const progressWidth = Math.min(rawProgress, 100);
 

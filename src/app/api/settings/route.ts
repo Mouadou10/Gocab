@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { DEFAULT_TARGET_HISTORY, parseTargetHistory } from "@/lib/target-history";
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   whatsapp_invite_template:
@@ -38,14 +39,16 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     ADMIN: ["dashboard", "leads", "training", "fleet", "tickets", "performance", "field", "insurance", "settings"],
   }),
   department_weekly_targets: JSON.stringify({
-    target_daily_calls: 34,
-    target_daily_training_fixed: 7,
-    target_weekly_leads: 100,
-    target_daily_preorders: 9,
-    target_training_showup_rate: 80,
-    target_kyc_completion_rate: 25,
-    target_lead_conversion_rate: 20,
-    target_active_fleet_rate: 85,
+    target_daily_calls: 133,
+    target_daily_training_fixed: 40,
+    target_weekly_leads: 250,
+    target_daily_preorders: 10,
+    target_daily_attended: 26,
+    target_training_showup_rate: 65,
+    target_kyc_completion_rate: 10,
+    target_lead_conversion_rate: 30,
+    target_preorder_conversion_rate: 25,
+    target_active_fleet_rate: 95,
     target_max_downtime_days: 7,
     target_weekly_churn_limit: 2,
     target_max_waived_days: 10,
@@ -57,6 +60,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     target_collection_rate: 90,
     target_weekly_revenue_mad: 50000,
   }),
+  department_target_history: JSON.stringify(DEFAULT_TARGET_HISTORY),
 };
 
 import { requireAuth } from "@/lib/api-auth";
@@ -114,6 +118,49 @@ export async function POST(request: NextRequest) {
       update: { value },
       create: { key, value },
     });
+
+    // If updating department_weekly_targets, update or append to date-effective department_target_history
+    if (key === "department_weekly_targets") {
+      try {
+        const parsedTargets = typeof value === "string" ? JSON.parse(value) : value;
+        const effectiveDate = body.effective_date || new Date().toISOString().split("T")[0];
+
+        const historyRecord = await prisma.setting.findUnique({
+          where: { key: "department_target_history" },
+        });
+        const historyList = parseTargetHistory(historyRecord?.value);
+
+        const existingIdx = historyList.findIndex((item) => item.effective_date === effectiveDate);
+        const snapshot = {
+          effective_date: effectiveDate,
+          target_daily_calls: Number(parsedTargets.target_daily_calls) || 50,
+          target_daily_training_fixed: Number(parsedTargets.target_daily_training_fixed) || 15,
+          target_daily_attended: Number(parsedTargets.target_daily_attended) || 10,
+          target_daily_preorders: Number(parsedTargets.target_daily_preorders) || 4,
+          target_daily_tasks: Number(parsedTargets.target_daily_tasks) || 10,
+          target_lead_conversion_rate: Number(parsedTargets.target_lead_conversion_rate) || 30,
+          target_training_showup_rate: Number(parsedTargets.target_training_showup_rate) || 65,
+          target_preorder_conversion_rate: Number(parsedTargets.target_preorder_conversion_rate) || 25,
+          ...parsedTargets,
+        };
+
+        if (existingIdx >= 0) {
+          historyList[existingIdx] = snapshot;
+        } else {
+          historyList.push(snapshot);
+        }
+
+        historyList.sort((a, b) => a.effective_date.localeCompare(b.effective_date));
+
+        await prisma.setting.upsert({
+          where: { key: "department_target_history" },
+          update: { value: JSON.stringify(historyList) },
+          create: { key: "department_target_history", value: JSON.stringify(historyList) },
+        });
+      } catch (err) {
+        console.warn("Failed to update department_target_history:", err);
+      }
+    }
 
     // Touch sync state so all open sessions refresh immediately
     touchSyncState("settings").catch(() => {});
