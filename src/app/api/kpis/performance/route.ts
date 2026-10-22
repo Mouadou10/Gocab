@@ -229,6 +229,8 @@ export async function GET(request: NextRequest) {
         has_fiche_anthropometrique: true,
         has_confirmation_adresse: true,
         has_permis: true,
+        presence_confirmed: true,
+        presence_confirmed_at: true,
         handled_by: true,
         created_at: true,
         updated_at: true,
@@ -237,6 +239,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Standardized set of training attendance statuses across GoCab (synchronized with TrainingScorecard)
+    // Standardized set of training attendance statuses across GoCab (synchronized with TrainingScorecard)
+    // Counting leads moved to "Pending" as physically present leads in the training session
     const ATTENDED_STATUSES = [
       "Attended",
       "Attended and not interested",
@@ -247,20 +251,62 @@ export async function GET(request: NextRequest) {
       "Accept offer",
     ];
 
-    const isAttendedLead = (l: any) =>
-      l.board_column === "VEHICLE_ASSIGNMENT" ||
-      (l.training_status && ATTENDED_STATUSES.includes(l.training_status));
+    const isAttendedLead = (l: any) => {
+      if (l.board_column === "VEHICLE_ASSIGNMENT") return true;
+      if (Boolean(l.presence_confirmed)) return true;
+      const ts = (l.training_status || "").trim().toLowerCase();
+      if (!ts) return false;
+      return (
+        ts === "pending" ||
+        ts.includes("pending") ||
+        ts === "attended" ||
+        ts.includes("attended") ||
+        ts.includes("présent") ||
+        ts.includes("present") ||
+        ts.includes("preorder") ||
+        ts.includes("assign") ||
+        ts.includes("accept") ||
+        ts.includes("refused") ||
+        ATTENDED_STATUSES.some((s) => s.toLowerCase() === ts)
+      );
+    };
+
+    // ── Traffic Acquisition Activity in Date Range (Prospection Calls & Training Fixed) ──
+    // Measured on the date the agent made the call and changed the lead status (status_changed_at)
+    // Synchronized 1:1 with LeadsScorecard on the Leads page
+    const isTrafficCallInRange = (l: any) => {
+      if (l.board_column === "NEW_LEADS") return false;
+      const ts = l.status_changed_at;
+      if (!ts) return false;
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return false;
+      return d >= startDate && d <= endDate;
+    };
+
+    const isLeadsWorkflowLead = (l: any) =>
+      l.board_column === "BRAND_PRE_FILTER" || l.brand_status === "Training fixed";
+
+    const allTrafficLeadsInRange = allLeads.filter(
+      (l) => isTrafficCallInRange(l) && isLeadsWorkflowLead(l)
+    );
 
     // Filter leads treated in date range or scheduled for training session in date range
     const isLeadInDateRange = (l: any) => {
-      // If reminder_date is set, the scheduled session date strictly defines its period
+      // 1. If reminder_date is set, the scheduled session date defines its period
       if (l.reminder_date) {
         const rd = new Date(l.reminder_date);
-        if (!isNaN(rd.getTime())) {
-          return rd >= startDate && rd <= endDate;
+        if (!isNaN(rd.getTime()) && rd >= startDate && rd <= endDate) {
+          return true;
         }
       }
-      // If no reminder_date is set, fallback to status_changed_at or created_at
+      // 2. Presence confirmation in range
+      if (l.presence_confirmed_at) {
+        const pd = new Date(l.presence_confirmed_at);
+        if (!isNaN(pd.getTime()) && pd >= startDate && pd <= endDate) {
+          return true;
+        }
+      }
+      // 3. Fallback to status_changed_at or created_at
       const ts = l.status_changed_at || l.created_at;
       if (!ts) return false;
       const d = new Date(ts);
@@ -313,20 +359,49 @@ export async function GET(request: NextRequest) {
     });
 
     // ── Global Funnel Numbers ──────────────────────────────────────────
-    const callsDone = filteredLeadsInRange.filter((l) => l.board_column !== "NEW_LEADS").length;
-    const trainingFixed = filteredLeadsInRange.filter(
-      (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
-    ).length;
+    // Synchronized with Traffic Acquisition activity
+    const callsDone = allTrafficLeadsInRange.length > 0 ? allTrafficLeadsInRange.length : filteredLeadsInRange.filter((l) => l.board_column !== "NEW_LEADS").length;
+    const trainingFixed = allTrafficLeadsInRange.length > 0
+      ? allTrafficLeadsInRange.filter((l) => l.brand_status === "Training fixed").length
+      : filteredLeadsInRange.filter(
+          (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+        ).length;
 
-    // Attended persons (candidates showing up at training)
+    // Attended persons (candidates showing up at training, including leads moved to Pending)
     const attendedPersons = filteredLeadsInRange.filter(isAttendedLead).length;
 
     const leadConversionRate = callsDone > 0 ? Number(((trainingFixed / callsDone) * 100).toFixed(1)) : 0;
 
     // Training Pipeline in Date Range
-    const trainingLeads = filteredLeadsInRange.filter(
-      (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT" || l.brand_status === "Training fixed"
-    );
+    const isTrainingPipelineLead = (l: any) =>
+      l.board_column === "TRAINING_PIPELINE" ||
+      l.board_column === "VEHICLE_ASSIGNMENT" ||
+      l.brand_status === "Training fixed";
+
+    const trainingLeads = allLeads.filter((l) => {
+      if (!isTrainingPipelineLead(l)) return false;
+      // Scheduled session date in range
+      if (l.reminder_date) {
+        const rd = new Date(l.reminder_date);
+        if (!isNaN(rd.getTime()) && rd >= startDate && rd <= endDate) return true;
+      }
+      // Presence recorded in range
+      if (l.presence_confirmed_at) {
+        const pd = new Date(l.presence_confirmed_at);
+        if (!isNaN(pd.getTime()) && pd >= startDate && pd <= endDate) return true;
+      }
+      // Present in session (e.g. moved to Pending or Attended) during range
+      if (isAttendedLead(l) && l.status_changed_at) {
+        const sd = new Date(l.status_changed_at);
+        if (!isNaN(sd.getTime()) && sd >= startDate && sd <= endDate) return true;
+      }
+      // Fallback: If no reminder_date, check created_at
+      if (!l.reminder_date && l.created_at) {
+        const cd = new Date(l.created_at);
+        if (!isNaN(cd.getTime()) && cd >= startDate && cd <= endDate) return true;
+      }
+      return false;
+    });
 
     const attendedCount = trainingLeads.filter(isAttendedLead).length;
 
@@ -358,24 +433,27 @@ export async function GET(request: NextRequest) {
     const monthlyPreordersTarget = Math.round(monthlyTrainingTarget * 0.25);
 
     // ── Traffic Acquisition Team (Nour & Kaoutar) ─────────────────────
-    const trafficLeads = leadsTreatedInRange.filter((l) => {
-      const h = ((l as any).handled_by || "").toLowerCase();
-      const n = (l.notes || "").toLowerCase();
-      return (
-        h.includes("kaoutar") ||
-        h.includes("nour") ||
-        n.includes("kaoutar") ||
-        n.includes("nour")
-      );
-    });
+    // Synchronized with Leads Prospection scorecard: strictly counts calls and trainings fixed during period
+    let activeTrafficLeads = allTrafficLeadsInRange;
+    if (targetUser && (targetUser.role === "LEAD_ACQUISITION_JR" || targetUser.role === "BRAND_MANAGER")) {
+      const uName = (targetUser.fullName || targetUser.name || "").toLowerCase();
+      const uEmail = (targetUser.email || "").toLowerCase();
+      activeTrafficLeads = allTrafficLeadsInRange.filter((l) => {
+        const h = (l.handled_by || "").toLowerCase();
+        const n = (l.notes || "").toLowerCase();
+        return (
+          h.includes(uName) ||
+          h.includes(uEmail) ||
+          n.includes(uName) ||
+          n.includes(uEmail) ||
+          userFixedLeadIds.has(l.id)
+        );
+      });
+    }
 
-    const activeTrafficLeads = targetUser && targetUser.role === "LEAD_ACQUISITION_JR"
-      ? filteredLeadsInRange
-      : (trafficLeads.length > 0 ? trafficLeads : filteredLeadsInRange);
-
-    const trafficCallsDone = activeTrafficLeads.filter((l) => l.board_column !== "NEW_LEADS").length;
+    const trafficCallsDone = activeTrafficLeads.length;
     const trafficTrainingFixed = activeTrafficLeads.filter(
-      (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+      (l) => l.brand_status === "Training fixed"
     ).length;
 
     // ── Call Results Breakdown for Traffic Team (Nour & Kaoutar) ───────
@@ -391,28 +469,22 @@ export async function GET(request: NextRequest) {
     };
 
     activeTrafficLeads.forEach((l) => {
-      if (l.board_column !== "NEW_LEADS") {
-        callResults.total++;
-        const s = (l.brand_status || "").toLowerCase();
-        if (
-          l.brand_status === "Training fixed" ||
-          l.board_column === "TRAINING_PIPELINE" ||
-          l.board_column === "VEHICLE_ASSIGNMENT"
-        ) {
-          callResults.trainingFixed++;
-        } else if (s.includes("no response") || s.includes("pas de réponse")) {
-          callResults.noResponse++;
-        } else if (s.includes("recall") || s.includes("rappeler")) {
-          callResults.toRecall++;
-        } else if (s.includes("not interested") || s.includes("pas intéressé")) {
-          callResults.notInterested++;
-        } else if (s.includes("wrong number") || s.includes("faux numéro")) {
-          callResults.wrongNumber++;
-        } else if (s.includes("client")) {
-          callResults.alreadyClient++;
-        } else {
-          callResults.other++;
-        }
+      callResults.total++;
+      const s = (l.brand_status || "").toLowerCase();
+      if (l.brand_status === "Training fixed") {
+        callResults.trainingFixed++;
+      } else if (s.includes("no response") || s.includes("pas de réponse")) {
+        callResults.noResponse++;
+      } else if (s.includes("recall") || s.includes("rappeler")) {
+        callResults.toRecall++;
+      } else if (s.includes("not interested") || s.includes("pas intéressé")) {
+        callResults.notInterested++;
+      } else if (s.includes("wrong number") || s.includes("faux numéro")) {
+        callResults.wrongNumber++;
+      } else if (s.includes("client")) {
+        callResults.alreadyClient++;
+      } else {
+        callResults.other++;
       }
     });
 
@@ -503,15 +575,24 @@ export async function GET(request: NextRequest) {
 
     activeOnboardingLeads.forEach((l) => {
       let sessionDate = "";
-      if (l.reminder_date) {
+      // For candidates who attended or were moved to Pending, credit to the actual session attendance date
+      if (isAttendedLead(l)) {
+        if (l.presence_confirmed_at) {
+          try {
+            const d = new Date(l.presence_confirmed_at);
+            if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
+          } catch {}
+        }
+        if (!sessionDate && l.status_changed_at) {
+          try {
+            const d = new Date(l.status_changed_at);
+            if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
+          } catch {}
+        }
+      }
+      if (!sessionDate && l.reminder_date) {
         try {
           const d = new Date(l.reminder_date);
-          if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
-        } catch {}
-      }
-      if (!sessionDate && l.status_changed_at) {
-        try {
-          const d = new Date(l.status_changed_at);
           if (!isNaN(d.getTime())) sessionDate = d.toISOString().split("T")[0];
         } catch {}
       }
@@ -1198,15 +1279,15 @@ export async function GET(request: NextRequest) {
       const uName = (u.fullName || u.name || "").toLowerCase();
       const uEmail = (u.email || "").toLowerCase();
 
-      const userHandledLeads = leadsTreatedInRange.filter((l) => {
+      const userHandledTraffic = allTrafficLeadsInRange.filter((l) => {
         const h = ((l as any).handled_by || "").toLowerCase();
         const n = (l.notes || "").toLowerCase();
-        return h.includes(uName) || h.includes(uEmail) || n.includes(uName) || n.includes(uEmail);
+        return h.includes(uName) || h.includes(uEmail) || n.includes(uName) || n.includes(uEmail) || userFixedLeadIds.has(l.id);
       });
 
-      const userCalls = userHandledLeads.filter((l) => l.board_column !== "NEW_LEADS").length;
-      const userTrainings = userHandledLeads.filter(
-        (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+      const userCalls = userHandledTraffic.length;
+      const userTrainings = userHandledTraffic.filter(
+        (l) => l.brand_status === "Training fixed"
       ).length;
 
       if (u.role === "LEAD_ACQUISITION_JR" || u.role === "BRAND_MANAGER" || uName.includes("nour") || uName.includes("kaoutar")) {
@@ -1222,8 +1303,8 @@ export async function GET(request: NextRequest) {
         dept = "Formation & Onboarding";
         teamName = "Onboarding Specialist (Ayoub Gsaib)";
         keyMetric = "Précommandes / Affect.";
-        const userPreorders = userHandledLeads.filter(
-          (l) => l.training_status === "Assign vehicle" || l.training_status === "Accept offer" || l.training_status === "Preorder"
+        const userPreorders = trainingLeads.filter(
+          (l: any) => l.training_status === "Assign vehicle" || l.training_status === "Accept offer" || l.training_status === "Preorder"
         ).length;
         actual = userPreorders > 0 ? userPreorders : onboardingPreorderAssignedTotal;
         target = scaledPreordersTarget;
@@ -1328,14 +1409,14 @@ export async function GET(request: NextRequest) {
     while (curr <= endDate) {
       const dateKey = curr.toISOString().split("T")[0];
 
-      const dayLeads = leadsTreatedInRange.filter((l) => {
-        const ts = l.status_changed_at || l.updated_at || l.created_at;
+      const dayTrafficLeads = allTrafficLeadsInRange.filter((l) => {
+        const ts = l.status_changed_at;
         return ts && new Date(ts).toISOString().split("T")[0] === dateKey;
       });
 
-      const dayCalls = dayLeads.filter((l) => l.board_column !== "NEW_LEADS").length;
-      const dayTrainings = dayLeads.filter(
-        (l) => l.brand_status === "Training fixed" || l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+      const dayCalls = dayTrafficLeads.length;
+      const dayTrainings = dayTrafficLeads.filter(
+        (l) => l.brand_status === "Training fixed"
       ).length;
 
       const dayPaymentLedgers = paymentLedgers.filter(

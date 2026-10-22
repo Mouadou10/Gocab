@@ -188,29 +188,77 @@ export default function TrainingScorecard({
     l.board_column === 'TRAINING_PIPELINE' || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
 
-  // Filter by date range: reminder_date is the scheduled session date.
+  // Conversion statuses — the goal of the training pipeline
+  const CONVERSION_STATUSES = ['Assign vehicle', 'Accept offer', 'Preorder', 'VEHICLE_ASSIGNMENT'];
+
+  // Attended statuses — all candidates who physically showed up to the training session
+  // Synchronized 1:1 with the KPI performance analytics definition
+  // Counting leads moved to "Pending" as physically present in the training session
+  const ATTENDED_STATUSES = [
+    'Attended',
+    'Attended and not interested',
+    'Pending',
+    'Refused the offer',
+    'Assign vehicle',
+    'Preorder',
+    'Accept offer',
+  ];
+
+  const isAttended = (l: any) => {
+    if (l.board_column === 'VEHICLE_ASSIGNMENT') return true;
+    if (Boolean(l.presence_confirmed)) return true;
+    const ts = (l.training_status || '').trim().toLowerCase();
+    if (!ts) return false;
+    return (
+      ts === 'pending' ||
+      ts.includes('pending') ||
+      ts === 'attended' ||
+      ts.includes('attended') ||
+      ts.includes('présent') ||
+      ts.includes('present') ||
+      ts.includes('preorder') ||
+      ts.includes('assign') ||
+      ts.includes('accept') ||
+      ts.includes('refused') ||
+      ATTENDED_STATUSES.some(s => s.toLowerCase() === ts) ||
+      CONVERSION_STATUSES.some(s => s.toLowerCase() === ts)
+    );
+  };
+
+  // Filter by date range: scheduled session date (reminder_date),
+  // presence confirmation date, or attendance status change date.
   // Falls back to created_at if reminder_date is not set.
   const filteredLeads = trainingLeads.filter(lead => {
     if (!startDate && !endDate) return true;
-    const dateToCheck = lead.reminder_date || lead.created_at;
-    if (!dateToCheck) return false;
 
-    try {
-      const d = new Date(dateToCheck);
-      if (isNaN(d.getTime())) return false;
-      const iso = d.toISOString().split('T')[0];
-      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const inRange = (dStr: string | null | undefined) => {
+      if (!dStr) return false;
+      try {
+        const d = new Date(dStr);
+        if (isNaN(d.getTime())) return false;
+        const iso = d.toISOString().split('T')[0];
+        const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const check = (ymd: string) => {
+          if (startDate && ymd < startDate) return false;
+          if (endDate && ymd > endDate) return false;
+          return true;
+        };
+        return check(iso) || check(local);
+      } catch {
+        return false;
+      }
+    };
 
-      const inRange = (ymd: string) => {
-        if (startDate && ymd < startDate) return false;
-        if (endDate && ymd > endDate) return false;
-        return true;
-      };
+    // 1. Scheduled session date in range
+    if (lead.reminder_date && inRange(lead.reminder_date)) return true;
+    // 2. Presence recorded in range
+    if (lead.presence_confirmed_at && inRange(lead.presence_confirmed_at)) return true;
+    // 3. Attended / pending session in range
+    if (isAttended(lead) && lead.status_changed_at && inRange(lead.status_changed_at)) return true;
+    // 4. Fallback if no reminder_date
+    if (!lead.reminder_date && lead.created_at && inRange(lead.created_at)) return true;
 
-      return inRange(iso) || inRange(local);
-    } catch {
-      return false;
-    }
+    return false;
   });
 
   const totalInTraining = filteredLeads.length;
@@ -262,31 +310,13 @@ export default function TrainingScorecard({
   const presenceConfirmedCount = filteredLeads.filter(l => Boolean(l.presence_confirmed)).length;
   const presenceConfirmedPct = totalInTraining > 0 ? Math.round((presenceConfirmedCount / totalInTraining) * 100) : 0;
 
-  // Conversion statuses — the goal of the training pipeline
-  const CONVERSION_STATUSES = ['Assign vehicle', 'Accept offer', 'Preorder', 'VEHICLE_ASSIGNMENT'];
   const converted = filteredLeads.filter(l =>
     CONVERSION_STATUSES.includes(l.training_status) || l.board_column === 'VEHICLE_ASSIGNMENT'
   );
   const totalConverted = converted.length;
 
-  // Attended statuses — all candidates who physically showed up to the training session
-  // Synchronized 1:1 with the KPI performance analytics definition
-  const ATTENDED_STATUSES = [
-    'Attended',
-    'Attended and not interested',
-    'Pending',
-    'Refused the offer',
-    'Assign vehicle',
-    'Preorder',
-    'Accept offer',
-  ];
-
-  // Attendance count
-  const attendedCount = filteredLeads.filter(l =>
-    (l.training_status && ATTENDED_STATUSES.includes(l.training_status)) ||
-    CONVERSION_STATUSES.includes(l.training_status) ||
-    l.board_column === 'VEHICLE_ASSIGNMENT'
-  ).length;
+  // Attendance count (counting Pending as physically present)
+  const attendedCount = filteredLeads.filter(isAttended).length;
   const attendanceRate = totalInTraining > 0 ? ((attendedCount / totalInTraining) * 100).toFixed(1) : '0';
 
   // ── Dynamic Period Scaling based on Moroccan Business Calendar ──────
