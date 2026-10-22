@@ -58,9 +58,15 @@ export async function GET(request: NextRequest) {
     }
 
     const totalFleet = vehicles.length;
-    const activeVehicles = vehicles.filter((v) => v.status === "Actif");
+    const activeVehicles = vehicles.filter(
+      (v) =>
+        v.status === "Actif" ||
+        v.status === "In service" ||
+        v.status === "in service" ||
+        v.status === "working"
+    );
     const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.status === "Disponible");
-    const inRepairVehicles = vehicles.filter((v) => v.status === "In garage" || v.status === "In service");
+    const inRepairVehicles = vehicles.filter((v) => v.status === "In garage" || v.status === "maintenance");
     const impoundedVehicles = vehicles.filter((v) =>
       ["impounded by police", "impounded", "police_immobilization", "missing_document", "Accident", "Blocked"].includes(v.status)
     );

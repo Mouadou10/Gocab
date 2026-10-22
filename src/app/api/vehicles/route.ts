@@ -33,7 +33,11 @@ export async function GET(request: Request) {
     }
 
     if (status) {
-      where.status = status;
+      if (status.toUpperCase() === "ACTIVE" || status.toUpperCase() === "ACTIF") {
+        where.status = { in: ["Actif", "working", "In service", "in service", "En service"] };
+      } else {
+        where.status = status;
+      }
     }
 
     if (manager && manager !== "ALL") {

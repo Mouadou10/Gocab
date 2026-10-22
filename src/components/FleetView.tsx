@@ -355,8 +355,10 @@ export default function FleetView() {
 
   // KPI Calculations
   const totalCount = vehicles.length;
-  const activeCount = vehicles.filter((v) => v.status === "Actif" || v.status === "working").length;
-  const availableCount = vehicles.filter((v) => v.status === "Available").length;
+  const isActifStatus = (status: string) =>
+    ["Actif", "working", "In service", "in service", "En service", "en service"].includes(status);
+  const activeCount = vehicles.filter((v) => isActifStatus(v.status)).length;
+  const availableCount = vehicles.filter((v) => v.status === "Available" || v.status === "disponible").length;
   const inGarageCount = vehicles.filter(
     (v) => v.status === "In garage" || v.status === "maintenance" || v.status === "Accident"
   ).length;
@@ -371,7 +373,7 @@ export default function FleetView() {
   // Client-side quick filtering
   const filteredVehicles = useMemo(() => {
     return vehicles.filter((v) => {
-      if (activeQuickTab === "ACTIVE" && v.status !== "Actif" && v.status !== "working") return false;
+      if (activeQuickTab === "ACTIVE" && !isActifStatus(v.status)) return false;
       if (activeQuickTab === "AVAILABLE" && v.status !== "Available") return false;
       if (
         activeQuickTab === "GARAGE" &&
@@ -456,9 +458,14 @@ export default function FleetView() {
   function formatStatusLabel(status: string) {
     switch (status) {
       case "Available":
+      case "disponible":
         return "Disponible (Au parc)";
       case "Actif":
       case "working":
+      case "In service":
+      case "in service":
+      case "En service":
+      case "en service":
         return "Actif (En service)";
       case "In garage":
       case "maintenance":
@@ -483,9 +490,14 @@ export default function FleetView() {
   function getStatusStyle(status: string) {
     switch (status) {
       case "Available":
+      case "disponible":
         return "bg-emerald-50 text-emerald-800 border-emerald-200 font-bold";
       case "Actif":
       case "working":
+      case "In service":
+      case "in service":
+      case "En service":
+      case "en service":
         return "bg-blue-50 text-blue-800 border-blue-200 font-bold";
       case "In garage":
       case "maintenance":

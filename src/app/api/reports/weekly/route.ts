@@ -25,7 +25,9 @@ export async function GET() {
     ]);
 
     const totalFleet = vehicles.length;
-    const activeVehicles = vehicles.filter((v) => v.status === "Actif").length;
+    const activeVehicles = vehicles.filter(
+      (v) => v.status === "Actif" || v.status === "In service" || v.status === "working"
+    ).length;
     const activeFleetRate = totalFleet > 0 ? Math.round((activeVehicles / totalFleet) * 100) : 0;
 
     // --- PILLAR 1: LEAD ACQUISITION & KYC ---

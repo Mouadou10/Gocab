@@ -194,10 +194,10 @@ export default function DashboardView() {
 
       if (!matchesSearch) return false;
 
-      if (statusFilter === "INACTIVE" && v.status === "Actif") return false;
-      if (statusFilter === "ACTIVE" && v.status !== "Actif") return false;
+      if (statusFilter === "INACTIVE" && (v.status === "Actif" || v.status === "In service" || v.status === "working")) return false;
+      if (statusFilter === "ACTIVE" && v.status !== "Actif" && v.status !== "In service" && v.status !== "working") return false;
       if (statusFilter === "AVAILABLE" && v.status !== "Available" && v.status !== "Disponible") return false;
-      if (statusFilter === "GARAGE" && v.status !== "In garage" && v.status !== "In service") return false;
+      if (statusFilter === "GARAGE" && v.status !== "In garage" && v.status !== "maintenance") return false;
       if (statusFilter === "POLICE" && v.status !== "impounded by police" && v.status !== "Accident" && v.status !== "Blocked") return false;
 
       return true;
@@ -842,11 +842,11 @@ export default function DashboardView() {
                         <td className="py-3.5 px-4">
                           <span
                             className={`text-2xs font-bold px-2 py-0.5 rounded-md ${
-                              v.status === "Actif"
+                              v.status === "Actif" || v.status === "In service" || v.status === "working"
                                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                 : v.status === "Available" || v.status === "Disponible"
                                 ? "bg-amber-50 text-amber-800 border border-amber-200"
-                                : v.status === "In garage" || v.status === "In service"
+                                : v.status === "In garage" || v.status === "maintenance"
                                 ? "bg-blue-50 text-blue-700 border border-blue-200"
                                 : "bg-red-50 text-red-700 border border-red-200"
                             }`}

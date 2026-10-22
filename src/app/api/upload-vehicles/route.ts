@@ -67,14 +67,20 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "Blocked";
   }
 
-  // 6. Working / Active
-  if (s.includes("working") || s.includes("actif") || s.includes("service")) {
+  // 7. Working / Active / In service
+  if (
+    s.includes("working") ||
+    s.includes("actif") ||
+    s.includes("service") ||
+    s.includes("in service") ||
+    s.includes("en service")
+  ) {
     return "Actif";
   }
 
-  // 7. Available
+  // 8. Available
   if (s.includes("avail") || s.includes("dispo") || s.includes("libre") || s.includes("parc")) {
-    return "Available";
+    return hasDriver ? "Actif" : "Available";
   }
 
   return hasDriver ? "Actif" : "Available";
@@ -487,7 +493,10 @@ export async function POST(request: NextRequest) {
                   year: item.year,
                   vin: item.vin || existing.vin,
                   hub_city: item.hub_city,
-                  status: item.status,
+                  status:
+                    item.status === "Available" && (item.driverName || existing.assigned_driver_name)
+                      ? "Actif"
+                      : item.status,
                   is_archived: false,
                   total_downtime_days: item.downtimeDays || existing.total_downtime_days,
                   insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,

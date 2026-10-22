@@ -669,7 +669,7 @@ export async function GET(request: NextRequest) {
       prisma.vehicle.findMany({
         where: {
           is_archived: false,
-          status: { in: ["In garage", "In service", "Accident", "Maintenance"] },
+          status: { in: ["In garage", "Accident", "Maintenance"] },
         },
         select: { id: true, total_downtime_days: true, updated_at: true, assigned_collector: true },
       }),
