@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { syncVehicleAssignmentToLead } from '@/lib/services/leadVehicleReconciliation';
 import { touchSyncState } from '@/lib/sync';
 import { invalidateDriverCache } from '@/lib/driverCache';
+import { isMehdiPlate } from '@/lib/fleet-managers';
 
 export async function POST(req: Request) {
   try {
@@ -53,13 +54,19 @@ export async function POST(req: Request) {
       data: { assignedVehicleId: vehicleId, is_archived: false }
     });
 
+    const vehicleUpdateData: any = { 
+      status: "ACTIF",
+      assigned_driver_name: driver.fullName,
+      assigned_driver_phone: driver.phoneSanitized
+    };
+    if (isMehdiPlate(vehicle.plate_number)) {
+      vehicleUpdateData.assigned_collector = "mehdi elyattouti";
+      vehicleUpdateData.assigned_supervisor = "mehdi elyattouti";
+    }
+
     await prisma.vehicle.update({
       where: { id: vehicleId },
-      data: { 
-        status: "ACTIF",
-        assigned_driver_name: driver.fullName,
-        assigned_driver_phone: driver.phoneSanitized
-      }
+      data: vehicleUpdateData
     });
 
     // 5. Synchronize Lead to VEHICLE_ASSIGNMENT

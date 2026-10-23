@@ -25,6 +25,7 @@ import RedFlagBadge from "./RedFlagBadge";
 import NationalBlacklistBadge from "./NationalBlacklistBadge";
 import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 const HUB_CITIES = [
   "Casablanca",
@@ -122,11 +123,12 @@ export default function VehicleDrawer({
   const [assignedDriverName, setAssignedDriverName] = useState(vehicle?.assigned_driver_name || "");
   const [assignedDriverPhone, setAssignedDriverPhone] = useState(vehicle?.assigned_driver_phone || "");
   const [assignedDriverId, setAssignedDriverId] = useState(vehicle?.driverProfile?.id || "");
+  const isDedicatedMehdi = isMehdiPlate(vehicle?.plate_number || plateNumber);
   const [assignedSupervisor, setAssignedSupervisor] = useState(
-    vehicle?.assigned_supervisor || vehicle?.assigned_collector || "Mohamed Aziz"
+    isMehdiPlate(vehicle?.plate_number) ? "mehdi elyattouti" : (vehicle?.assigned_supervisor || vehicle?.assigned_collector || "Mohamed Aziz")
   );
   const [assignedCollector, setAssignedCollector] = useState(
-    vehicle?.assigned_collector || vehicle?.assigned_supervisor || "Mohamed Aziz"
+    isMehdiPlate(vehicle?.plate_number) ? "mehdi elyattouti" : (vehicle?.assigned_collector || vehicle?.assigned_supervisor || "Mohamed Aziz")
   );
   const [notes, setNotes] = useState(vehicle?.notes || "");
 
@@ -315,8 +317,8 @@ export default function VehicleDrawer({
         autorisation_expiry_date: autorisationExpiry || null,
         technical_inspection_expiry: technicalInspectionExpiry || null,
         assigned_driver_id: assignedDriverId || null,
-        assigned_supervisor: assignedSupervisor || "Mohamed Aziz",
-        assigned_collector: assignedCollector || assignedSupervisor || "Mohamed Aziz",
+        assigned_supervisor: isMehdiPlate(vehicle?.plate_number || plateNumber) ? "mehdi elyattouti" : (assignedSupervisor || "Mohamed Aziz"),
+        assigned_collector: isMehdiPlate(vehicle?.plate_number || plateNumber) ? "mehdi elyattouti" : (assignedCollector || assignedSupervisor || "Mohamed Aziz"),
         notes: notes || null,
       };
 
@@ -703,20 +705,30 @@ export default function VehicleDrawer({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                  <span>👤</span> Gestionnaire de Flotte (Fleet Manager)
+                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">👤 Gestionnaire de Flotte (Fleet Manager)</span>
+                  {isDedicatedMehdi && (
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
+                      Verrouillé Mehdi
+                    </span>
+                  )}
                 </label>
                 <select
-                  value={assignedSupervisor}
+                  value={isDedicatedMehdi ? "mehdi elyattouti" : assignedSupervisor}
+                  disabled={isDedicatedMehdi}
                   onChange={(e) => {
                     setAssignedSupervisor(e.target.value);
                     setAssignedCollector(e.target.value);
                   }}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-navy/30 focus:outline-none"
+                  className={`w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy/30 focus:outline-none ${
+                    isDedicatedMehdi
+                      ? "bg-slate-100 text-slate-700 border-slate-300 cursor-not-allowed"
+                      : "border-gray-300 text-slate-900"
+                  }`}
                 >
                   <option value="">-- Non assigné --</option>
-                  <option value="Mohamed Aziz">Mohamed Aziz (68 Véhicules)</option>
-                  <option value="mehdi elyattouti">Mehdi Elyattouti (26 Véhicules)</option>
+                  <option value="Mohamed Aziz">Mohamed Aziz (Portefeuille Général)</option>
+                  <option value="mehdi elyattouti">Mehdi Elyattouti (26 Véhicules Dédiés)</option>
                   <option value="Salma Abouri">Salma Abouri</option>
                 </select>
               </div>

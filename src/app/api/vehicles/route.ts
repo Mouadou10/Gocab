@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-guard";
 import { logAudit } from "@/lib/services/auditLogger";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 /**
  * GET /api/vehicles
@@ -183,8 +184,8 @@ export async function POST(request: Request) {
         technical_inspection_expiry: technical_inspection_expiry ? new Date(technical_inspection_expiry) : null,
         assigned_driver_name: assigned_driver_name ? assigned_driver_name.trim() : null,
         assigned_driver_phone: assigned_driver_phone ? assigned_driver_phone.trim() : null,
-        assigned_supervisor: body.assigned_supervisor || body.assigned_collector || "Mohamed Aziz",
-        assigned_collector: body.assigned_collector || body.assigned_supervisor || "Mohamed Aziz",
+        assigned_supervisor: isMehdiPlate(plate_number) ? "mehdi elyattouti" : (body.assigned_supervisor || body.assigned_collector || "Mohamed Aziz"),
+        assigned_collector: isMehdiPlate(plate_number) ? "mehdi elyattouti" : (body.assigned_collector || body.assigned_supervisor || "Mohamed Aziz"),
         notes: notes ? notes.trim() : null,
       },
     });

@@ -9,6 +9,7 @@ import { syncVehicleAssignmentToLead } from "@/lib/services/leadVehicleReconcili
 import { touchSyncState } from "@/lib/sync";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { invalidateDriverCache } from "@/lib/driverCache";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 /**
  * GET /api/vehicles/[id]
@@ -236,11 +237,16 @@ export async function PATCH(
     }
 
 
-    if (body.assigned_supervisor !== undefined) {
-      updateData.assigned_supervisor = body.assigned_supervisor ? body.assigned_supervisor.trim() : null;
-    }
-    if (body.assigned_collector !== undefined) {
-      updateData.assigned_collector = body.assigned_collector ? body.assigned_collector.trim() : null;
+    if (isMehdiPlate(updateData.plate_number || prevVehicle?.plate_number)) {
+      updateData.assigned_supervisor = "mehdi elyattouti";
+      updateData.assigned_collector = "mehdi elyattouti";
+    } else {
+      if (body.assigned_supervisor !== undefined) {
+        updateData.assigned_supervisor = body.assigned_supervisor ? body.assigned_supervisor.trim() : null;
+      }
+      if (body.assigned_collector !== undefined) {
+        updateData.assigned_collector = body.assigned_collector ? body.assigned_collector.trim() : null;
+      }
     }
 
     if (body.historical_driver_name !== undefined) updateData.historical_driver_name = body.historical_driver_name;

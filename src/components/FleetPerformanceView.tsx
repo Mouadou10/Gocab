@@ -48,6 +48,7 @@ import BalanceReconciliationModal from "./BalanceReconciliationModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 import DriverDailyCommentModal, { DriverCommentItem } from "./DriverDailyCommentModal";
 import RedFlagBadge from "./RedFlagBadge";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 interface DriverDailyItem {
   id: string;
@@ -545,12 +546,16 @@ export default function FleetPerformanceView() {
 
     if (selectedManager !== "ALL") {
       const targetM = selectedManager.trim().toLowerCase();
-      const driverM = (d.manager || "").trim().toLowerCase();
-      const effectiveManager = driverM || "mohamed aziz";
-      if (targetM.includes("aziz")) {
-        if (effectiveManager.includes("mehdi")) return false;
-      } else if (!effectiveManager.includes(targetM) && !targetM.includes(effectiveManager)) {
-        return false;
+      const isMehdi = isMehdiPlate(d.vehicle?.plate_number) || (d.manager || "").trim().toLowerCase().includes("mehdi");
+      if (targetM.includes("mehdi")) {
+        if (!isMehdi) return false;
+      } else if (targetM.includes("aziz")) {
+        if (isMehdi) return false;
+      } else {
+        const effectiveManager = (d.manager || "").trim().toLowerCase() || "mohamed aziz";
+        if (!effectiveManager.includes(targetM) && !targetM.includes(effectiveManager)) {
+          return false;
+        }
       }
     }
 
@@ -1712,7 +1717,7 @@ export default function FleetPerformanceView() {
                             </p>
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                               <User className="w-2.5 h-2.5 text-slate-500" />
-                              {driver.manager && driver.manager.toLowerCase().includes("mehdi") ? "Mehdi Elyattouti" : "Mohamed Aziz"}
+                              {isMehdiPlate(driver.vehicle?.plate_number) || (driver.manager && driver.manager.toLowerCase().includes("mehdi")) ? "Mehdi Elyattouti" : "Mohamed Aziz"}
                             </span>
                           </div>
                         ) : (

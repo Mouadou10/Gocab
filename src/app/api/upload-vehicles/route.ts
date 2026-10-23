@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s execution on Vercel for bulk imports
@@ -458,8 +459,8 @@ export async function POST(request: NextRequest) {
                   insurance_policy_number: item.insurancePolicy,
                   isInsuranceActive: item.isInsuranceActive,
                   assigned_driver_name: item.driverName,
-                  assigned_supervisor: item.manager || "Mohamed Aziz",
-                  assigned_collector: item.manager || "Mohamed Aziz",
+                  assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
+                  assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
                   notes: item.notes,
                   current_mileage: 0,
                 },
@@ -502,8 +503,8 @@ export async function POST(request: NextRequest) {
                   insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
                   isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
                   assigned_driver_name: item.driverName || existing.assigned_driver_name,
-                  assigned_supervisor: item.manager || existing.assigned_supervisor || "Mohamed Aziz",
-                  assigned_collector: item.manager || existing.assigned_collector || "Mohamed Aziz",
+                  assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_supervisor || "Mohamed Aziz"),
+                  assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_collector || "Mohamed Aziz"),
                   notes: notesToSave,
                 },
               });

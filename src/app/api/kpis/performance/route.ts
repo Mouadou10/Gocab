@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getMoroccanWorkingDays, getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
 import { getTargetsForRange, parseTargetHistory } from "@/lib/target-history";
+import { isMehdiPlate } from "@/lib/fleet-managers";
 
 export const dynamic = "force-dynamic";
 
@@ -804,12 +805,12 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Map vehicles to assigned Fleet Performance Manager ("aziz" vs "mehdi", unassigned default to "aziz")
+    // Map vehicles to assigned Fleet Performance Manager ("aziz" vs "mehdi", Mehdi has dedicated locked portfolio)
     const vehicleCollectorMap = new Map<string, string>();
     const plateCollectorMap = new Map<string, string>();
     allFleetVehicles.forEach((v) => {
-      const norm = (v.assigned_collector || (v as any).assigned_supervisor || "").toLowerCase();
-      const col = norm.includes("mehdi") ? "mehdi" : "aziz";
+      const isMehdi = isMehdiPlate(v.plate_number) || (v.assigned_collector || (v as any).assigned_supervisor || "").toLowerCase().includes("mehdi");
+      const col = isMehdi ? "mehdi" : "aziz";
       vehicleCollectorMap.set(v.id, col);
       plateCollectorMap.set(v.plate_number, col);
     });
@@ -1326,7 +1327,7 @@ export async function GET(request: NextRequest) {
       } else if (u.role === "FLEET_PERF_MANAGER" || uName.includes("salma") || uName.includes("mohamed aziz") || uName.includes("mehdi")) {
         dept = "Performance Flotte & Recouvrement";
         if (uName.includes("mehdi") || u.email.includes("mehdi")) {
-          teamName = "Fleet Performance (Mehdi Elyattouti · 26 Véhicules)";
+          teamName = `Fleet Performance (Mehdi Elyattouti · ${mehdiFleet.vehiclesCount} Véhicules)`;
           keyMetric = `Cash (${mehdiFleet.collectionRecoveryRate}%) · ${mehdiFleet.vehiclesCount} Véhicules`;
           actual = mehdiFleet.collectionRecoveryRate;
           target = targetMinCollectionRate;
@@ -1334,7 +1335,7 @@ export async function GET(request: NextRequest) {
           teamAttainmentPct = mehdiFleet.teamAttainmentPct;
           bonusEarnedMAD = mehdiFleet.bonusEarnedMAD;
         } else if (uName.includes("aziz") || u.email.includes("aziz")) {
-          teamName = "Fleet Performance (Mohamed Aziz · 68 Véhicules)";
+          teamName = `Fleet Performance (Mohamed Aziz · ${azizFleet.vehiclesCount} Véhicules)`;
           keyMetric = `Cash (${azizFleet.collectionRecoveryRate}%) · ${azizFleet.vehiclesCount} Véhicules`;
           actual = azizFleet.collectionRecoveryRate;
           target = targetMinCollectionRate;

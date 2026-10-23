@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import { isMehdiPlate, resolveVehicleFleetManager, resolveDriverFleetManager } from "@/lib/fleet-managers";
 
 export async function GET(request: NextRequest) {
   try {
@@ -264,19 +265,43 @@ export async function GET(request: NextRequest) {
 
       const firstPayment = driver.payments[0];
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
-      let manager = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
-
-      // Default any driver appearing without fleet manager to Mohamed Aziz
-      if (!manager || !manager.trim() || manager.toLowerCase() === "unassigned") {
-        manager = "Mohamed Aziz";
-        if (resolvedVehicle?.id) {
-          prisma.vehicle.update({
-            where: { id: resolvedVehicle.id },
-            data: {
-              assigned_collector: "Mohamed Aziz",
-              assigned_supervisor: "Mohamed Aziz",
-            },
-          }).catch(() => {});
+      let manager: string;
+      if (isMehdiPlate(resolvedVehicle?.plate_number)) {
+        manager = "Mehdi Elyattouti";
+        if (
+          resolvedVehicle?.id &&
+          ((resolvedVehicle.assigned_collector || "").toLowerCase() !== "mehdi elyattouti" ||
+            (resolvedVehicle.assigned_supervisor || "").toLowerCase() !== "mehdi elyattouti")
+        ) {
+          prisma.vehicle
+            .update({
+              where: { id: resolvedVehicle.id },
+              data: {
+                assigned_collector: "mehdi elyattouti",
+                assigned_supervisor: "mehdi elyattouti",
+              },
+            })
+            .catch(() => {});
+        }
+      } else {
+        const rawMgr = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
+        if (!rawMgr || !rawMgr.trim() || rawMgr.toLowerCase() === "unassigned") {
+          manager = "Mohamed Aziz";
+          if (resolvedVehicle?.id) {
+            prisma.vehicle
+              .update({
+                where: { id: resolvedVehicle.id },
+                data: {
+                  assigned_collector: "Mohamed Aziz",
+                  assigned_supervisor: "Mohamed Aziz",
+                },
+              })
+              .catch(() => {});
+          }
+        } else if (rawMgr.toLowerCase().includes("mehdi")) {
+          manager = "Mehdi Elyattouti";
+        } else {
+          manager = "Mohamed Aziz";
         }
       }
 
@@ -336,12 +361,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Count total vehicles per manager from all active vehicles (unassigned default to Aziz)
+    // Count total vehicles per manager from all active vehicles (unassigned default to Aziz, Mehdi has locked portfolio)
     let azizVehiclesCount = 0;
     let mehdiVehiclesCount = 0;
     for (const v of allVehicles) {
-      const mgr = (v.assigned_collector || v.assigned_supervisor || "").toLowerCase();
-      if (mgr.includes("mehdi")) {
+      if (resolveVehicleFleetManager(v) === "mehdi elyattouti") {
         mehdiVehiclesCount++;
       } else {
         azizVehiclesCount++;
@@ -382,18 +406,16 @@ export async function GET(request: NextRequest) {
     let targetDriverSet = driverList;
     if (managerParam && managerParam !== "ALL") {
       const targetM = managerParam.trim().toLowerCase();
-      if (targetM.includes("aziz")) {
-        targetDriverSet = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi"));
+      if (targetM.includes("mehdi")) {
+        targetDriverSet = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi") || isMehdiPlate(d.vehicle?.plate_number));
       } else {
-        targetDriverSet = driverList.filter((d) =>
-          d.manager ? d.manager.toLowerCase().includes(targetM) || targetM.includes(d.manager.toLowerCase()) : false
-        );
+        targetDriverSet = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi") && !isMehdiPlate(d.vehicle?.plate_number));
       }
     }
 
     // Calculate individual portfolio stats for Aziz and Mehdi (all non-mehdi drivers assigned to Aziz)
-    const azizDrivers = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi"));
-    const mehdiDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi"));
+    const azizDrivers = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi") && !isMehdiPlate(d.vehicle?.plate_number));
+    const mehdiDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi") || isMehdiPlate(d.vehicle?.plate_number));
 
     const calcPortfolioMetrics = (subset: typeof driverList, totalVehicles: number) => {
       let mDebt = 0;
