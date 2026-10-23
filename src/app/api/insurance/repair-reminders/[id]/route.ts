@@ -44,6 +44,7 @@ export async function PATCH(
       estimated_cost_mad,
       priority,
       agent_notes,
+      comments,
     } = body;
 
     const updateData: any = {};
@@ -61,7 +62,11 @@ export async function PATCH(
       updateData.estimated_cost_mad = Number(estimated_cost_mad) || 0;
     }
     if (priority !== undefined) updateData.priority = priority;
-    if (agent_notes !== undefined) updateData.agent_notes = agent_notes;
+    if (comments !== undefined) {
+      updateData.agent_notes = typeof comments === "string" ? comments : JSON.stringify(comments);
+    } else if (agent_notes !== undefined) {
+      updateData.agent_notes = agent_notes;
+    }
 
     const updated = await (prisma as any).repairReminder.update({
       where: { id },

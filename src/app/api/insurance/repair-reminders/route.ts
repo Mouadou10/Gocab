@@ -127,9 +127,27 @@ export async function GET(request: NextRequest) {
         parsedPhotos = [];
       }
 
+      // Parse comments / agent_notes safely
+      let parsedComments: any[] = [];
+      try {
+        if (item.agent_notes) {
+          const parsed = JSON.parse(item.agent_notes);
+          if (Array.isArray(parsed)) {
+            parsedComments = parsed;
+          } else if (typeof parsed === "string") {
+            parsedComments = [{ id: "legacy-1", author: item.created_by || "Agent", content: parsed, created_at: item.created_at }];
+          }
+        }
+      } catch {
+        if (item.agent_notes && typeof item.agent_notes === "string" && item.agent_notes.trim()) {
+          parsedComments = [{ id: "legacy-1", author: item.created_by || "Agent", content: item.agent_notes.trim(), created_at: item.created_at }];
+        }
+      }
+
       return {
         ...item,
         photos: parsedPhotos,
+        comments: parsedComments,
         vehicle_make_model: matchedVeh?.make_model || "Véhicule Flotte",
         vehicle_hub_city: matchedVeh?.hub_city || "Casablanca",
         vehicle_status: matchedVeh?.status || "Actif",

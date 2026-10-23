@@ -18,9 +18,13 @@ import {
   FileText,
   X,
   Maximize2,
+  Edit3,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import RedFlagBadge from "./RedFlagBadge";
+import EditRepairReminderModal, { RepairCommentItem } from "./EditRepairReminderModal";
 
 export interface RepairReminderItem {
   id: string;
@@ -46,6 +50,7 @@ export interface RepairReminderItem {
   priority: "Normal" | "Urgent" | "Critical";
   status: "PENDING" | "DUE" | "IN_REPAIR" | "COMPLETED" | "CANCELLED";
   agent_notes?: string | null;
+  comments?: RepairCommentItem[];
   created_by?: string | null;
   created_at: string;
   vehicle_make_model?: string;
@@ -71,6 +76,29 @@ export default function RepairReminderCard({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [newDate, setNewDate] = useState(reminder.reminder_date);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editModalTab, setEditModalTab] = useState<"photos" | "comments" | "details">("photos");
+
+  const commentsList = (() => {
+    if (Array.isArray(reminder.comments) && reminder.comments.length > 0) {
+      return reminder.comments;
+    }
+    if (reminder.agent_notes) {
+      try {
+        const parsed = JSON.parse(reminder.agent_notes);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+      return [
+        {
+          id: "note-1",
+          author: reminder.created_by || "Agent",
+          content: reminder.agent_notes,
+          created_at: reminder.created_at,
+        },
+      ];
+    }
+    return [];
+  })();
 
   // Calculate days difference
   const today = new Date();
@@ -275,17 +303,100 @@ export default function RepairReminderCard({
           </div>
         </div>
 
-        {/* Photo Gallery Grid */}
-        {reminder.photos && reminder.photos.length > 0 && (
-          <div className="space-y-1.5">
+        {/* Comments & Tracking Section */}
+        {commentsList.length > 0 ? (
+          <div className="bg-amber-50/50 p-3 rounded-2xl border border-amber-200/60 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-3xs font-extrabold uppercase tracking-wider text-gray-500 flex items-center gap-1">
-                <Camera className="w-3 h-3 text-navy" />
-                <span>Photos de Dommages ({reminder.photos.length})</span>
+              <span className="text-3xs font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                <MessageSquare className="w-3 h-3 text-amber-700" />
+                <span>Commentaires & Suivi ({commentsList.length})</span>
               </span>
-              <span className="text-3xs text-gray-400">Cliquez pour agrandir</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalTab("comments");
+                  setIsEditModalOpen(true);
+                }}
+                className="text-3xs text-amber-800 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <span>Écrire</span>
+              </button>
             </div>
 
+            <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+              {commentsList.map((c: any, i: number) => (
+                <div key={c.id || i} className="text-2xs bg-white/90 p-2 rounded-xl border border-amber-100 shadow-3xs space-y-0.5">
+                  <div className="flex items-center justify-between text-3xs text-gray-400">
+                    <span className="font-bold text-gray-800">{c.author || "Agent"}</span>
+                    {c.created_at && (
+                      <span className="font-mono">
+                        {new Date(c.created_at).toLocaleDateString("fr-FR", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-wrap leading-tight">{c.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setEditModalTab("comments");
+                setIsEditModalOpen(true);
+              }}
+              className="text-2xs text-gray-500 hover:text-navy flex items-center gap-1 font-semibold hover:underline cursor-pointer"
+            >
+              <MessageSquare className="w-3 h-3 text-gray-400" />
+              <span>+ Écrire un commentaire ou note de suivi</span>
+            </button>
+          </div>
+        )}
+
+        {/* Photo Gallery Grid */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-3xs font-extrabold uppercase tracking-wider text-gray-500 flex items-center gap-1">
+              <Camera className="w-3 h-3 text-navy" />
+              <span>Photos de Dommages ({reminder.photos?.length || 0})</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalTab("photos");
+                  setIsEditModalOpen(true);
+                }}
+                className="text-3xs text-navy font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-navy/5 px-2 py-0.5 rounded-lg border border-navy/10"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <span>Ajouter photo</span>
+              </button>
+              {reminder.photos && reminder.photos.length > 0 && (
+                <span className="text-3xs text-gray-400">Cliquez pour agrandir</span>
+              )}
+            </div>
+          </div>
+
+          {(!reminder.photos || reminder.photos.length === 0) ? (
+            <div
+              onClick={() => {
+                setEditModalTab("photos");
+                setIsEditModalOpen(true);
+              }}
+              className="p-3 bg-gray-50 border border-dashed border-gray-200 rounded-xl text-center text-2xs text-gray-400 hover:border-navy hover:text-navy cursor-pointer transition-colors"
+            >
+              + Cliquez pour ajouter des photos de dommages
+            </div>
+          ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {reminder.photos.map((photo, idx) => (
                 <div
@@ -293,6 +404,7 @@ export default function RepairReminderCard({
                   onClick={() => setSelectedPhoto(photo.fileUrl)}
                   className="relative group rounded-xl overflow-hidden aspect-video bg-gray-900 border border-gray-200 cursor-pointer shadow-2xs hover:border-navy transition-all"
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={photo.fileUrl}
                     alt={photo.name}
@@ -304,8 +416,8 @@ export default function RepairReminderCard({
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Reschedule inline date picker if open */}
         {isRescheduling && (
@@ -376,6 +488,20 @@ export default function RepairReminderCard({
               <span>Reporter Date</span>
             </button>
           )}
+
+          {/* Edit Sinistre Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setEditModalTab("photos");
+              setIsEditModalOpen(true);
+            }}
+            className="px-3 py-1.5 bg-navy hover:bg-[#1a3454] text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+            title="Modifier photos, ajouter des commentaires et mettre à jour le sinistre"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+            <span>Modifier Sinistre</span>
+          </button>
         </div>
 
         <button
@@ -387,6 +513,17 @@ export default function RepairReminderCard({
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Edit Sinistre & Photos Modal */}
+      {isEditModalOpen && (
+        <EditRepairReminderModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={onUpdate}
+          reminder={reminder}
+          initialTab={editModalTab}
+        />
+      )}
 
       {/* Lightbox / Zoom Modal for Photo */}
       {selectedPhoto && (
