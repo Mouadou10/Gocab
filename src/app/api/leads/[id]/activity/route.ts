@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
-import { ensureLeadActivityLogTable } from "@/lib/activity-log";
+import { ensureLeadActivityLogTable, normalizeAgentName } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,12 @@ export async function GET(
       take: 50,
     });
 
-    return NextResponse.json({ logs });
+    return NextResponse.json({
+      logs: logs.map((l: any) => ({
+        ...l,
+        agent: normalizeAgentName(l.agent),
+      })),
+    });
   } catch (error) {
     try {
       return handleAuthError(error);
@@ -49,11 +54,16 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
 
-    const agent =
-      body.agent ||
+    const validBodyAgent =
+      body.agent && body.agent.trim() !== "" && body.agent.trim().toLowerCase() !== "agent"
+        ? body.agent.trim()
+        : undefined;
+    const agent = normalizeAgentName(
       session?.user?.name ||
-      session?.user?.email ||
-      "Agent";
+        validBodyAgent ||
+        session?.user?.email ||
+        "Agent"
+    );
     const action = body.action || "NOTE_ADDED";
     const detail = body.detail || null;
 

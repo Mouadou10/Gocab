@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { LeadUpdateSchema } from "@/lib/validations";
 import { touchSyncState } from "@/lib/sync";
-import { logManyLeadActivities } from "@/lib/activity-log";
+import { logManyLeadActivities, normalizeAgentName } from "@/lib/activity-log";
 import { invalidateLeadsCache } from "@/lib/leads-cache";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
@@ -108,8 +108,15 @@ export async function PATCH(
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
     }
-    if (body.handled_by !== undefined) {
-      updateData.handled_by = body.handled_by;
+    const validBodyHandledBy =
+      body.handled_by && body.handled_by.trim() !== "" && body.handled_by.trim().toLowerCase() !== "agent"
+        ? body.handled_by.trim()
+        : undefined;
+    const resolvedHandledBy = normalizeAgentName(
+      session?.user?.name || validBodyHandledBy || session?.user?.email || "Agent"
+    );
+    if (body.handled_by !== undefined || session?.user?.name) {
+      updateData.handled_by = resolvedHandledBy;
     }
 
     // Guardrails removed per user request
@@ -189,11 +196,7 @@ export async function PATCH(
     touchSyncState("leads").catch(() => {});
 
     // ── Activity Log — record what the agent just did ────────────────────────
-    const agentName =
-      body.handled_by ||
-      session?.user?.name ||
-      session?.user?.email ||
-      "Agent";
+    const agentName = resolvedHandledBy;
     const logEntries: { lead_id: string; agent: string; action: string; detail: string }[] = [];
 
     const isNameChanged = Boolean(updateData.raw_name && updateData.raw_name !== existingLead.raw_name);

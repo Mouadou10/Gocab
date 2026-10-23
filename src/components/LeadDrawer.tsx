@@ -592,8 +592,14 @@ export default function LeadDrawer({
         }
       }
 
-      // Record agent attribution
-      payload.handled_by = session?.user?.name || session?.user?.email || lead.handled_by || "Agent";
+      // Record agent attribution (never overwrite with literal "Agent")
+      const resolvedAgent =
+        session?.user?.name ||
+        (lead.handled_by && lead.handled_by.toLowerCase() !== "agent" ? lead.handled_by : undefined) ||
+        session?.user?.email;
+      if (resolvedAgent) {
+        payload.handled_by = resolvedAgent;
+      }
       payload.presence_confirmed = presenceConfirmed;
 
       const res = await fetch(`/api/leads/${lead.id}`, {
@@ -669,6 +675,12 @@ export default function LeadDrawer({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold tracking-tight">{rawName || lead.raw_name}</h3>
+              {lead.handled_by && lead.handled_by.toLowerCase() !== "agent" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/15 text-amber-300 border border-white/20">
+                  <span>👤</span>
+                  <span>{lead.handled_by}</span>
+                </span>
+              )}
               {nationalMatch.isBlacklisted && (
                 <NationalBlacklistBadge match={nationalMatch} size="sm" />
               )}

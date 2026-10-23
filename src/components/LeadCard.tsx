@@ -38,6 +38,7 @@ interface Lead {
   is_resident?: boolean | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  handled_by?: string | null;
   national_blacklist_match?: any | null;
 }
 
@@ -270,6 +271,15 @@ export default function LeadCard({
 
         {/* Status Badges */}
         <div className="flex flex-wrap gap-1">
+          {lead.handled_by && lead.handled_by.toLowerCase() !== "agent" && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-800 border border-violet-200/80"
+              title={`Prospect traité par ${lead.handled_by}`}
+            >
+              <span>👤</span>
+              <span>{lead.handled_by}</span>
+            </span>
+          )}
           {lead.city && (
             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
               📍 {lead.city}
