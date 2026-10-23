@@ -1512,15 +1512,6 @@ export default function KanbanBoard() {
                 }`}
               >
                 📱 {t.fieldMissions || "Missions Telegram"}
-                <span
-                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                    activeTab === "field-missions"
-                      ? "bg-white text-sky-700"
-                      : "bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300"
-                  }`}
-                >
-                  NEW
-                </span>
               </button>
             )}
 
