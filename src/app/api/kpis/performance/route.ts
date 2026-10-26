@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getMoroccanWorkingDays, getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
-import { getTargetsForRange, parseTargetHistory } from "@/lib/target-history";
+import { getTargetsForRange, parseTargetHistory, getTargetForDate } from "@/lib/target-history";
 import { isMehdiPlate } from "@/lib/fleet-managers";
 
 export const dynamic = "force-dynamic";
@@ -440,10 +440,14 @@ export async function GET(request: NextRequest) {
     const scaledPreordersTarget = targetRangeInfo.scaledPreordersTarget;
     const scaledTasksTarget = targetRangeInfo.scaledTasksTarget;
 
-    const monthlyCallsTarget = dailyCallsTarget * workingDaysInMonth;
-    const monthlyTrainingTarget = Math.round(monthlyCallsTarget * 0.30);
-    const monthlyAttendedTarget = Math.round(monthlyTrainingTarget * 0.65);
-    const monthlyPreordersTarget = Math.round(monthlyTrainingTarget * 0.25);
+    const firstDayOfMonth = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1, 0, 0, 0));
+    const lastDayOfMonth = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const fullMonthTargetInfo = getTargetsForRange(firstDayOfMonth, lastDayOfMonth, historyList, targets);
+
+    const monthlyCallsTarget = fullMonthTargetInfo.scaledCallsTarget;
+    const monthlyTrainingTarget = fullMonthTargetInfo.scaledTrainingTarget;
+    const monthlyAttendedTarget = fullMonthTargetInfo.scaledAttendedTarget;
+    const monthlyPreordersTarget = fullMonthTargetInfo.scaledPreordersTarget;
 
     // ── Traffic Acquisition Team (Nour & Kaoutar) ─────────────────────
     // Synchronized with Leads Prospection scorecard: strictly counts calls and trainings fixed during period
@@ -1452,10 +1456,16 @@ export async function GET(request: NextRequest) {
       );
       const dayTasksDone = dayTasks.filter((t) => t.status === "Completed" || t.status === "COMPLETED").length;
 
+      const dayTargetSnapshot = getTargetForDate(dateKey, historyList, targets);
+
       dailyTimeline.push({
         date: dateKey,
         calls: dayCalls,
+        targetCalls: dayTargetSnapshot.target_daily_calls,
         trainings: dayTrainings,
+        targetTrainings: dayTargetSnapshot.target_daily_training_fixed,
+        targetAttended: dayTargetSnapshot.target_daily_attended,
+        targetPreorders: dayTargetSnapshot.target_daily_preorders,
         collectedMAD: dayCollectedMAD,
         tasksDone: dayTasksDone,
       });

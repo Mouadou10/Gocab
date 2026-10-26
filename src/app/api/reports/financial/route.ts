@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { getMoroccanWorkingDays } from "@/lib/moroccoCalendar";
 import { isMehdiPlate } from "@/lib/fleet-managers";
+import { getTargetsForRange, parseTargetHistory, getTargetForDate } from "@/lib/target-history";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest) {
       dailyCollections,
       periodPaymentLedgers,
       settingsRecord,
+      targetHistoryRecord,
       redFlagsLookup,
     ] = await Promise.all([
       prisma.vehicle.findMany({
@@ -218,10 +220,11 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.setting.findUnique({ where: { key: "department_weekly_targets" } }),
+      prisma.setting.findUnique({ where: { key: "department_target_history" } }),
       getActiveRedFlagsLookup(),
     ]);
 
-    // Parse custom department targets
+    // Parse custom department targets & date-effective daily target history
     let customTargets: any = {};
     if (settingsRecord?.value) {
       try {
@@ -229,20 +232,38 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
-    const targetDailyCalls = Number(customTargets.target_daily_calls) || 50;
-    const targetDailyTrainingFixed = Number(customTargets.target_daily_training_fixed) || Math.round(targetDailyCalls * 0.3);
-    const targetDailyAttended = Number(customTargets.target_daily_attended) || Math.round(targetDailyTrainingFixed * 0.65);
-    const targetDailyPreorders = Number(customTargets.target_daily_preorders) || Math.round(targetDailyTrainingFixed * 0.25);
-    const targetMinCollectionRate = Number(customTargets.target_min_collection_rate) || 50;
-    const targetMaxCollectionRate = Number(customTargets.target_collection_rate) || 60;
-    const targetMaxChurnRate = Number(customTargets.target_monthly_churn_rate) || 20;
-    const targetMaxMaintenanceDays = Number(customTargets.target_max_downtime_days) || 10;
-    const targetMaxAvailableDays = Number(customTargets.target_avg_available_days) || 1.0;
-    const targetMaxMissingDocsDays = Number(customTargets.target_max_missing_docs_days) || 3.0;
-    const targetMaxVidangeHours = Number(customTargets.target_max_vidange_hours) || 1.0;
-    const targetMaxFieldMissionHours = Number(customTargets.target_max_field_mission_hours) || 3.0;
-    const targetSlaResolutionRate = Number(customTargets.target_sla_resolution_rate) || 95;
-    const targetAttestationRate = Number(customTargets.target_monthly_inspection_rate) || 90;
+    const historyList = parseTargetHistory(targetHistoryRecord?.value, customTargets);
+
+    // For ALL preset, bound target range start to earliest target snapshot or Oct 1, 2026
+    const effectiveTargetStartDate =
+      periodPreset === "ALL" && !fromParam
+        ? new Date(
+            `${historyList[0]?.effective_date || "2026-10-01"}T00:00:00.000Z`
+          )
+        : startDate;
+
+    const targetRangeInfo = getTargetsForRange(
+      effectiveTargetStartDate,
+      endDate,
+      historyList,
+      customTargets
+    );
+
+    const targetDailyCalls = targetRangeInfo.avgDailyCalls;
+    const targetDailyTrainingFixed = targetRangeInfo.avgDailyTraining;
+    const targetDailyAttended = targetRangeInfo.avgDailyAttended;
+    const targetDailyPreorders = targetRangeInfo.avgDailyPreorders;
+    const targetLeadConversionRate = targetRangeInfo.targetLeadConversionRate || 30;
+    const targetMinCollectionRate = targetRangeInfo.targetMinCollectionRate || 50;
+    const targetMaxCollectionRate = targetRangeInfo.targetMaxCollectionRate || 60;
+    const targetMaxChurnRate = targetRangeInfo.targetMaxChurnRate || 20;
+    const targetMaxMaintenanceDays = targetRangeInfo.targetMaxMaintenanceDays || 10;
+    const targetMaxAvailableDays = targetRangeInfo.targetMaxAvailableDays || 1.0;
+    const targetMaxMissingDocsDays = targetRangeInfo.targetMaxMissingDocsDays || 3.0;
+    const targetMaxVidangeHours = targetRangeInfo.targetMaxVidangeHours || 1.0;
+    const targetMaxFieldMissionHours = targetRangeInfo.targetMaxFieldMissionHours || 3.0;
+    const targetSlaResolutionRate = targetRangeInfo.targetSlaResolutionRate || 95;
+    const targetAttestationRate = targetRangeInfo.targetAttestationRate || 90;
 
     // =========================================================================
     // 1. FLEET STATUS BREAKDOWN (% Available, % Missing Docs, % Maintenance, % Working)
@@ -760,11 +781,12 @@ export async function GET(request: NextRequest) {
     };
 
     // =========================================================================
-    // 7. GLOBAL TEAM WORK COMPOSITE SCORE & 4 OPERATIONAL PILLARS
+    // 7. GLOBAL TEAM WORK COMPOSITE SCORE & 4 OPERATIONAL PILLARS (DATE-EFFECTIVE DAILY TARGETS)
     // =========================================================================
     // Pillar 1: Traffic & Acquisition (Nour Abouri & Kaoutar Ouardi)
-    const scaledCallsTarget = Math.max(1, targetDailyCalls * workingDays);
-    const scaledTrainingFixedTarget = Math.max(1, targetDailyTrainingFixed * workingDays);
+    // Uses exact sum of each working day's target from department_target_history
+    const scaledCallsTarget = Math.max(1, targetRangeInfo.scaledCallsTarget);
+    const scaledTrainingFixedTarget = Math.max(1, targetRangeInfo.scaledTrainingTarget);
     const trafficConversionRatePct =
       prospectionCallsInPeriod > 0
         ? Number(((trainingsFixedInPeriod / prospectionCallsInPeriod) * 100).toFixed(1))
@@ -772,14 +794,17 @@ export async function GET(request: NextRequest) {
 
     const callsAttainment = Math.min(150, (prospectionCallsInPeriod / scaledCallsTarget) * 100);
     const trainingFixedAttainment = Math.min(150, (trainingsFixedInPeriod / scaledTrainingFixedTarget) * 100);
-    const conversionAttainment = Math.min(150, (trafficConversionRatePct / 30) * 100);
+    const conversionAttainment = Math.min(
+      150,
+      (trafficConversionRatePct / Math.max(1, targetLeadConversionRate)) * 100
+    );
     const trafficPillarScorePct = Number(
       (0.4 * callsAttainment + 0.4 * trainingFixedAttainment + 0.2 * conversionAttainment).toFixed(1)
     );
 
     // Pillar 2: Formation & Onboarding (Ayoub Gsaib)
-    const scaledAttendedTarget = Math.max(1, targetDailyAttended * workingDays);
-    const scaledPreordersAssignedTarget = Math.max(1, targetDailyPreorders * workingDays);
+    const scaledAttendedTarget = Math.max(1, targetRangeInfo.scaledAttendedTarget);
+    const scaledPreordersAssignedTarget = Math.max(1, targetRangeInfo.scaledPreordersTarget);
     const totalAssignedAndPreordersInPeriod = assignedLeadsInPeriod.length + preorderLeadsInPeriod.length;
     const onboardingConversionRatePct =
       attendedInPeriod > 0
@@ -798,6 +823,57 @@ export async function GET(request: NextRequest) {
     const onboardingPillarScorePct = Number(
       (0.4 * attendedAttainment + 0.4 * assignedPreorderAttainment + 0.2 * velocityAttainment).toFixed(1)
     );
+
+    // Day-by-Day Performance vs Daily Target Breakdown
+    const dailyTargetPerformance = targetRangeInfo.dailySchedule.map((dayEntry) => {
+      const dStr = dayEntry.date;
+      const dayCallsLeads = trafficCallsLeadsInPeriod.filter((l) => {
+        const ts = l.status_changed_at || l.updated_at || l.created_at;
+        return ts && new Date(ts).toISOString().split("T")[0] === dStr;
+      });
+      const actualCalls = dayCallsLeads.length;
+      const actualFixed = dayCallsLeads.filter((l) => l.brand_status === "Training fixed").length;
+
+      const dayAttended = trainingLeadsInPeriod.filter((l) => {
+        if (!isAttendedLead(l)) return false;
+        const ts = l.presence_confirmed_at || l.reminder_date || l.status_changed_at || l.created_at;
+        return ts && new Date(ts).toISOString().split("T")[0] === dStr;
+      }).length;
+
+      const dayAssigned = assignedLeadsInPeriod.filter((l) => {
+        const ts = l.status_changed_at || l.updated_at || l.created_at;
+        return ts && new Date(ts).toISOString().split("T")[0] === dStr;
+      }).length;
+      const dayPreorders = preorderLeadsInPeriod.filter((l) => {
+        const ts = l.status_changed_at || l.updated_at || l.created_at;
+        return ts && new Date(ts).toISOString().split("T")[0] === dStr;
+      }).length;
+      const actualAssignedAndPreorders = dayAssigned + dayPreorders;
+
+      const tCalls = dayEntry.isWorkingDay ? dayEntry.target_daily_calls : 0;
+      const tFixed = dayEntry.isWorkingDay ? dayEntry.target_daily_training_fixed : 0;
+      const tAttended = dayEntry.isWorkingDay ? dayEntry.target_daily_attended : 0;
+      const tPreorders = dayEntry.isWorkingDay ? dayEntry.target_daily_preorders : 0;
+
+      return {
+        date: dStr,
+        isWorkingDay: dayEntry.isWorkingDay,
+        effectiveTargetDate: dayEntry.effectiveDate,
+        targetCalls: tCalls,
+        actualCalls,
+        callsPct: tCalls > 0 ? Number(((actualCalls / tCalls) * 100).toFixed(1)) : 100,
+        targetTrainingFixed: tFixed,
+        actualTrainingFixed: actualFixed,
+        trainingFixedPct: tFixed > 0 ? Number(((actualFixed / tFixed) * 100).toFixed(1)) : 100,
+        targetAttended: tAttended,
+        actualAttended: dayAttended,
+        attendedPct: tAttended > 0 ? Number(((dayAttended / tAttended) * 100).toFixed(1)) : 100,
+        targetPreorders: tPreorders,
+        actualAssignedAndPreorders,
+        preordersPct:
+          tPreorders > 0 ? Number(((actualAssignedAndPreorders / tPreorders) * 100).toFixed(1)) : 100,
+      };
+    });
 
     // Pillar 3: Fleet Performance & Cash Collection (Salma Abouri, Mohamed Aziz, Mehdi Elyattouti)
     const collectionAttainment =
@@ -907,19 +983,19 @@ export async function GET(request: NextRequest) {
             label: "Appels de Prospection (Période)",
             actual: `${prospectionCallsInPeriod} appels`,
             subtext: `Nour: ${nourCalls} · Kaoutar: ${kaoutarCalls}`,
-            target: `${scaledCallsTarget} appels (${targetDailyCalls}/j)`,
+            target: `${scaledCallsTarget} appels (${targetRangeInfo.formulas.calls})`,
           },
           {
             label: "Formations Fixées (Training Fixed)",
             actual: `${trainingsFixedInPeriod} fixées`,
             subtext: `Nour: ${nourFixed} · Kaoutar: ${kaoutarFixed}`,
-            target: `${scaledTrainingFixedTarget} fixées (${targetDailyTrainingFixed}/j)`,
+            target: `${scaledTrainingFixedTarget} fixées (${targetRangeInfo.formulas.trainingFixed})`,
           },
           {
             label: "Taux de Conversion Appel → Formation",
             actual: `${trafficConversionRatePct}%`,
-            subtext: "Cible standard GoCab : ≥ 30%",
-            target: "≥ 30%",
+            subtext: `Cible standard GoCab : ≥ ${targetLeadConversionRate}%`,
+            target: `≥ ${targetLeadConversionRate}%`,
           },
         ],
       },
@@ -940,13 +1016,13 @@ export async function GET(request: NextRequest) {
             label: "Présents en Formation (Attended + Pending)",
             actual: `${attendedInPeriod} présents`,
             subtext: `Sur ${trainingLeadsInPeriod.length} convoqués sur la période`,
-            target: `${scaledAttendedTarget} présents`,
+            target: `${scaledAttendedTarget} présents (${targetRangeInfo.formulas.attended})`,
           },
           {
             label: "Véhicules Affectés & Précommandes (Période)",
             actual: `${totalAssignedAndPreordersInPeriod} (${assignedLeadsInPeriod.length} affect. + ${preorderLeadsInPeriod.length} précom.)`,
             subtext: `Cumul global : ${assignedLeadsAllTime.length} affectés · ${preorderLeadsAllTime.length} précommandes`,
-            target: `${scaledPreordersAssignedTarget} sur la période`,
+            target: `${scaledPreordersAssignedTarget} (${targetRangeInfo.formulas.preorders})`,
           },
           {
             label: "Vélocité Parc (AVG Jours Véhicule Disponible)",
@@ -1347,6 +1423,23 @@ export async function GET(request: NextRequest) {
         field_pillar_score_pct: fieldPillarScorePct,
       },
       teamWorkPillars,
+      dailyTargets: {
+        workingDays: targetRangeInfo.workingDays,
+        hasMultipleTargetRegimes: targetRangeInfo.hasMultipleTargetRegimes,
+        avgDailyCalls: targetRangeInfo.avgDailyCalls,
+        avgDailyTraining: targetRangeInfo.avgDailyTraining,
+        avgDailyAttended: targetRangeInfo.avgDailyAttended,
+        avgDailyPreorders: targetRangeInfo.avgDailyPreorders,
+        scaledCallsTarget: targetRangeInfo.scaledCallsTarget,
+        scaledTrainingTarget: targetRangeInfo.scaledTrainingTarget,
+        scaledAttendedTarget: targetRangeInfo.scaledAttendedTarget,
+        scaledPreordersTarget: targetRangeInfo.scaledPreordersTarget,
+        formulas: targetRangeInfo.formulas,
+        segments: targetRangeInfo.segments,
+        dailyPerformance: dailyTargetPerformance,
+        activeSnapshot: targetRangeInfo.activeSnapshot,
+        history: historyList,
+      },
       portfolioComparison,
       churnedDriversLedger: enrichedChurnLedger,
       agentTargets,

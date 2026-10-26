@@ -43,6 +43,7 @@ import {
   Layers,
   Activity,
   Briefcase,
+  Target,
 } from "lucide-react";
 import {
   PieChart,
@@ -239,6 +240,14 @@ export default function DashboardView() {
     aziz: PortfolioStats;
     mehdi: PortfolioStats;
   } | null>(null);
+  const [dailyTargets, setDailyTargets] = useState<any | null>(null);
+  const [showDailyTargetPanel, setShowDailyTargetPanel] = useState(false);
+  const [targetEditDate, setTargetEditDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [targetEditCalls, setTargetEditCalls] = useState<number>(133);
+  const [targetEditFixed, setTargetEditFixed] = useState<number>(40);
+  const [targetEditAttended, setTargetEditAttended] = useState<number>(26);
+  const [targetEditPreorders, setTargetEditPreorders] = useState<number>(10);
+  const [isSavingDailyTarget, setIsSavingDailyTarget] = useState(false);
   const [churnedDriversLedger, setChurnedDriversLedger] = useState<ChurnedDriverEntry[]>([]);
   const [vehicles, setVehicles] = useState<VehicleFinancialItem[]>([]);
   const [dailyCollectionsSummary, setDailyCollectionsSummary] = useState<any>(null);
@@ -283,6 +292,14 @@ export default function DashboardView() {
         setSummary(finData.summary);
         setPeriodInfo(finData.period || null);
         setTeamWorkPillars(finData.teamWorkPillars || []);
+        setDailyTargets(finData.dailyTargets || null);
+        if (finData.dailyTargets?.activeSnapshot) {
+          const snap = finData.dailyTargets.activeSnapshot;
+          setTargetEditCalls(Number(snap.target_daily_calls) || 133);
+          setTargetEditFixed(Number(snap.target_daily_training_fixed) || 40);
+          setTargetEditAttended(Number(snap.target_daily_attended) || 26);
+          setTargetEditPreorders(Number(snap.target_daily_preorders) || 10);
+        }
         setPortfolioComparison(finData.portfolioComparison || null);
         setChurnedDriversLedger(finData.churnedDriversLedger || []);
         setVehicles(finData.vehicles || []);
@@ -369,6 +386,44 @@ export default function DashboardView() {
   }, [churnedDriversLedger, churnScopeFilter]);
 
   // Export Financial CSV
+  const handleSaveDailyTargetForDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingDailyTarget(true);
+    try {
+      const existingSnap = dailyTargets?.activeSnapshot || {};
+      const payloadTargets = {
+        ...existingSnap,
+        target_daily_calls: Number(targetEditCalls) || 50,
+        target_daily_training_fixed: Number(targetEditFixed) || 15,
+        target_daily_attended: Number(targetEditAttended) || 10,
+        target_daily_preorders: Number(targetEditPreorders) || 4,
+      };
+
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "department_weekly_targets",
+          value: JSON.stringify(payloadTargets),
+          effective_date: targetEditDate,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(
+          `🎯 Objectif journalier fixé pour le ${targetEditDate} (${payloadTargets.target_daily_calls} appels/j · ${payloadTargets.target_daily_training_fixed} form./j)`
+        );
+        await fetchFinancialReport();
+      } else {
+        toast.error("Erreur lors de la sauvegarde de l'objectif journalier");
+      }
+    } catch {
+      toast.error("Erreur réseau lors de la sauvegarde");
+    } finally {
+      setIsSavingDailyTarget(false);
+    }
+  };
+
   const exportFinancialCSV = () => {
     if (vehicles.length === 0) return;
 
@@ -602,18 +657,232 @@ export default function DashboardView() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-bold">
+          <div className="flex items-center gap-2 text-xs font-bold flex-wrap">
             <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700">
-              📞 {summary?.prospection_calls_in_period || 0} Appels
+              📞 {summary?.prospection_calls_in_period || 0} / {dailyTargets?.scaledCallsTarget || 0} Appels
             </span>
             <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-200">
-              🎓 {summary?.trainings_fixed_in_period || 0} Fixées
+              🎓 {summary?.trainings_fixed_in_period || 0} / {dailyTargets?.scaledTrainingTarget || 0} Fixées
             </span>
             <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
-              🚗 {summary?.assigned_and_preorders_in_period || 0} Affect./Précom.
+              🚗 {summary?.assigned_and_preorders_in_period || 0} / {dailyTargets?.scaledPreordersTarget || 0} Affect./Précom.
             </span>
+            <button
+              type="button"
+              onClick={() => setShowDailyTargetPanel((v) => !v)}
+              className="px-3 py-1.5 rounded-xl bg-navy text-gold hover:bg-navy/90 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>{showDailyTargetPanel ? "Masquer Cibles du Jour" : "🎯 Cibles Journalières & Calcul"}</span>
+            </button>
           </div>
         </div>
+
+        {/* Dynamic Daily Target Breakdown Banner */}
+        {dailyTargets && (
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded-lg bg-navy text-gold font-extrabold text-[11px]">
+                Pondération Journalière Active ({dailyTargets.workingDays}j ouvrés)
+              </span>
+              {dailyTargets.segments?.map((seg: any, i: number) => (
+                <span
+                  key={i}
+                  className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-[11px]"
+                >
+                  <strong className="text-navy">
+                    {seg.startDate === seg.endDate ? seg.startDate : `${seg.startDate} → ${seg.endDate}`} ({seg.workingDays}j)
+                  </strong>
+                  {" : "}
+                  {seg.dailyCalls} appels/j · {seg.dailyTrainingFixed} fixées/j · {seg.dailyAttended} prés./j · {seg.dailyPreorders} affect./j
+                </span>
+              ))}
+            </div>
+            <div className="text-[11px] font-bold text-slate-600 shrink-0">
+              Cumul Cibles Période :{" "}
+              <span className="text-navy font-mono">
+                {dailyTargets.scaledCallsTarget} appels · {dailyTargets.scaledTrainingTarget} fixées · {dailyTargets.scaledAttendedTarget} présents · {dailyTargets.scaledPreordersTarget} affect.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsible Daily Target Editor & Day-by-Day Performance Table */}
+        {showDailyTargetPanel && dailyTargets && (
+          <div className="bg-slate-50/90 border border-indigo-200 rounded-2xl p-4 space-y-4 animate-fadeIn">
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-200 pb-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-extrabold text-navy flex items-center gap-2">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                  <span>Ajuster l&apos;Objectif d&apos;une Journée Spécifique (Adaptation Automatique des Calculs)</span>
+                </h3>
+                <p className="text-2xs text-slate-500">
+                  Chaque journée ouvrée conserve sa propre cible historique. Modifier la cible d&apos;une date ajuste instantanément le cumul de la période et les scores d&apos;équipe.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveDailyTargetForDate} className="flex flex-wrap items-end gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Date d&apos;effet
+                  </label>
+                  <input
+                    type="date"
+                    value={targetEditDate}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setTargetEditDate(d);
+                      const snap = dailyTargets.history
+                        ?.slice()
+                        .reverse()
+                        .find((h: any) => h.effective_date <= d);
+                      if (snap) {
+                        setTargetEditCalls(Number(snap.target_daily_calls) || 50);
+                        setTargetEditFixed(Number(snap.target_daily_training_fixed) || 15);
+                        setTargetEditAttended(Number(snap.target_daily_attended) || 10);
+                        setTargetEditPreorders(Number(snap.target_daily_preorders) || 4);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-bold text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Appels / Jour
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={targetEditCalls}
+                    onChange={(e) => {
+                      const c = Math.max(1, Number(e.target.value) || 0);
+                      const f = Math.round(c * 0.3);
+                      const a = Math.round(f * 0.65);
+                      const p = Math.round(f * 0.25);
+                      setTargetEditCalls(c);
+                      setTargetEditFixed(f);
+                      setTargetEditAttended(a);
+                      setTargetEditPreorders(p);
+                    }}
+                    className="w-24 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Fixées / Jour
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={targetEditFixed}
+                    onChange={(e) => setTargetEditFixed(Math.max(1, Number(e.target.value) || 0))}
+                    className="w-24 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Présents / Jour
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={targetEditAttended}
+                    onChange={(e) => setTargetEditAttended(Math.max(1, Number(e.target.value) || 0))}
+                    className="w-24 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                    Affect.+Précom./J
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={targetEditPreorders}
+                    onChange={(e) => setTargetEditPreorders(Math.max(1, Number(e.target.value) || 0))}
+                    className="w-24 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-navy"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSavingDailyTarget}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingDailyTarget ? "Enregistrement..." : "💾 Appliquer Cible du Jour"}
+                </button>
+              </form>
+            </div>
+
+            {/* Day-by-Day Performance vs Active Daily Target Table */}
+            <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-left border-collapse text-[11px]">
+                <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0">
+                  <tr>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3">Type Jour</th>
+                    <th className="py-2 px-3 text-right">Appels (Réel / Cible Jour)</th>
+                    <th className="py-2 px-3 text-right">Form. Fixées (Réel / Cible Jour)</th>
+                    <th className="py-2 px-3 text-right">Présents (Réel / Cible Jour)</th>
+                    <th className="py-2 px-3 text-right">Affect. & Précom. (Réel / Cible Jour)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {dailyTargets.dailyPerformance
+                    ?.slice()
+                    .reverse()
+                    .map((d: any) => (
+                      <tr key={d.date} className={d.isWorkingDay ? "hover:bg-slate-50" : "bg-slate-50/50 text-slate-400"}>
+                        <td className="py-1.5 px-3 font-mono font-bold text-navy">{d.date}</td>
+                        <td className="py-1.5 px-3">
+                          {d.isWorkingDay ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                              Jour Ouvré (Cible {d.effectiveTargetDate})
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-semibold text-[10px]">
+                              Week-end / Férié
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono">
+                          <strong>{d.actualCalls}</strong> / {d.targetCalls}{" "}
+                          {d.isWorkingDay && (
+                            <span className={d.callsPct >= 100 ? "text-emerald-600 font-bold" : "text-amber-600"}>
+                              ({d.callsPct}%)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono">
+                          <strong>{d.actualTrainingFixed}</strong> / {d.targetTrainingFixed}{" "}
+                          {d.isWorkingDay && (
+                            <span className={d.trainingFixedPct >= 100 ? "text-emerald-600 font-bold" : "text-amber-600"}>
+                              ({d.trainingFixedPct}%)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono">
+                          <strong>{d.actualAttended}</strong> / {d.targetAttended}{" "}
+                          {d.isWorkingDay && (
+                            <span className={d.attendedPct >= 100 ? "text-emerald-600 font-bold" : "text-amber-600"}>
+                              ({d.attendedPct}%)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono">
+                          <strong>{d.actualAssignedAndPreorders}</strong> / {d.targetPreorders}{" "}
+                          {d.isWorkingDay && (
+                            <span className={d.preordersPct >= 100 ? "text-emerald-600 font-bold" : "text-amber-600"}>
+                              ({d.preordersPct}%)
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {teamWorkPillars.map((pillar) => {
