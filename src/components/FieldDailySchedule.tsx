@@ -1861,13 +1861,54 @@ export default function FieldDailySchedule({
                     </button>
                   ))}
                 </div>
+
+                {createTaskType === "OTHER" && (
+                  <div className="mt-2.5 p-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl space-y-1.5 animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-extrabold text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Autre Mission Personnalisée (Matricule Optionnel)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-tight">
+                      Mission terrain sur mesure : le véhicule n&apos;est pas obligatoire. Renseignez directement vos consignes ci-dessous.
+                    </p>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {[
+                        "📄 Livraison contrat / Documents",
+                        "🔑 Récupération double des clés",
+                        "📍 Vérification stationnement / GPS",
+                        "🤝 Entretien chauffeur sur place",
+                        "🏢 Démarches administratives",
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => {
+                            setCreateDesc((prev) => (prev ? `${prev} · ${chip}` : chip));
+                          }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                        >
+                          + {chip}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Vehicle Plate & Priority */}
               <div className="grid grid-cols-2 gap-3">
                 <div ref={plateDropdownRef} className="relative">
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                    <span>Immatriculation (Matricule) *</span>
+                    <span>
+                      Immatriculation (Matricule){" "}
+                      {createTaskType === "OTHER" ? (
+                        <span className="text-3xs font-normal text-slate-400 dark:text-slate-500">
+                          (Optionnel)
+                        </span>
+                      ) : (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </span>
                     {vehicles.length > 0 && (
                       <span className="text-3xs font-medium text-slate-400">
                         {vehicles.length} véhicules en flotte
@@ -1876,8 +1917,12 @@ export default function FieldDailySchedule({
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="Tapez l'immat (ex: 21527-Y-6 ou WW...)"
+                    required={createTaskType !== "OTHER"}
+                    placeholder={
+                      createTaskType === "OTHER"
+                        ? "Optionnel (ex: 21527-Y-6 ou laisser vide)"
+                        : "Tapez l'immat (ex: 21527-Y-6 ou WW...)"
+                    }
                     value={createPlate}
                     onFocus={() => setIsPlateDropdownOpen(true)}
                     onChange={(e) => {

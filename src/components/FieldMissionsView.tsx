@@ -1632,7 +1632,14 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
             <div className="grid grid-cols-2 gap-2">
               <div ref={plateDropdownRef} className="relative">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center justify-between">
-                  <span>Matricule *</span>
+                  <span>
+                    Matricule{" "}
+                    {createTaskType === "OTHER" ? (
+                      <span className="text-[9px] font-normal text-slate-400 lowercase">(optionnel)</span>
+                    ) : (
+                      "*"
+                    )}
+                  </span>
                   {vehicles.length > 0 && (
                     <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">
                       {vehicles.length} flotte
@@ -1641,7 +1648,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                 </label>
                 <input
                   type="text"
-                  placeholder="26517-Y-6 ou WW..."
+                  placeholder={createTaskType === "OTHER" ? "Optionnel..." : "26517-Y-6 ou WW..."}
                   value={createPlate}
                   onFocus={() => setIsPlateDropdownOpen(true)}
                   onChange={(e) => {
