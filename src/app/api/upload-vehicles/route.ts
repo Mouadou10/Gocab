@@ -495,14 +495,21 @@ export async function POST(request: NextRequest) {
                   vin: item.vin || existing.vin,
                   hub_city: item.hub_city,
                   status:
-                    item.status === "Available" && (item.driverName || existing.assigned_driver_name)
-                      ? "Actif"
+                    item.status === "Available"
+                      ? (item.driverName ? "Actif" : "Available")
                       : item.status,
                   is_archived: false,
                   total_downtime_days: item.downtimeDays || existing.total_downtime_days,
                   insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
                   isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
-                  assigned_driver_name: item.driverName || existing.assigned_driver_name,
+                  assigned_driver_name:
+                    item.status === "Available" && !item.driverName
+                      ? null
+                      : item.driverName || existing.assigned_driver_name,
+                  historical_driver_name:
+                    item.status === "Available" && !item.driverName && existing.assigned_driver_name
+                      ? existing.assigned_driver_name
+                      : existing.historical_driver_name,
                   assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_supervisor || "Mohamed Aziz"),
                   assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_collector || "Mohamed Aziz"),
                   notes: notesToSave,
