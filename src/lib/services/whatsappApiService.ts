@@ -3,9 +3,19 @@ import {
   normalizeWhatsAppPhone,
   formatDisplayPhone,
   GOCAB_WHATSAPP_TEMPLATES,
+  APPROVED_360_TEMPLATES,
+  Approved360TemplateDef,
+  GOCAB_HQ_LOCATION,
+  detectApproved360Template,
 } from "@/lib/whatsapp";
 
-export { normalizeWhatsAppPhone, formatDisplayPhone, GOCAB_WHATSAPP_TEMPLATES };
+export {
+  normalizeWhatsAppPhone,
+  formatDisplayPhone,
+  GOCAB_WHATSAPP_TEMPLATES,
+  APPROVED_360_TEMPLATES,
+  GOCAB_HQ_LOCATION,
+};
 
 export const getDbConv = () =>
   (prisma as any).whatsAppConversation || (prisma as any).whatsappConversation;
@@ -21,6 +31,14 @@ export interface SendMessageOptions {
   templateKey?: string;
   templateName?: string;
   templateLanguage?: string;
+  templateParams?: string[];
+  buttonUrlParam?: string;
+  locationHeader?: {
+    latitude: number | string;
+    longitude: number | string;
+    name: string;
+    address: string;
+  };
   interactiveButtons?: Array<{ id: string; title: string }>;
   mediaUrl?: string;
   mediaType?: "image" | "document" | "audio" | "video";
@@ -570,6 +588,136 @@ export async function findOrCreateConversation(phoneNumber: string, contactName?
   return conversation;
 }
 
+let cachedLiveTemplates: Approved360TemplateDef[] | null = null;
+let cachedLiveTemplatesAt = 0;
+
+/**
+ * Fetches live approved WABA templates directly from 360dialog (/v1/configs/templates)
+ * with a 60s in-memory cache and exact fallback to APPROVED_360_TEMPLATES.
+ */
+export async function fetchLive360Templates(
+  forceRefresh = false
+): Promise<{ templates: Approved360TemplateDef[]; source: "360dialog_live" | "fallback" }> {
+  const now = Date.now();
+  if (!forceRefresh && cachedLiveTemplates && now - cachedLiveTemplatesAt < 60_000) {
+    return { templates: cachedLiveTemplates, source: "360dialog_live" };
+  }
+
+  try {
+    const config = await getWhatsAppApiConfig();
+    if (!config.d360ApiKey) {
+      return { templates: APPROVED_360_TEMPLATES, source: "fallback" };
+    }
+
+    const d360Base = config.d360ApiUrl.replace(/\/$/, "");
+    const res = await fetch(`${d360Base}/v1/configs/templates`, {
+      headers: { "D360-API-KEY": config.d360ApiKey },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return { templates: APPROVED_360_TEMPLATES, source: "fallback" };
+    }
+
+    const data = await res.json().catch(() => null);
+    const rawList: any[] = Array.isArray(data?.waba_templates) ? data.waba_templates : [];
+    const approvedRaw = rawList.filter(
+      (t) => String(t?.status || "").toLowerCase() === "approved"
+    );
+
+    if (approvedRaw.length === 0) {
+      return { templates: APPROVED_360_TEMPLATES, source: "fallback" };
+    }
+
+    const parsed: Approved360TemplateDef[] = approvedRaw.map((t) => {
+      const comps: any[] = Array.isArray(t.components) ? t.components : [];
+      const headerComp = comps.find((c) => String(c.type || "").toUpperCase() === "HEADER");
+      const bodyComp = comps.find((c) => String(c.type || "").toUpperCase() === "BODY");
+      const buttonsComp = comps.find((c) => String(c.type || "").toUpperCase() === "BUTTONS");
+
+      const headerFormatRaw = String(headerComp?.format || "NONE").toUpperCase();
+      const headerFormat = (
+        ["LOCATION", "TEXT", "IMAGE", "DOCUMENT", "VIDEO"].includes(headerFormatRaw)
+          ? headerFormatRaw
+          : "NONE"
+      ) as Approved360TemplateDef["headerFormat"];
+
+      const bodyText = String(bodyComp?.text || "");
+      const placeholderMatches = bodyText.match(/\{\{[^}]+\}\}/g) || [];
+      const uniquePlaceholders = new Set(placeholderMatches.map((m) => m.trim()));
+
+      const firstBtn = Array.isArray(buttonsComp?.buttons) ? buttonsComp.buttons[0] : null;
+      const buttonLabel = firstBtn?.text ? String(firstBtn.text) : undefined;
+      const buttonUrl = firstBtn?.url ? String(firstBtn.url) : undefined;
+      const hasDynamicButtonUrl = Boolean(buttonUrl && /\{\{[^}]+\}\}/.test(buttonUrl));
+
+      const name = String(t.name || "");
+      const lang = String(t.language || "ar");
+      const category = String(t.category || "MARKETING").toUpperCase();
+
+      const fallbackMeta = APPROVED_360_TEMPLATES.find(
+        (f) => f.name.toLowerCase() === name.toLowerCase()
+      );
+
+      return {
+        id: name,
+        name,
+        language: lang,
+        category,
+        status: "approved",
+        title: fallbackMeta?.title || `${name} (${lang.toUpperCase()})`,
+        badge: "Approuvé 360dialog",
+        icon: fallbackMeta?.icon || (headerFormat === "LOCATION" ? "📍" : "✨"),
+        description:
+          fallbackMeta?.description ||
+          `Modèle officiel 360dialog (${category} · ${lang.toUpperCase()})`,
+        defaultTime: fallbackMeta?.defaultTime,
+        headerFormat,
+        headerText: headerComp?.text ? String(headerComp.text) : undefined,
+        bodyParamCount: uniquePlaceholders.size,
+        buttonLabel,
+        buttonUrl,
+        hasDynamicButtonUrl,
+        template: bodyText,
+      };
+    });
+
+    // Sort so "formation" is first, "vendredi" second, then any additional approved templates
+    parsed.sort((a, b) => {
+      const rank = (n: string) =>
+        n === "formation" ? 0 : n === "vendredi" ? 1 : 2;
+      return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name);
+    });
+
+    cachedLiveTemplates = parsed;
+    cachedLiveTemplatesAt = now;
+    return { templates: parsed, source: "360dialog_live" };
+  } catch (err) {
+    console.warn("fetchLive360Templates fallback warning:", err);
+    return { templates: APPROVED_360_TEMPLATES, source: "fallback" };
+  }
+}
+
+/**
+ * Checks whether the conversation has received an inbound message within Meta's 24h window
+ */
+export async function hasInboundWithin24h(conversationId: string): Promise<boolean> {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentInbound = await getDbMsg().findFirst({
+      where: {
+        conversation_id: conversationId,
+        direction: "INBOUND",
+        created_at: { gte: cutoff },
+      },
+      orderBy: { created_at: "desc" },
+    });
+    return Boolean(recentInbound);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Sends an outbound WhatsApp message via 360dialog / Meta Cloud API and logs to DB
  */
@@ -591,21 +739,107 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   let apiError: string | null = null;
   let deliveryMode = "CRM_LIVE_SIMULATION";
 
-  const buildPayload = (useInteractive: boolean, asTemplate = false) => {
-    // If sending an official approved template (e.g. 360dialog / Meta approved "formation" or "vendredi")
-    if (asTemplate && opts.templateName) {
-      return {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: cleanPhone,
-        type: "template",
-        template: {
-          name: opts.templateName,
-          language: {
-            code: opts.templateLanguage || "ar",
+  // Resolve live approved 360dialog template definition if templateName is provided OR text matches an approved template
+  const { templates: liveTemplates } = await fetchLive360Templates();
+  const autoDetectedTpl = !opts.templateName
+    ? detectApproved360Template(opts.text, liveTemplates)
+    : null;
+  const effectiveTemplateName = opts.templateName || autoDetectedTpl?.name;
+  const matchedTemplate = effectiveTemplateName
+    ? liveTemplates.find(
+        (t) => t.name.toLowerCase() === effectiveTemplateName.toLowerCase()
+      ) ||
+      APPROVED_360_TEMPLATES.find(
+        (t) => t.name.toLowerCase() === effectiveTemplateName.toLowerCase()
+      ) ||
+      null
+    : null;
+
+  const buildTemplatePayload = () => {
+    const tplName = matchedTemplate?.name || effectiveTemplateName!;
+    const tplLang = matchedTemplate?.language || opts.templateLanguage || "ar";
+    const components: any[] = [];
+
+    // 1. HEADER component (CRITICAL: "formation" & "vendredi" both have format: "LOCATION" in 360dialog!)
+    const headerFormat =
+      matchedTemplate?.headerFormat ||
+      (tplName === "formation" || tplName === "vendredi" ? "LOCATION" : "NONE");
+
+    if (headerFormat === "LOCATION") {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "location",
+            location: {
+              latitude: opts.locationHeader?.latitude ?? GOCAB_HQ_LOCATION.latitude,
+              longitude: opts.locationHeader?.longitude ?? GOCAB_HQ_LOCATION.longitude,
+              name: opts.locationHeader?.name ?? GOCAB_HQ_LOCATION.name,
+              address: opts.locationHeader?.address ?? GOCAB_HQ_LOCATION.address,
+            },
           },
+        ],
+      });
+    } else if (headerFormat === "IMAGE" && opts.mediaUrl) {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "image",
+            image: {
+              link: opts.mediaUrl.startsWith("http")
+                ? opts.mediaUrl
+                : `https://${process.env.VERCEL_URL || "gocab-iota.vercel.app"}${opts.mediaUrl}`,
+            },
+          },
+        ],
+      });
+    }
+
+    // 2. BODY parameters (only if the 360dialog template actually defines {{1}}, {{2}}... variables)
+    const expectedBodyParams = matchedTemplate?.bodyParamCount ?? 0;
+    if (expectedBodyParams > 0) {
+      const provided = Array.isArray(opts.templateParams) ? opts.templateParams : [];
+      const bodyParams = Array.from({ length: expectedBodyParams }, (_, idx) => ({
+        type: "text",
+        text:
+          provided[idx] ||
+          (idx === 0 ? conversation.contact_name || "Chauffeur" : "Casablanca"),
+      }));
+      components.push({
+        type: "body",
+        parameters: bodyParams,
+      });
+    }
+
+    // 3. Dynamic URL BUTTON parameter (only if button URL has {{1}} placeholder)
+    if (matchedTemplate?.hasDynamicButtonUrl && opts.buttonUrlParam) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [{ type: "text", text: opts.buttonUrlParam }],
+      });
+    }
+
+    return {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: cleanPhone,
+      type: "template",
+      template: {
+        name: tplName,
+        language: {
+          code: tplLang,
         },
-      };
+        ...(components.length > 0 ? { components } : {}),
+      },
+    };
+  };
+
+  const buildPayload = (useInteractive: boolean, asTemplate = false) => {
+    if (asTemplate && effectiveTemplateName) {
+      return buildTemplatePayload();
     }
 
     if (opts.mediaUrl) {
@@ -659,19 +893,28 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     };
   };
 
+  // Ensure the CRM chat log displays the real 360dialog template content delivered to the recipient
+  const finalLoggedText =
+    matchedTemplate && (matchedTemplate.bodyParamCount ?? 0) === 0
+      ? matchedTemplate.headerFormat === "LOCATION"
+        ? `📍 ${GOCAB_HQ_LOCATION.name} (${GOCAB_HQ_LOCATION.address})\n\n${matchedTemplate.template}`
+        : matchedTemplate.template
+      : opts.text;
+
   // Dispatch live WhatsApp Business API message
   if (config.isLiveConfigured) {
     if (config.provider === "360dialog" && config.d360ApiKey) {
       try {
         const d360Base = config.d360ApiUrl.replace(/\/$/, "");
         const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
-        const hasTemplate = Boolean(opts.templateName);
+        const hasTemplate = Boolean(effectiveTemplateName);
 
         let d360Res: Response;
         let d360Data: any;
 
         if (hasTemplate) {
-          // Send official approved WhatsApp template message (bypasses 24h customer window)
+          // Send official approved WhatsApp template message (bypasses 24h customer window).
+          // NEVER fall back to plain text on template calls — plain text silently fails via webhook with Code 131047!
           d360Res = await fetch(`${d360Base}/messages`, {
             method: "POST",
             headers: {
@@ -681,24 +924,6 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
             body: JSON.stringify(buildPayload(false, true)),
           });
           d360Data = await d360Res.json().catch(() => null);
-
-          // If template dispatch was rejected, fallback to text payload
-          if (!d360Res.ok) {
-            console.warn("360dialog template attempt warning, trying text fallback:", d360Res.status, d360Data);
-            const fallbackRes = await fetch(`${d360Base}/messages`, {
-              method: "POST",
-              headers: {
-                "D360-API-KEY": config.d360ApiKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(buildPayload(false, false)),
-            });
-            const fallbackData = await fallbackRes.json().catch(() => null);
-            if (fallbackRes.ok && fallbackData?.messages?.[0]) {
-              d360Res = fallbackRes;
-              d360Data = fallbackData;
-            }
-          }
         } else {
           d360Res = await fetch(`${d360Base}/messages`, {
             method: "POST",
@@ -734,12 +959,17 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
             apiError =
               "Erreur 360dialog HTTP 401 (Non autorisé) : La clé API 360dialog est invalide ou non générée. Rendez-vous sur app.360dialog.com pour copier la clé API de votre canal et la coller dans Paramètres.";
           } else {
+            const firstErr = Array.isArray(d360Data?.errors) ? d360Data.errors[0] : null;
             apiError =
+              firstErr?.error_data?.details ||
+              (firstErr?.title
+                ? `${firstErr.title}${firstErr.code ? ` (Code ${firstErr.code})` : ""}`
+                : null) ||
               d360Data?.meta?.developer_message ||
+              d360Data?.error?.error_user_msg ||
               d360Data?.error?.message ||
               d360Data?.detail ||
               d360Data?.message ||
-              (d360Data?.errors && d360Data.errors[0]?.details) ||
               `Erreur 360dialog HTTP ${d360Res.status}`;
           }
           status = "FAILED";
@@ -754,58 +984,20 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     } else if (config.phoneNumberId && config.accessToken) {
       try {
         const hasInteractive = Boolean(opts.interactiveButtons && opts.interactiveButtons.length > 0);
-        const hasTemplate = Boolean(opts.templateName);
+        const hasTemplate = Boolean(effectiveTemplateName);
 
-        let metaRes: Response;
-        let metaData: any;
-
-        if (hasTemplate) {
-          metaRes = await fetch(
-            `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${config.accessToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(buildPayload(false, true)),
-            }
-          );
-          metaData = await metaRes.json().catch(() => null);
-
-          if (!metaRes.ok) {
-            console.warn("Meta template warning, trying text fallback:", metaData);
-            const fallbackRes = await fetch(
-              `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${config.accessToken}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(buildPayload(false, false)),
-              }
-            );
-            const fallbackData = await fallbackRes.json().catch(() => null);
-            if (fallbackRes.ok && fallbackData?.messages?.[0]) {
-              metaRes = fallbackRes;
-              metaData = fallbackData;
-            }
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(buildPayload(hasTemplate ? false : hasInteractive, hasTemplate)),
           }
-        } else {
-          metaRes = await fetch(
-            `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${config.accessToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(buildPayload(hasInteractive, false)),
-            }
-          );
-          metaData = await metaRes.json().catch(() => null);
-        }
+        );
+        const metaData = await metaRes.json().catch(() => null);
 
         if (metaRes.ok && metaData?.messages && metaData.messages[0]) {
           waMessageId = metaData.messages[0].id;
@@ -813,7 +1005,10 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
           deliveryMode = "META_GRAPH_API";
         } else {
           console.warn("Meta Cloud API warning response:", metaData);
-          apiError = metaData?.error?.message || "Erreur Meta Cloud API";
+          apiError =
+            metaData?.error?.error_user_msg ||
+            metaData?.error?.message ||
+            "Erreur Meta Cloud API";
           status = "FAILED";
           deliveryMode = "META_GRAPH_API";
         }
@@ -833,7 +1028,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
       direction: "OUTBOUND",
       sender_type: "AGENT",
       sender_name: opts.senderName || "GoCab Operations",
-      text: opts.text,
+      text: finalLoggedText,
       status: status,
       wa_message_id: waMessageId || `local-${Date.now()}`,
       media_url: opts.mediaUrl || null,
@@ -852,7 +1047,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   await getDbConv().update({
     where: { id: conversation.id },
     data: {
-      last_message: opts.text,
+      last_message: finalLoggedText,
       last_message_at: new Date(),
       ...(shouldSetHuman ? { workflow_state: "HUMAN_AGENT" } : {}),
     },
@@ -863,6 +1058,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     message,
     apiError,
     mode: deliveryMode,
+    usedTemplate: matchedTemplate?.name || effectiveTemplateName || null,
   };
 }
 
@@ -1018,7 +1214,7 @@ export async function routeConversationByImmat(
     console.warn("Could not auto-create VehicleIssue from WhatsApp immat:", e);
   }
 
-  if (sendBotReply) {
+  if (sendBotReply && (await hasInboundWithin24h(conversationId))) {
     const replyText = vehicle
       ? `✅ Véhicule *${finalPlate}* (${vehicle.make_model}) identifié !\n` +
         `👤 Chauffeur : *${finalDriverName}*\n\n` +
@@ -1115,7 +1311,7 @@ export async function routeConversationToLeadAcquisition(
     },
   });
 
-  if (sendBotReply) {
+  if (sendBotReply && (await hasInboundWithin24h(conversationId))) {
     const replyText =
       `👋 Merci pour votre intérêt pour *GoCab* !\n\n` +
       `Votre demande est transmise directement à notre équipe *Acquisition & Recrutement Chauffeurs*.\n` +

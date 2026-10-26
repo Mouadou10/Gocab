@@ -22,8 +22,10 @@ import {
   formatLeadWhatsAppMessage,
   generateWhatsAppWebURL,
   APPROVED_360_TEMPLATES,
+  Approved360TemplateDef,
   getApproved360Template,
   resolve360TemplateByDate,
+  formatTemplateForWhatsAppWeb,
   LEAD_STATUS_TEMPLATES,
   LeadStatusTemplateDef,
 } from "@/lib/whatsapp";
@@ -215,6 +217,8 @@ export default function LeadDrawer({
   }, []);
 
   // WhatsApp Direct Hub State
+  const [live360Templates, setLive360Templates] =
+    useState<Approved360TemplateDef[]>(APPROVED_360_TEMPLATES);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [waMessageText, setWaMessageText] = useState<string>("");
   const [isManualEdit, setIsManualEdit] = useState<boolean>(false);
@@ -223,6 +227,17 @@ export default function LeadDrawer({
   const [waDeliveryMode, setWaDeliveryMode] = useState<string | null>(null);
   const [recentWaMessages, setRecentWaMessages] = useState<any[]>([]);
   const [isLoadingWaHistory, setIsLoadingWaHistory] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetch("/api/whatsapp/templates")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.templates) && data.templates.length > 0) {
+          setLive360Templates(data.templates);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Activity Log ──────────────────────────────────────────────────────────
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
@@ -281,29 +296,28 @@ export default function LeadDrawer({
   // Active status key based on board
   const activeStatusKey = boardType === "leads" ? (brandStatus || "NEW_LEADS") : (trainingStatus || "Scheduled");
 
-  // Determine approved 360dialog template ("formation" vs "vendredi")
-  const default360Tpl = resolve360TemplateByDate(trainingDate || recallDate);
+  // Determine approved 360dialog template ("formation" vs "vendredi" or any live synced template)
+  const default360Tpl = resolve360TemplateByDate(trainingDate || recallDate, live360Templates);
 
   // Re-generate or update template text when active status or context fields change
   useEffect(() => {
     if (isManualEdit) return;
 
-    // Default to approved 360dialog template
-    const targetTplId = (selectedTemplateId === "formation" || selectedTemplateId === "vendredi")
-      ? selectedTemplateId
-      : default360Tpl.id;
-
-    const activeTpl = getApproved360Template(targetTplId);
+    const targetTplId = selectedTemplateId || default360Tpl.id;
+    const activeTpl = getApproved360Template(targetTplId, live360Templates);
     setSelectedTemplateId(activeTpl.id);
 
-    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
-      name: lead.raw_name,
-      city: city || lead.city || "Casablanca",
-      date: trainingDate || recallDate || "",
-      time: recallTime ? recallTime : undefined,
-      missingDocs: missingDocsList,
-      templateId: activeTpl.id,
-    });
+    const formatted =
+      (activeTpl.bodyParamCount ?? 0) > 0
+        ? formatLeadWhatsAppMessage(activeTpl.template, {
+            name: lead.raw_name,
+            city: city || lead.city || "Casablanca",
+            date: trainingDate || recallDate || "",
+            time: recallTime ? recallTime : undefined,
+            missingDocs: missingDocsList,
+            templateId: activeTpl.id,
+          })
+        : activeTpl.template;
 
     setWaMessageText(formatted);
   }, [
@@ -318,21 +332,25 @@ export default function LeadDrawer({
     hasFiche,
     hasConfirmation,
     hasPermis,
+    live360Templates,
   ]);
 
-  // Handle template selection from dropdown (Only approved 360dialog templates: "formation" or "vendredi")
+  // Handle template selection from dropdown (Live approved 360dialog templates)
   const handleSelectCustomTemplate = (templateId: string) => {
-    const activeTpl = getApproved360Template(templateId);
+    const activeTpl = getApproved360Template(templateId, live360Templates);
     setSelectedTemplateId(activeTpl.id);
 
-    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
-      name: lead.raw_name,
-      city: city || lead.city || "Casablanca",
-      date: trainingDate || recallDate || "",
-      time: recallTime ? recallTime : undefined,
-      missingDocs: missingDocsList,
-      templateId: activeTpl.id,
-    });
+    const formatted =
+      (activeTpl.bodyParamCount ?? 0) > 0
+        ? formatLeadWhatsAppMessage(activeTpl.template, {
+            name: lead.raw_name,
+            city: city || lead.city || "Casablanca",
+            date: trainingDate || recallDate || "",
+            time: recallTime ? recallTime : undefined,
+            missingDocs: missingDocsList,
+            templateId: activeTpl.id,
+          })
+        : activeTpl.template;
     setWaMessageText(formatted);
     setIsManualEdit(false);
   };
@@ -340,16 +358,19 @@ export default function LeadDrawer({
   // Reset template to default approved 360dialog template
   const handleResetTemplate = () => {
     setIsManualEdit(false);
-    const activeTpl = resolve360TemplateByDate(trainingDate || recallDate);
+    const activeTpl = resolve360TemplateByDate(trainingDate || recallDate, live360Templates);
     setSelectedTemplateId(activeTpl.id);
-    const formatted = formatLeadWhatsAppMessage(activeTpl.template, {
-      name: lead.raw_name,
-      city: city || lead.city || "Casablanca",
-      date: trainingDate || recallDate || "",
-      time: recallTime ? recallTime : undefined,
-      missingDocs: missingDocsList,
-      templateId: activeTpl.id,
-    });
+    const formatted =
+      (activeTpl.bodyParamCount ?? 0) > 0
+        ? formatLeadWhatsAppMessage(activeTpl.template, {
+            name: lead.raw_name,
+            city: city || lead.city || "Casablanca",
+            date: trainingDate || recallDate || "",
+            time: recallTime ? recallTime : undefined,
+            missingDocs: missingDocsList,
+            templateId: activeTpl.id,
+          })
+        : activeTpl.template;
     setWaMessageText(formatted);
     toast.success(`Modèle réinitialisé à "${activeTpl.title}"`);
   };
@@ -394,21 +415,22 @@ export default function LeadDrawer({
     }
     setIsSendingWa(true);
     try {
-      const templateNameToUse = selectedTemplateId === "vendredi" ? "vendredi" : "formation";
+      const activeTpl = getApproved360Template(selectedTemplateId, live360Templates);
+      const templateNameToUse = activeTpl.name;
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: lead.sanitized_phone,
-          text: waMessageText.trim(),
+          text: activeTpl.template,
           templateName: templateNameToUse,
-          templateLanguage: "ar",
+          templateLanguage: activeTpl.language || "ar",
           senderName: session?.user?.name || session?.user?.email || "GoCab Operations",
         }),
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.message?.status !== "FAILED") {
         const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setWaSentSuccessAt(timeNow);
         setWaDeliveryMode(data.mode || "360DIALOG_WABA");
@@ -420,7 +442,7 @@ export default function LeadDrawer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "WHATSAPP_SENT",
-            detail: `Modèle 360dialog (${templateNameToUse}) envoyé : "${waMessageText.slice(0, 60)}${waMessageText.length > 60 ? "..." : ""}"`,
+            detail: `Modèle 360dialog (${templateNameToUse}) envoyé : "${activeTpl.template.slice(0, 60)}${activeTpl.template.length > 60 ? "..." : ""}"`,
             agent: session?.user?.name || session?.user?.email || "Agent",
           }),
         }).then(() => fetchActivityLog()).catch(() => {});
@@ -437,7 +459,11 @@ export default function LeadDrawer({
 
   // Open message in WhatsApp Web / wa.me
   const handleOpenWhatsAppWeb = () => {
-    const url = generateWhatsAppWebURL(lead.sanitized_phone, waMessageText);
+    const activeTpl = getApproved360Template(selectedTemplateId, live360Templates);
+    const webText = isManualEdit
+      ? waMessageText
+      : formatTemplateForWhatsAppWeb(activeTpl, waMessageText);
+    const url = generateWhatsAppWebURL(lead.sanitized_phone, webText);
     window.open(url, "_blank");
     fetch(`/api/leads/${lead.id}/activity`, {
       method: "POST",
@@ -1307,7 +1333,7 @@ export default function LeadDrawer({
                 </label>
                 <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                  2 Modèles Approuvés (ar)
+                  {live360Templates.length} Modèle(s) Approuvé(s)
                 </span>
               </div>
 
@@ -1317,7 +1343,7 @@ export default function LeadDrawer({
                   onChange={(e) => handleSelectCustomTemplate(e.target.value)}
                   className="w-full bg-white border border-emerald-200 rounded-xl px-2.5 py-1.5 text-xs text-gray-800 font-semibold focus:ring-2 focus:ring-emerald-400 focus:outline-none"
                 >
-                  {APPROVED_360_TEMPLATES.map((tmpl) => (
+                  {live360Templates.map((tmpl) => (
                     <option key={tmpl.id} value={tmpl.id}>
                       {tmpl.icon} {tmpl.title} · {tmpl.language.toUpperCase()} ({tmpl.category})
                     </option>
@@ -1341,30 +1367,35 @@ export default function LeadDrawer({
             <div className="space-y-1">
               <div className="flex items-center justify-between text-[11px] text-gray-500">
                 <span className="text-3xs text-emerald-900/70 font-semibold">
-                  Aperçu & Personnalisation du message :
+                  Aperçu exact du modèle 360dialog :
                 </span>
                 <span className="text-3xs font-mono">{waMessageText.length} car.</span>
               </div>
 
               <textarea
                 rows={4}
+                readOnly={!isManualEdit}
                 value={waMessageText}
                 onChange={(e) => {
                   setWaMessageText(e.target.value);
                   setIsManualEdit(true);
                 }}
                 placeholder="Écrivez le message WhatsApp..."
-                className="w-full bg-white border border-emerald-200 rounded-xl p-3 text-xs text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none font-sans leading-relaxed resize-none shadow-inner"
+                className="w-full bg-emerald-50/30 border border-emerald-200 rounded-xl p-3 text-xs text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none font-sans leading-relaxed resize-none shadow-inner"
               />
 
-              {/* Tags info pill */}
-              <div className="flex items-center gap-1.5 flex-wrap text-3xs text-emerald-900/60 pt-0.5">
-                <span className="font-semibold text-emerald-900">Variables insérées :</span>
-                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Nom: {lead.raw_name.split(" ")[0]}</span>
-                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Ville: {city || lead.city || "Casablanca"}</span>
-                {(trainingDate || recallDate) && (
-                  <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-100">Date: {trainingDate || recallDate}</span>
-                )}
+              {/* Official 360dialog Components Info Strip */}
+              <div className="flex items-center gap-1.5 flex-wrap text-3xs text-emerald-900/80 pt-0.5">
+                <span className="font-semibold text-emerald-950">Inclus dans l&apos;envoi API :</span>
+                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-emerald-800">
+                  📍 Carte GPS Maârif
+                </span>
+                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-blue-700">
+                  🔗 Bouton Localisation
+                </span>
+                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-emerald-800">
+                  ⚡ Hors fenêtre 24h OK
+                </span>
               </div>
             </div>
 

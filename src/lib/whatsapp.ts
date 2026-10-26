@@ -6,26 +6,42 @@
  * 100% client-safe (no Node/DB imports).
  */
 
+export const GOCAB_HQ_LOCATION = {
+  latitude: 33.566063,
+  longitude: -7.6362229,
+  name: "GoCab Rent",
+  address: "زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف",
+  mapsUrl:
+    "https://www.google.com/maps/place/33%C2%B033'57.8%22N+7%C2%B038'10.4%22W/@33.566063,-7.6387978,17z/data=!3m1!4b1!4m4!3m3!8m2!3d33.566063!4d-7.6362229?hl=en&entry=ttu&g_ep=EgoyMDI2MTAwNy4wIKXMDSoASAFQAw%3D%3D",
+};
+
 export const DEFAULT_INVITE_TEMPLATE =
-  "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time} في مقر GoCab ({city}).\n\nالوثائق المطلوبة:\n- البطاقة الوطنية (CIN)\n- رخصة السياقة (Permis)\n- حسن السيرة (Fiche anthropométrique)\n\nشكراً لكم ونتطلع للقائكم.";
+  `نؤكد لكم موعد تكوينكم على الساعة 3 زوالا \nيقع مكتبنا في: زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف، يمكنكم معرفة موقعنا عبر رابط غوغل مابس: ${GOCAB_HQ_LOCATION.mapsUrl}\n إلى اللقاء قريباً`;
 
 export const DEFAULT_MISSING_DOCS_TEMPLATE =
   "Bonjour {name},\n\nAfin de finaliser votre dossier chauffeur GoCab ({city}) et de vous attribuer votre véhicule, merci de nous transmettre les documents manquants suivants :\n{missing_docs}\n\nVous pouvez nous envoyer des photos bien lisibles directement sur ce numéro WhatsApp.\n\nL'équipe GoCab Recrutement.";
 
 /**
  * Official Approved 360dialog / WhatsApp Business Cloud API Templates for Lead Acquisition
- * Sourced directly from Meta WhatsApp Business Manager (Status: Approved, Lang: ar, Category: MARKETING)
+ * Sourced directly from 360dialog Hub (+212 6 62 14 51 09, Status: Approved, Lang: ar, Category: MARKETING)
  */
 export interface Approved360TemplateDef {
-  id: "formation" | "vendredi";
-  name: "formation" | "vendredi";
-  language: "ar";
-  category: "MARKETING";
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  status?: string;
   title: string;
   badge: string;
   icon: string;
   description: string;
-  defaultTime: string;
+  defaultTime?: string;
+  headerFormat?: "LOCATION" | "TEXT" | "IMAGE" | "DOCUMENT" | "VIDEO" | "NONE";
+  headerText?: string;
+  bodyParamCount?: number;
+  buttonLabel?: string;
+  buttonUrl?: string;
+  hasDynamicButtonUrl?: boolean;
   template: string;
 }
 
@@ -35,53 +51,115 @@ export const APPROVED_360_TEMPLATES: Approved360TemplateDef[] = [
     name: "formation",
     language: "ar",
     category: "MARKETING",
-    title: "formation (Session Standard)",
+    status: "approved",
+    title: "formation (Session 15h00)",
     badge: "Approuvé 360dialog",
     icon: "🎓",
-    description: "Session de formation standard (15h00) — Modèle marketing arabe officiel approuvé 360dialog",
+    description:
+      "Convocation officielle 15h00 avec carte GPS Maârif & bouton Localisation (Approuvé 360dialog)",
     defaultTime: "3:00 مساءً (15h00)",
+    headerFormat: "LOCATION",
+    bodyParamCount: 0,
+    buttonLabel: "Localisation",
+    buttonUrl: GOCAB_HQ_LOCATION.mapsUrl,
+    hasDynamicButtonUrl: false,
     template:
-      "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم {date} على الساعة {time} في مقر GoCab ({city}).\n\nالوثائق المطلوبة:\n- البطاقة الوطنية (CIN)\n- رخصة السياقة (Permis)\n- حسن السيرة (Fiche anthropométrique)\n\nشكراً لكم ونتطلع للقائكم.",
+      `نؤكد لكم موعد تكوينكم على الساعة 3 زوالا \nيقع مكتبنا في: زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف، يمكنكم معرفة موقعنا عبر رابط غوغل مابس: ${GOCAB_HQ_LOCATION.mapsUrl}\n إلى اللقاء قريباً`,
   },
   {
     id: "vendredi",
     name: "vendredi",
     language: "ar",
     category: "MARKETING",
-    title: "vendredi (Session Vendredi)",
+    status: "approved",
+    title: "vendredi (Session Vendredi 11h00)",
     badge: "Approuvé 360dialog",
     icon: "🕌",
-    description: "Session de formation spéciale du vendredi (11h00) — Modèle marketing arabe officiel approuvé 360dialog",
+    description:
+      "Convocation spéciale vendredi 11h00 avec carte GPS Maârif & bouton Localisation (Approuvé 360dialog)",
     defaultTime: "11:00 صباحاً (11h00)",
+    headerFormat: "LOCATION",
+    bodyParamCount: 0,
+    buttonLabel: "Localisation",
+    buttonUrl: GOCAB_HQ_LOCATION.mapsUrl,
+    hasDynamicButtonUrl: false,
     template:
-      "السلام عليكم {name}،\nتم تأكيد موعد التدريب الخاص بكم يوم الجمعة {date} على الساعة {time} في مقر GoCab ({city}).\n\nالوثائق المطلوبة:\n- البطاقة الوطنية (CIN)\n- رخصة السياقة (Permis)\n- حسن السيرة (Fiche anthropométrique)\n\nشكراً لكم ونتطلع للقائكم يوم الجمعة إن شاء الله.",
+      "مرحباً، نؤكد لكم موعد تكوينكم مع GoCab يوم الجمعة على الساعة 11 صباحاً. يقع مكتبنا في: زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف، يمكنكم معرفة موقعنا عبر رابط غوغل مابس:",
   },
 ];
 
 /**
- * Returns the approved 360dialog template by ID, falling back to "formation"
+ * Returns the approved 360dialog template by ID/name from an optional dynamic list, falling back to "formation"
  */
-export function getApproved360Template(templateId?: string | null): Approved360TemplateDef {
-  if (templateId === "vendredi") {
-    return APPROVED_360_TEMPLATES[1];
+export function getApproved360Template(
+  templateId?: string | null,
+  availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES
+): Approved360TemplateDef {
+  const pool = availableTemplates.length > 0 ? availableTemplates : APPROVED_360_TEMPLATES;
+  if (templateId) {
+    const exact = pool.find(
+      (t) => t.id === templateId || t.name.toLowerCase() === templateId.toLowerCase()
+    );
+    if (exact) return exact;
   }
-  return APPROVED_360_TEMPLATES[0];
+  return pool.find((t) => t.name === "formation") || pool[0] || APPROVED_360_TEMPLATES[0];
 }
 
 /**
  * Automatically resolves whether to use "vendredi" or "formation" based on training date
  */
 export function resolve360TemplateByDate(
-  trainingDate?: string | Date | null
+  trainingDate?: string | Date | null,
+  availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES
 ): Approved360TemplateDef {
-  if (!trainingDate) return APPROVED_360_TEMPLATES[0];
+  if (!trainingDate) return getApproved360Template("formation", availableTemplates);
   try {
     const d = typeof trainingDate === "string" ? new Date(trainingDate) : trainingDate;
     if (!isNaN(d.getTime()) && d.getDay() === 5) {
-      return APPROVED_360_TEMPLATES[1]; // Friday
+      return getApproved360Template("vendredi", availableTemplates); // Friday
     }
   } catch (_) {}
-  return APPROVED_360_TEMPLATES[0];
+  return getApproved360Template("formation", availableTemplates);
+}
+
+/**
+ * Detects if a message string matches one of the approved 360dialog templates
+ */
+export function detectApproved360Template(
+  messageText: string,
+  availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES
+): Approved360TemplateDef | null {
+  const norm = (messageText || "").trim();
+  if (!norm) return null;
+  const pool = availableTemplates.length > 0 ? availableTemplates : APPROVED_360_TEMPLATES;
+
+  for (const tpl of pool) {
+    const tplBody = (tpl.template || "").trim();
+    if (!tplBody) continue;
+    if (norm === tplBody || norm.includes(tplBody)) {
+      return tpl;
+    }
+  }
+
+  // Match distinctive Arabic phrases from GoCab's approved templates
+  if (norm.includes("موعد تكوينكم") && norm.includes("الجمعة")) {
+    return getApproved360Template("vendredi", pool);
+  }
+  if (norm.includes("موعد تكوينكم") && (norm.includes("3 زوالا") || norm.includes("المعاريف"))) {
+    return getApproved360Template("formation", pool);
+  }
+  return null;
+}
+
+/**
+ * Formats a template's text for WhatsApp Web (appends static button URL if not already in body)
+ */
+export function formatTemplateForWhatsAppWeb(tpl: Approved360TemplateDef, customText?: string): string {
+  const base = (customText ?? tpl.template).trim();
+  if (tpl.buttonUrl && !base.includes("http")) {
+    return `${base}\n${tpl.buttonUrl}`;
+  }
+  return base;
 }
 
 /**

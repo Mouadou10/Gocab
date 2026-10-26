@@ -18,6 +18,9 @@ import {
   formatDisplayPhone,
   normalizeWhatsAppPhone,
   APPROVED_360_TEMPLATES,
+  Approved360TemplateDef,
+  detectApproved360Template,
+  formatTemplateForWhatsAppWeb,
   formatLeadWhatsAppMessage,
 } from "@/lib/whatsapp";
 
@@ -48,14 +51,40 @@ export default function WhatsAppDirectModal({
   const [isSending, setIsSending] = useState(false);
   const [sentSuccessAt, setSentSuccessAt] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<string | null>(null);
+  const [live360Templates, setLive360Templates] =
+    useState<Approved360TemplateDef[]>(APPROVED_360_TEMPLATES);
+  const [selected360Template, setSelected360Template] =
+    useState<Approved360TemplateDef | null>(null);
+
+  useEffect(() => {
+    fetch("/api/whatsapp/templates")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.templates) && data.templates.length > 0) {
+          setLive360Templates(data.templates);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (target) {
-      setMessageText(target.defaultMessage || "");
+      const detected = detectApproved360Template(target.defaultMessage || "", live360Templates);
+      if (detected) {
+        setSelected360Template(detected);
+        setMessageText(detected.template);
+      } else if (target.contactType === "LEAD" && !target.defaultMessage) {
+        const fallbackLeadTpl = live360Templates[0] || APPROVED_360_TEMPLATES[0];
+        setSelected360Template(fallbackLeadTpl);
+        setMessageText(fallbackLeadTpl.template);
+      } else {
+        setSelected360Template(null);
+        setMessageText(target.defaultMessage || "");
+      }
       setSentSuccessAt(null);
       setDeliveryMode(null);
     }
-  }, [target]);
+  }, [target, live360Templates]);
 
   if (!isOpen || !target) return null;
 
@@ -65,26 +94,17 @@ export default function WhatsAppDirectModal({
 
     setIsSending(true);
     try {
-      let templateNameToSend: string | undefined = undefined;
-      let templateLangToSend: string | undefined = undefined;
-      if (target.contactType === "LEAD" || messageText.includes("التدريب")) {
-        if (messageText.includes("الجمعة")) {
-          templateNameToSend = "vendredi";
-          templateLangToSend = "ar";
-        } else {
-          templateNameToSend = "formation";
-          templateLangToSend = "ar";
-        }
-      }
+      const matchedTpl =
+        selected360Template || detectApproved360Template(messageText, live360Templates);
 
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: target.phoneNumber,
-          text: messageText.trim(),
-          templateName: templateNameToSend,
-          templateLanguage: templateLangToSend,
+          text: matchedTpl ? matchedTpl.template : messageText.trim(),
+          templateName: matchedTpl ? matchedTpl.name : undefined,
+          templateLanguage: matchedTpl ? matchedTpl.language : undefined,
           senderName: "GoCab Operations",
         }),
       });
@@ -95,8 +115,8 @@ export default function WhatsAppDirectModal({
         setSentSuccessAt(timeNow);
         setDeliveryMode(data.mode || "360DIALOG_WABA");
         toast.success(
-          templateNameToSend
-            ? `✓ Modèle 360dialog "${templateNameToSend}" envoyé avec succès !`
+          matchedTpl
+            ? `✓ Modèle officiel 360dialog "${matchedTpl.name}" envoyé avec succès !`
             : "✓ Message WhatsApp envoyé directement avec succès !",
           {
             icon: "🚀",
@@ -108,7 +128,7 @@ export default function WhatsAppDirectModal({
           data.apiError ||
           data.error ||
           data.message?.error_message ||
-          "Échec d'envoi API (Vérifiez le forfait 360dialog ou la fenêtre Meta 24h)";
+          "Échec d'envoi API (Vérifiez la configuration 360dialog ou la fenêtre Meta 24h)";
         toast.error(`⚠️ Échec d'envoi: ${errorDetail}`, { duration: 6000 });
       }
     } catch (err: any) {
@@ -118,41 +138,39 @@ export default function WhatsAppDirectModal({
     }
   };
 
-  const quickTemplates = target.contactType === "LEAD"
-    ? APPROVED_360_TEMPLATES.map((tmpl) => ({
-        title: `${tmpl.icon} ${tmpl.title}`,
-        text: formatLeadWhatsAppMessage(tmpl.template, {
-          name: target.contactName,
-          city: "Casablanca",
-          templateId: tmpl.id,
-        }),
-      }))
-    : [
-        {
-          title: "💰 Relance Impayé",
-          text: `Bonjour ${target.contactName},\n\nNous vous contactons concernant votre versement GoCab (${target.plateNumber ? `véhicule ${target.plateNumber}` : "votre contrat"}).\nVotre solde d'impayé actuel est de : ${target.arrearsMAD || 0} MAD.\nMerci de procéder à la régularisation dès aujourd'hui afin d'éviter toute suspension de contrat.\n\nL'équipe GoCab Operations.`,
-        },
-        {
-          title: "🚨 Alerte 3e Jour",
-          text: `Bonjour ${target.contactName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule ${target.plateNumber || ""}.\nSolde dû : ${target.arrearsMAD || 0} MAD.\nSans versement immédiat avant 18h, le protocole d'immobilisation et de récupération du véhicule sera automatiquement enclenché.\n\nL'équipe GoCab Contentieux.`,
-        },
-        {
-          title: "🎓 Formation (360dialog ar)",
-          text: formatLeadWhatsAppMessage(APPROVED_360_TEMPLATES[0].template, {
-            name: target.contactName,
-            city: "Casablanca",
-            templateId: "formation",
-          }),
-        },
-        {
-          title: "🕌 Formation Vendredi (360dialog ar)",
-          text: formatLeadWhatsAppMessage(APPROVED_360_TEMPLATES[1].template, {
-            name: target.contactName,
-            city: "Casablanca",
-            templateId: "vendredi",
-          }),
-        },
-      ];
+  const quickTemplates: Array<{
+    title: string;
+    text: string;
+    tpl360?: Approved360TemplateDef;
+  }> =
+    target.contactType === "LEAD"
+      ? live360Templates.map((tmpl) => ({
+          title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
+          text:
+            (tmpl.bodyParamCount ?? 0) > 0
+              ? formatLeadWhatsAppMessage(tmpl.template, {
+                  name: target.contactName,
+                  city: "Casablanca",
+                  templateId: tmpl.id,
+                })
+              : tmpl.template,
+          tpl360: tmpl,
+        }))
+      : [
+          {
+            title: "💰 Relance Impayé",
+            text: `Bonjour ${target.contactName},\n\nNous vous contactons concernant votre versement GoCab (${target.plateNumber ? `véhicule ${target.plateNumber}` : "votre contrat"}).\nVotre solde d'impayé actuel est de : ${target.arrearsMAD || 0} MAD.\nMerci de procéder à la régularisation dès aujourd'hui afin d'éviter toute suspension de contrat.\n\nL'équipe GoCab Operations.`,
+          },
+          {
+            title: "🚨 Alerte 3e Jour",
+            text: `Bonjour ${target.contactName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule ${target.plateNumber || ""}.\nSolde dû : ${target.arrearsMAD || 0} MAD.\nSans versement immédiat avant 18h, le protocole d'immobilisation et de récupération du véhicule sera automatiquement enclenché.\n\nL'équipe GoCab Contentieux.`,
+          },
+          ...live360Templates.map((tmpl) => ({
+            title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
+            text: tmpl.template,
+            tpl360: tmpl,
+          })),
+        ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/60 backdrop-blur-xs animate-fadeIn">
@@ -221,36 +239,93 @@ export default function WhatsAppDirectModal({
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-gold" />
-              Modèles Rapides
+              Modèles Rapides & 360dialog Approuvés
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {quickTemplates.map((t, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setMessageText(t.text)}
-                  className="px-2.5 py-1 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 text-gray-700 text-xs font-semibold rounded-xl border border-gray-200 transition-all cursor-pointer"
-                >
-                  {t.title}
-                </button>
-              ))}
+              {quickTemplates.map((t, idx) => {
+                const isSelectedTpl =
+                  Boolean(t.tpl360) && selected360Template?.name === t.tpl360?.name;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setSelected360Template(t.tpl360 || null);
+                      setMessageText(t.text);
+                    }}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                      isSelectedTpl
+                        ? "bg-emerald-600 text-white border-emerald-700 shadow-xs"
+                        : t.tpl360
+                        ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-200"
+                        : "bg-gray-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    {t.title}
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {selected360Template && (
+            <div className="px-3.5 py-2.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-2 text-xs text-emerald-950">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black">
+                  360dialog Approuvé
+                </span>
+                <span className="font-bold">
+                  {selected360Template.name} ({selected360Template.language.toUpperCase()})
+                </span>
+                {selected360Template.headerFormat === "LOCATION" && (
+                  <span className="text-[11px] text-emerald-800 font-semibold">
+                    · 📍 Carte GPS Maârif incluse
+                  </span>
+                )}
+                <span className="text-[11px] text-emerald-700">
+                  · Envoi API garanti hors fenêtre 24h
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelected360Template(null);
+                  setMessageText("");
+                }}
+                className="text-[10px] font-bold text-gray-600 hover:text-red-700 px-2 py-0.5 rounded bg-white border border-gray-200 cursor-pointer shrink-0"
+              >
+                ✕ Texte libre
+              </button>
+            </div>
+          )}
 
           {/* Message Area */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-gray-800">
-              Message à transmettre
+              {selected360Template
+                ? `Aperçu officiel du modèle 360dialog (${selected360Template.name})`
+                : "Message à transmettre"}
             </label>
             <textarea
               rows={6}
+              readOnly={Boolean(
+                selected360Template && (selected360Template.bodyParamCount ?? 0) === 0
+              )}
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
               placeholder="Rédigez votre message WhatsApp..."
-              className="w-full p-3 bg-white border border-gray-300 rounded-2xl text-xs font-sans text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-2xs leading-relaxed"
+              className={`w-full p-3 border rounded-2xl text-xs font-sans text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs leading-relaxed ${
+                selected360Template
+                  ? "bg-emerald-50/40 border-emerald-300"
+                  : "bg-white border-gray-300"
+              }`}
             />
             <div className="flex items-center justify-between text-[11px] text-gray-400">
-              <span>L&apos;API officielle applique une fenêtre 24h. Si le contact est inactif, utilisez WhatsApp Web.</span>
+              <span>
+                {selected360Template
+                  ? "✅ Ce modèle officiel contourne la fenêtre Meta 24h et inclut l'en-tête GPS Maârif."
+                  : "Le texte libre requiert une fenêtre 24h ouverte. Sinon choisissez un modèle 360dialog ci-dessus."}
+              </span>
               <span>{messageText.length} caractères</span>
             </div>
           </div>
@@ -309,7 +384,15 @@ export default function WhatsAppDirectModal({
               Fermer
             </button>
             <a
-              href={`https://wa.me/${normalizeWhatsAppPhone(target.phoneNumber)}${messageText.trim() ? `?text=${encodeURIComponent(messageText.trim())}` : ""}`}
+              href={`https://wa.me/${normalizeWhatsAppPhone(target.phoneNumber)}${
+                messageText.trim()
+                  ? `?text=${encodeURIComponent(
+                      selected360Template
+                        ? formatTemplateForWhatsAppWeb(selected360Template, messageText)
+                        : messageText.trim()
+                    )}`
+                  : ""
+              }`}
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"

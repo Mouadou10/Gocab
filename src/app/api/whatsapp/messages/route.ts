@@ -70,11 +70,15 @@ export async function POST(request: NextRequest) {
       mediaType,
       templateName,
       templateLanguage,
+      templateParams,
     } = body;
 
-    const messageText = (text && text.trim()) || (mediaUrl ? "📷 Photo" : "");
-    if (!messageText && !mediaUrl) {
-      return NextResponse.json({ error: "Le texte ou une photo est requis" }, { status: 400 });
+    const messageText =
+      (text && text.trim()) ||
+      (templateName ? `[Modèle 360dialog: ${templateName}]` : "") ||
+      (mediaUrl ? "📷 Photo" : "");
+    if (!messageText && !mediaUrl && !templateName) {
+      return NextResponse.json({ error: "Le texte, un modèle ou une photo est requis" }, { status: 400 });
     }
 
     if (!conversationId && !phoneNumber) {
@@ -105,12 +109,14 @@ export async function POST(request: NextRequest) {
       mediaType: mediaType || (mediaUrl ? "image" : undefined),
       templateName: templateName || undefined,
       templateLanguage: templateLanguage || undefined,
+      templateParams: Array.isArray(templateParams) ? templateParams : undefined,
     });
 
     return NextResponse.json({
       success: result.success,
       message: result.message,
       mode: result.mode,
+      usedTemplate: result.usedTemplate,
       apiError: result.apiError,
       error: !result.success ? result.apiError || "Échec d'envoi WhatsApp API" : undefined,
     });

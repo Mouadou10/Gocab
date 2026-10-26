@@ -40,7 +40,11 @@ import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
 import {
   GOCAB_WHATSAPP_TEMPLATES,
   APPROVED_360_TEMPLATES,
+  Approved360TemplateDef,
+  GOCAB_HQ_LOCATION,
   getApproved360Template,
+  detectApproved360Template,
+  formatTemplateForWhatsAppWeb,
   formatLeadWhatsAppMessage,
   formatDisplayPhone,
   normalizeWhatsAppPhone,
@@ -153,6 +157,11 @@ export default function WhatsAppCrmView() {
   const [newChatName, setNewChatName] = useState("");
   const [simulateText, setSimulateText] = useState("");
   const [apiConfig, setApiConfig] = useState<any>(null);
+  const [live360Templates, setLive360Templates] =
+    useState<Approved360TemplateDef[]>(APPROVED_360_TEMPLATES);
+  const [selected360Template, setSelected360Template] =
+    useState<Approved360TemplateDef | null>(null);
+  const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
 
   // Photo Lightbox & Upload states
   const [lightboxImage, setLightboxImage] = useState<{ url: string; caption?: string } | null>(null);
@@ -186,7 +195,27 @@ export default function WhatsAppCrmView() {
     scrollToBottom();
   }, [messages]);
 
-  // Fetch API Config status
+  // Fetch API Config & live approved 360dialog templates
+  const syncLive360Templates = useCallback(async (force = false) => {
+    if (force) setIsSyncingTemplates(true);
+    try {
+      const res = await fetch(`/api/whatsapp/templates${force ? "?refresh=1" : ""}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.templates) && data.templates.length > 0) {
+        setLive360Templates(data.templates);
+        if (force) {
+          toast.success(
+            `✓ ${data.templates.length} modèle(s) officiel(s) synchronisé(s) depuis 360dialog`
+          );
+        }
+      }
+    } catch {
+      if (force) toast.error("Impossible de synchroniser les modèles 360dialog");
+    } finally {
+      if (force) setIsSyncingTemplates(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetch("/api/whatsapp/config")
       .then((res) => res.json())
@@ -194,7 +223,8 @@ export default function WhatsAppCrmView() {
         if (data.config) setApiConfig(data.config);
       })
       .catch(() => {});
-  }, []);
+    syncLive360Templates(false);
+  }, [syncLive360Templates]);
 
   // Check for target phone or filter requested from Fleet Performance / Lead Drawer
   useEffect(() => {
@@ -283,6 +313,7 @@ export default function WhatsAppCrmView() {
   }, []);
 
   useEffect(() => {
+    setSelected360Template(null);
     if (selectedConvId) {
       fetchMessages(selectedConvId);
     } else {
@@ -368,7 +399,13 @@ export default function WhatsAppCrmView() {
     const photoToUpload = selectedPhotoFile;
     const previewToClean = photoPreviewUrl;
 
+    // Resolve explicit or auto-detected 360dialog template BEFORE clearing UI state
+    const matched360Tpl =
+      !photoToUpload &&
+      (selected360Template || detectApproved360Template(messageText, live360Templates));
+
     setInputMessage("");
+    setSelected360Template(null);
     clearSelectedPhoto();
     setIsSending(true);
 
@@ -396,6 +433,12 @@ export default function WhatsAppCrmView() {
       }
     }
 
+    const displayOptimisticText = matched360Tpl
+      ? matched360Tpl.headerFormat === "LOCATION"
+        ? `📍 ${GOCAB_HQ_LOCATION.name} (${GOCAB_HQ_LOCATION.address})\n\n${matched360Tpl.template}`
+        : matched360Tpl.template
+      : messageText || (uploadedMediaUrl ? "📷 Photo" : "");
+
     // Optimistic UI message insertion
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: MessageItem = {
@@ -404,7 +447,7 @@ export default function WhatsAppCrmView() {
       direction: "OUTBOUND",
       sender_type: "AGENT",
       sender_name: "GoCab Operations",
-      text: messageText || (uploadedMediaUrl ? "📷 Photo" : ""),
+      text: displayOptimisticText,
       media_url: uploadedMediaUrl,
       status: "PENDING",
       created_at: new Date().toISOString(),
@@ -412,32 +455,15 @@ export default function WhatsAppCrmView() {
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
-      // Auto-detect if sending an approved 360dialog template for leads
-      let templateNameToSend: string | undefined = undefined;
-      let templateLangToSend: string | undefined = undefined;
-      const isLead =
-        activeConversation.contactType === "LEAD" ||
-        activeConversation.routedDepartment === "LEAD_ACQUISITION";
-
-      if (isLead || messageText.includes("التدريب") || messageText.includes("GoCab")) {
-        if (messageText.includes("الجمعة")) {
-          templateNameToSend = "vendredi";
-          templateLangToSend = "ar";
-        } else if (messageText.includes("التدريب")) {
-          templateNameToSend = "formation";
-          templateLangToSend = "ar";
-        }
-      }
-
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: activeConversation.id,
           phoneNumber: activeConversation.phoneNumber,
-          text: messageText,
-          templateName: templateNameToSend,
-          templateLanguage: templateLangToSend,
+          text: matched360Tpl ? matched360Tpl.template : messageText,
+          templateName: matched360Tpl ? matched360Tpl.name : undefined,
+          templateLanguage: matched360Tpl ? matched360Tpl.language : undefined,
           mediaUrl: uploadedMediaUrl || undefined,
           mediaType: uploadedMediaUrl ? "image" : undefined,
         }),
@@ -449,13 +475,18 @@ export default function WhatsAppCrmView() {
           prev.map((m) => (m.id === tempId ? (data.message as MessageItem) : m))
         );
         fetchConversations(true);
-        toast.success("✓ Message WhatsApp transmis avec succès !", { icon: "🚀" });
+        toast.success(
+          matched360Tpl
+            ? `✓ Modèle officiel 360dialog "${matched360Tpl.name}" envoyé avec succès !`
+            : "✓ Message WhatsApp transmis avec succès !",
+          { icon: "🚀" }
+        );
       } else {
         const errorDetail =
           data.apiError ||
           data.error ||
           data.message?.error_message ||
-          "Échec de remise par l'API WhatsApp (Vérifiez la fenêtre 24h)";
+          "Échec de remise par l'API WhatsApp";
         const is401 = errorDetail.includes("401");
         toast.error(
           is401
@@ -489,7 +520,7 @@ export default function WhatsAppCrmView() {
     }
   };
 
-  // Quick Template insertion with token interpolation
+  // Quick Template insertion with token interpolation (Free-text inside 24h window)
   const handleApplyTemplate = (tpl: (typeof GOCAB_WHATSAPP_TEMPLATES)[0]) => {
     if (!activeConversation) return;
 
@@ -508,31 +539,37 @@ export default function WhatsAppCrmView() {
     text = text.replace(/{{plate}}/g, plate);
     text = text.replace(/{{date}}/g, date);
 
+    setSelected360Template(null);
     setInputMessage(text);
     setShowTemplatesDropdown(false);
-    toast.success(`Modèle "${tpl.title}" appliqué`, { icon: "✨" });
+    toast.success(`Modèle libre "${tpl.title}" inséré`, { icon: "✨" });
     textareaRef.current?.focus();
   };
 
-  // Quick 360dialog Approved Template insertion for Lead Acquisition
-  const handleApply360Template = (tplId: "formation" | "vendredi") => {
+  // Quick 360dialog Approved Template selection (Bypasses 24h Meta window + includes GPS Location Header)
+  const handleApply360Template = (tplId: string) => {
     if (!activeConversation) return;
 
-    const tpl = getApproved360Template(tplId);
+    const tpl = getApproved360Template(tplId, live360Templates);
+    const hasVars = (tpl.bodyParamCount ?? 0) > 0;
     const name = activeConversation.contactName || activeConversation.lead?.name || "Chauffeur";
     const city = activeConversation.lead?.city || "Casablanca";
-    const trainingDate = "";
 
-    const text = formatLeadWhatsAppMessage(tpl.template, {
-      name,
-      city,
-      date: trainingDate,
-      templateId: tpl.id,
-    });
+    const text = hasVars
+      ? formatLeadWhatsAppMessage(tpl.template, {
+          name,
+          city,
+          templateId: tpl.id,
+        })
+      : tpl.template;
 
+    setSelected360Template(tpl);
     setInputMessage(text);
     setShowTemplatesDropdown(false);
-    toast.success(`Modèle 360dialog "${tpl.title}" appliqué`, { icon: "✨" });
+    toast.success(
+      `Modèle officiel 360dialog "${tpl.name}" sélectionné — Prêt pour envoi direct API`,
+      { icon: "✅" }
+    );
     textareaRef.current?.focus();
   };
 
@@ -1464,50 +1501,127 @@ export default function WhatsAppCrmView() {
 
             {/* Integrated Quick Templates Carousel (Docked Right Above Input) */}
             <div className="px-4 py-2 bg-white/95 border-t border-gray-100 flex items-center gap-2 overflow-x-auto scrollbar-none shadow-2xs">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
-                <Sparkles className="w-3 h-3 text-amber-500" />
-                {activeConversation.contactType === "LEAD" ||
-                activeConversation.routedDepartment === "LEAD_ACQUISITION"
-                  ? "Modèles 360dialog approuvés :"
-                  : "Modèles :"}
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1 shrink-0">
+                <Sparkles className="w-3 h-3 text-emerald-600" />
+                Modèles 360dialog :
               </span>
-              {activeConversation.contactType === "LEAD" ||
-              activeConversation.routedDepartment === "LEAD_ACQUISITION" ? (
-                APPROVED_360_TEMPLATES.map((tpl) => (
+              {live360Templates.map((tpl) => {
+                const isSelectedTpl = selected360Template?.name === tpl.name;
+                return (
                   <button
                     key={tpl.id}
+                    type="button"
                     onClick={() => handleApply360Template(tpl.id)}
-                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 hover:border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-xl shrink-0 transition-all border border-emerald-200 cursor-pointer shadow-2xs flex items-center gap-1.5"
-                    title={`Modèle officiel 360dialog approuvé (${tpl.language.toUpperCase()})`}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-xl shrink-0 transition-all border cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                      isSelectedTpl
+                        ? "bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30"
+                        : "bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-950 hover:border-emerald-300 text-emerald-800 border-emerald-200"
+                    }`}
+                    title={`Modèle officiel 360dialog approuvé (${tpl.language.toUpperCase()} · ${tpl.category}) — Envoi API garanti même hors fenêtre 24h`}
                   >
                     <span>{tpl.icon}</span>
                     <span>{tpl.title}</span>
-                    <span className="text-[9px] bg-emerald-200/80 text-emerald-900 px-1 py-0.2 rounded font-mono font-bold">
-                      360dialog ar
+                    <span
+                      className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold ${
+                        isSelectedTpl
+                          ? "bg-white/20 text-white"
+                          : "bg-emerald-200/80 text-emerald-900"
+                      }`}
+                    >
+                      360dialog {tpl.language}
                     </span>
                   </button>
-                ))
-              ) : (
-                GOCAB_WHATSAPP_TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => handleApplyTemplate(tpl)}
-                    className="px-2.5 py-1 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-gray-700 text-[11px] font-semibold rounded-xl shrink-0 transition-all border border-gray-200 cursor-pointer shadow-2xs"
-                  >
-                    {tpl.title}
-                  </button>
-                ))
-              )}
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => syncLive360Templates(true)}
+                disabled={isSyncingTemplates}
+                className="px-2 py-1 bg-gray-50 hover:bg-gray-100 text-gray-600 text-[10px] font-bold rounded-xl shrink-0 border border-gray-200 flex items-center gap-1 cursor-pointer transition-all"
+                title="Synchroniser en direct les modèles approuvés depuis 360dialog Hub"
+              >
+                <RefreshCw className={`w-3 h-3 ${isSyncingTemplates ? "animate-spin text-emerald-600" : ""}`} />
+                <span>Sync</span>
+              </button>
+
+              {activeConversation.contactType !== "LEAD" &&
+                activeConversation.routedDepartment !== "LEAD_ACQUISITION" &&
+                is24hWindowOpen && (
+                  <>
+                    <span className="h-4 w-px bg-gray-200 shrink-0 mx-0.5" />
+                    {GOCAB_WHATSAPP_TEMPLATES.map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleApplyTemplate(tpl)}
+                        className="px-2.5 py-1 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-gray-700 text-[11px] font-semibold rounded-xl shrink-0 transition-all border border-gray-200 cursor-pointer shadow-2xs"
+                      >
+                        {tpl.title}
+                      </button>
+                    ))}
+                  </>
+                )}
             </div>
 
             {/* Chat Input Footer */}
             <div className="bg-white border-t border-gray-200/80 p-3 md:p-4">
-              {!is24hWindowOpen && (
+              {selected360Template ? (
+                <div className="mb-2.5 px-3.5 py-2.5 bg-emerald-50/95 border border-emerald-300 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-950 animate-fadeIn shadow-2xs">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide">
+                      <Check className="w-3 h-3" /> Modèle 360dialog Prêt
+                    </span>
+                    <span className="font-black text-emerald-950">
+                      {selected360Template.name} ({selected360Template.language.toUpperCase()})
+                    </span>
+                    {selected360Template.headerFormat === "LOCATION" && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                        📍 En-tête Carte GPS Maârif inclus
+                      </span>
+                    )}
+                    {selected360Template.buttonLabel && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white text-blue-700 border border-blue-200 text-[10px] font-bold">
+                        🔗 Bouton : {selected360Template.buttonLabel}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-emerald-800 font-semibold">
+                      • Contourne la fenêtre Meta 24h
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSendMessage()}
+                      disabled={isSending}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-[10px] flex items-center gap-1 shadow-xs cursor-pointer transition-all"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>Envoyer maintenant</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected360Template(null);
+                        setInputMessage("");
+                      }}
+                      className="px-2 py-1 bg-white hover:bg-red-50 text-gray-600 hover:text-red-700 border border-gray-200 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                      title="Retirer le modèle 360dialog et passer en saisie libre"
+                    >
+                      ✕ Retirer
+                    </button>
+                  </div>
+                </div>
+              ) : !is24hWindowOpen ? (
                 <div className="mb-2.5 px-3 py-2 bg-amber-50 border border-amber-200/80 rounded-xl flex items-center justify-between gap-2 text-[11px] text-amber-900 animate-fadeIn">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>
-                      <strong>Fenêtre 24h fermée :</strong> Ce contact ne vous a pas écrit durant les dernières 24h. L&apos;API Meta rejettera le texte libre (Code 131047). Utilisez <strong>WhatsApp Web</strong> ci-dessous.
+                      <strong>Fenêtre 24h fermée :</strong> Sélectionnez un{" "}
+                      <strong>Modèle 360dialog</strong> ci-dessus (ex: <em>formation</em> ou{" "}
+                      <em>vendredi</em>) pour l&apos;envoyer directement via l&apos;API, ou utilisez{" "}
+                      <strong>WhatsApp Web</strong> pour du texte libre.
                     </span>
                   </div>
                   <a
@@ -1520,7 +1634,7 @@ export default function WhatsAppCrmView() {
                     <ExternalLink className="w-3 h-3" /> Ouvrir Web
                   </a>
                 </div>
-              )}
+              ) : null}
 
               {/* Photo Preview Chip (if an image is selected) */}
               {photoPreviewUrl && (
@@ -1589,10 +1703,19 @@ export default function WhatsAppCrmView() {
                   <Camera className="w-4 h-4" />
                 </button>
 
-                <div className="flex-1 bg-gray-100/90 rounded-2xl p-1.5 border border-gray-200 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all shadow-2xs">
+                <div
+                  className={`flex-1 rounded-2xl p-1.5 border transition-all shadow-2xs ${
+                    selected360Template
+                      ? "bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-500/15"
+                      : "bg-gray-100/90 border-gray-200 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500/10"
+                  }`}
+                >
                   <textarea
                     ref={textareaRef}
-                    rows={2}
+                    rows={selected360Template ? 3 : 2}
+                    readOnly={Boolean(
+                      selected360Template && (selected360Template.bodyParamCount ?? 0) === 0
+                    )}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onPaste={handlePaste}
@@ -1613,7 +1736,15 @@ export default function WhatsAppCrmView() {
 
                 {/* Direct WhatsApp Web Button (Bypasses 24h window restriction) */}
                 <a
-                  href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}${inputMessage.trim() ? `?text=${encodeURIComponent(inputMessage.trim())}` : ""}`}
+                  href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}${
+                    inputMessage.trim()
+                      ? `?text=${encodeURIComponent(
+                          selected360Template
+                            ? formatTemplateForWhatsAppWeb(selected360Template, inputMessage)
+                            : inputMessage.trim()
+                        )}`
+                      : ""
+                  }`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-11 h-11 rounded-2xl bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-gray-600 border border-gray-200 flex items-center justify-center transition-all shrink-0 cursor-pointer shadow-2xs"
@@ -1878,29 +2009,24 @@ export default function WhatsAppCrmView() {
                 <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center justify-between">
                   <span>Modèles 360dialog approuvés</span>
                   <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded border border-emerald-200">
-                    ar (MARKETING)
+                    {live360Templates.length} approuvé(s)
                   </span>
                 </span>
-                <button
-                  onClick={() => handleApply360Template("formation")}
-                  className="w-full py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer border border-emerald-200/80 shadow-2xs"
-                  title="Appliquer le modèle officiel approuvé formation (360dialog)"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>🎓</span> Formation (Session Standard)
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-emerald-700" />
-                </button>
-                <button
-                  onClick={() => handleApply360Template("vendredi")}
-                  className="w-full py-2 px-2.5 bg-teal-50 hover:bg-teal-100 text-teal-950 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer border border-teal-200/80 shadow-2xs"
-                  title="Appliquer le modèle officiel approuvé vendredi (360dialog)"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>🕌</span> Formation Vendredi (11h00)
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-teal-700" />
-                </button>
+                {live360Templates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => handleApply360Template(tpl.id)}
+                    className="w-full py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 text-xs font-bold rounded-xl transition-all flex items-center justify-between cursor-pointer border border-emerald-200/80 shadow-2xs"
+                    title={`Appliquer le modèle officiel approuvé ${tpl.name} (360dialog)`}
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span>{tpl.icon}</span>
+                      <span className="truncate">{tpl.title}</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                  </button>
+                ))}
               </div>
             </div>
           )}
