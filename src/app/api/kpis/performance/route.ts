@@ -451,11 +451,20 @@ export async function GET(request: NextRequest) {
 
     // ── Traffic Acquisition Team (Nour & Kaoutar) ─────────────────────
     // Synchronized with Leads Prospection scorecard: strictly counts calls and trainings fixed during period
-    let activeTrafficLeads = allTrafficLeadsInRange;
+    const allTreatedWorkflowLeads = allLeads.filter(
+      (l) =>
+        l.board_column !== "NEW_LEADS" &&
+        (l.brand_status ||
+          l.board_column === "BRAND_PRE_FILTER" ||
+          l.board_column === "TRAINING_PIPELINE" ||
+          l.board_column === "VEHICLE_ASSIGNMENT")
+    );
+    let activeTrafficLeads = allTrafficLeadsInRange.length > 0 ? allTrafficLeadsInRange : allTreatedWorkflowLeads;
+
     if (targetUser && (targetUser.role === "LEAD_ACQUISITION_JR" || targetUser.role === "BRAND_MANAGER")) {
       const uName = (targetUser.fullName || targetUser.name || "").toLowerCase();
       const uEmail = (targetUser.email || "").toLowerCase();
-      activeTrafficLeads = allTrafficLeadsInRange.filter((l) => {
+      const userFiltered = activeTrafficLeads.filter((l) => {
         const h = (l.handled_by || "").toLowerCase();
         const n = (l.notes || "").toLowerCase();
         return (
@@ -466,6 +475,9 @@ export async function GET(request: NextRequest) {
           userFixedLeadIds.has(l.id)
         );
       });
+      if (userFiltered.length > 0) {
+        activeTrafficLeads = userFiltered;
+      }
     }
 
     const trafficCallsDone = activeTrafficLeads.length;
@@ -1806,6 +1818,10 @@ export async function GET(request: NextRequest) {
       leaderboard,
       dailyTimeline,
       users,
+    }, {
+      headers: {
+        "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
+      },
     });
   } catch (error: any) {
     console.error("GET /api/kpis/performance error:", error);

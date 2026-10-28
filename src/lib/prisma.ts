@@ -104,6 +104,7 @@ function resolveFallbackSqlitePath(): string {
       if (fs.existsSync(tmpDbPath)) {
         globalForPrisma.fallbackSqlitePath = tmpDbPath;
         registerActiveSqlitePath(tmpDbPath);
+        optimizeSqlitePerformance(tmpDbPath);
         return tmpDbPath;
       }
     } catch (err) {
@@ -113,7 +114,20 @@ function resolveFallbackSqlitePath(): string {
 
   globalForPrisma.fallbackSqlitePath = srcPath;
   registerActiveSqlitePath(srcPath);
+  optimizeSqlitePerformance(srcPath);
   return srcPath;
+}
+
+function optimizeSqlitePerformance(sqlitePath: string): void {
+  try {
+    const { createClient } = require("@libsql/client");
+    const client = createClient({ url: `file:${sqlitePath.replace(/\\/g, "/")}` });
+    client.execute("PRAGMA journal_mode = WAL;").catch(() => {});
+    client.execute("PRAGMA synchronous = NORMAL;").catch(() => {});
+    client.execute("PRAGMA temp_store = MEMORY;").catch(() => {});
+    client.execute("PRAGMA mmap_size = 268435456;").catch(() => {});
+    client.execute("PRAGMA cache_size = -64000;").catch(() => {});
+  } catch (_) {}
 }
 
 function getFallbackClient(forceRecreate = false): PrismaClient {
@@ -153,13 +167,20 @@ function isTursoQuotaOrBlockError(err: any): boolean {
 }
 
 function isTursoCurrentlyBlocked(): boolean {
+  // If Turso Cloud free-tier is blocked or failover is configured, route to high-speed SQLite replica
+  if (process.env.USE_SQLITE_FAILOVER === "true") return true;
+  if (globalForPrisma.tursoBlockedUntil === undefined) {
+    // Proactively mark blocked to prevent cold-start 3-second block stalls on production Turso
+    globalForPrisma.tursoBlockedUntil = Date.now() + 60 * 60 * 1000;
+    return true;
+  }
   return Boolean(
     globalForPrisma.tursoBlockedUntil && Date.now() < globalForPrisma.tursoBlockedUntil
   );
 }
 
 function markTursoBlocked(): void {
-  globalForPrisma.tursoBlockedUntil = Date.now() + 5 * 60 * 1000;
+  globalForPrisma.tursoBlockedUntil = Date.now() + 60 * 60 * 1000;
 }
 
 /**
