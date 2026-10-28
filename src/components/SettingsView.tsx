@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { getWorkingDaysInFullMonth } from "@/lib/moroccoCalendar";
 import { TargetSnapshot, parseTargetHistory } from "@/lib/target-history";
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
 
 const ALL_TABS: { id: TabType; label: string; icon: string; description: string }[] = [
   { id: "dashboard", label: "Home", icon: "📊", description: "KPI overview & command metrics" },
@@ -24,6 +24,7 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
   { id: "leads", label: "Leads", icon: "💼", description: "Lead acquisition Kanban & intake" },
   { id: "training", label: "Training", icon: "🎓", description: "Driver training pipeline & KYC checks" },
   { id: "drivers", label: "Drivers", icon: "🚖", description: "Driver fleet profiles & CSV imports" },
+  { id: "flagged-drivers", label: "Signalements", icon: "🚩", description: "Blacklist nationale & conducteurs à risque" },
   { id: "fleet", label: "Fleet", icon: "🚗", description: "Vehicle fleet inventory & assignments" },
   { id: "vehicle-ops", label: "Journal Flotte", icon: "🚘", description: "Journal partagé des événements, pannes et interventions véhicules" },
   { id: "tickets", label: "Support", icon: "🔧", description: "Maintenance & 24h SLA tickets" },
@@ -36,17 +37,19 @@ const ALL_TABS: { id: TabType; label: string; icon: string; description: string 
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "drivers", "whatsapp"],
-  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "whatsapp"],
-  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
-  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
-  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
-  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
-  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
+  BRAND_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
+  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "whatsapp"],
+  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
+  FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
+  FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
   LEAD_ACQUISITION_JR: "Lead Acquisition Jr",
+  BRAND_MANAGER: "Brand Manager",
   ONBOARDING_SPECIALIST: "Onboarding Specialist",
   FLEET_PERF_MANAGER: "Fleet Performance Manager",
   FIELD_SUPERVISOR: "Field Supervisor",
@@ -278,7 +281,7 @@ export default function SettingsView() {
           if (settingsData.settings.role_tab_permissions) {
             try {
               const parsed = JSON.parse(settingsData.settings.role_tab_permissions);
-              setPermissions(parsed);
+              setPermissions((prev) => ({ ...prev, ...parsed }));
             } catch (e) {}
           }
           if (settingsData.settings.custom_role_labels) {

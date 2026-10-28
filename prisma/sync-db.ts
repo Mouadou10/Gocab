@@ -136,9 +136,23 @@ async function syncSchema() {
       pass: process.env.SEED_ADMIN_PASSWORD || "Moulana@pc1995",
     },
     {
+      email: "kurbankerimov@gocab.io",
+      name: "Kurban Kerimov",
+      fullName: "Kurban Kerimov",
+      role: "OPS_MANAGER",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
       email: "kaoutar.ouardi@gocab.io",
       name: "Kaoutar Ouardi",
       fullName: "Kaoutar Ouardi",
+      role: "LEAD_ACQUISITION_JR",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "nour.abouri@gocab.io",
+      name: "Nour Abouri",
+      fullName: "Nour Abouri",
       role: "LEAD_ACQUISITION_JR",
       pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
     },
@@ -149,20 +163,48 @@ async function syncSchema() {
       role: "LEAD_ACQUISITION_JR",
       pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
     },
+    {
+      email: "ayoub.gsaib@gocab.io",
+      name: "Ayoub Gsaib",
+      fullName: "Ayoub Gsaib",
+      role: "ONBOARDING_SPECIALIST",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "mohamed.aziz@gocab.io",
+      name: "Mohamed Aziz",
+      fullName: "Mohamed Aziz",
+      role: "FLEET_PERF_MANAGER",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "mehdi.elyattouti@gocab.io",
+      name: "Mehdi Elyattouti",
+      fullName: "Mehdi Elyattouti",
+      role: "FLEET_PERF_MANAGER",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "hamza.rassid@gocab.io",
+      name: "Hamza Rassid",
+      fullName: "Hamza Rassid",
+      role: "FIELD_SUPERVISOR",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
+    {
+      email: "ayoub.rassid@gocab.io",
+      name: "Ayoub Rassid",
+      fullName: "Ayoub Rassid",
+      role: "FIELD_SUPERVISOR",
+      pass: process.env.SEED_AGENT_PASSWORD || "GoCab2024!",
+    },
   ];
 
   for (const member of teamToSync) {
     try {
       const passwordHash = await bcrypt.hash(member.pass, 12);
-      const firstName = member.name.split(" ")[0];
       const existing = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: member.email },
-            { fullName: { contains: firstName } },
-            { name: { contains: firstName } },
-          ],
-        },
+        where: { email: member.email },
       });
 
       if (!existing) {

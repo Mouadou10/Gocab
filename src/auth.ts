@@ -89,11 +89,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             fullName: "Mohamed Aziz",
             role: "FLEET_PERF_MANAGER",
           },
+          "mehdi.elyattouti@gocab.io": {
+            id: "8c3b4f12-0e21-4f9a-bb89-53e712a89d44",
+            name: "Mehdi Elyattouti",
+            fullName: "Mehdi Elyattouti",
+            role: "FLEET_PERF_MANAGER",
+          },
           "nour.abouri@gocab.io": {
             id: "fe2ec083-3d9f-40b4-ae05-b9989ff81d2b",
             name: "Nour Abouri",
             fullName: "Nour Abouri",
-            role: "BRAND_MANAGER",
+            role: "LEAD_ACQUISITION_JR",
           },
           "kurbankerimov@gocab.io": {
             id: "d338716b-21ad-4efa-9ea3-729ce18761f8",
@@ -113,11 +119,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           if (isMasterPass || isDefaultPass) {
             const teamMeta = CORE_TEAM_ACCOUNTS[email];
+            let effectiveRole = teamMeta.role;
+            let effectiveId = teamMeta.id;
+            try {
+              const dbUser = await prisma.user.findFirst({ where: { email } });
+              if (dbUser?.role) effectiveRole = dbUser.role;
+              if (dbUser?.id) effectiveId = dbUser.id;
+            } catch (_) {}
+
             return {
-              id: teamMeta.id,
+              id: effectiveId,
               name: teamMeta.name,
               email,
-              role: teamMeta.role,
+              role: effectiveRole,
               mustChangePassword: false,
             };
           }

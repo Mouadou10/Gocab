@@ -13,50 +13,105 @@ export async function GET() {
   if ("error" in authResult) return authResult.error;
 
   try {
-    // Ensure core agent accounts exist with updated gocab.io emails
-    const defaultAgents = [
+    // Ensure all 10 core GoCab team member accounts exist with gocab.io emails
+    const defaultTeamMembers = [
+      {
+        email: "mouad.koudia@gocab.io",
+        name: "Mouad Koudia",
+        fullName: "Mouad Koudia",
+        role: "OPS_MANAGER",
+        region: "CASABLANCA",
+      },
+      {
+        email: "kurbankerimov@gocab.io",
+        name: "Kurban Kerimov",
+        fullName: "Kurban Kerimov",
+        role: "OPS_MANAGER",
+        region: "CASABLANCA",
+      },
       {
         email: "kaoutar.ouardi@gocab.io",
         name: "Kaoutar Ouardi",
         fullName: "Kaoutar Ouardi",
         role: "LEAD_ACQUISITION_JR",
+        region: "CASABLANCA",
+      },
+      {
+        email: "nour.abouri@gocab.io",
+        name: "Nour Abouri",
+        fullName: "Nour Abouri",
+        role: "LEAD_ACQUISITION_JR",
+        region: "CASABLANCA",
       },
       {
         email: "salma.abouri@gocab.io",
         name: "Salma Abouri",
         fullName: "Salma Abouri",
         role: "LEAD_ACQUISITION_JR",
+        region: "CASABLANCA",
+      },
+      {
+        email: "ayoub.gsaib@gocab.io",
+        name: "Ayoub Gsaib",
+        fullName: "Ayoub Gsaib",
+        role: "ONBOARDING_SPECIALIST",
+        region: "CASABLANCA",
+      },
+      {
+        email: "mohamed.aziz@gocab.io",
+        name: "Mohamed Aziz",
+        fullName: "Mohamed Aziz",
+        role: "FLEET_PERF_MANAGER",
+        region: "CASABLANCA",
+      },
+      {
+        email: "mehdi.elyattouti@gocab.io",
+        name: "Mehdi Elyattouti",
+        fullName: "Mehdi Elyattouti",
+        role: "FLEET_PERF_MANAGER",
+        region: "CASABLANCA",
+      },
+      {
+        email: "hamza.rassid@gocab.io",
+        name: "Hamza Rassid",
+        fullName: "Hamza Rassid",
+        role: "FIELD_SUPERVISOR",
+        region: "CASABLANCA",
+      },
+      {
+        email: "ayoub.rassid@gocab.io",
+        name: "Ayoub Rassid",
+        fullName: "Ayoub Rassid",
+        role: "FIELD_SUPERVISOR",
+        region: "CASABLANCA",
       },
     ];
 
-    for (const ag of defaultAgents) {
-      const firstName = ag.name.split(" ")[0];
+    for (const member of defaultTeamMembers) {
       const existing = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: ag.email },
-            { fullName: { contains: firstName } },
-            { name: { contains: firstName } },
-          ],
-        },
+        where: { email: member.email },
       });
 
       if (existing) {
-        if (existing.email !== ag.email) {
-          await prisma.user.update({
-            where: { id: existing.id },
-            data: { email: ag.email, name: ag.name, fullName: ag.fullName, isActive: true },
-          });
-        }
+        // Ensure active and names are retained
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            name: existing.name || member.name,
+            fullName: existing.fullName || member.fullName,
+            isActive: true,
+          },
+        });
       } else {
-        const passwordHash = await bcrypt.hash("GoCab2024!", 12);
+        const rawPass = member.email === "mouad.koudia@gocab.io" ? "Moulana@pc1995" : "GoCab2024!";
+        const passwordHash = await bcrypt.hash(rawPass, 12);
         await prisma.user.create({
           data: {
-            email: ag.email,
-            name: ag.name,
-            fullName: ag.fullName,
-            role: ag.role,
-            region: "CASABLANCA",
+            email: member.email,
+            name: member.name,
+            fullName: member.fullName,
+            role: member.role,
+            region: member.region || "CASABLANCA",
             passwordHash,
             isActive: true,
             mustChangePassword: false,
@@ -79,6 +134,19 @@ export async function GET() {
       orderBy: { created_at: "asc" },
     });
 
+    const defaultAvatars: Record<string, string> = {
+      "mouad.koudia@gocab.io": "👑",
+      "kurbankerimov@gocab.io": "💼",
+      "kaoutar.ouardi@gocab.io": "🎯",
+      "nour.abouri@gocab.io": "✨",
+      "salma.abouri@gocab.io": "💫",
+      "ayoub.gsaib@gocab.io": "🎓",
+      "mohamed.aziz@gocab.io": "🚗",
+      "mehdi.elyattouti@gocab.io": "🚙",
+      "hamza.rassid@gocab.io": "🛡️",
+      "ayoub.rassid@gocab.io": "🔍",
+    };
+
     const avatarSettings = await prisma.setting.findMany({
       where: { key: { startsWith: "user_avatar_" } },
     });
@@ -90,7 +158,7 @@ export async function GET() {
 
     const usersWithAvatars = users.map((u) => ({
       ...u,
-      image: avatarMap.get(u.email.toLowerCase()) || null,
+      image: avatarMap.get(u.email.toLowerCase()) || defaultAvatars[u.email.toLowerCase()] || null,
     }));
 
     return NextResponse.json({ users: usersWithAvatars });
