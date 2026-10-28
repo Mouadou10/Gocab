@@ -98,7 +98,11 @@ function resolveFallbackSqlitePath(): string {
   if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
     try {
       const tmpDbPath = path.join(os.tmpdir(), "gocab-dev.db");
-      if (!fs.existsSync(tmpDbPath) && fs.existsSync(srcPath)) {
+      const shouldCopy =
+        !fs.existsSync(tmpDbPath) ||
+        (fs.existsSync(srcPath) &&
+          fs.statSync(srcPath).mtimeMs > fs.statSync(tmpDbPath).mtimeMs);
+      if (shouldCopy && fs.existsSync(srcPath)) {
         fs.copyFileSync(srcPath, tmpDbPath);
       }
       if (fs.existsSync(tmpDbPath)) {
