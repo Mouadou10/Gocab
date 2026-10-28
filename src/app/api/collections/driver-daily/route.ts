@@ -173,8 +173,20 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Strictly skip drivers without any car assigned
+      // Strictly skip drivers without an active working car assigned
       if (!resolvedVehicle) {
+        continue;
+      }
+      const vStatusLower = (resolvedVehicle.status || "").toLowerCase();
+      if (
+        vStatusLower.includes("police") ||
+        vStatusLower.includes("impound") ||
+        vStatusLower.includes("garage") ||
+        vStatusLower.includes("maintenance") ||
+        vStatusLower.includes("accident") ||
+        vStatusLower.includes("avail") ||
+        vStatusLower.includes("missing")
+      ) {
         continue;
       }
 

@@ -8,11 +8,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
 import { isMehdiPlate } from "@/lib/fleet-managers";
+import { invalidateDriverCache } from "@/lib/driverCache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s execution on Vercel for bulk imports
@@ -53,7 +54,12 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "In garage";
   }
 
-  // 5. Missing documents (Documents manquants)
+  // 5. Missing key (Clé manquante)
+  if (s.includes("missing_key") || s.includes("cle_manquante") || s.includes("clé") || s.includes("key")) {
+    return "missing_key";
+  }
+
+  // 6. Missing documents (Documents manquants)
   if (
     s.includes("missing") ||
     s.includes("document") ||
@@ -577,19 +583,33 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              if (matchedDriver) {
+              if (item.status !== "Actif") {
+                // Non-working vehicle (Available, maintenance, police_immobilization, missing_key, etc.):
+                // Release any active DriverProfile pointing to this vehicle so immobilized/garage cars
+                // do not inflate active daily collection driver counts.
+                await prisma.driverProfile.updateMany({
+                  where: { assignedVehicleId: vehicleId },
+                  data: { assignedVehicleId: null },
+                }).catch(() => {});
+                for (const d of allDrivers) {
+                  if (d.assignedVehicleId === vehicleId) {
+                    d.assignedVehicleId = null;
+                  }
+                }
+                driverByAssignedVehicleId.delete(vehicleId);
+              } else if (matchedDriver) {
                 // Update driver name if vehicle CSV has a better/updated spelling
                 if (item.driverName && matchedDriver.fullName !== item.driverName) {
                   await prisma.driverProfile.update({
                     where: { id: matchedDriver.id },
-                    data: { fullName: item.driverName },
+                    data: { fullName: item.driverName, is_archived: false },
                   }).catch(() => {});
                   matchedDriver.fullName = item.driverName;
                 }
 
-                if (matchedDriver.assignedVehicleId !== vehicleId) {
+                if (matchedDriver.assignedVehicleId !== vehicleId || matchedDriver.is_archived) {
                   // Release driver's former vehicle to history
-                  if (matchedDriver.assignedVehicleId) {
+                  if (matchedDriver.assignedVehicleId && matchedDriver.assignedVehicleId !== vehicleId) {
                     await prisma.vehicle.update({
                       where: { id: matchedDriver.assignedVehicleId },
                       data: {
@@ -614,9 +634,10 @@ export async function POST(request: NextRequest) {
 
                   await prisma.driverProfile.update({
                     where: { id: matchedDriver.id },
-                    data: { assignedVehicleId: vehicleId },
+                    data: { assignedVehicleId: vehicleId, is_archived: false },
                   });
                   matchedDriver.assignedVehicleId = vehicleId;
+                  matchedDriver.is_archived = false;
                   driverByAssignedVehicleId.set(vehicleId, matchedDriver);
                 }
                 linked_drivers++;
@@ -784,6 +805,48 @@ export async function POST(request: NextRequest) {
                     driver_name: item.driverName || null,
                     driver_phone: matchedDriver?.phoneSanitized || null,
                     ticket_type: "Documents manquants",
+                    priority,
+                    status: "OPEN",
+                    description: desc,
+                    created_at: statusStartDate,
+                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                }).catch(() => null);
+
+                if (newTicket) {
+                  openTickets.push(newTicket);
+                  openTicketsByVehicleId.set(vehicleId, openTickets);
+                  tickets_created++;
+                }
+              }
+            } else if (item.status === "missing_key") {
+              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+              const existingTicket = openTickets.find((t) =>
+                ["Clé manquante", "missing_key"].includes(t.ticket_type)
+              );
+
+              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+              const desc = `🔑 Clé manquante signalée depuis ${item.downtimeDays} jour(s) (depuis le ${startDateFormatted}). Récupération ou double de clé requis.`;
+
+              if (existingTicket) {
+                await prisma.maintenanceTicket.update({
+                  where: { id: existingTicket.id },
+                  data: {
+                    description: desc,
+                    priority,
+                    driver_name: item.driverName || existingTicket.driver_name,
+                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+                  },
+                }).catch(() => {});
+                tickets_updated++;
+              } else {
+                const newTicket = await prisma.maintenanceTicket.create({
+                  data: {
+                    vehicle_id: vehicleId,
+                    plate_number: item.plate_number,
+                    driver_name: item.driverName || null,
+                    driver_phone: matchedDriver?.phoneSanitized || null,
+                    ticket_type: "Clé manquante",
                     priority,
                     status: "OPEN",
                     description: desc,
@@ -974,8 +1037,10 @@ export async function POST(request: NextRequest) {
       console.error("Post-upload vehicle reconciliation error:", err);
     });
 
-    // Trigger sync state update
-    void touchSyncState("all");
+    // Flush SQLite failover state to cloud replica if active & invalidate caches
+    invalidateDriverCache();
+    await flushDatabaseSync();
+    await touchSyncState("all");
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 import { invalidateDriverCache } from "@/lib/driverCache";
@@ -256,16 +256,16 @@ export async function POST(request: NextRequest) {
       keys.find((k) => /id\s*number|cin/i.test(k));
 
     const plateKey =
-      keys.find((k) => /^(plate|plate\s*number|immatriculation|matricule|vehicule|vehicle|car)$/i.test(k.trim())) ||
-      keys.find((k) => /plate|immat|matricule/i.test(k));
+      keys.find((k) => /^(plate|plate\s*number|immatriculation|matricule|vehicule|vehicules|vehicle|vehicles|car|cars)$/i.test(k.trim())) ||
+      keys.find((k) => /plate|immat|matricule|vehicle|vehicule/i.test(k));
 
     const makeModelKey =
       keys.find((k) => /^(make|model|make\s*model|marque|modele|car\s*model)$/i.test(k.trim())) ||
       keys.find((k) => /model|marque/i.test(k));
 
     const statusKey =
-      keys.find((k) => /^(status|statut|etat|vehicle\s*status|driver\s*status)$/i.test(k.trim())) ||
-      keys.find((k) => /status|statut/i.test(k));
+      keys.find((k) => /^(status|statut|etat|vehicle\s*status)$/i.test(k.trim())) ||
+      keys.find((k) => /status|statut/i.test(k) && !/activation|driver/i.test(k));
 
     const contractKey =
       keys.find((k) => /^(contract|contrat|contract\s*type|type\s*contrat)$/i.test(k.trim())) ||
@@ -340,6 +340,16 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          const normalizedStatus = rawStatus
+            ? /^(working|actif|activated|in\s*service|en\s*service)$/i.test(rawStatus)
+              ? "Actif"
+              : /^(available|disponible)$/i.test(rawStatus)
+              ? "Available"
+              : /^(maintenance|garage|in\s*garage)$/i.test(rawStatus)
+              ? "In garage"
+              : rawStatus
+            : "";
+
           if (!vehicle) {
             try {
               vehicle = await prisma.vehicle.create({
@@ -348,7 +358,7 @@ export async function POST(request: NextRequest) {
                   make_model: rawMakeModel || "Dacia Logan 1.5 dCi",
                   year: 2023,
                   hub_city: rawCity || "Casablanca",
-                  status: rawStatus || "Actif",
+                  status: normalizedStatus || "Actif",
                   assigned_driver_name: rawName || null,
                   assigned_driver_phone: rawPhone || null,
                 },
@@ -359,11 +369,11 @@ export async function POST(request: NextRequest) {
             } catch (e) {
               vehicle = plateMap.get(normPlate) || plateMap.get(compPlate) || null;
             }
-          } else if (rawStatus && vehicle.status !== rawStatus) {
+          } else if (normalizedStatus && vehicle.status !== normalizedStatus) {
             // Update vehicle status if explicitly specified in CSV
             await prisma.vehicle.update({
               where: { id: vehicle.id },
-              data: { status: rawStatus },
+              data: { status: normalizedStatus },
             }).catch(() => {});
           }
         }
@@ -786,6 +796,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Touch sync state so all active sessions & dashboard instantly refresh collections data
+    await flushDatabaseSync();
     await touchSyncState("collections");
     invalidateDriverCache();
 

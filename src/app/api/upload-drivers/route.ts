@@ -1,16 +1,20 @@
 /**
  * Bulk Driver CSV Upload API — POST /api/upload-drivers
  *
- * Parses CSV containing drivers (handles GoCab spreadsheet with Phone Number, Name, Gender, Balance, ID Number, Vehicles),
- * auto-sanitizes Moroccan phone numbers, computes debt/arrears from negative balance,
- * performs intelligent multi-pattern matching to vehicles by immatriculation / WW variations,
+ * Parses CSV/Excel containing drivers (handles GoCab spreadsheet with Phone Number, Name, Gender, Balance, ID Number, Vehicles, Comment),
+ * auto-sanitizes Moroccan phone numbers, computes debt/arrears strictly from negative balance (positive = prepaid credit = 0 debt),
+ * performs multi-pattern matching to vehicles by immatriculation / WW variations,
+ * syncs today's morning PaymentLedger balance when Balance is provided so Fleet Performance KPIs update immediately,
  * and bulk-inserts/upserts DriverProfile records.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 import { reconcileDriverVehicleAssignments } from "@/lib/services/driverVehicleReconciliation";
+import { invalidateDriverCache } from "@/lib/driverCache";
+import { touchSyncState } from "@/lib/sync";
+import { requireAuth } from "@/lib/api-auth";
 
 /** Standard Moroccan phone sanitization (+212XXXXXXXXX) */
 function sanitizePhone(raw: string): string {
@@ -27,10 +31,47 @@ function normalizePlate(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function parseNumericBalance(val: string | undefined): number | null {
+  if (!val) return null;
+  const s = val.trim();
+  if (!s) return null;
+  const isParenNegative = /^\(.*\)$/.test(s);
+  const hasMinus = s.includes("-") || isParenNegative;
+  let numStr = s.replace(/[^0-9.,]/g, "");
+  if (!numStr) return null;
+  if (numStr.includes(",") && numStr.includes(".")) {
+    if (numStr.lastIndexOf(",") > numStr.lastIndexOf(".")) {
+      numStr = numStr.replace(/\./g, "").replace(",", ".");
+    } else {
+      numStr = numStr.replace(/,/g, "");
+    }
+  } else if (numStr.includes(",")) {
+    const parts = numStr.split(",");
+    if (parts.length === 2 && parts[1].length <= 2) {
+      numStr = `${parts[0]}.${parts[1]}`;
+    } else {
+      numStr = numStr.replace(/,/g, "");
+    }
+  }
+  const num = parseFloat(numStr);
+  if (isNaN(num)) return null;
+  return hasMinus ? -Math.abs(num) : Math.abs(num);
+}
+
+const NON_WORKING_IMMOBILIZED_STATUSES = new Set([
+  "police_immobilization",
+  "impounded",
+  "impounded by police",
+  "In garage",
+  "maintenance",
+  "Accident",
+  "missing_document",
+  "missing_key",
+  "Blocked",
+]);
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,11 +99,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Le fichier est vide ou illisible" }, { status: 400 });
     }
 
-    // Helper to find column by multiple possible aliases
     const getField = (row: Record<string, string>, aliases: string[]): string | undefined => {
       for (const alias of aliases) {
         const val = row[alias.toLowerCase()];
-        if (val && val.trim()) return val.trim();
+        if (val !== undefined && val !== null && String(val).trim() !== "") {
+          return String(val).trim();
+        }
       }
       return undefined;
     };
@@ -73,19 +115,35 @@ export async function POST(request: NextRequest) {
     let skipped_invalid = 0;
     let linked_vehicles = 0;
 
-    // Fetch all vehicles to enable multi-pattern fuzzy matching
-    const allVehicles = await prisma.vehicle.findMany();
+    // Today's date boundaries for syncing morning PaymentLedger when Balance is present
+    const todayStr = new Date().toISOString().split("T")[0];
+    const targetDate = new Date(`${todayStr}T12:00:00.000Z`);
+    const dayOfWeek = targetDate.getUTCDay();
+    const startOfDay = new Date(`${todayStr}T00:00:00.000Z`);
+    const endOfDay = new Date(`${todayStr}T23:59:59.999Z`);
 
-    // Fetch the snapshot of currently assigned vehicles BEFORE we process the CSV
-    // This allows us to compare against the final state to detect churn.
-    const initialAssignedVehicles = await prisma.vehicle.findMany({
-      where: {
-        assigned_driver_name: { not: null },
-      },
-      include: { driverProfile: true },
-    });
+    // Fetch all vehicles and today's ledgers
+    const [allVehicles, initialAssignedVehicles, existingTodayLedgers] = await Promise.all([
+      prisma.vehicle.findMany({ where: { is_archived: false } }),
+      prisma.vehicle.findMany({
+        where: {
+          is_archived: false,
+          assigned_driver_name: { not: null },
+        },
+        include: { driverProfile: true },
+      }),
+      prisma.paymentLedger.findMany({
+        where: {
+          paymentDate: { gte: startOfDay, lte: endOfDay },
+        },
+      }),
+    ]);
 
-    // Helper to find vehicle by immat
+    const todayLedgerByDriverId = new Map<string, (typeof existingTodayLedgers)[0]>();
+    for (const pl of existingTodayLedgers) {
+      todayLedgerByDriverId.set(pl.driverId, pl);
+    }
+
     const findMatchingVehicle = (rawPlate: string) => {
       if (!rawPlate) return null;
       const targetNorm = normalizePlate(rawPlate);
@@ -96,17 +154,16 @@ export async function POST(request: NextRequest) {
         if (normalizePlate(v.plate_number) === targetNorm) return v;
       }
 
-      // 2. WW prefix vs suffix match (e.g. 860502-WW vs WW860502, WW964990 vs 964990-WW)
+      // 2. WW prefix vs suffix match (e.g. 028101WW vs WW028101)
       const targetDigits = targetNorm.replace(/WW/g, "");
-      if (targetDigits.length >= 4) {
+      if (targetDigits.length >= 4 && targetNorm.includes("WW")) {
         for (const v of allVehicles) {
           const vNorm = normalizePlate(v.plate_number);
-          const vDigits = vNorm.replace(/WW/g, "");
-          if (vDigits === targetDigits) return v;
+          if (vNorm.includes("WW") && vNorm.replace(/WW/g, "") === targetDigits) return v;
         }
       }
 
-      // 3. Search in vehicle notes (e.g. "Ancien N°: 860533-WW" or "Old Number")
+      // 3. Search in vehicle notes (e.g. "Ancien N°: 860533-WW" or "Enreg:")
       for (const v of allVehicles) {
         if (v.notes && normalizePlate(v.notes).includes(targetNorm)) {
           return v;
@@ -123,7 +180,6 @@ export async function POST(request: NextRequest) {
       return null;
     };
 
-    // Track what is assigned in the CSV to detect churn
     const csvVehicleAssignments: Record<string, { driverName: string; driverPhone: string; driverId: string }> = {};
     const csvDriverIds = new Set<string>();
     let churned_drivers = 0;
@@ -143,56 +199,67 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const phoneSanitized = rawPhone ? sanitizePhone(rawPhone) : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
+      const phoneSanitized = rawPhone
+        ? sanitizePhone(rawPhone)
+        : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
 
-      // ID Number (CIN)
       const rawCin = getField(row, [
         "id number", "cin", "cnie", "id", "national id", "carte nationale", "n° cin", "id num"
       ]);
       const cinNumber = (rawCin ? rawCin.replace(/\s+/g, "") : `CIN-${phoneSanitized.slice(-6)}`).toUpperCase();
 
-      // Contract Type: "WEEKLY" (1800 MAD every Monday) or "DAILY" (300 MAD/day Mon-Sat)
       const rawContract = getField(row, ["type contrat", "contrat", "contract", "type", "contract type", "formule"]);
       let contractType = "DAILY";
       if (rawContract) {
         const norm = rawContract.toLowerCase();
         if (norm.includes("week") || norm.includes("hebdo") || norm.includes("1800") || norm.includes("lundi")) {
           contractType = "WEEKLY";
-        } else {
-          contractType = "DAILY";
         }
       }
 
-      // Parse Balance / Arrears (Negative balance like -2000 means 2000 MAD debt)
-      const rawBalance = getField(row, ["impayes mad", "impayes", "impayés", "balance", "solde", "arrears", "dette"]);
+      // Parse Balance vs Explicit Arrears:
+      // In GoCab Yango exports, "Balance" is negative for debt (-2800 => 2800 MAD arrears) and positive for credit (+1800 => 0 MAD arrears).
+      // Only if the column is explicitly named "Impayes" / "Arrears" / "Dette" is a positive number treated as debt.
+      const rawBalanceCol = getField(row, ["balance", "solde"]);
+      const rawExplicitArrearsCol = getField(row, ["impayes mad", "impayes", "impayés", "arrears", "dette"]);
+
+      let parsedBalance: number | null = null;
       let currentArrearsMAD = 0.0;
-      if (rawBalance && !isNaN(Number(rawBalance))) {
-        const num = Number(rawBalance);
-        currentArrearsMAD = num < 0 ? Math.abs(num) : num > 0 ? num : 0.0;
+
+      if (rawBalanceCol !== undefined) {
+        parsedBalance = parseNumericBalance(rawBalanceCol);
+        if (parsedBalance !== null) {
+          currentArrearsMAD = parsedBalance < 0 ? Math.abs(parsedBalance) : 0.0;
+        }
+      } else if (rawExplicitArrearsCol !== undefined) {
+        const parsedArr = parseNumericBalance(rawExplicitArrearsCol);
+        if (parsedArr !== null) {
+          currentArrearsMAD = Math.abs(parsedArr);
+          parsedBalance = -currentArrearsMAD;
+        }
       }
 
-      // Default stage from arrears or explicit stage column
       const explicitStage = getField(row, ["stage", "statut", "default stage", "recouvrement"]);
       let defaultStage = explicitStage || "NOMINAL";
-      if (!explicitStage && currentArrearsMAD > 0) {
+      if (!explicitStage) {
         if (currentArrearsMAD >= 1500) defaultStage = "DAY_3_BLOCK";
-        else if (currentArrearsMAD >= 1000) defaultStage = "DAY_2_ACTION";
-        else defaultStage = "DAY_1_WARNING";
+        else if (currentArrearsMAD >= 600) defaultStage = "DAY_2_ACTION";
+        else if (currentArrearsMAD > 0) defaultStage = "DAY_1_WARNING";
+        else defaultStage = "NOMINAL";
       }
 
-      // Match vehicle by Vehicles / Immatriculation
-      const rawPlate = getField(row, [
-        "immatriculation", "immatriculatio", "vehicles", "vehicle", "plate", "matricule", "vehicule", "vehicules", "immat", "plate number", "registration", "old number"
-      ]);
-      
-      let assignedVehicleId: string | null = null;
-      let matchedVehicle = rawPlate ? findMatchingVehicle(rawPlate) : null;
+      const unpaidDays = currentArrearsMAD === 0 ? 0 : Math.max(1, Math.ceil(currentArrearsMAD / 300));
 
+      const rawPlate = getField(row, [
+        "vehicles", "vehicle", "immatriculation", "immatriculatio", "plate", "matricule", "vehicule", "vehicules", "immat", "plate number", "registration", "old number"
+      ]);
+
+      let assignedVehicleId: string | null = null;
+      const matchedVehicle = rawPlate ? findMatchingVehicle(rawPlate) : null;
       if (matchedVehicle) {
         assignedVehicleId = matchedVehicle.id;
       }
 
-      // Check if driver already exists strictly by identity (phone, CIN, or Name)
       const existing = await prisma.driverProfile.findFirst({
         where: {
           OR: [
@@ -206,7 +273,6 @@ export async function POST(request: NextRequest) {
       let driverRecord;
 
       if (!existing) {
-        // Release vehicle from any prior driver before assigning to new driver
         if (assignedVehicleId) {
           await prisma.driverProfile.updateMany({
             where: { assignedVehicleId },
@@ -224,7 +290,7 @@ export async function POST(request: NextRequest) {
             contractType,
             currentArrearsMAD,
             defaultStage,
-            consecutiveUnpaidDays: currentArrearsMAD >= 600 ? 2 : currentArrearsMAD >= 300 ? 1 : 0,
+            consecutiveUnpaidDays: unpaidDays,
             isKycVerified: true,
             monthlyTripCount: 0,
             assignedVehicleId,
@@ -245,10 +311,8 @@ export async function POST(request: NextRequest) {
         }
         inserted++;
       } else {
-        // Update existing driver profile with real contact info, while preserving or updating vehicle
         const finalVehicleId = assignedVehicleId || existing.assignedVehicleId;
 
-        // If assigning a new vehicle, move driver's previous vehicle to history
         if (assignedVehicleId && existing.assignedVehicleId && existing.assignedVehicleId !== assignedVehicleId) {
           await prisma.vehicle.update({
             where: { id: existing.assignedVehicleId },
@@ -261,7 +325,6 @@ export async function POST(request: NextRequest) {
           }).catch(() => {});
         }
 
-        // If assigning a vehicle, ensure no other driver is currently holding it
         if (finalVehicleId) {
           await prisma.driverProfile.updateMany({
             where: { assignedVehicleId: finalVehicleId, id: { not: existing.id } },
@@ -276,8 +339,8 @@ export async function POST(request: NextRequest) {
             phoneSanitized: rawPhone ? phoneSanitized : existing.phoneSanitized,
             cinNumber: rawCin ? cinNumber : existing.cinNumber,
             contractType: rawContract ? contractType : existing.contractType,
-            currentArrearsMAD: rawBalance ? currentArrearsMAD : existing.currentArrearsMAD,
-            consecutiveUnpaidDays: currentArrearsMAD >= 600 ? 2 : currentArrearsMAD >= 300 ? 1 : existing.consecutiveUnpaidDays,
+            currentArrearsMAD: parsedBalance !== null ? currentArrearsMAD : existing.currentArrearsMAD,
+            consecutiveUnpaidDays: parsedBalance !== null ? unpaidDays : existing.consecutiveUnpaidDays,
             defaultStage,
             assignedVehicleId: finalVehicleId,
             is_archived: false,
@@ -298,9 +361,68 @@ export async function POST(request: NextRequest) {
         updated++;
       }
 
+      // Sync today's PaymentLedger morning snapshot whenever Balance is provided in the CSV
+      if (parsedBalance !== null) {
+        const effContract = (driverRecord.contractType || "DAILY").toUpperCase();
+        const expectedMAD =
+          effContract === "WEEKLY"
+            ? (dayOfWeek === 1 ? 1800 : 0)
+            : (dayOfWeek >= 1 && dayOfWeek <= 6 ? 300 : 0);
+
+        const existingLedger = todayLedgerByDriverId.get(driverRecord.id);
+        if (existingLedger) {
+          await prisma.paymentLedger.update({
+            where: { id: existingLedger.id },
+            data: {
+              morningBalance: parsedBalance,
+              expectedMAD: expectedMAD || existingLedger.expectedMAD,
+              arrearsMAD: currentArrearsMAD,
+              notes: existingLedger.notes || `Solde initial (import chauffeurs): ${parsedBalance} MAD`,
+            },
+          }).catch(() => {});
+        } else {
+          const createdLedger = await prisma.paymentLedger.create({
+            data: {
+              driverId: driverRecord.id,
+              paymentDate: targetDate,
+              expectedMAD,
+              clearedMAD: 0,
+              arrearsMAD: currentArrearsMAD,
+              morningBalance: parsedBalance,
+              notes: `Solde initial (matin): ${parsedBalance} MAD`,
+            },
+          }).catch(() => null);
+          if (createdLedger) {
+            todayLedgerByDriverId.set(driverRecord.id, createdLedger);
+          }
+        }
+      }
+
+      // Import driver comment from CSV if present
+      const rawComment = getField(row, ["comment", "comments", "commentaire", "remarque", "note", "notes"]);
+      if (rawComment) {
+        const existingComment = await prisma.driverComment.findFirst({
+          where: {
+            driverId: driverRecord.id,
+            content: rawComment,
+          },
+        }).catch(() => null);
+
+        if (!existingComment) {
+          await prisma.driverComment.create({
+            data: {
+              driverId: driverRecord.id,
+              authorName: "Import CSV",
+              authorRole: "FLEET_PERF_MANAGER",
+              content: rawComment,
+              commentDate: todayStr,
+            },
+          }).catch(() => {});
+        }
+      }
+
       csvDriverIds.add(driverRecord.id);
 
-      // Record this assignment for the churn check later
       if (assignedVehicleId && matchedVehicle) {
         csvVehicleAssignments[assignedVehicleId] = {
           driverName: driverRecord.fullName,
@@ -316,7 +438,11 @@ export async function POST(request: NextRequest) {
       const previousDriverName = vehicle.assigned_driver_name;
       const previousDriverPhone = vehicle.assigned_driver_phone;
 
-      // 1. Vehicle is missing entirely from the CSV OR is no longer assigned to anyone in the CSV
+      // Never overwrite immobilized/garage/police vehicles to "Available"
+      if (NON_WORKING_IMMOBILIZED_STATUSES.has(vehicle.status)) {
+        continue;
+      }
+
       if (!csvAssignment) {
         await prisma.churnEvent.create({
           data: {
@@ -325,22 +451,19 @@ export async function POST(request: NextRequest) {
             driver_name: previousDriverName,
             driver_phone: previousDriverPhone,
             reason: "Auto-churned via CSV Upload: Vehicle is no longer in the active drivers list.",
-          }
+          },
         });
         churned_drivers++;
 
-        // Free up the vehicle
         await prisma.vehicle.update({
           where: { id: vehicle.id },
           data: {
             status: "Available",
             assigned_driver_name: null,
             assigned_driver_phone: null,
-          }
+          },
         });
-      } 
-      // 2. Vehicle changed hands (assigned to a DIFFERENT driver in the CSV)
-      else if (csvAssignment.driverPhone !== previousDriverPhone) {
+      } else if (csvAssignment.driverPhone !== previousDriverPhone) {
         await prisma.churnEvent.create({
           data: {
             vehicle_id: vehicle.id,
@@ -348,19 +471,18 @@ export async function POST(request: NextRequest) {
             driver_name: previousDriverName,
             driver_phone: previousDriverPhone,
             reason: `Auto-churned via CSV Upload: Vehicle reassigned to new driver (${csvAssignment.driverName}).`,
-          }
+          },
         });
         churned_drivers++;
       }
     }
 
     // --- ARCHIVE MISSING DRIVERS ---
-    // Any driver NOT in this CSV should be archived and unassigned, since CSV is the single source of truth.
     const csvDriverIdsArray = Array.from(csvDriverIds);
     await prisma.driverProfile.updateMany({
       where: {
         id: { notIn: csvDriverIdsArray },
-        is_archived: false // Only update those not already archived
+        is_archived: false,
       },
       data: {
         is_archived: true,
@@ -368,10 +490,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Reconcile all assignments to guarantee 1 driver = 1 working car
     await reconcileDriverVehicleAssignments().catch((err) => {
       console.error("Post-upload driver reconciliation error:", err);
     });
+
+    invalidateDriverCache();
+    await flushDatabaseSync();
+    await touchSyncState("all");
 
     return NextResponse.json({
       success: true,
@@ -382,7 +507,9 @@ export async function POST(request: NextRequest) {
         skipped_invalid,
         linked_vehicles,
         churned_drivers,
-        archived_drivers: (await prisma.driverProfile.count({ where: { id: { notIn: csvDriverIdsArray }, is_archived: true } })) // Note: This count includes previously archived drivers, but gives a general sense.
+        archived_drivers: await prisma.driverProfile.count({
+          where: { id: { notIn: csvDriverIdsArray }, is_archived: true },
+        }),
       },
     });
   } catch (error: any) {

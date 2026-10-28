@@ -66,6 +66,7 @@ const VEHICLE_STATUSES = [
   "impounded",
   "police_immobilization",
   "missing_document",
+  "missing_key",
   "Accident",
   "Blocked",
 ] as const;
@@ -363,7 +364,7 @@ export default function FleetView() {
     (v) => v.status === "In garage" || v.status === "maintenance" || v.status === "Accident"
   ).length;
   const blockedCount = vehicles.filter((v) =>
-    ["impounded", "police_immobilization", "impounded by police", "Blocked", "missing_document"].includes(v.status)
+    ["impounded", "police_immobilization", "impounded by police", "Blocked", "missing_document", "missing_key"].includes(v.status)
   ).length;
   const redFlaggedCount = vehicles.filter(
     (v) => Boolean(v.is_driver_red_flagged || v.driverProfile?.isRedFlagged)
@@ -384,7 +385,7 @@ export default function FleetView() {
         return false;
       if (
         activeQuickTab === "BLOCKED" &&
-        !["impounded", "police_immobilization", "impounded by police", "Blocked", "missing_document"].includes(v.status)
+        !["impounded", "police_immobilization", "impounded by police", "Blocked", "missing_document", "missing_key"].includes(v.status)
       )
         return false;
       if (activeQuickTab === "EXPIRED" && !expiredVehicleIds.has(v.id)) return false;
@@ -480,6 +481,8 @@ export default function FleetView() {
         return "Accidenté";
       case "missing_document":
         return "Documents manquants";
+      case "missing_key":
+        return "Clé manquante";
       case "Blocked":
         return "Bloqué";
       default:
@@ -511,6 +514,8 @@ export default function FleetView() {
         return "bg-purple-100 text-purple-900 border-purple-300 font-bold";
       case "missing_document":
         return "bg-rose-50 text-rose-800 border-rose-200 font-bold";
+      case "missing_key":
+        return "bg-amber-100 text-amber-900 border-amber-300 font-bold";
       case "Blocked":
         return "bg-red-100 text-red-900 border-red-300 font-bold";
       default:

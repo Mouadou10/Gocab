@@ -42,6 +42,7 @@ const VEHICLE_STATUSES = [
   "impounded",
   "police_immobilization",
   "missing_document",
+  "missing_key",
   "Accident",
   "Blocked",
 ] as const;

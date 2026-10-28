@@ -786,7 +786,7 @@ export default function FleetPerformanceView() {
           {/* Portfolio Quick Badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-2xs font-bold text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-xl">
-              🚗 Flotte Totale : <strong className="text-navy">100 Véhicules</strong>
+              🚗 Flotte Totale : <strong className="text-navy">{(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules</strong>
             </span>
             <span className="text-2xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
               👨‍✈️ Chauffeurs Portefeuille : <strong className="text-emerald-900">{summary?.totalDrivers || filteredDrivers.length}</strong>
@@ -832,7 +832,7 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                68 Véhicules
+                {portfolios?.aziz?.vehicleCount ?? 75} Véhicules
               </span>
             </div>
 
@@ -895,7 +895,7 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                26 Véhicules
+                {portfolios?.mehdi?.vehicleCount ?? 26} Véhicules
               </span>
             </div>
 
@@ -958,13 +958,13 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                100 Véhicules
+                {(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules
               </span>
             </div>
 
             <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-2xs">
               <span className={selectedManager === "ALL" ? "text-white/80" : "text-gray-500"}>
-                Aziz (68) + Mehdi (26) + Dispo (6)
+                Aziz ({portfolios?.aziz?.vehicleCount ?? 75}) + Mehdi ({portfolios?.mehdi?.vehicleCount ?? 26})
               </span>
               <div className="text-right">
                 <span className={`font-mono font-bold block ${selectedManager === "ALL" ? "text-emerald-300 font-black" : "text-emerald-700"}`}>
@@ -1001,13 +1001,13 @@ export default function FleetPerformanceView() {
             <div>
               <p className="font-black text-xs sm:text-sm">
                 {selectedManager.toLowerCase().includes("aziz") && (
-                  <>Portefeuille Actif : Mohamed Aziz (68 Véhicules — inclut les 2 véhicules transférés de Hamza Rassid).</>
+                  <>Portefeuille Actif : Mohamed Aziz ({portfolios?.aziz?.vehicleCount ?? 75} Véhicules — inclut les véhicules transférés de Hamza Rassid).</>
                 )}
                 {selectedManager.toLowerCase().includes("mehdi") && (
-                  <>Portefeuille Actif : Mehdi Elyattouti (26 Véhicules sous gestion directe).</>
+                  <>Portefeuille Actif : Mehdi Elyattouti ({portfolios?.mehdi?.vehicleCount ?? 26} Véhicules sous gestion directe).</>
                 )}
                 {selectedManager === "ALL" && (
-                  <>Vue Globale Flotte (100 Véhicules) — Cliquez sur Mohamed Aziz ou Mehdi Elyattouti ci-dessus pour isoler leur performance.</>
+                  <>Vue Globale Flotte ({(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules) — Cliquez sur Mohamed Aziz ou Mehdi Elyattouti ci-dessus pour isoler leur performance.</>
                 )}
               </p>
               <p className="text-2xs opacity-80 mt-0.5">
