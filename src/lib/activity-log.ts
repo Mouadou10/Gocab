@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-let tableEnsured = false;
+let tableEnsured = true;
 
 /**
  * Canonical agent name resolver.
@@ -76,8 +76,8 @@ export function matchesAgentIdentity(logAgent: string | null | undefined, target
  * Ensures the LeadActivityLog table exists in Turso/LibSQL database.
  * Runs once idempotently to avoid "no such table" runtime errors.
  */
-export async function ensureLeadActivityLogTable(): Promise<void> {
-  if (tableEnsured) return;
+export async function ensureLeadActivityLogTable(force = false): Promise<void> {
+  if (tableEnsured && !force) return;
   try {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "LeadActivityLog" (
@@ -119,9 +119,8 @@ export async function logLeadActivity(
   action: string,
   detail?: string | null
 ): Promise<void> {
+  const canonicalAgent = normalizeAgentName(agent);
   try {
-    await ensureLeadActivityLogTable();
-    const canonicalAgent = normalizeAgentName(agent);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).leadActivityLog.create({
       data: {
@@ -132,14 +131,25 @@ export async function logLeadActivity(
       },
     });
   } catch (err: any) {
-    console.warn("Failed to log lead activity:", err?.message);
+    if (String(err?.message || "").includes("no such table")) {
+      await ensureLeadActivityLogTable(true);
+      await (prisma as any).leadActivityLog.create({
+        data: {
+          lead_id: leadId,
+          agent: canonicalAgent,
+          action,
+          detail: detail ?? null,
+        },
+      }).catch(() => {});
+    } else {
+      console.warn("Failed to log lead activity:", err?.message);
+    }
   }
 }
 
 export async function logManyLeadActivities(entries: ActivityLogEntry[]): Promise<void> {
   if (!entries || entries.length === 0) return;
   try {
-    await ensureLeadActivityLogTable();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).leadActivityLog.createMany({
       data: entries.map((e) => ({
@@ -150,7 +160,19 @@ export async function logManyLeadActivities(entries: ActivityLogEntry[]): Promis
       })),
     });
   } catch (err: any) {
-    console.warn("Failed to log many lead activities:", err?.message);
+    if (String(err?.message || "").includes("no such table")) {
+      await ensureLeadActivityLogTable(true);
+      await (prisma as any).leadActivityLog.createMany({
+        data: entries.map((e) => ({
+          lead_id: e.lead_id,
+          agent: normalizeAgentName(e.agent),
+          action: e.action,
+          detail: e.detail ?? null,
+        })),
+      }).catch(() => {});
+    } else {
+      console.warn("Failed to log many lead activities:", err?.message);
+    }
   }
 }
 

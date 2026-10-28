@@ -965,6 +965,7 @@ export default function KanbanBoard() {
     setLeads((prev) =>
       prev.map((l) => (l.id === updatedLead.id ? updatedLead : l))
     );
+    setSelectedLead((prev) => (prev?.id === updatedLead.id ? updatedLead : prev));
     notifyMutation("leads");
   }
 

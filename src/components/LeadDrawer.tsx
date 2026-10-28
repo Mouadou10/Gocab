@@ -182,7 +182,9 @@ export default function LeadDrawer({
   }, [boardType, brandStatus, recallDate]);
 
   const [notes, setNotes] = useState<string>(lead.notes || "");
-  const [isRecalled, setIsRecalled] = useState<boolean>(false);
+  const [isRecalled, setIsRecalled] = useState<boolean>(
+    boardType === "leads" && lead.board_column !== "NEW_LEADS"
+  );
 
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -517,7 +519,7 @@ export default function LeadDrawer({
         notes: notes || null,
       };
 
-      if (isRecalled) {
+      if (isRecalled || (boardType === "leads" && brandStatus && brandStatus !== "NEW_LEADS")) {
         payload.is_recalled = true;
         payload.mark_as_called = true;
       }
@@ -535,12 +537,6 @@ export default function LeadDrawer({
           if (trainingDate) {
             const date = new Date(trainingDate);
             payload.reminder_date = date.toISOString(); // Use reminder_date to track scheduled training date
-
-            // Auto-trigger WhatsApp confirmation message if not already sent in drawer
-            if (!waSentSuccessAt) {
-              const waUrl = generateWhatsAppWebURL(phone.trim() || lead.sanitized_phone, waMessageText);
-              window.open(waUrl, "_blank");
-            }
           }
         } else if (brandStatus === "To Recall") {
           // Move to To Recall with scheduled recall datetime
@@ -596,12 +592,6 @@ export default function LeadDrawer({
             payload.assigned_vehicle_id = selectedVehicleId;
           }
 
-          // Auto-trigger WhatsApp thank-you message if not already sent
-          if (!waSentSuccessAt) {
-            const waUrl = generateThankYouURL(phone.trim() || lead.sanitized_phone);
-            window.open(waUrl, "_blank");
-          }
-
           // Fire unlock alert
           setTimeout(() => {
             alert("🚗 Assign Vehicle Module Unlocked");
@@ -614,7 +604,6 @@ export default function LeadDrawer({
         } else if (trainingStatus === "Preorder") {
           payload.board_column = "TRAINING_PIPELINE";
           payload.preorder_amount = preorderAmount ? parseFloat(preorderAmount) : null;
-        } else {
         }
       }
 
@@ -628,22 +617,34 @@ export default function LeadDrawer({
       }
       payload.presence_confirmed = presenceConfirmed;
 
-      const res = await fetch(`/api/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 10000);
 
-      if (res.ok) {
-        const data = await res.json();
-        toast.success("Lead mis à jour avec succès");
-        // Refresh activity log before closing so it's ready next open
-        fetchActivityLog();
-        onUpdate(data.lead);
-        handleClose();
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        toast.error(errorData.error || "Échec de la mise à jour du prospect");
+      try {
+        const res = await fetch(`/api/leads/${lead.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: abortController.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          toast.success("Lead mis à jour avec succès");
+          onUpdate(data.lead);
+          handleClose();
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          toast.error(errorData.error || "Échec de la mise à jour du prospect");
+        }
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === "AbortError") {
+          toast.error("Le serveur met trop de temps à répondre. Veuillez réessayer.");
+        } else {
+          throw fetchErr;
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to save updates");
@@ -715,6 +716,7 @@ export default function LeadDrawer({
               <a
                 href={`tel:${phone || lead.sanitized_phone}`}
                 onClick={() => {
+                  setIsRecalled(true);
                   fetch(`/api/leads/${lead.id}/activity`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -846,6 +848,9 @@ export default function LeadDrawer({
                     setTrainingDate("");
                     setIsManualEdit(false);
                     setWaSentSuccessAt(null);
+                    if (newStatus !== "NEW_LEADS") {
+                      setIsRecalled(true);
+                    }
                     if (newStatus === "To Recall" && !recallDate) {
                       setRecallDate(getTodayDateStr());
                     }
