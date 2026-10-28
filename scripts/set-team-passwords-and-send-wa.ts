@@ -6,7 +6,7 @@ const TURSO_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io/v2/pipeli
 const TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
 const D360_API_KEY = "GWXTBL4vQP6MHGigqMIYYQkYAK";
 const D360_URL = "https://waba-v2.360dialog.io/messages";
-const PORTAL_URL = "https://gocab-iota.vercel.app";
+const PORTAL_URL = "https://gocab-iota.vercel.app/login";
 const DEFAULT_PASSWORD = "GoCab2024!";
 
 const db = new Database(path.join(process.cwd(), "dev.db"));

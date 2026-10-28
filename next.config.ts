@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
     "/api/**/*": ["./dev.db"],
   },
   env: {
+    NEXTAUTH_URL:
+      process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.includes("ebvnnjpka")
+        ? process.env.NEXTAUTH_URL
+        : "https://gocab-iota.vercel.app",
+    AUTH_URL:
+      process.env.AUTH_URL && !process.env.AUTH_URL.includes("ebvnnjpka")
+        ? process.env.AUTH_URL
+        : "https://gocab-iota.vercel.app",
     NEXT_PUBLIC_BUILD_TIME: buildTime,
     NEXT_PUBLIC_APP_VERSION: appVersion,
   },

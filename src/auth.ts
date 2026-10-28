@@ -24,6 +24,14 @@ declare module "next-auth" {
   }
 }
 
+// Sanitize stale deployment URLs injected in Vercel environment
+if (process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.includes("ebvnnjpka")) {
+  process.env.NEXTAUTH_URL = "https://gocab-iota.vercel.app";
+}
+if (process.env.AUTH_URL && process.env.AUTH_URL.includes("ebvnnjpka")) {
+  process.env.AUTH_URL = "https://gocab-iota.vercel.app";
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   trustHost: true,

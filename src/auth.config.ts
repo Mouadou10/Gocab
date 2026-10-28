@@ -12,8 +12,9 @@ export const authConfig: NextAuthConfig = {
     error: "/login",
   },
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
+      const { nextUrl } = request;
       const pathname = nextUrl.pathname;
       const isLoginPage = pathname === "/login";
       const isPublic =
@@ -24,20 +25,45 @@ export const authConfig: NextAuthConfig = {
 
       if (isPublic) return true;
 
+      // Ensure we redirect strictly using the host the user actually visited (e.g. gocab-iota.vercel.app)
+      // Never use internal or stale Vercel deployment hashes
+      const rawHost =
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        "gocab-iota.vercel.app";
+      const host = rawHost.split(",")[0].trim();
+      const proto =
+        request.headers.get("x-forwarded-proto") ||
+        (host.includes("localhost") ? "http" : "https");
+      const currentOrigin = `${proto}://${host}`;
+
       if (isLoginPage) {
         if (isLoggedIn) {
-          return Response.redirect(new URL("/", nextUrl));
+          return Response.redirect(new URL("/", currentOrigin));
         }
         return true;
       }
 
       if (!isLoggedIn) {
-        const loginUrl = new URL("/login", nextUrl);
+        const loginUrl = new URL("/login", currentOrigin);
         loginUrl.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
         return Response.redirect(loginUrl);
       }
 
       return true;
+    },
+    redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const parsedUrl = new URL(url);
+        if (parsedUrl.hostname.includes("ebvnnjpka") || parsedUrl.hostname.includes("-projects.vercel.app")) {
+          return `${baseUrl}/`;
+        }
+        if (parsedUrl.hostname.includes("vercel.app") || parsedUrl.hostname.includes("gocab")) {
+          return url;
+        }
+      } catch {}
+      return baseUrl;
     },
     jwt({ token, user, trigger, session }) {
       if (user) {

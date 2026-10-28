@@ -37,7 +37,18 @@ const ROLE_LABELS: Record<string, string> = {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const rawCallbackUrl = searchParams.get("callbackUrl") || "/";
+  const callbackUrl =
+    rawCallbackUrl.startsWith("/") && !rawCallbackUrl.startsWith("//")
+      ? rawCallbackUrl
+      : (function () {
+          try {
+            const u = new URL(rawCallbackUrl);
+            return u.pathname + u.search;
+          } catch {
+            return "/";
+          }
+        })();
   const error = searchParams.get("error");
 
   const [email, setEmail] = useState("");
