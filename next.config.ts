@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  outputFileTracingIncludes: {
+    "/*": ["./dev.db"],
+    "/api/**/*": ["./dev.db"],
+  },
   env: {
     NEXT_PUBLIC_BUILD_TIME: buildTime,
     NEXT_PUBLIC_APP_VERSION: appVersion,

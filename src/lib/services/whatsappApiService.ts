@@ -399,11 +399,24 @@ export async function resolveContactByPhone(phoneNumber: string): Promise<Resolv
  * - Drivers are moved to FLEET_SUPPORT / ROUTED_DRIVER_SUPPORT with plate & driver_id.
  * - Leads (including Training candidates) are moved to LEAD_ACQUISITION / ROUTED_LEAD_ACQUISITION with lead_id.
  */
-export async function syncAllWhatsAppConversations(): Promise<void> {
+let lastWhatsAppSyncAt = 0;
+
+export async function syncAllWhatsAppConversations(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - lastWhatsAppSyncAt < 600000) {
+    return;
+  }
+  lastWhatsAppSyncAt = now;
+
   await ensureWhatsAppTables();
   try {
     const convs = await getDbConv().findMany({
-      where: { is_archived: false },
+      where: {
+        is_archived: false,
+        driver_id: null,
+        lead_id: null,
+      },
+      take: 25,
     });
     for (const c of convs) {
       const info = await resolveContactByPhone(c.phone_number);
