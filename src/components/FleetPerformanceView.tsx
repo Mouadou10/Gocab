@@ -528,6 +528,74 @@ export default function FleetPerformanceView() {
           } catch (e) {}
         }
 
+        // Rehydrate latest evening reconciliation snapshot if server has 0 cleared cash
+        if (typeof window !== "undefined") {
+          try {
+            const rawSnap = localStorage.getItem(`gocab_collections_snapshot_${endDate}`);
+            if (rawSnap) {
+              const snap = JSON.parse(rawSnap);
+              const snapCleared = snap?.summary?.totalCollectedTodayMAD || 0;
+              if (snapCleared > 0 && (effSummary?.totalClearedTodayMAD === 0 || !effSummary?.totalClearedTodayMAD || effSummary.totalClearedTodayMAD < snapCleared)) {
+                const morningBase = effSummary?.totalMorningTargetMAD || 59790;
+                effSummary = {
+                  ...effSummary,
+                  totalMorningTargetMAD: morningBase,
+                  totalExpectedTodayMAD: morningBase,
+                  totalClearedTodayMAD: snapCleared,
+                  remainingToCollectMAD: Math.max(0, morningBase - snapCleared),
+                  hasEveningCsv: true,
+                };
+
+                // Merge driver payments from reconciliation snapshot
+                if (Array.isArray(snap.matchedDrivers) && snap.matchedDrivers.length > 0) {
+                  const snapMap = new Map<string, any>(snap.matchedDrivers.map((m: any) => [m.driverId, m]));
+                  effDrivers = effDrivers.map((d: any) => {
+                    const match = snapMap.get(d.id);
+                    if (match && match.collectedAmount > 0) {
+                      return {
+                        ...d,
+                        clearedTodayMAD: match.collectedAmount,
+                        eveningBalance: match.eveningBalance,
+                        isPaidToday: match.status === "PAID" || match.collectedAmount >= (d.expectedTodayMAD || 300),
+                      };
+                    }
+                    return d;
+                  });
+
+                  // Recalculate portfolio breakdown for Aziz and Mehdi
+                  if (effPortfolios) {
+                    let azizCleared = 0;
+                    let mehdiCleared = 0;
+                    for (const d of effDrivers) {
+                      const clr = d.clearedTodayMAD || 0;
+                      if (d.manager?.toLowerCase().includes("mehdi")) mehdiCleared += clr;
+                      else azizCleared += clr;
+                    }
+                    if (effPortfolios.aziz) {
+                      effPortfolios.aziz = {
+                        ...effPortfolios.aziz,
+                        clearedMAD: azizCleared,
+                        remainingMAD: Math.max(0, effPortfolios.aziz.targetMAD - azizCleared),
+                        collectionPercentage: effPortfolios.aziz.targetMAD > 0 ? (azizCleared / effPortfolios.aziz.targetMAD) * 100 : 0,
+                      };
+                    }
+                    if (effPortfolios.mehdi) {
+                      effPortfolios.mehdi = {
+                        ...effPortfolios.mehdi,
+                        clearedMAD: mehdiCleared,
+                        remainingMAD: Math.max(0, effPortfolios.mehdi.targetMAD - mehdiCleared),
+                        collectionPercentage: effPortfolios.mehdi.targetMAD > 0 ? (mehdiCleared / effPortfolios.mehdi.targetMAD) * 100 : 0,
+                      };
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Could not rehydrate collections snapshot:", e);
+          }
+        }
+
         setDrivers(effDrivers);
         setSummary(effSummary);
         if (effPortfolios) {

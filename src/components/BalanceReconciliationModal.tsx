@@ -221,6 +221,8 @@ export default function BalanceReconciliationModal({
           if (data.summary?.totalMorningTargetMAD) {
             localStorage.setItem(`gocab_authoritative_morning_target_${date}`, String(data.summary.totalMorningTargetMAD));
           }
+          // Remove any stale fullcache so fetchDriverCollections immediately reads the fresh snapshot with collected cash
+          localStorage.removeItem(`gocab_collections_fullcache_${date}`);
         }
       } catch (storageErr) {
         console.warn("Could not write collections snapshot to localStorage", storageErr);
