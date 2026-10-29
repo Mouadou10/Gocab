@@ -40,5 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# sqlite wal
+*.db-shm
+*.db-wal
+
 # scratch
 scratch/

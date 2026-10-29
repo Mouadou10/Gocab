@@ -166,7 +166,7 @@ interface UserRecord {
 
 export default function SettingsView() {
   const { t, language } = useLanguage();
-  const [activeSection, setActiveSection] = useState<"targets" | "roles" | "users" | "whatsapp" | "telegram">("targets");
+  const [activeSection, setActiveSection] = useState<"targets" | "roles" | "users" | "whatsapp" | "telegram" | "backup">("targets");
   const [targets, setTargets] = useState<DepartmentTargets>(DEFAULT_TARGETS);
   const [permissions, setPermissions] = useState<Record<string, TabType[]>>(DEFAULT_ROLE_PERMISSIONS);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
@@ -175,6 +175,14 @@ export default function SettingsView() {
   const [missingDocsTemplate, setMissingDocsTemplate] = useState("");
   const [paymentReminderTemplate, setPaymentReminderTemplate] = useState("");
   const [blockWarningTemplate, setBlockWarningTemplate] = useState("");
+
+  // Google Drive & Cloud Backup State
+  const [backupStatus, setBackupStatus] = useState<any>(null);
+  const [isLoadingBackup, setIsLoadingBackup] = useState(false);
+  const [isSyncingBackup, setIsSyncingBackup] = useState(false);
+  const [webhookInput, setWebhookInput] = useState("");
+  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
+  const [showScriptModal, setShowScriptModal] = useState(false);
 
   // WhatsApp Cloud API Configuration (360dialog & Meta)
   const [waProvider, setWaProvider] = useState("360dialog");
@@ -326,6 +334,15 @@ export default function SettingsView() {
             if (data.audience) setWaAudience(data.audience);
           })
           .catch(() => {});
+
+        // Fetch Google Drive backup status
+        fetch("/api/backup")
+          .then((res) => res.json())
+          .then((data) => {
+            setBackupStatus(data);
+            if (data.webhookUrl) setWebhookInput(data.webhookUrl);
+          })
+          .catch(() => {});
       } catch (err) {
         console.error("Failed to load settings:", err);
         toast.error("Failed to load settings data");
@@ -335,6 +352,111 @@ export default function SettingsView() {
     }
     loadData();
   }, []);
+
+  const fetchBackupStatus = async () => {
+    setIsLoadingBackup(true);
+    try {
+      const res = await fetch("/api/backup");
+      const data = await res.json();
+      setBackupStatus(data);
+      if (data.webhookUrl) {
+        setWebhookInput(data.webhookUrl);
+      }
+    } catch {
+      toast.error("Impossible de charger l'état de la sauvegarde");
+    } finally {
+      setIsLoadingBackup(false);
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    setIsSyncingBackup(true);
+    try {
+      toast.loading("Synchronisation avec Google Drive en cours...", { id: "sync-drive" });
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || "Sauvegarde réussie !", { id: "sync-drive" });
+      } else {
+        toast.error(data.error || "Erreur de sauvegarde", { id: "sync-drive" });
+      }
+      fetchBackupStatus();
+    } catch (e: any) {
+      toast.error("Échec de la sauvegarde: " + e.message, { id: "sync-drive" });
+    } finally {
+      setIsSyncingBackup(false);
+    }
+  };
+
+  const handleSaveWebhook = async () => {
+    setIsSavingWebhook(true);
+    try {
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save-webhook", webhookUrl: webhookInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Webhook Google Apps Script enregistré !");
+        fetchBackupStatus();
+      } else {
+        toast.error("Erreur lors de l'enregistrement");
+      }
+    } catch {
+      toast.error("Erreur lors de l'enregistrement");
+    } finally {
+      setIsSavingWebhook(false);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    try {
+      toast.loading("Génération de l'archive complète...", { id: "download-archive" });
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export-json" }),
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gocab_full_backup_${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success("Téléchargement de l'archive terminé !", { id: "download-archive" });
+    } catch {
+      toast.error("Erreur de téléchargement", { id: "download-archive" });
+    }
+  };
+
+  const handleDownloadCsv = async (type: "leads" | "vehicles" | "drivers" | "payments") => {
+    try {
+      toast.loading(`Génération du fichier CSV (${type})...`, { id: `download-${type}` });
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export-csv", type }),
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gocab_${type}_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success(`Export CSV (${type}) téléchargé !`, { id: `download-${type}` });
+    } catch {
+      toast.error(`Erreur d'exportation CSV (${type})`, { id: `download-${type}` });
+    }
+  };
 
   // Handle adding phone number to 360dialog allowlist
   async function handleAddAllowlistPhone(phoneToAdd: string) {
@@ -976,6 +1098,19 @@ export default function SettingsView() {
             }`}
           >
             📱 Telegram
+          </button>
+          <button
+            onClick={() => {
+              setActiveSection("backup");
+              fetchBackupStatus();
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeSection === "backup"
+                ? "bg-[#34a853] text-white shadow-sm font-bold"
+                : "text-white/80 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            💾 Google Drive
           </button>
         </div>
       </div>
@@ -2764,7 +2899,429 @@ export default function SettingsView() {
         </div>
       )}
 
-      {/* MODAL: CREATE NEW ROLE */}
+      {/* SECTION 6: SAUVEGARDE & REDONDANCE GOOGLE DRIVE */}
+      {activeSection === "backup" && (
+        <div className="space-y-6">
+          {/* Main Card */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <span>💾</span> Double Emplacement de Données : Vercel + Google Drive
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Sauvegarde automatique et redondante de l&apos;intégralité de la base de données (Leads, Flotte, Chauffeurs, Paiements).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Redondance Active
+                </span>
+              </div>
+            </div>
+
+            {/* Target Folder & Service Account Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/70 to-indigo-50/40 border border-blue-100/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                    📁 Dossier Google Drive Dédié
+                  </span>
+                  <a
+                    href="https://drive.google.com/drive/folders/1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline flex items-center gap-1"
+                  >
+                    Ouvrir dans Drive ↗
+                  </a>
+                </div>
+                <p className="text-xs font-mono text-gray-600 bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100 break-all">
+                  1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr
+                </p>
+                <p className="text-[11px] text-blue-800/80">
+                  Nom du dossier : <b>GoCab Backups</b>
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/70 to-pink-50/40 border border-purple-100/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                    🤖 Compte de Service Google Cloud
+                  </span>
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-800 rounded-md">
+                    Connecté
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-gray-600 bg-white/80 px-2.5 py-1.5 rounded-lg border border-purple-100 break-all">
+                  google-drive@gen-lang-client-0868678110.iam.gserviceaccount.com
+                </p>
+                <p className="text-[11px] text-purple-800/80">
+                  Identifiant projet : <b>gen-lang-client-0868678110</b>
+                </p>
+              </div>
+            </div>
+
+            {/* Current System Counts */}
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+                Volume Actuel des Données Protégées
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-center">
+                  <span className="text-lg">💼</span>
+                  <div className="text-lg font-black text-gray-900 mt-1">
+                    {backupStatus?.currentCounts?.leads ?? "..."}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Leads Actifs</div>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-center">
+                  <span className="text-lg">🚗</span>
+                  <div className="text-lg font-black text-gray-900 mt-1">
+                    {backupStatus?.currentCounts?.vehicles ?? "..."}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Véhicules Flotte</div>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-center">
+                  <span className="text-lg">🚖</span>
+                  <div className="text-lg font-black text-gray-900 mt-1">
+                    {backupStatus?.currentCounts?.drivers ?? "..."}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Chauffeurs</div>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-center">
+                  <span className="text-lg">💳</span>
+                  <div className="text-lg font-black text-gray-900 mt-1">
+                    {backupStatus?.currentCounts?.payments ?? "..."}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Versements</div>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 text-center col-span-2 sm:col-span-1">
+                  <span className="text-lg">🔧</span>
+                  <div className="text-lg font-black text-gray-900 mt-1">
+                    {backupStatus?.currentCounts?.tickets ?? "..."}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Tickets & Maintenance</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Last Backup Summary */}
+            {backupStatus?.lastBackup && (
+              <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
+                    ✓
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-emerald-950">
+                      Dernière Sauvegarde Réussie
+                    </div>
+                    <div className="text-[11px] text-emerald-800">
+                      {new Date(backupStatus.lastBackup.timestamp).toLocaleString("fr-FR")} • Méthode :{" "}
+                      <span className="font-semibold">{backupStatus.lastBackup.method === "webhook" ? "Google Apps Script Webhook" : "Archive Prête"}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchBackupStatus}
+                  className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition-all self-start sm:self-auto"
+                >
+                  Rafraîchir
+                </button>
+              </div>
+            )}
+
+            {/* Direct Instant Action Buttons */}
+            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleTriggerBackup}
+                disabled={isSyncingBackup}
+                className="px-5 py-2.5 bg-[#34a853] hover:bg-[#2d9248] text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSyncingBackup ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>🚀</span>
+                )}
+                <span>Synchroniser Maintenant sur Google Drive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                className="px-4 py-2.5 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-2"
+              >
+                <span>📥</span>
+                <span>Télécharger Archive Complète (.json)</span>
+              </button>
+            </div>
+
+            {/* Quick CSV Export Grid */}
+            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+              <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <span>📊</span> Exports Rapides Excel / CSV (1 clic)
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCsv("leads")}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>💼</span> Leads (.csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCsv("vehicles")}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>🚗</span> Véhicules (.csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCsv("drivers")}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>🚖</span> Chauffeurs (.csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCsv("payments")}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>💳</span> Versements & Solde (.csv)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Webhook Bridge Configuration for Personal Gmail Accounts */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <span>⚡</span> Liaison Google Apps Script (Pour Compte Personnel @gmail.com)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Permet à GoCab d&apos;écrire directement dans vos 15 Go de stockage personnel Google Drive sans être bloqué par le quota Google Service Account (0 Mo).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScriptModal(true)}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-xl border border-amber-200 transition-all self-start sm:self-auto flex items-center gap-1.5"
+              >
+                <span>📋</span> Voir le Script (1 clic)
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold text-gray-700">
+                URL de l&apos;Application Web Google Apps Script
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                  value={webhookInput}
+                  onChange={(e) => setWebhookInput(e.target.value)}
+                  className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy/30"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveWebhook}
+                  disabled={isSavingWebhook}
+                  className="px-5 py-2.5 bg-navy hover:bg-navy/90 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50"
+                >
+                  {isSavingWebhook ? "Enregistrement…" : "Enregistrer le Webhook"}
+                </button>
+              </div>
+
+              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-[11px] text-blue-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>💡</span> Pourquoi cette passerelle est nécessaire pour votre compte Gmail personnel :
+                </div>
+                <div>
+                  Google Cloud n&apos;attribue <b>aucun quota de stockage (0 Mo)</b> aux comptes de service robots sur les dossiers personnels Gmail (erreur <i>403 storageQuotaExceeded</i>). 
+                  Le script Google Apps Script s&apos;exécute directement sous votre propre session Google (<b>mouadou123@gmail.com</b>), ce qui permet d&apos;écrire instantanément dans votre dossier Drive avec vos 15 Go d&apos;espace disponible !
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: GOOGLE APPS SCRIPT CODE */}
+      {showScriptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-2xl w-full p-6 space-y-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 shrink-0">
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span>📋</span> Script Google Apps Script pour Google Drive
+              </h3>
+              <button
+                onClick={() => setShowScriptModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 pr-1 text-xs">
+              <div className="space-y-1.5 bg-gray-50 p-3.5 rounded-2xl border border-gray-200">
+                <div className="font-bold text-gray-800">Instructions simples en 3 étapes :</div>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600 pl-1">
+                  <li>Ouvrez <a href="https://script.google.com" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">https://script.google.com</a> et cliquez sur <b>+ Nouveau projet</b>.</li>
+                  <li>Supprimez le code existant, collez le script ci-dessous, puis appuyez sur <b>Ctrl + S</b>.</li>
+                  <li>Cliquez en haut à droite sur <b>Déployer &gt; Nouveau déploiement</b> :
+                    <ul className="list-disc list-inside pl-4 text-gray-500 mt-1">
+                      <li>Type : <b>Application Web</b></li>
+                      <li>Exécuter en tant que : <b>Moi</b></li>
+                      <li>Qui a accès : <b>Tout le monde (Anyone)</b></li>
+                    </ul>
+                  </li>
+                  <li>Copiez l&apos;URL Webhook obtenue et collez-la dans GoCab !</li>
+                </ol>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-gray-700">Code du Script (Prêt à l&apos;emploi) :</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = `function doPost(e) {
+  try {
+    var rawData = e.postData.contents;
+    var data = JSON.parse(rawData);
+    var folderId = "1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr";
+    var folder = DriveApp.getFolderById(folderId);
+
+    var savedFiles = [];
+
+    if (data.files && Array.isArray(data.files)) {
+      data.files.forEach(function(item) {
+        var blob;
+        if (item.contentBase64) {
+          var decoded = Utilities.base64Decode(item.contentBase64);
+          blob = Utilities.newBlob(decoded, item.mimeType || "application/octet-stream", item.filename);
+        } else if (item.content) {
+          blob = Utilities.newBlob(item.content, item.mimeType || "text/plain", item.filename);
+        }
+
+        if (blob) {
+          var existing = folder.getFilesByName(item.filename);
+          while (existing.hasNext()) {
+            existing.next().setTrashed(true);
+          }
+          var newFile = folder.createFile(blob);
+          savedFiles.push({ name: item.filename, id: newFile.getId(), size: newFile.getSize() });
+        }
+      });
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "Sauvegarde GoCab synchronisée avec succès dans Google Drive !",
+      timestamp: new Date().toISOString(),
+      savedFiles: savedFiles
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "active",
+    folderId: "1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr",
+    name: "GoCab Google Drive Backup Webhook"
+  })).setMimeType(ContentService.MimeType.JSON);
+}`;
+                      navigator.clipboard.writeText(code);
+                      toast.success("Script copié dans le presse-papier !");
+                    }}
+                    className="px-3 py-1 bg-navy text-white text-[11px] font-bold rounded-lg hover:bg-navy/90 shadow-2xs"
+                  >
+                    Copier le Script 📋
+                  </button>
+                </div>
+                <pre className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed max-h-60">
+{`function doPost(e) {
+  try {
+    var rawData = e.postData.contents;
+    var data = JSON.parse(rawData);
+    var folderId = "1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr";
+    var folder = DriveApp.getFolderById(folderId);
+
+    var savedFiles = [];
+
+    if (data.files && Array.isArray(data.files)) {
+      data.files.forEach(function(item) {
+        var blob;
+        if (item.contentBase64) {
+          var decoded = Utilities.base64Decode(item.contentBase64);
+          blob = Utilities.newBlob(decoded, item.mimeType || "application/octet-stream", item.filename);
+        } else if (item.content) {
+          blob = Utilities.newBlob(item.content, item.mimeType || "text/plain", item.filename);
+        }
+
+        if (blob) {
+          var existing = folder.getFilesByName(item.filename);
+          while (existing.hasNext()) {
+            existing.next().setTrashed(true);
+          }
+          var newFile = folder.createFile(blob);
+          savedFiles.push({ name: item.filename, id: newFile.getId(), size: newFile.getSize() });
+        }
+      });
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "Sauvegarde GoCab synchronisée avec succès dans Google Drive !",
+      timestamp: new Date().toISOString(),
+      savedFiles: savedFiles
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "active",
+    folderId: "1rpJPDuKMo8Tej0lk8LUAJxeGK4p4-wtr",
+    name: "GoCab Google Drive Backup Webhook"
+  })).setMimeType(ContentService.MimeType.JSON);
+}`}
+                </pre>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-gray-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowScriptModal(false)}
+                className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isNewRoleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-lg w-full p-6 space-y-5">
