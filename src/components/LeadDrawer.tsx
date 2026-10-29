@@ -529,7 +529,11 @@ export default function LeadDrawer({
         notes: notes || null,
       };
 
-      if (isRecalled || (boardType === "leads" && brandStatus && brandStatus !== "NEW_LEADS")) {
+      if (
+        isRecalled ||
+        (boardType === "leads" && brandStatus && brandStatus !== "NEW_LEADS") ||
+        (boardType === "training" && trainingStatus)
+      ) {
         payload.is_recalled = true;
         payload.mark_as_called = true;
       }
@@ -1263,8 +1267,8 @@ export default function LeadDrawer({
             </div>
           )}
 
-          {/* Recalled Status Checkbox (For Leads prospection only) */}
-          {boardType === "leads" && (lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")) && (
+          {/* Recalled Status Checkbox (For Leads prospection & Onboarding follow-up) */}
+          {(boardType === "training" || (boardType === "leads" && (lead.board_column !== "NEW_LEADS" || (brandStatus && brandStatus !== "NEW_LEADS")))) && (
             <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-2xl space-y-2">
               <label className="flex items-start gap-3 cursor-pointer select-none">
                 <input

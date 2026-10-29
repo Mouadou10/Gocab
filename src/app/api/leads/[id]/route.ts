@@ -184,14 +184,18 @@ export async function PATCH(
     // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called)
     // 2. Lead moves out of NEW_LEADS into any status
     // 3. Brand status changes or is updated on the Leads board
-    // 4. Lead is moved to "Training fixed" or training date is rescheduled
-    // 5. A recall date is scheduled or rescheduled
+    // 4. Training status changes or is updated on the Training board
+    // 5. Lead column moves
+    // 6. Lead is moved to "Training fixed" or training date is rescheduled
+    // 7. A recall date is scheduled or rescheduled
     if (body.board_column === "NEW_LEADS" && !isExplicitlyCalled && !body.brand_status) {
       (updateData as any).status_changed_at = null;
     } else if (
       isExplicitlyCalled ||
       isInitialExitFromNewLeads ||
       isBrandStatusChanged ||
+      isTrainingStatusChanged ||
+      isColumnChanged ||
       isMovingToTrainingFixed ||
       isRecallRescheduled
     ) {

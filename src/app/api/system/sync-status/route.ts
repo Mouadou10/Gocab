@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
     const currentVersion = syncState.version;
 
     const shouldHardReload =
-      (clientVersion.length > 0 && currentVersion.length > 0 && clientVersion !== currentVersion) ||
       Boolean(syncState.forceRefreshAt && clientSessionStart > 0 && syncState.forceRefreshAt > clientSessionStart);
 
     const response = {

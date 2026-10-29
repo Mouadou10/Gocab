@@ -432,10 +432,33 @@ export default function FleetPerformanceView() {
       const data = await res.json();
 
       if (data.drivers) {
+        // Resilient client-side caching: if server has morning CSV, cache it
+        if (data.summary?.hasMorningCsv && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(`gocab_collections_fullcache_${endDate}`, JSON.stringify(data));
+          } catch (e) {}
+        }
+
+        // Rehydrate if cold container returns default contract before morning balance syncs
+        let effSummary = data.summary;
+        let effPortfolios = data.portfolios;
+        if (!data.summary?.hasMorningCsv && typeof window !== "undefined") {
+          try {
+            const rawCache = localStorage.getItem(`gocab_collections_fullcache_${endDate}`);
+            if (rawCache) {
+              const cached = JSON.parse(rawCache);
+              if (cached?.summary?.hasMorningCsv) {
+                effSummary = cached.summary;
+                if (cached.portfolios) effPortfolios = cached.portfolios;
+              }
+            }
+          } catch (e) {}
+        }
+
         setDrivers(data.drivers);
-        setSummary(data.summary);
-        if (data.portfolios) {
-          setPortfolios(data.portfolios);
+        setSummary(effSummary);
+        if (effPortfolios) {
+          setPortfolios(effPortfolios);
         }
         if (data.managers) {
           setAvailableManagers(data.managers);

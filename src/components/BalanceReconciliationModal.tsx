@@ -151,6 +151,21 @@ export default function BalanceReconciliationModal({
       setMatchedDrivers(data.matchedDrivers || []);
       setUnmatchedRows(data.unmatchedRows || []);
 
+      try {
+        if (typeof window !== "undefined") {
+          const snapshotPayload = {
+            date,
+            mode,
+            timestamp: Date.now(),
+            summary: data.summary,
+            matchedDrivers: data.matchedDrivers || [],
+          };
+          localStorage.setItem(`gocab_collections_snapshot_${date}`, JSON.stringify(snapshotPayload));
+        }
+      } catch (storageErr) {
+        console.warn("Could not write collections snapshot to localStorage", storageErr);
+      }
+
       if (mode === "MORNING") {
         toast.success(`☀️ Solde Matin enregistré pour ${data.summary.matchedCount} chauffeurs !`);
       } else {

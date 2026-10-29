@@ -234,13 +234,8 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       setIsOnline(true);
       const data = await res.json();
 
-      // ─── Force-refresh signal: mandatory immediate reload for ALL sessions ───
-      // Triggered by POST /api/system/sync-status (admin action or new deployment)
-      if (
-        data.shouldRefreshApp ||
-        (data.forceRefreshAt && data.forceRefreshAt > sessionStartTimeRef.current)
-      ) {
-        // Do not show a toast — reload immediately and unconditionally
+      // ─── Force-refresh signal: ONLY triggered by deliberate administrative emergency broadcast ───
+      if (data.forceRefreshAt && data.forceRefreshAt > sessionStartTimeRef.current) {
         forceImmediateReload();
         return;
       }
@@ -340,38 +335,12 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
     };
   }, [checkSyncStatus]);
 
-  // Countdown auto-reload on new deployment
+  // Non-disruptive deployment notification (no forced auto-reload while user is working)
   useEffect(() => {
     if (!appUpdateAvailable) return;
 
-    // If the tab is currently hidden/backgrounded, reload immediately when it becomes visible
-    const handleVisibleReload = () => {
-      if (document.visibilityState === "visible") {
-        window.location.reload();
-      }
-    };
-
-    if (document.hidden) {
-      document.addEventListener("visibilitychange", handleVisibleReload);
-      return () => {
-        document.removeEventListener("visibilitychange", handleVisibleReload);
-      };
-    }
-
-    // Start 5-second countdown for active user
-    setUpdateCountdown(5);
-    const interval = setInterval(() => {
-      setUpdateCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(interval);
-          window.location.reload();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
+    // Show persistent banner without disruptive auto-reload loop
+    setUpdateCountdown(null);
   }, [appUpdateAvailable]);
 
   // Subscribe helper
