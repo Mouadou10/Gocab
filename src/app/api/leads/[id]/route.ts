@@ -197,7 +197,9 @@ export async function PATCH(
       isTrainingStatusChanged ||
       isColumnChanged ||
       isMovingToTrainingFixed ||
-      isRecallRescheduled
+      isRecallRescheduled ||
+      Boolean(body.brand_status && body.brand_status !== "NEW_LEADS") ||
+      Boolean(body.training_status)
     ) {
       (updateData as any).status_changed_at = new Date();
     }
@@ -207,9 +209,9 @@ export async function PATCH(
       data: updateData,
     });
 
-    // Invalidate leads cache & synchronously touch sync state to flush to Postgres cloud replica
+    // Invalidate leads cache & touch sync state in background so response returns in <50ms
     invalidateLeadsCache();
-    await touchSyncState("leads").catch(() => {});
+    touchSyncState("leads").catch(() => {});
 
     // ── Activity Log — record what the agent just did ────────────────────────
     const agentName = resolvedHandledBy;

@@ -291,6 +291,7 @@ export async function POST(request: NextRequest) {
     const reassignedVehicles: { plate: string; previousDriver: string; newDriver: string }[] = [];
     const processedDriverIds = new Set<string>();
     let totalCollectedToday = 0;
+    let totalMorningTargetMAD = 0;
     let paidCount = 0;
     let partialCount = 0;
     let unpaidCount = 0;
@@ -638,6 +639,7 @@ export async function POST(request: NextRequest) {
         const morningUnpaidDays = morningArrears === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
         // If file contains explicit payment amount, preserve and credit it instead of wiping to 0
         const morningCleared = directPayment > 0 ? directPayment : 0;
+        totalMorningTargetMAD += morningArrears;
         if (morningCleared > 0) totalCollectedToday += morningCleared;
 
         if (existingLedger) {
@@ -820,6 +822,7 @@ export async function POST(request: NextRequest) {
         matchedCount: matchedDriversList.length,
         unmatchedCount: unmatchedRows.length,
         totalCollectedTodayMAD: totalCollectedToday,
+        totalMorningTargetMAD,
         newDriversCreated,
         newVehiclesCreated,
         vehiclesReassignedCount: reassignedVehicles.length,

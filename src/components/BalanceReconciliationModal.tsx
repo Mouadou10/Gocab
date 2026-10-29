@@ -161,6 +161,9 @@ export default function BalanceReconciliationModal({
             matchedDrivers: data.matchedDrivers || [],
           };
           localStorage.setItem(`gocab_collections_snapshot_${date}`, JSON.stringify(snapshotPayload));
+          if (mode === "MORNING" && data.summary?.totalMorningTargetMAD) {
+            localStorage.setItem(`gocab_authoritative_morning_target_${date}`, String(data.summary.totalMorningTargetMAD));
+          }
         }
       } catch (storageErr) {
         console.warn("Could not write collections snapshot to localStorage", storageErr);
