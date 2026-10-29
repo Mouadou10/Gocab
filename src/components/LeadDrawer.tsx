@@ -181,10 +181,20 @@ export default function LeadDrawer({
     }
   }, [boardType, brandStatus, recallDate]);
 
+  const isCalledToday = useMemo(() => {
+    if (!lead.status_changed_at) return false;
+    const callDate = new Date(lead.status_changed_at).toISOString().split("T")[0];
+    return callDate === getTodayDateStr();
+  }, [lead.status_changed_at]);
+
   const [notes, setNotes] = useState<string>(lead.notes || "");
-  const [isRecalled, setIsRecalled] = useState<boolean>(
-    boardType === "leads" && lead.board_column !== "NEW_LEADS"
-  );
+  const [isRecalled, setIsRecalled] = useState<boolean>(() => {
+    if (lead.status_changed_at) {
+      const callDate = new Date(lead.status_changed_at).toISOString().split("T")[0];
+      if (callDate === getTodayDateStr()) return true;
+    }
+    return boardType === "leads" && lead.board_column !== "NEW_LEADS";
+  });
 
   const [validationError, setValidationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -542,6 +552,7 @@ export default function LeadDrawer({
           // Move to To Recall with scheduled recall datetime
           payload.board_column = "BRAND_PRE_FILTER";
           payload.brand_status = "To Recall";
+          payload.training_status = null;
 
           const effectiveRecallDate = recallDate || getTodayDateStr();
           if (effectiveRecallDate) {
@@ -557,6 +568,7 @@ export default function LeadDrawer({
           // Any other brand status means it's no longer a new lead
           payload.board_column = "BRAND_PRE_FILTER";
           payload.brand_status = brandStatus;
+          payload.training_status = null;
         }
       } else {
         payload.training_status = trainingStatus;
@@ -604,6 +616,8 @@ export default function LeadDrawer({
         } else if (trainingStatus === "Preorder") {
           payload.board_column = "TRAINING_PIPELINE";
           payload.preorder_amount = preorderAmount ? parseFloat(preorderAmount) : null;
+        } else {
+          payload.board_column = "TRAINING_PIPELINE";
         }
       }
 
@@ -1263,16 +1277,22 @@ export default function LeadDrawer({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-navy flex items-center gap-1.5">
                       <span>📞</span>
-                      <span>Marquer comme Rappelé (+1 Appel Comptabilisé)</span>
+                      <span>
+                        {isCalledToday
+                          ? "Appel déjà comptabilisé aujourd'hui"
+                          : "Marquer comme Rappelé (+1 Appel Comptabilisé)"}
+                      </span>
                     </span>
                     {isRecalled && (
                       <span className="text-3xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                        ✓ Comptabilisé
+                        {isCalledToday ? "✓ Comptabilisé aujourd'hui" : "+1 Appel à enregistrer"}
                       </span>
                     )}
                   </div>
                   <p className="text-2xs text-gray-500">
-                    Cochez cette case si vous avez rappelé ce prospect. Dès l&apos;enregistrement, cet appel sera comptabilisé dans vos objectifs journaliers.
+                    {isCalledToday
+                      ? "Cet appel a déjà été comptabilisé dans vos objectifs journaliers aujourd'hui."
+                      : "Cochez cette case ou modifiez le statut pour comptabiliser cet appel dans vos objectifs journaliers dès l'enregistrement."}
                   </p>
                 </div>
               </label>

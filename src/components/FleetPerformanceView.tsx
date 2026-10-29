@@ -2046,6 +2046,8 @@ export default function FleetPerformanceView() {
          onClose={() => setIsBalanceModalOpen(false)}
          selectedDate={endDate}
          onSuccess={fetchDriverCollections}
+         hasMorningCsv={summary?.hasMorningCsv ?? false}
+         morningTargetMAD={summary?.totalMorningTargetMAD ?? 0}
        />
  
        {/* Direct WhatsApp Sending Modal */}

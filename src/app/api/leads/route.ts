@@ -209,9 +209,9 @@ export async function POST(request: Request) {
       },
     });
 
-    // Touch sync state so all open sessions refresh immediately
+    // Invalidate leads cache and touch sync state so all open sessions refresh immediately
     invalidateLeadsCache();
-    touchSyncState("leads").catch(() => {});
+    await touchSyncState("leads").catch(() => {});
 
     const nationalMatch = matchNationalBlacklist(lead.raw_name);
 

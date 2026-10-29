@@ -14,8 +14,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
+import { invalidateDriverCache } from "@/lib/driverCache";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { isMehdiPlate, resolveVehicleFleetManager, resolveDriverFleetManager } from "@/lib/fleet-managers";
 
@@ -657,8 +658,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Notify all open sessions (Dashboard, Perf page) to refresh
+    // Invalidate driver cache, touch sync state and flush to cloud replica immediately
+    invalidateDriverCache();
     await touchSyncState("collections");
+    await flushDatabaseSync();
 
     return NextResponse.json({
       success: true,

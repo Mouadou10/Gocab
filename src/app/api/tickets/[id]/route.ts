@@ -177,7 +177,7 @@ export async function PATCH(
     }
 
     // Touch sync state so all open sessions refresh immediately
-    touchSyncState("tickets").catch(() => {});
+    await touchSyncState("tickets").catch(() => {});
 
     // When ticket transitions to IN_PROGRESS, auto-synchronize linked Field Task to IN_PROGRESS
     if (updateData.status === "IN_PROGRESS" && currentTicket.status !== "IN_PROGRESS") {
@@ -332,7 +332,7 @@ export async function DELETE(
       await prisma.maintenanceTicket.delete({ where: { id } });
     }
 
-    touchSyncState("tickets").catch(() => {});
+    await touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("DELETE /api/tickets/[id] error:", error);

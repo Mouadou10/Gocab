@@ -493,8 +493,8 @@ export async function POST(request: Request) {
     );
 
     // Touch sync state so Ticket page and Field Recovery page immediately refresh
-    void touchSyncState("tickets");
-    void touchSyncState("all");
+    await touchSyncState("tickets").catch(() => {});
+    await touchSyncState("all").catch(() => {});
 
     return NextResponse.json({ task, ticket_id: finalLinkedTicketId }, { status: 201 });
   } catch (error) {
@@ -565,7 +565,7 @@ export async function DELETE(request: Request) {
     }
 
     const result = await prisma.fieldTask.deleteMany({ where });
-    touchSyncState("tickets").catch(() => {});
+    await touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true, count: result.count });
   } catch (error: any) {
     console.error("DELETE /api/field-tasks error:", error);

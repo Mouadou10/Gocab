@@ -72,6 +72,10 @@ export async function PATCH(
     }
     if (body.brand_status !== undefined) {
       updateData.brand_status = body.brand_status;
+      // If moving back to a leads board status (other than Training fixed), clear training_status so it doesn't stay stuck in training
+      if (body.brand_status && body.brand_status !== "Training fixed" && body.training_status === undefined) {
+        updateData.training_status = null;
+      }
     }
     if (body.training_status !== undefined) {
       updateData.training_status = body.training_status;
@@ -171,28 +175,21 @@ export async function PATCH(
 
     const isRecallRescheduled =
       isReminderChanged &&
-      (existingLead.board_column === "BRAND_PRE_FILTER" || body.board_column === "BRAND_PRE_FILTER");
+      (existingLead.board_column === "BRAND_PRE_FILTER" ||
+        body.board_column === "BRAND_PRE_FILTER" ||
+        existingLead.brand_status === "Training fixed" ||
+        body.brand_status === "Training fixed");
 
-    // Only update status_changed_at (Leads Prospection Call counter) if:
-    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called) on the Leads board
+    // Update status_changed_at (Leads Prospection Call counter) whenever:
+    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called)
     // 2. Lead moves out of NEW_LEADS into any status
-    // 3. Brand status changes on the Leads board (e.g. to NRP1, NRP2, To Recall, Not interested, Training fixed)
-    // 4. Lead is moved to "Training fixed"
-    // 5. A recall date is scheduled or rescheduled on the Leads board
-    // CRITICAL DECOUPLING:
-    // Training presence confirmation (presence_confirmed) has its own presence_confirmed_at timestamp and belongs ONLY to Training.
-    // Changes to training_status (Attended, Pending, Refused, Assign vehicle, Preorder) belong ONLY to Training.
-    // Neither Training presence confirmations nor training_status changes may EVER stamp status_changed_at!
-    const isLeadsContext =
-      existingLead.board_column === "NEW_LEADS" ||
-      existingLead.board_column === "BRAND_PRE_FILTER" ||
-      body.board_column === "BRAND_PRE_FILTER" ||
-      body.board_column === "NEW_LEADS";
-
-    if (body.board_column === "NEW_LEADS") {
+    // 3. Brand status changes or is updated on the Leads board
+    // 4. Lead is moved to "Training fixed" or training date is rescheduled
+    // 5. A recall date is scheduled or rescheduled
+    if (body.board_column === "NEW_LEADS" && !isExplicitlyCalled && !body.brand_status) {
       (updateData as any).status_changed_at = null;
     } else if (
-      (isExplicitlyCalled && isLeadsContext) ||
+      isExplicitlyCalled ||
       isInitialExitFromNewLeads ||
       isBrandStatusChanged ||
       isMovingToTrainingFixed ||
@@ -206,9 +203,9 @@ export async function PATCH(
       data: updateData,
     });
 
-    // Invalidate leads cache & touch sync state so all open sessions refresh immediately
+    // Invalidate leads cache & synchronously touch sync state to flush to Postgres cloud replica
     invalidateLeadsCache();
-    touchSyncState("leads").catch(() => {});
+    await touchSyncState("leads").catch(() => {});
 
     // ── Activity Log — record what the agent just did ────────────────────────
     const agentName = resolvedHandledBy;
@@ -491,9 +488,9 @@ export async function DELETE(
       where: { id },
     });
 
-    // Invalidate memory cache and trigger live sync
+    // Invalidate memory cache and trigger live sync & cloud replica flush
     invalidateLeadsCache();
-    touchSyncState("leads").catch(() => {});
+    await touchSyncState("leads").catch(() => {});
 
     return NextResponse.json({ success: true, deletedLeadId: id });
   } catch (error) {

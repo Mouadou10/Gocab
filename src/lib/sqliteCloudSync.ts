@@ -161,6 +161,14 @@ export async function pushSqliteSnapshotNow(sqlitePath?: string): Promise<void> 
 
   try {
     if (!fs.existsSync(targetPath)) return;
+
+    // Flush any pending WAL pages into main db file before snapshotting
+    try {
+      const { createClient } = require("@libsql/client");
+      const chkClient = createClient({ url: `file:${targetPath.replace(/\\/g, "/")}` });
+      await chkClient.execute("PRAGMA wal_checkpoint(PASSIVE);").catch(() => {});
+    } catch (_) {}
+
     const raw = fs.readFileSync(targetPath);
     const compressed = zlib.gzipSync(raw, { level: 6 });
     const newVersion = Date.now();

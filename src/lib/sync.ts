@@ -5,7 +5,7 @@
  * and deployment version across serverless instances using Turso DB + memory cache.
  */
 
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 
 export interface SyncState {
   leads: number;
@@ -134,8 +134,8 @@ export async function touchSyncState(
 
   globalForSync.syncCache = nextState;
 
-  // Persist asynchronously in background so callers are not slowed down
-  prisma.setting
+  // Persist sync state setting
+  await prisma.setting
     .upsert({
       where: { key: SYNC_SETTING_KEY },
       update: { value: JSON.stringify(nextState) },
@@ -144,6 +144,12 @@ export async function touchSyncState(
     .catch((err) => {
       console.warn("touchSyncState Turso upsert warning:", err?.message || err);
     });
+
+  // Automatically flush any pending SQLite mutations to cross-container cloud replica
+  // before returning, ensuring zero data loss across Vercel serverless containers
+  await flushDatabaseSync().catch((err) => {
+    console.warn("touchSyncState flushDatabaseSync warning:", err?.message || err);
+  });
 
   return nextState;
 }

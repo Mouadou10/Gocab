@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -63,6 +63,8 @@ interface BalanceReconciliationModalProps {
   onClose: () => void;
   selectedDate: string;
   onSuccess: () => void;
+  hasMorningCsv?: boolean;
+  morningTargetMAD?: number;
 }
 
 export default function BalanceReconciliationModal({
@@ -70,8 +72,12 @@ export default function BalanceReconciliationModal({
   onClose,
   selectedDate,
   onSuccess,
+  hasMorningCsv = false,
+  morningTargetMAD = 0,
 }: BalanceReconciliationModalProps) {
-  const [mode, setMode] = useState<"MORNING" | "EVENING">("MORNING");
+  const [mode, setMode] = useState<"MORNING" | "EVENING">(() =>
+    hasMorningCsv ? "EVENING" : "MORNING"
+  );
   const [date, setDate] = useState(selectedDate);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -81,6 +87,14 @@ export default function BalanceReconciliationModal({
   const [searchFilter, setSearchFilter] = useState("");
   const [activeTab, setActiveTab] = useState<"matched" | "unmatched">("matched");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Automatically adjust default mode when modal opens or hasMorningCsv updates
+  useEffect(() => {
+    if (isOpen) {
+      setMode(hasMorningCsv ? "EVENING" : "MORNING");
+      setSummary(null);
+    }
+  }, [isOpen, hasMorningCsv]);
 
   if (!isOpen) return null;
 
@@ -186,6 +200,39 @@ export default function BalanceReconciliationModal({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {/* Smart Status Guidance Banner */}
+          {hasMorningCsv ? (
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                <Moon className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-indigo-950 text-sm">
+                    Solde Matin déjà configuré pour cette date ({morningTargetMAD ? `${morningTargetMAD.toLocaleString("fr-FR")} MAD de cible` : "Cible active"}).
+                  </span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
+                    ✓ Matin Validé
+                  </span>
+                </div>
+                <p className="text-indigo-900 leading-relaxed">
+                  Le mode <span className="font-bold text-indigo-700">🌙 2. Solde Soir & Rapprochement</span> est activé par défaut.
+                  Importez le fichier de fin de journée pour calculer automatiquement les encaissements, déduire les restes à recouvrer et actualiser les alertes d&apos;impayés.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-3">
+              <Sun className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-xs text-amber-900 space-y-0.5">
+                <p className="font-bold">Étape 1 : Importation du Solde Matin</p>
+                <p className="text-amber-800">
+                  Importez le solde initial de la journée pour fixer les dettes de départ et calculer les cibles d&apos;encaissement.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Mode Selector (Matin vs Soir) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
@@ -194,7 +241,7 @@ export default function BalanceReconciliationModal({
                 setMode("MORNING");
                 setSummary(null);
               }}
-              className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3 ${
+              className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3 relative cursor-pointer ${
                 mode === "MORNING"
                   ? "border-amber-500 bg-amber-50/60 shadow-sm"
                   : "border-gray-200 bg-gray-50/50 hover:bg-gray-50 text-gray-600"
@@ -207,12 +254,19 @@ export default function BalanceReconciliationModal({
               >
                 <Sun className="w-5 h-5" />
               </div>
-              <div className="space-y-0.5">
-                <p className={`font-bold text-sm ${mode === "MORNING" ? "text-amber-950" : "text-gray-800"}`}>
-                  1. Solde Matin (Début de journée)
-                </p>
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className={`font-bold text-sm ${mode === "MORNING" ? "text-amber-950" : "text-gray-800"}`}>
+                    1. Solde Matin (Début de journée)
+                  </p>
+                  {hasMorningCsv && (
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                      ✓ Déjà importé
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">
-                  Enregistre le solde initial de chaque chauffeur pour la journée sélectionnée.
+                  Fixe le solde de départ avant les encaissements du jour (remet les encaissements du jour à 0 MAD).
                 </p>
               </div>
             </button>
@@ -223,7 +277,7 @@ export default function BalanceReconciliationModal({
                 setMode("EVENING");
                 setSummary(null);
               }}
-              className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3 ${
+              className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3 relative cursor-pointer ${
                 mode === "EVENING"
                   ? "border-indigo-600 bg-indigo-50/60 shadow-sm"
                   : "border-gray-200 bg-gray-50/50 hover:bg-gray-50 text-gray-600"
@@ -236,12 +290,19 @@ export default function BalanceReconciliationModal({
               >
                 <Moon className="w-5 h-5" />
               </div>
-              <div className="space-y-0.5">
-                <p className={`font-bold text-sm ${mode === "EVENING" ? "text-indigo-950" : "text-gray-800"}`}>
-                  2. Solde Soir & Rapprochement Automatique
-                </p>
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className={`font-bold text-sm ${mode === "EVENING" ? "text-indigo-950" : "text-gray-800"}`}>
+                    2. Solde Soir & Rapprochement
+                  </p>
+                  {hasMorningCsv && (
+                    <span className="text-[10px] font-bold bg-indigo-600 text-white px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                      ⭐ Recommandé
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">
-                  Compare le solde du soir à celui du matin, calcule les montants versés et met à jour le CRM.
+                  Compare avec le matin, déduit le reste à recouvrer et comptabilise les encaissements réels.
                 </p>
               </div>
             </button>

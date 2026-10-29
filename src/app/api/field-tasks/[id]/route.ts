@@ -217,7 +217,7 @@ export async function PATCH(
       }).catch((err) => console.error("Error sending field task completed telegram alert:", err));
     }
 
-    touchSyncState("tickets").catch(() => {});
+    await touchSyncState("tickets").catch(() => {});
 
     return NextResponse.json({ task });
   } catch (error) {
@@ -279,7 +279,7 @@ export async function DELETE(
       await prisma.fieldTask.delete({ where: { id } });
     }
 
-    touchSyncState("tickets").catch(() => {});
+    await touchSyncState("tickets").catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("DELETE /api/field-tasks/[id] error:", error);

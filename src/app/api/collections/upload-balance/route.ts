@@ -248,8 +248,12 @@ export async function POST(request: NextRequest) {
       keys.find((k) => /phone|tel/i.test(k));
 
     const balanceKey =
-      keys.find((k) => /^(balance|solde|current\s*balance|montant|total\s*balance|impayes|arrears)$/i.test(k.trim())) ||
+      keys.find((k) => /^(balance|solde|current\s*balance|total\s*balance|impayes|arrears)$/i.test(k.trim())) ||
       keys.find((k) => /balance|solde|impaye/i.test(k));
+
+    const paymentKey =
+      keys.find((k) => /^(versement|paiement|payment|cleared|paye|amount\s*paid|montant\s*verse|reglement)$/i.test(k.trim())) ||
+      keys.find((k) => /versement|paiement|payment|cleared|paye|reglement/i.test(k));
 
     const cinKey =
       keys.find((k) => /^(id\s*number|cin|cnie|piece\s*identite)$/i.test(k.trim())) ||
@@ -275,9 +279,9 @@ export async function POST(request: NextRequest) {
       keys.find((k) => /^(city|ville|hub|region)$/i.test(k.trim())) ||
       keys.find((k) => /city|ville|hub/i.test(k));
 
-    if (!balanceKey) {
+    if (!balanceKey && !paymentKey) {
       return NextResponse.json(
-        { error: "Colonne 'Balance' ou 'Solde' introuvable dans le fichier CSV." },
+        { error: "Colonne 'Balance', 'Solde', 'Versement' ou 'Paiement' introuvable dans le fichier CSV." },
         { status: 400 }
       );
     }
@@ -303,10 +307,14 @@ export async function POST(request: NextRequest) {
       const rawStatus = statusKey ? row[statusKey]?.trim() : "";
       const rawContract = contractKey ? row[contractKey]?.trim() : "";
       const rawCity = cityKey ? row[cityKey]?.trim() : "";
-      const rawBalance = row[balanceKey];
+      const rawBalance = balanceKey ? row[balanceKey] : undefined;
+      const rawPayment = paymentKey ? row[paymentKey] : undefined;
 
-      const balance = parseBalance(rawBalance);
-      if (balance === null) continue;
+      let balance = parseBalance(rawBalance);
+      const directPayment = parseBalance(rawPayment) !== null ? Math.max(0, parseBalance(rawPayment)!) : 0;
+
+      if (balance === null && directPayment === 0) continue;
+      if (balance === null) balance = 0;
 
       // ── Step 1: Resolve or Create Vehicle from Plate ───────────────────
       let vehicle = null;
@@ -628,6 +636,9 @@ export async function POST(request: NextRequest) {
         // Negative balance represents debt. Positive balance represents credit/advance (0 debt).
         const morningArrears = balance < 0 ? Math.abs(balance) : 0;
         const morningUnpaidDays = morningArrears === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
+        // If file contains explicit payment amount, preserve and credit it instead of wiping to 0
+        const morningCleared = directPayment > 0 ? directPayment : 0;
+        if (morningCleared > 0) totalCollectedToday += morningCleared;
 
         if (existingLedger) {
           await prisma.paymentLedger.update({
@@ -635,8 +646,9 @@ export async function POST(request: NextRequest) {
             data: {
               morningBalance: balance,
               expectedMAD: expectedMAD || existingLedger.expectedMAD,
+              clearedMAD: morningCleared > 0 ? morningCleared : existingLedger.clearedMAD,
               arrearsMAD: morningArrears,
-              notes: existingLedger.notes || `Solde initial: ${balance} MAD`,
+              notes: existingLedger.notes || `Solde initial: ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
             },
           });
         } else {
@@ -645,10 +657,10 @@ export async function POST(request: NextRequest) {
               driverId: driver.id,
               paymentDate: targetDate,
               expectedMAD,
-              clearedMAD: 0,
+              clearedMAD: morningCleared,
               arrearsMAD: morningArrears,
               morningBalance: balance,
-              notes: `Solde initial (matin): ${balance} MAD`,
+              notes: `Solde initial (matin): ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
             },
           });
         }
@@ -675,9 +687,9 @@ export async function POST(request: NextRequest) {
           plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
           morningBalance: balance,
           eveningBalance: null,
-          collectedAmount: 0,
+          collectedAmount: morningCleared,
           expectedMAD,
-          status: "MORNING_SET",
+          status: morningCleared > 0 ? (morningCleared >= expectedMAD ? "PAID" : "PARTIAL") : "MORNING_SET",
           isRedFlagged: Boolean(driver.isRedFlagged),
           redFlagReason: driver.redFlagReason || null,
         });
@@ -688,15 +700,14 @@ export async function POST(request: NextRequest) {
             ? existingLedger.morningBalance
             : -driver.currentArrearsMAD;
 
-        let collected = 0;
+        let calculatedDelta = 0;
         if (morningBal <= 0 && balance >= morningBal) {
-          collected = balance - morningBal;
+          calculatedDelta = balance - morningBal;
         } else if (morningBal > 0 && balance <= morningBal) {
-          collected = morningBal - balance;
-        } else if (morningBal <= 0 && balance < morningBal) {
-          collected = 0;
+          calculatedDelta = morningBal - balance;
         }
 
+        let collected = directPayment > 0 ? Math.max(directPayment, calculatedDelta) : calculatedDelta;
         collected = Math.max(0, Math.round(collected * 100) / 100);
         totalCollectedToday += collected;
 
@@ -712,7 +723,7 @@ export async function POST(request: NextRequest) {
           unpaidCount++;
         }
 
-        const newArrears = balance < 0 ? Math.abs(balance) : 0;
+        const newArrears = balance !== 0 ? (balance < 0 ? Math.abs(balance) : 0) : Math.max(0, (driver.currentArrearsMAD || 0) - collected);
         let newUnpaidDays = driver.consecutiveUnpaidDays || 0;
         if (collected >= expectedMAD && expectedMAD > 0) {
           newUnpaidDays = 0;
