@@ -24,14 +24,14 @@ export async function GET() {
     if ("error" in authResult) {
       return authResult.error;
     }
-    // Return cached leads if fresh (5s TTL)
+    // Return cached leads if fresh (3s TTL)
     const cached = getCachedLeads();
     if (cached) {
       return NextResponse.json(
         { leads: cached },
         {
           headers: {
-            "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
           },
         }
       );
@@ -67,6 +67,7 @@ export async function GET() {
         data: {
           board_column: "NEW_LEADS",
           brand_status: null,
+          reminder_date: null,
           updated_at: now,
         },
       }).catch(() => {});
@@ -76,7 +77,7 @@ export async function GET() {
       { leads: enrichedLeads },
       {
         headers: {
-          "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       }
     );

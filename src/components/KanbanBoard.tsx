@@ -151,6 +151,37 @@ const TRAINING_COLUMNS = [
   "Preorder",
 ] as const;
 
+const OVERRIDE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getLocalLeadOverrides(): Record<string, { lead: Lead; timestamp: number }> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem("gocab_lead_overrides");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const valid: Record<string, { lead: Lead; timestamp: number }> = {};
+    for (const [id, entry] of Object.entries(parsed)) {
+      if (entry && typeof entry === "object" && (now - (entry as any).timestamp) < OVERRIDE_TTL_MS) {
+        valid[id] = entry as any;
+      }
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalLeadOverride(lead: Partial<Lead> & { id: string }) {
+  if (typeof window === "undefined" || !lead?.id) return;
+  try {
+    const overrides = getLocalLeadOverrides();
+    const existing = overrides[lead.id]?.lead || ({} as Lead);
+    overrides[lead.id] = { lead: { ...existing, ...lead } as Lead, timestamp: Date.now() };
+    localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
+  } catch {}
+}
+
 export default function KanbanBoard() {
   const { language, setLanguage, t, dir } = useLanguage();
   const { data: session, update: updateSession } = useSession() || {};
@@ -419,14 +450,27 @@ export default function KanbanBoard() {
   /** Fetch all leads from the API. */
   const fetchLeads = useCallback(async () => {
     try {
-      const res = await fetch("/api/leads");
+      const res = await fetch("/api/leads", { cache: "no-store" });
       if (!res.ok) {
         console.error("Leads API error status:", res.status);
         return;
       }
       const data = await res.json();
       if (Array.isArray(data.leads)) {
-        setLeads(data.leads);
+        const overrides = getLocalLeadOverrides();
+        const now = Date.now();
+        const mergedLeads = data.leads.map((serverLead: Lead) => {
+          const override = overrides[serverLead.id];
+          if (override?.lead) {
+            const serverUpdated = serverLead.updated_at ? new Date(serverLead.updated_at).getTime() : 0;
+            // Retain local client override if saved within the last 5 minutes and server hasn't committed a newer update
+            if (serverUpdated <= override.timestamp && now - override.timestamp < OVERRIDE_TTL_MS) {
+              return { ...serverLead, ...override.lead };
+            }
+          }
+          return serverLead;
+        });
+        setLeads(mergedLeads);
       }
     } catch (err) {
       console.error("Failed to fetch leads:", err);
@@ -962,6 +1006,7 @@ export default function KanbanBoard() {
 
   /** After drawer update, update the lead in state and notify live sessions. */
   function handleLeadUpdate(updatedLead: Lead) {
+    saveLocalLeadOverride(updatedLead);
     setLeads((prev) =>
       prev.map((l) => (l.id === updatedLead.id ? updatedLead : l))
     );
@@ -971,6 +1016,13 @@ export default function KanbanBoard() {
 
   /** After drawer deletion, remove the lead from state and notify live sessions. */
   function handleLeadDelete(deletedLeadId: string) {
+    if (typeof window !== "undefined") {
+      try {
+        const overrides = getLocalLeadOverrides();
+        delete overrides[deletedLeadId];
+        localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
+      } catch {}
+    }
     setLeads((prev) => prev.filter((l) => l.id !== deletedLeadId));
     setSelectedLead(null);
     notifyMutation("leads");
@@ -1061,17 +1113,16 @@ export default function KanbanBoard() {
     // Handle Leads Tab Drops
     if (activeTab === "leads") {
       if (targetColumn === "NEW_LEADS") {
-        // Optimistic update
+        const updated = { ...lead, board_column: "NEW_LEADS", brand_status: null, reminder_date: null };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "NEW_LEADS", brand_status: null } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null }),
+            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null, reminder_date: null }),
           });
         } catch (err) {
           fetchLeads();
@@ -1080,10 +1131,15 @@ export default function KanbanBoard() {
         // Move to Training Pipeline, preserve existing training status if already progressed
         const targetTrainingStatus = lead.training_status || "Scheduled";
         const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
+        const updated = {
+          ...lead,
+          board_column: targetBoardColumn,
+          brand_status: targetColumn,
+          training_status: targetTrainingStatus,
+        };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: targetBoardColumn, brand_status: targetColumn, training_status: targetTrainingStatus } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
@@ -1099,16 +1155,26 @@ export default function KanbanBoard() {
         }
       } else {
         // Move to Brand Pre-Filter status
+        const isRecall = targetColumn === "To Recall";
+        const updated = {
+          ...lead,
+          board_column: "BRAND_PRE_FILTER",
+          brand_status: targetColumn,
+          reminder_date: isRecall ? lead.reminder_date : null,
+        };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "BRAND_PRE_FILTER", brand_status: targetColumn } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "BRAND_PRE_FILTER", brand_status: targetColumn }),
+            body: JSON.stringify({
+              board_column: "BRAND_PRE_FILTER",
+              brand_status: targetColumn,
+              reminder_date: isRecall ? lead.reminder_date : null,
+            }),
           });
         } catch (err) {
           fetchLeads();
@@ -1135,18 +1201,16 @@ export default function KanbanBoard() {
         }
 
         // Move to Vehicle Assignment immediately and open drawer to choose vehicle
+        const updated = { ...lead, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle", reminder_date: null };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId
-              ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" }
-              : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" }),
+            body: JSON.stringify({ board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle", reminder_date: null }),
           });
           // Trigger WhatsApp thank you & Alert
           const waUrl = generateThankYouURL(lead.sanitized_phone);
@@ -1157,10 +1221,10 @@ export default function KanbanBoard() {
         }
       } else if (targetColumn === "Pending") {
         // Move to Pending immediately and open drawer
+        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", training_status: targetColumn } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
@@ -1174,10 +1238,10 @@ export default function KanbanBoard() {
         }
       } else if (targetColumn === "Preorder") {
         // Move to Preorder immediately and open drawer
+        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", training_status: targetColumn } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
@@ -1191,16 +1255,16 @@ export default function KanbanBoard() {
         }
       } else {
         // Standard training status move
+        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn, reminder_date: null };
+        saveLocalLeadOverride(updated);
         setLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", training_status: targetColumn } : l
-          )
+          prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
           await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "TRAINING_PIPELINE", training_status: targetColumn }),
+            body: JSON.stringify({ board_column: "TRAINING_PIPELINE", training_status: targetColumn, reminder_date: null }),
           });
         } catch (err) {
           fetchLeads();

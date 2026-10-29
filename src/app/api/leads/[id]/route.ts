@@ -69,12 +69,19 @@ export async function PATCH(
 
     if (body.board_column !== undefined) {
       updateData.board_column = body.board_column as string;
+      if (body.board_column === "NEW_LEADS" && body.reminder_date === undefined) {
+        updateData.reminder_date = null;
+      }
     }
     if (body.brand_status !== undefined) {
       updateData.brand_status = body.brand_status;
       // If moving back to a leads board status (other than Training fixed), clear training_status so it doesn't stay stuck in training
       if (body.brand_status && body.brand_status !== "Training fixed" && body.training_status === undefined) {
         updateData.training_status = null;
+      }
+      // If moving to any status other than "To Recall" and "Training fixed", clear reminder_date if not explicitly provided
+      if (body.brand_status !== "To Recall" && body.brand_status !== "Training fixed" && body.reminder_date === undefined) {
+        updateData.reminder_date = null;
       }
     }
     if (body.training_status !== undefined) {

@@ -7,7 +7,7 @@ let leadsCache: { leads: any[]; timestamp: number } | null = null;
 let lastRecallCheckAt = 0;
 
 export function getCachedLeads(): any[] | null {
-  if (leadsCache && Date.now() - leadsCache.timestamp < 60000) {
+  if (leadsCache && Date.now() - leadsCache.timestamp < 3000) {
     return leadsCache.leads;
   }
   return null;

@@ -542,6 +542,7 @@ export default function LeadDrawer({
         if (brandStatus === "NEW_LEADS" || !brandStatus) {
           payload.board_column = "NEW_LEADS";
           payload.brand_status = null;
+          payload.reminder_date = null;
         } else if (brandStatus === "Training fixed") {
           // Move from leads page to training page (preserve existing training status if already progressed)
           payload.board_column = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
@@ -573,6 +574,7 @@ export default function LeadDrawer({
           payload.board_column = "BRAND_PRE_FILTER";
           payload.brand_status = brandStatus;
           payload.training_status = null;
+          payload.reminder_date = null;
         }
       } else {
         payload.training_status = trainingStatus;
@@ -604,6 +606,7 @@ export default function LeadDrawer({
           // Move to vehicle assignment
           payload.board_column = "VEHICLE_ASSIGNMENT";
           payload.training_status = "Assign vehicle";
+          payload.reminder_date = null;
           if (selectedVehicleId) {
             payload.assigned_vehicle_id = selectedVehicleId;
           }
@@ -622,6 +625,7 @@ export default function LeadDrawer({
           payload.preorder_amount = preorderAmount ? parseFloat(preorderAmount) : null;
         } else {
           payload.board_column = "TRAINING_PIPELINE";
+          payload.reminder_date = null;
         }
       }
 
