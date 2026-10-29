@@ -432,10 +432,9 @@ export default function FleetPerformanceView() {
       const data = await res.json();
 
       if (data.drivers) {
-        // Detect stale container data (e.g. old 67190 MAD seed or 46930 unassigned debt)
+        // Detect stale container data (e.g. old 67190 MAD seed)
         const isStaleServerSeed =
-          data.summary?.totalMorningTargetMAD === 67190 ||
-          (data.summary?.unassignedArrearsMAD || 0) > 0;
+          data.summary?.totalMorningTargetMAD === 67190;
 
         // Clean up any stale 67190 / 46930 entries from localStorage
         if (typeof window !== "undefined") {

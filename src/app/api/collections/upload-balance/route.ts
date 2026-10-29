@@ -114,24 +114,88 @@ function parseBalance(val: any): number | null {
   return hasMinus ? -Math.abs(num) : Math.abs(num);
 }
 
+/**
+ * Dynamically detects spreadsheet column headers.
+ */
+function detectHeaders(firstRow: any) {
+  if (!firstRow) return {} as any;
+  const keys = Object.keys(firstRow);
+
+  const nameKey =
+    keys.find((k) => /^(name|driver\s*name|nom|chauffeur|full\s*name)$/i.test(k.trim())) ||
+    keys.find((k) => /name|nom/i.test(k));
+
+  const phoneKey =
+    keys.find((k) => /^(phone|phone\s*number|telephone|tel|num|mobile)$/i.test(k.trim())) ||
+    keys.find((k) => /phone|tel/i.test(k));
+
+  const cinKey =
+    keys.find((k) => /^(id\s*number|cin|cnie|piece\s*identite)$/i.test(k.trim())) ||
+    keys.find((k) => /id\s*number|cin/i.test(k));
+
+  const plateKey =
+    keys.find((k) => /^(plate|plate\s*number|immatriculation|matricule|vehicule|vehicules|vehicle|vehicles|car|cars)$/i.test(k.trim())) ||
+    keys.find((k) => /plate|immat|matricule|vehicle|vehicule/i.test(k));
+
+  const makeModelKey =
+    keys.find((k) => /^(make|model|make\s*model|marque|modele|car\s*model)$/i.test(k.trim())) ||
+    keys.find((k) => /model|marque/i.test(k));
+
+  const statusKey =
+    keys.find((k) => /^(status|statut|etat|vehicle\s*status)$/i.test(k.trim())) ||
+    keys.find((k) => /status|statut/i.test(k) && !/activation|driver/i.test(k));
+
+  const contractKey =
+    keys.find((k) => /^(contract|contrat|contract\s*type|type\s*contrat)$/i.test(k.trim())) ||
+    keys.find((k) => /contract|contrat/i.test(k));
+
+  const cityKey =
+    keys.find((k) => /^(city|ville|hub|region)$/i.test(k.trim())) ||
+    keys.find((k) => /city|ville|hub/i.test(k));
+
+  const morningBalanceKey =
+    keys.find((k) => /solde\s*matin|balance\s*matin|solde\s*debut|solde\s*initial|morning\s*balance/i.test(k.trim())) ||
+    keys.find((k) => /matin|morning/i.test(k));
+
+  const eveningBalanceKey =
+    keys.find((k) => /solde\s*soir|balance\s*soir|solde\s*fin|solde\s*final|evening\s*balance/i.test(k.trim())) ||
+    keys.find((k) => /soir|evening/i.test(k));
+
+  const genericBalanceKey =
+    keys.find((k) => /^(balance|solde|current\s*balance|total\s*balance|impayes|arrears)$/i.test(k.trim())) ||
+    keys.find((k) => /balance|solde|impaye/i.test(k));
+
+  const paymentKey =
+    keys.find((k) => /^(versement|paiement|payment|cleared|paye|amount\s*paid|montant\s*verse|reglement|recouvrement|encaissement|encaisse|espece|cash|virement|recu|depot|total\s*paye|somme\s*versee|clearedmad)$/i.test(k.trim())) ||
+    keys.find((k) => /versement|paiement|payment|cleared|paye|reglement|recouvrement|encaissement/i.test(k));
+
+  return {
+    nameKey,
+    phoneKey,
+    cinKey,
+    plateKey,
+    makeModelKey,
+    statusKey,
+    contractKey,
+    cityKey,
+    morningBalanceKey,
+    eveningBalanceKey,
+    genericBalanceKey,
+    paymentKey,
+  };
+}
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const mode = ((formData.get("mode") as string) || "MORNING").toUpperCase(); // "MORNING" or "EVENING"
+    const singleFile = formData.get("file") as File | null;
+    const morningFile = (formData.get("morningFile") || formData.get("fileMorning")) as File | null;
+    const eveningFile = (formData.get("eveningFile") || formData.get("fileEvening")) as File | null;
+    const reqMode = ((formData.get("mode") as string) || "MORNING").toUpperCase(); // "MORNING", "EVENING", or "DUAL"
     const dateParam = (formData.get("date") as string) || new Date().toISOString().split("T")[0];
-
-    if (!file) {
-      return NextResponse.json({ error: "Veuillez fournir un fichier CSV ou Excel (.xlsx)." }, { status: 400 });
-    }
-
-    const { rows } = await parseSpreadsheetFile(file);
-    if (rows.length === 0) {
-      return NextResponse.json({ error: "Le fichier est vide ou illisible." }, { status: 400 });
-    }
 
     // Determine target business date
     const targetDate = new Date(`${dateParam}T12:00:00.000Z`);
@@ -143,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     // If Monday (dayOfWeek === 1), fetch previous Friday through Sunday ledgers to compare balances
     const fridayDate = new Date(targetDate);
-    fridayDate.setUTCDate(fridayDate.getUTCDate() - 3); // 3 days before Monday is Friday
+    fridayDate.setUTCDate(fridayDate.getUTCDate() - 3);
     const startOfFriday = new Date(fridayDate);
     startOfFriday.setUTCHours(0, 0, 0, 0);
 
@@ -208,7 +272,6 @@ export async function POST(request: NextRequest) {
       if (pNorm) plateMap.set(pNorm, v);
       if (cNorm) plateMap.set(cNorm, v);
 
-      // Support WW prefix <-> suffix mapping (e.g. WW028124 <-> 028124WW)
       if (cNorm.includes("WW")) {
         const digits = cNorm.replace(/WW/g, "");
         if (digits) {
@@ -235,61 +298,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Detect column headers dynamically from the CSV
-    const firstRow = rows[0];
-    const keys = Object.keys(firstRow);
+    // Determine operation mode & parse spreadsheet file(s)
+    let isDualFiles = !!(morningFile && eveningFile);
+    let morningRows: any[] = [];
+    let eveningRows: any[] = [];
+    let singleRows: any[] = [];
 
-    const nameKey =
-      keys.find((k) => /^(name|driver\s*name|nom|chauffeur|full\s*name)$/i.test(k.trim())) ||
-      keys.find((k) => /name|nom/i.test(k));
-
-    const phoneKey =
-      keys.find((k) => /^(phone|phone\s*number|telephone|tel|num|mobile)$/i.test(k.trim())) ||
-      keys.find((k) => /phone|tel/i.test(k));
-
-    const balanceKey =
-      keys.find((k) => /^(balance|solde|current\s*balance|total\s*balance|impayes|arrears)$/i.test(k.trim())) ||
-      keys.find((k) => /balance|solde|impaye/i.test(k));
-
-    const paymentKey =
-      keys.find((k) => /^(versement|paiement|payment|cleared|paye|amount\s*paid|montant\s*verse|reglement)$/i.test(k.trim())) ||
-      keys.find((k) => /versement|paiement|payment|cleared|paye|reglement/i.test(k));
-
-    const cinKey =
-      keys.find((k) => /^(id\s*number|cin|cnie|piece\s*identite)$/i.test(k.trim())) ||
-      keys.find((k) => /id\s*number|cin/i.test(k));
-
-    const plateKey =
-      keys.find((k) => /^(plate|plate\s*number|immatriculation|matricule|vehicule|vehicules|vehicle|vehicles|car|cars)$/i.test(k.trim())) ||
-      keys.find((k) => /plate|immat|matricule|vehicle|vehicule/i.test(k));
-
-    const makeModelKey =
-      keys.find((k) => /^(make|model|make\s*model|marque|modele|car\s*model)$/i.test(k.trim())) ||
-      keys.find((k) => /model|marque/i.test(k));
-
-    const statusKey =
-      keys.find((k) => /^(status|statut|etat|vehicle\s*status)$/i.test(k.trim())) ||
-      keys.find((k) => /status|statut/i.test(k) && !/activation|driver/i.test(k));
-
-    const contractKey =
-      keys.find((k) => /^(contract|contrat|contract\s*type|type\s*contrat)$/i.test(k.trim())) ||
-      keys.find((k) => /contract|contrat/i.test(k));
-
-    const cityKey =
-      keys.find((k) => /^(city|ville|hub|region)$/i.test(k.trim())) ||
-      keys.find((k) => /city|ville|hub/i.test(k));
-
-    if (!balanceKey && !paymentKey) {
-      return NextResponse.json(
-        { error: "Colonne 'Balance', 'Solde', 'Versement' ou 'Paiement' introuvable dans le fichier CSV." },
-        { status: 400 }
-      );
+    if (isDualFiles) {
+      const mParsed = await parseSpreadsheetFile(morningFile!);
+      const eParsed = await parseSpreadsheetFile(eveningFile!);
+      morningRows = mParsed.rows;
+      eveningRows = eParsed.rows;
+      if (morningRows.length === 0 || eveningRows.length === 0) {
+        return NextResponse.json({ error: "L'un des fichiers fournis (Matin ou Soir) est vide ou illisible." }, { status: 400 });
+      }
+    } else {
+      const targetFile = singleFile || morningFile || eveningFile;
+      if (!targetFile) {
+        return NextResponse.json({ error: "Veuillez fournir un fichier CSV ou Excel (.xlsx)." }, { status: 400 });
+      }
+      const parsed = await parseSpreadsheetFile(targetFile);
+      singleRows = parsed.rows;
+      if (singleRows.length === 0) {
+        return NextResponse.json({ error: "Le fichier est vide ou illisible." }, { status: 400 });
+      }
     }
 
     const matchedDriversList: any[] = [];
     const unmatchedRows: any[] = [];
     const reassignedVehicles: { plate: string; previousDriver: string; newDriver: string }[] = [];
-    const processedDriverIds = new Set<string>();
     let totalCollectedToday = 0;
     let totalMorningTargetMAD = 0;
     let paidCount = 0;
@@ -298,41 +335,26 @@ export async function POST(request: NextRequest) {
     let newDriversCreated = 0;
     let newVehiclesCreated = 0;
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const rawName = nameKey ? row[nameKey]?.trim() : "";
-      const rawPhone = phoneKey ? row[phoneKey]?.trim() : "";
-      const rawCin = cinKey ? row[cinKey]?.trim() : "";
-      const rawPlate = plateKey ? row[plateKey]?.trim() : "";
-      const rawMakeModel = makeModelKey ? row[makeModelKey]?.trim() : "";
-      const rawStatus = statusKey ? row[statusKey]?.trim() : "";
-      const rawContract = contractKey ? row[contractKey]?.trim() : "";
-      const rawCity = cityKey ? row[cityKey]?.trim() : "";
-      const rawBalance = balanceKey ? row[balanceKey] : undefined;
-      const rawPayment = paymentKey ? row[paymentKey] : undefined;
+    // Helper to resolve or link driver and vehicle for any row
+    const resolveDriverAndVehicle = async (row: any, hdrs: ReturnType<typeof detectHeaders>) => {
+      const rawPlate = hdrs.plateKey ? row[hdrs.plateKey]?.trim() : "";
+      const rawMakeModel = hdrs.makeModelKey ? row[hdrs.makeModelKey]?.trim() : "";
+      const rawStatus = hdrs.statusKey ? row[hdrs.statusKey]?.trim() : "";
+      const rawCity = hdrs.cityKey ? row[hdrs.cityKey]?.trim() : "";
+      const rawName = hdrs.nameKey ? row[hdrs.nameKey]?.trim() : "";
+      const rawPhone = hdrs.phoneKey ? row[hdrs.phoneKey]?.trim() : "";
+      const rawCin = hdrs.cinKey ? row[hdrs.cinKey]?.trim() : "";
 
-      let balance = parseBalance(rawBalance);
-      const directPayment = parseBalance(rawPayment) !== null ? Math.max(0, parseBalance(rawPayment)!) : 0;
-
-      if (balance === null && directPayment === 0) continue;
-      if (balance === null) balance = 0;
-
-      // ── Step 1: Resolve or Create Vehicle from Plate ───────────────────
       let vehicle = null;
       if (rawPlate) {
         const normPlate = normalizePlate(rawPlate);
         const compPlate = compactPlate(rawPlate);
         if (normPlate) {
           vehicle = plateMap.get(normPlate) || plateMap.get(compPlate);
-
-          // Fuzzy WW lookup
           if (!vehicle && compPlate.includes("WW")) {
             const digits = compPlate.replace(/WW/g, "");
-            if (digits) {
-              vehicle = plateMap.get(`WW${digits}`) || plateMap.get(`${digits}WW`) || null;
-            }
+            if (digits) vehicle = plateMap.get(`WW${digits}`) || plateMap.get(`${digits}WW`) || null;
           }
-
           if (!vehicle && rawPhone) {
             const pNorm = normalizePhone(rawPhone);
             const d = pNorm ? phoneMap.get(pNorm) : undefined;
@@ -340,7 +362,6 @@ export async function POST(request: NextRequest) {
               vehicle = allVehicles.find((av) => av.id === d.assignedVehicleId) || null;
             }
           }
-
           if (!vehicle && rawName) {
             const nNorm = normalizeName(rawName);
             const d = nNorm ? nameMap.get(nNorm) : undefined;
@@ -374,56 +395,40 @@ export async function POST(request: NextRequest) {
               });
               plateMap.set(normPlate, vehicle);
               if (compPlate) plateMap.set(compPlate, vehicle);
-              newVehiclesCreated++;
             } catch (e) {
               vehicle = plateMap.get(normPlate) || plateMap.get(compPlate) || null;
             }
-          } else if (normalizedStatus && vehicle.status !== normalizedStatus) {
-            // Update vehicle status if explicitly specified in CSV
-            await prisma.vehicle.update({
-              where: { id: vehicle.id },
-              data: { status: normalizedStatus },
-            }).catch(() => {});
           }
         }
       }
 
-      // ── Step 2: Resolve or Create Driver ───────────────────────────────
       let driver: typeof allDrivers[0] | undefined;
-
       if (rawPhone) {
         const pNorm = normalizePhone(rawPhone);
         driver = phoneMap.get(pNorm);
       }
-
       if (!driver && rawCin) {
         driver = cinMap.get(rawCin.toUpperCase().trim());
       }
-
       if (!driver && rawName) {
         const nNorm = normalizeName(rawName);
         driver = nameMap.get(nNorm);
-
-        // Fallback: partial word matching
         if (!driver) {
-          const parts = nNorm.split(" ").filter((p) => p.length >= 3);
+          const parts = nNorm.split(" ").filter((p: string) => p.length >= 3);
           for (const d of allDrivers) {
             const dNorm = normalizeName(d.fullName);
-            if (parts.length >= 2 && parts.every((p) => dNorm.includes(p))) {
+            if (parts.length >= 2 && parts.every((p: string) => dNorm.includes(p))) {
               driver = d;
               break;
             }
           }
         }
       }
-
-      // Fallback: check vehicle's currently assigned driver if available
       if (!driver && vehicle?.id) {
         const vDriver = allDrivers.find((d) => d.assignedVehicleId === vehicle!.id);
         if (vDriver) {
-          if (!rawName) {
-            driver = vDriver;
-          } else {
+          if (!rawName) driver = vDriver;
+          else {
             const vNorm = normalizeName(vDriver.fullName);
             const rNorm = normalizeName(rawName);
             if (vNorm === rNorm || vNorm.includes(rNorm) || rNorm.includes(vNorm)) {
@@ -433,280 +438,128 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If driver is not found in DB, auto-enroll driver from CSV (SSOT)
-      if (!driver) {
-        const pDigits = normalizePhone(rawPhone);
-        const phoneFormatted = pDigits
-          ? `+212${pDigits}`
-          : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
-        const cinFormatted = rawCin
-          ? rawCin.toUpperCase().trim()
-          : `CIN-${Math.floor(100000 + Math.random() * 900000)}`;
-
+      // Auto-link driver to vehicle if plate is present in spreadsheet
+      if (driver && vehicle && driver.assignedVehicleId !== vehicle.id) {
         try {
-          // If vehicle is being linked to this new driver, safely unassign any prior driver
-          if (vehicle?.id) {
-            await prisma.driverProfile.updateMany({
-              where: { assignedVehicleId: vehicle.id },
-              data: { assignedVehicleId: null },
-            });
-            for (const d of allDrivers) {
-              if (d.assignedVehicleId === vehicle.id) {
-                d.assignedVehicleId = null;
-                (d as any).assignedVehicle = null;
-              }
-            }
-          }
-
-          const newDriver = await prisma.driverProfile.create({
-            data: {
-              fullName: rawName || `Chauffeur ${rawPlate || "CSV"}`,
-              phoneSanitized: phoneFormatted,
-              cinNumber: cinFormatted,
-              contractType: rawContract?.toUpperCase() === "WEEKLY" ? "WEEKLY" : "DAILY",
-              assignedVehicleId: vehicle?.id || null,
-              currentArrearsMAD: balance < 0 ? Math.abs(balance) : 0,
-              consecutiveUnpaidDays: balance < 0 ? Math.max(1, Math.ceil(Math.abs(balance) / 300)) : 0,
-              defaultStage:
-                balance < -1500 ? "DAY_3_BLOCK" : balance < -600 ? "DAY_2_ACTION" : "NOMINAL",
+          await prisma.driverProfile.updateMany({
+            where: {
+              assignedVehicleId: vehicle.id,
+              id: { not: driver.id },
             },
-            include: {
-              assignedVehicle: true,
-              payments: true,
+            data: { assignedVehicleId: null },
+          });
+
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: {
+              assignedVehicleId: vehicle.id,
+              is_archived: false,
             },
           });
 
-          driver = newDriver as any;
-          allDrivers.push(newDriver as any);
-          if (pDigits) phoneMap.set(pDigits, newDriver as any);
-          if (rawName) nameMap.set(normalizeName(rawName), newDriver as any);
-          cinMap.set(cinFormatted, newDriver as any);
-          newDriversCreated++;
-
-          if (vehicle?.id && newDriver) {
-            await prisma.vehicle.update({
-              where: { id: vehicle.id },
-              data: {
-                assigned_driver_name: newDriver.fullName,
-                assigned_driver_phone: newDriver.phoneSanitized,
-              },
-            }).catch(() => {});
-          }
-        } catch (err) {
-          console.warn("Auto-create driver failed from CSV row:", err);
-        }
-      }
-
-      if (!driver) {
-        unmatchedRows.push({
-          rowNumber: i + 2,
-          name: rawName || "Inconnu",
-          phone: rawPhone || "-",
-          balance,
-        });
-        continue;
-      }
-
-      processedDriverIds.add(driver.id);
-
-      // Link vehicle if not yet linked
-      if (vehicle && driver.assignedVehicleId !== vehicle.id) {
-        // Release vehicle from any other driver currently assigned to it and archive them
-        await prisma.driverProfile.updateMany({
-          where: { assignedVehicleId: vehicle.id, id: { not: driver.id } },
-          data: { assignedVehicleId: null, is_archived: true },
-        });
-        for (const d of allDrivers) {
-          if (d.assignedVehicleId === vehicle.id && d.id !== driver.id) {
-            reassignedVehicles.push({
-              plate: vehicle.plate_number,
-              previousDriver: d.fullName,
-              newDriver: driver.fullName,
-            });
-            d.assignedVehicleId = null;
-            (d as any).assignedVehicle = null;
-            (d as any).is_archived = true;
-          }
-        }
-
-        await prisma.driverProfile.update({
-          where: { id: driver.id },
-          data: { assignedVehicleId: vehicle.id, is_archived: false },
-        });
-        driver.assignedVehicleId = vehicle.id;
-        (driver as any).assignedVehicle = vehicle;
-        (driver as any).is_archived = false;
-
-        await prisma.vehicle.update({
-          where: { id: vehicle.id },
-          data: {
-            assigned_driver_name: driver.fullName,
-            assigned_driver_phone: driver.phoneSanitized || null,
-          },
-        }).catch(() => {});
-      } else if (vehicle && driver.assignedVehicleId === vehicle.id) {
-        // Ensure driver is active if currently assigned
-        if (driver.is_archived) {
-          await prisma.driverProfile.update({
-            where: { id: driver.id },
-            data: { is_archived: false },
-          }).catch(() => {});
-          (driver as any).is_archived = false;
-        }
-
-        // Keep vehicle assigned driver metadata strictly in sync
-        if (
-          vehicle.assigned_driver_name !== driver.fullName ||
-          vehicle.assigned_driver_phone !== driver.phoneSanitized
-        ) {
           await prisma.vehicle.update({
             where: { id: vehicle.id },
             data: {
               assigned_driver_name: driver.fullName,
-              assigned_driver_phone: driver.phoneSanitized || null,
-            },
-          }).catch(() => {});
-        }
-      }
-
-      // Contract detection & expected amount
-      let contract = (rawContract || driver.contractType || "DAILY").toUpperCase();
-
-      if (dayOfWeek === 1) {
-        // MONDAY CONTRACT AUTO-DETECTION (WEEKLY 1,800 DH vs DAILY 300 DH)
-        // Retrieve driver's Friday (or most recent prior) balance
-        const priorEntry = priorLedgerMap.get(driver.id);
-        let fridayDebt = 0;
-        if (priorEntry) {
-          if (priorEntry.eveningBalance !== null && priorEntry.eveningBalance !== undefined) {
-            fridayDebt = priorEntry.eveningBalance < 0 ? Math.abs(priorEntry.eveningBalance) : 0;
-          } else if (priorEntry.morningBalance !== null && priorEntry.morningBalance !== undefined) {
-            fridayDebt = priorEntry.morningBalance < 0 ? Math.abs(priorEntry.morningBalance) : 0;
-          } else {
-            fridayDebt = priorEntry.arrearsMAD || 0;
-          }
-        } else {
-          fridayDebt = driver.currentArrearsMAD || 0;
-        }
-
-        const mondayDebt = balance < 0 ? Math.abs(balance) : 0;
-        const deltaDebt = mondayDebt - fridayDebt;
-
-        // Detection rules:
-        // 1. If added debt on Monday is ~1800 DH -> WEEKLY
-        // 2. If added debt is ~300 DH or ~600 DH (Saturday + Monday) -> DAILY
-        // 3. If fridayDebt was 0 and mondayDebt is ~1800 DH -> WEEKLY
-        // 4. If fridayDebt was 0 and mondayDebt is ~300 or ~600 DH -> DAILY
-        // 5. Special Edge Case: If mondayDebt is 1800, but fridayDebt > 0 (e.g. 1200 DH) and deltaDebt != 1800
-        //    (e.g. 1200 remaining + 300 Sat + 300 Mon = 1800 DH), this is DAILY, not weekly!
-        if (Math.abs(deltaDebt - 1800) <= 50) {
-          contract = "WEEKLY";
-        } else if (Math.abs(deltaDebt - 300) <= 50 || Math.abs(deltaDebt - 600) <= 50) {
-          contract = "DAILY";
-        } else if (fridayDebt === 0 && Math.abs(mondayDebt - 1800) <= 50) {
-          contract = "WEEKLY";
-        } else if (fridayDebt === 0 && (Math.abs(mondayDebt - 300) <= 50 || Math.abs(mondayDebt - 600) <= 50)) {
-          contract = "DAILY";
-        } else if (Math.abs(mondayDebt - 1800) <= 50 && fridayDebt > 0 && Math.abs(deltaDebt - 1800) > 100) {
-          contract = "DAILY";
-        }
-
-        // Persist detected contract type if changed
-        if (contract !== driver.contractType) {
-          await prisma.driverProfile
-            .update({
-              where: { id: driver.id },
-              data: { contractType: contract },
-            })
-            .catch(() => {});
-          driver.contractType = contract;
-        }
-      }
-
-      let expectedMAD = 0;
-      if (contract === "WEEKLY") {
-        if (dayOfWeek === 1) expectedMAD = 1800;
-      } else {
-        if (dayOfWeek >= 1 && dayOfWeek <= 6) expectedMAD = 300;
-      }
-
-      const existingLedger = driver.payments?.[0] || null;
-
-      if (mode === "MORNING") {
-        // === MORNING SNAPSHOT ===
-        // Negative balance represents debt. Positive balance represents credit/advance (0 debt).
-        const morningArrears = balance < 0 ? Math.abs(balance) : 0;
-        const morningUnpaidDays = morningArrears === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
-        // If file contains explicit payment amount, preserve and credit it instead of wiping to 0
-        const morningCleared = directPayment > 0 ? directPayment : 0;
-        totalMorningTargetMAD += morningArrears;
-        if (morningCleared > 0) totalCollectedToday += morningCleared;
-
-        if (existingLedger) {
-          await prisma.paymentLedger.update({
-            where: { id: existingLedger.id },
-            data: {
-              morningBalance: balance,
-              expectedMAD: expectedMAD || existingLedger.expectedMAD,
-              clearedMAD: morningCleared > 0 ? morningCleared : existingLedger.clearedMAD,
-              arrearsMAD: morningArrears,
-              notes: existingLedger.notes || `Solde initial: ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
+              assigned_driver_phone: driver.phoneSanitized,
+              status: "Actif",
             },
           });
-        } else {
-          await prisma.paymentLedger.create({
-            data: {
-              driverId: driver.id,
-              paymentDate: targetDate,
-              expectedMAD,
-              clearedMAD: morningCleared,
-              arrearsMAD: morningArrears,
-              morningBalance: balance,
-              notes: `Solde initial (matin): ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
-            },
+
+          reassignedVehicles.push({
+            plate: vehicle.plate_number,
+            previousDriver: vehicle.assigned_driver_name || "Non assigné",
+            newDriver: driver.fullName,
+          });
+
+          driver.assignedVehicleId = vehicle.id;
+          driver.is_archived = false;
+        } catch (linkErr) {
+          console.warn("Auto-linking driver to vehicle failed:", linkErr);
+        }
+      } else if (driver && driver.is_archived) {
+        try {
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: { is_archived: false },
+          });
+          driver.is_archived = false;
+        } catch (e) {}
+      }
+
+      return { driver, vehicle };
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CASE 1: DUAL FILES (User provided separate Morning and Evening files)
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (isDualFiles) {
+      const mHdrs = detectHeaders(morningRows[0]);
+      const eHdrs = detectHeaders(eveningRows[0]);
+
+      // Map driverId -> Morning Row Info
+      const driverMorningMap = new Map<string, { balance: number; vehicle: any; contract?: string }>();
+      for (let i = 0; i < morningRows.length; i++) {
+        const row = morningRows[i];
+        const rawBal = mHdrs.morningBalanceKey || mHdrs.genericBalanceKey ? row[mHdrs.morningBalanceKey || mHdrs.genericBalanceKey] : undefined;
+        const bal = parseBalance(rawBal) ?? 0;
+        const { driver, vehicle } = await resolveDriverAndVehicle(row, mHdrs);
+        if (driver) {
+          driverMorningMap.set(driver.id, {
+            balance: bal,
+            vehicle,
+            contract: mHdrs.contractKey ? row[mHdrs.contractKey] : undefined,
           });
         }
+      }
 
-        // Update driver's current arrears strictly according to CSV
-        await prisma.driverProfile.update({
-          where: { id: driver.id },
-          data: {
-            currentArrearsMAD: morningArrears,
-            consecutiveUnpaidDays: morningUnpaidDays,
-            defaultStage:
-              morningArrears >= 1500
-                ? "DAY_3_BLOCK"
-                : morningArrears >= 600
-                ? "DAY_2_ACTION"
-                : "NOMINAL",
-          },
-        });
+      // Process Evening Rows & Reconcile
+      const processedDrivers = new Set<string>();
+      for (let i = 0; i < eveningRows.length; i++) {
+        const row = eveningRows[i];
+        const rawBal = eHdrs.eveningBalanceKey || eHdrs.genericBalanceKey ? row[eHdrs.eveningBalanceKey || eHdrs.genericBalanceKey] : undefined;
+        const rawPay = eHdrs.paymentKey ? row[eHdrs.paymentKey] : undefined;
+        const eveningBal = parseBalance(rawBal) ?? 0;
+        const directPayment = parseBalance(rawPay) !== null ? Math.max(0, parseBalance(rawPay)!) : 0;
 
-        matchedDriversList.push({
-          driverId: driver.id,
-          fullName: driver.fullName,
-          phone: driver.phoneSanitized,
-          plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
-          morningBalance: balance,
-          eveningBalance: null,
-          collectedAmount: morningCleared,
-          expectedMAD,
-          status: morningCleared > 0 ? (morningCleared >= expectedMAD ? "PAID" : "PARTIAL") : "MORNING_SET",
-          isRedFlagged: Boolean(driver.isRedFlagged),
-          redFlagReason: driver.redFlagReason || null,
-        });
-      } else {
-        // === EVENING SNAPSHOT & RECONCILIATION ===
+        const { driver, vehicle } = await resolveDriverAndVehicle(row, eHdrs);
+        if (!driver) {
+          unmatchedRows.push({
+            rowNumber: i + 2,
+            name: eHdrs.nameKey ? row[eHdrs.nameKey] : "Inconnu",
+            phone: eHdrs.phoneKey ? row[eHdrs.phoneKey] : "-",
+            balance: eveningBal,
+          });
+          continue;
+        }
+
+        processedDrivers.add(driver.id);
+        const mInfo = driverMorningMap.get(driver.id);
+        const existingLedger = driver.payments?.[0] || null;
+
         const morningBal =
-          existingLedger?.morningBalance !== undefined && existingLedger?.morningBalance !== null
+          mInfo !== undefined
+            ? mInfo.balance
+            : existingLedger?.morningBalance !== undefined && existingLedger?.morningBalance !== null
             ? existingLedger.morningBalance
             : -driver.currentArrearsMAD;
 
+        const morningArrears = morningBal < 0 ? Math.abs(morningBal) : 0;
+        totalMorningTargetMAD += morningArrears;
+
+        let contract = (mInfo?.contract || driver.contractType || "DAILY").toUpperCase();
+        let expectedMAD = 0;
+        if (contract === "WEEKLY") {
+          if (dayOfWeek === 1) expectedMAD = 1800;
+        } else {
+          if (dayOfWeek >= 1 && dayOfWeek <= 6) expectedMAD = 300;
+        }
+
         let calculatedDelta = 0;
-        if (morningBal <= 0 && balance >= morningBal) {
-          calculatedDelta = balance - morningBal;
-        } else if (morningBal > 0 && balance <= morningBal) {
-          calculatedDelta = morningBal - balance;
+        if (morningBal <= 0 && eveningBal >= morningBal) {
+          calculatedDelta = eveningBal - morningBal;
+        } else if (morningBal > 0 && eveningBal <= morningBal) {
+          calculatedDelta = morningBal - eveningBal;
         }
 
         let collected = directPayment > 0 ? Math.max(directPayment, calculatedDelta) : calculatedDelta;
@@ -725,23 +578,20 @@ export async function POST(request: NextRequest) {
           unpaidCount++;
         }
 
-        const newArrears = balance !== 0 ? (balance < 0 ? Math.abs(balance) : 0) : Math.max(0, (driver.currentArrearsMAD || 0) - collected);
-        let newUnpaidDays = driver.consecutiveUnpaidDays || 0;
-        if (collected >= expectedMAD && expectedMAD > 0) {
-          newUnpaidDays = 0;
-        } else if (collected < expectedMAD && expectedMAD > 0) {
-          newUnpaidDays = Math.max(1, newUnpaidDays + 1);
-        }
+        const newArrears = eveningBal !== 0 ? (eveningBal < 0 ? Math.abs(eveningBal) : 0) : Math.max(0, morningArrears - collected);
+        const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
 
         if (existingLedger) {
           await prisma.paymentLedger.update({
             where: { id: existingLedger.id },
             data: {
-              eveningBalance: balance,
-              calculatedDelta: collected,
+              morningBalance: morningBal,
+              eveningBalance: eveningBal,
               clearedMAD: collected,
+              calculatedDelta: collected,
               arrearsMAD: newArrears,
-              notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
+              expectedMAD: expectedMAD || existingLedger.expectedMAD,
+              notes: `Rapprochement Matin + Soir: Matin ${morningBal} MAD ➔ Soir ${eveningBal} MAD (Encaissé: ${collected} MAD)`,
             },
           });
         } else {
@@ -753,9 +603,9 @@ export async function POST(request: NextRequest) {
               clearedMAD: collected,
               arrearsMAD: newArrears,
               morningBalance: morningBal,
-              eveningBalance: balance,
+              eveningBalance: eveningBal,
               calculatedDelta: collected,
-              notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
+              notes: `Rapprochement Matin + Soir: Matin ${morningBal} MAD ➔ Soir ${eveningBal} MAD (Encaissé: ${collected} MAD)`,
             },
           });
         }
@@ -766,12 +616,6 @@ export async function POST(request: NextRequest) {
             currentArrearsMAD: newArrears,
             consecutiveUnpaidDays: newUnpaidDays,
             lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
-            defaultStage:
-              newArrears >= 1500
-                ? "DAY_3_BLOCK"
-                : newArrears >= 600
-                ? "DAY_2_ACTION"
-                : "NOMINAL",
           },
         });
 
@@ -781,7 +625,7 @@ export async function POST(request: NextRequest) {
           phone: driver.phoneSanitized,
           plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
           morningBalance: morningBal,
-          eveningBalance: balance,
+          eveningBalance: eveningBal,
           collectedAmount: collected,
           expectedMAD,
           status: payStatus,
@@ -789,22 +633,327 @@ export async function POST(request: NextRequest) {
           redFlagReason: driver.redFlagReason || null,
         });
       }
-    }
 
-    // ── SSOT FLEET DEBT ALIGNMENT ─────────────────────────────────────────
-    // In MORNING mode, the CSV is the Single Source of Truth for the fleet.
-    // Any driver in the database not included in the CSV is reconciled to 0 debt.
-    if (mode === "MORNING") {
-      const nonCsvDrivers = allDrivers.filter((d) => !processedDriverIds.has(d.id));
-      if (nonCsvDrivers.length > 0) {
-        await prisma.driverProfile.updateMany({
-          where: { id: { in: nonCsvDrivers.map((d) => d.id) } },
-          data: {
-            currentArrearsMAD: 0,
-            consecutiveUnpaidDays: 0,
-            defaultStage: "NOMINAL",
-          },
-        });
+      // Preserve any drivers present in morning file who had no row in evening file
+      for (const [driverId, mInfo] of driverMorningMap.entries()) {
+        if (!processedDrivers.has(driverId)) {
+          const driver = allDrivers.find((d) => d.id === driverId);
+          if (!driver) continue;
+          const morningBal = mInfo.balance;
+          const morningArrears = morningBal < 0 ? Math.abs(morningBal) : 0;
+          totalMorningTargetMAD += morningArrears;
+          unpaidCount++;
+
+          const existingLedger = driver.payments?.[0] || null;
+          if (existingLedger) {
+            await prisma.paymentLedger.update({
+              where: { id: existingLedger.id },
+              data: {
+                morningBalance: morningBal,
+                arrearsMAD: morningArrears,
+              },
+            });
+          } else {
+            await prisma.paymentLedger.create({
+              data: {
+                driverId: driver.id,
+                paymentDate: targetDate,
+                expectedMAD: 300,
+                clearedMAD: 0,
+                arrearsMAD: morningArrears,
+                morningBalance: morningBal,
+                notes: `Solde initial (matin): ${morningBal} MAD (Non présent au fichier soir)`,
+              },
+            });
+          }
+
+          matchedDriversList.push({
+            driverId: driver.id,
+            fullName: driver.fullName,
+            phone: driver.phoneSanitized,
+            plateNumber: mInfo.vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
+            morningBalance: morningBal,
+            eveningBalance: null,
+            collectedAmount: 0,
+            expectedMAD: 300,
+            status: "UNPAID",
+            isRedFlagged: Boolean(driver.isRedFlagged),
+            redFlagReason: driver.redFlagReason || null,
+          });
+        }
+      }
+    } else {
+      // ─────────────────────────────────────────────────────────────────────────────
+      // CASE 2: SINGLE FILE (Dual Columns in single sheet OR Mode Morning / Evening)
+      // ─────────────────────────────────────────────────────────────────────────────
+      const hdrs = detectHeaders(singleRows[0]);
+      const hasBothColumns = !!(hdrs.morningBalanceKey && hdrs.eveningBalanceKey);
+      const effectiveMode = hasBothColumns ? "DUAL_COLUMNS" : reqMode;
+
+      const balanceKey =
+        effectiveMode === "EVENING"
+          ? (hdrs.eveningBalanceKey || hdrs.genericBalanceKey)
+          : effectiveMode === "MORNING"
+          ? (hdrs.morningBalanceKey || hdrs.genericBalanceKey)
+          : hdrs.genericBalanceKey;
+
+      if (!balanceKey && !hdrs.paymentKey && !hasBothColumns) {
+        return NextResponse.json(
+          { error: "Colonne 'Balance', 'Solde', 'Versement' ou 'Paiement' introuvable dans le fichier CSV." },
+          { status: 400 }
+        );
+      }
+
+      for (let i = 0; i < singleRows.length; i++) {
+        const row = singleRows[i];
+        const rawMorningBal = hdrs.morningBalanceKey ? row[hdrs.morningBalanceKey] : undefined;
+        const rawEveningBal = hdrs.eveningBalanceKey ? row[hdrs.eveningBalanceKey] : undefined;
+        const rawBalance = balanceKey ? row[balanceKey] : undefined;
+        const rawPayment = hdrs.paymentKey ? row[hdrs.paymentKey] : undefined;
+
+        let balance = parseBalance(rawBalance) ?? 0;
+        const directPayment = parseBalance(rawPayment) !== null ? Math.max(0, parseBalance(rawPayment)!) : 0;
+
+        const { driver, vehicle } = await resolveDriverAndVehicle(row, hdrs);
+        if (!driver) {
+          unmatchedRows.push({
+            rowNumber: i + 2,
+            name: hdrs.nameKey ? row[hdrs.nameKey] : "Inconnu",
+            phone: hdrs.phoneKey ? row[hdrs.phoneKey] : "-",
+            balance,
+          });
+          continue;
+        }
+
+        const rawContract = hdrs.contractKey ? row[hdrs.contractKey]?.trim() : "";
+        let contract = (rawContract || driver.contractType || "DAILY").toUpperCase();
+        let expectedMAD = 0;
+        if (contract === "WEEKLY") {
+          if (dayOfWeek === 1) expectedMAD = 1800;
+        } else {
+          if (dayOfWeek >= 1 && dayOfWeek <= 6) expectedMAD = 300;
+        }
+
+        const existingLedger = driver.payments?.[0] || null;
+
+        if (effectiveMode === "DUAL_COLUMNS") {
+          // File has both Solde Matin and Solde Soir columns!
+          const mBal = parseBalance(rawMorningBal) ?? 0;
+          const eBal = parseBalance(rawEveningBal) ?? balance;
+          const morningArrears = mBal < 0 ? Math.abs(mBal) : 0;
+          totalMorningTargetMAD += morningArrears;
+
+          let calculatedDelta = 0;
+          if (mBal <= 0 && eBal >= mBal) calculatedDelta = eBal - mBal;
+          else if (mBal > 0 && eBal <= mBal) calculatedDelta = mBal - eBal;
+
+          let collected = directPayment > 0 ? Math.max(directPayment, calculatedDelta) : calculatedDelta;
+          collected = Math.max(0, Math.round(collected * 100) / 100);
+          totalCollectedToday += collected;
+
+          let payStatus: "PAID" | "PARTIAL" | "UNPAID" = "UNPAID";
+          if (collected >= expectedMAD && expectedMAD > 0) {
+            payStatus = "PAID";
+            paidCount++;
+          } else if (collected > 0) {
+            payStatus = "PARTIAL";
+            partialCount++;
+          } else {
+            payStatus = "UNPAID";
+            unpaidCount++;
+          }
+
+          const newArrears = eBal !== 0 ? (eBal < 0 ? Math.abs(eBal) : 0) : Math.max(0, morningArrears - collected);
+          const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
+
+          if (existingLedger) {
+            await prisma.paymentLedger.update({
+              where: { id: existingLedger.id },
+              data: {
+                morningBalance: mBal,
+                eveningBalance: eBal,
+                clearedMAD: collected,
+                calculatedDelta: collected,
+                arrearsMAD: newArrears,
+                expectedMAD: expectedMAD || existingLedger.expectedMAD,
+                notes: `Rapprochement complet (Colonnes Matin + Soir): Matin ${mBal} MAD ➔ Soir ${eBal} MAD (Encaissé: ${collected} MAD)`,
+              },
+            });
+          } else {
+            await prisma.paymentLedger.create({
+              data: {
+                driverId: driver.id,
+                paymentDate: targetDate,
+                expectedMAD,
+                clearedMAD: collected,
+                arrearsMAD: newArrears,
+                morningBalance: mBal,
+                eveningBalance: eBal,
+                calculatedDelta: collected,
+                notes: `Rapprochement complet (Colonnes Matin + Soir): Matin ${mBal} MAD ➔ Soir ${eBal} MAD (Encaissé: ${collected} MAD)`,
+              },
+            });
+          }
+
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: {
+              currentArrearsMAD: newArrears,
+              consecutiveUnpaidDays: newUnpaidDays,
+              lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
+            },
+          });
+
+          matchedDriversList.push({
+            driverId: driver.id,
+            fullName: driver.fullName,
+            phone: driver.phoneSanitized,
+            plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
+            morningBalance: mBal,
+            eveningBalance: eBal,
+            collectedAmount: collected,
+            expectedMAD,
+            status: payStatus,
+            isRedFlagged: Boolean(driver.isRedFlagged),
+            redFlagReason: driver.redFlagReason || null,
+          });
+        } else if (effectiveMode === "MORNING") {
+          // === MORNING SNAPSHOT ===
+          const morningArrears = balance < 0 ? Math.abs(balance) : 0;
+          const morningUnpaidDays = morningArrears === 0 ? 0 : Math.max(1, Math.ceil(morningArrears / 300));
+          const morningCleared = directPayment > 0 ? directPayment : (existingLedger?.clearedMAD || 0);
+          totalMorningTargetMAD += morningArrears;
+          if (morningCleared > 0) totalCollectedToday += morningCleared;
+
+          if (existingLedger) {
+            await prisma.paymentLedger.update({
+              where: { id: existingLedger.id },
+              data: {
+                morningBalance: balance,
+                expectedMAD: expectedMAD || existingLedger.expectedMAD,
+                clearedMAD: morningCleared,
+                arrearsMAD: morningArrears,
+                notes: existingLedger.notes || `Solde initial: ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
+              },
+            });
+          } else {
+            await prisma.paymentLedger.create({
+              data: {
+                driverId: driver.id,
+                paymentDate: targetDate,
+                expectedMAD,
+                clearedMAD: morningCleared,
+                arrearsMAD: morningArrears,
+                morningBalance: balance,
+                notes: `Solde initial (matin): ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
+              },
+            });
+          }
+
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: {
+              currentArrearsMAD: morningArrears,
+              consecutiveUnpaidDays: morningUnpaidDays,
+            },
+          });
+
+          matchedDriversList.push({
+            driverId: driver.id,
+            fullName: driver.fullName,
+            phone: driver.phoneSanitized,
+            plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
+            morningBalance: balance,
+            eveningBalance: existingLedger?.eveningBalance ?? null,
+            collectedAmount: morningCleared,
+            expectedMAD,
+            status: morningCleared > 0 ? (morningCleared >= expectedMAD ? "PAID" : "PARTIAL") : "MORNING_SET",
+            isRedFlagged: Boolean(driver.isRedFlagged),
+            redFlagReason: driver.redFlagReason || null,
+          });
+        } else {
+          // === EVENING SNAPSHOT & RECONCILIATION ===
+          const morningBal =
+            existingLedger?.morningBalance !== undefined && existingLedger?.morningBalance !== null
+              ? existingLedger.morningBalance
+              : -driver.currentArrearsMAD;
+
+          let calculatedDelta = 0;
+          if (morningBal <= 0 && balance >= morningBal) {
+            calculatedDelta = balance - morningBal;
+          } else if (morningBal > 0 && balance <= morningBal) {
+            calculatedDelta = morningBal - balance;
+          }
+
+          let collected = directPayment > 0 ? Math.max(directPayment, calculatedDelta) : calculatedDelta;
+          collected = Math.max(0, Math.round(collected * 100) / 100);
+          totalCollectedToday += collected;
+
+          let payStatus: "PAID" | "PARTIAL" | "UNPAID" = "UNPAID";
+          if (collected >= expectedMAD && expectedMAD > 0) {
+            payStatus = "PAID";
+            paidCount++;
+          } else if (collected > 0) {
+            payStatus = "PARTIAL";
+            partialCount++;
+          } else {
+            payStatus = "UNPAID";
+            unpaidCount++;
+          }
+
+          const newArrears = balance !== 0 ? (balance < 0 ? Math.abs(balance) : 0) : Math.max(0, (driver.currentArrearsMAD || 0) - collected);
+          const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
+
+          if (existingLedger) {
+            await prisma.paymentLedger.update({
+              where: { id: existingLedger.id },
+              data: {
+                eveningBalance: balance,
+                calculatedDelta: collected,
+                clearedMAD: collected,
+                arrearsMAD: newArrears,
+                notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
+              },
+            });
+          } else {
+            await prisma.paymentLedger.create({
+              data: {
+                driverId: driver.id,
+                paymentDate: targetDate,
+                expectedMAD,
+                clearedMAD: collected,
+                arrearsMAD: newArrears,
+                morningBalance: morningBal,
+                eveningBalance: balance,
+                calculatedDelta: collected,
+                notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
+              },
+            });
+          }
+
+          await prisma.driverProfile.update({
+            where: { id: driver.id },
+            data: {
+              currentArrearsMAD: newArrears,
+              consecutiveUnpaidDays: newUnpaidDays,
+              lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
+            },
+          });
+
+          matchedDriversList.push({
+            driverId: driver.id,
+            fullName: driver.fullName,
+            phone: driver.phoneSanitized,
+            plateNumber: vehicle?.plate_number || driver.assignedVehicle?.plate_number || "-",
+            morningBalance: morningBal,
+            eveningBalance: balance,
+            collectedAmount: collected,
+            expectedMAD,
+            status: payStatus,
+            isRedFlagged: Boolean(driver.isRedFlagged),
+            redFlagReason: driver.redFlagReason || null,
+          });
+        }
       }
     }
 
@@ -815,10 +964,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      mode,
+      mode: isDualFiles ? "DUAL" : reqMode,
       date: dateParam,
       summary: {
-        totalRows: rows.length,
+        totalRows: isDualFiles ? eveningRows.length : singleRows.length,
         matchedCount: matchedDriversList.length,
         unmatchedCount: unmatchedRows.length,
         totalCollectedTodayMAD: totalCollectedToday,
