@@ -4,6 +4,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
@@ -48,6 +51,8 @@ export async function PATCH(
       },
     });
 
+    await touchSyncState("collections");
+
     return NextResponse.json({ success: true, expense: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Failed to update expense" }, { status: 500 });
@@ -61,6 +66,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     await prisma.vehicleExpense.delete({ where: { id } });
+    await touchSyncState("collections");
     return NextResponse.json({ success: true, message: "Frais supprimé" });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Failed to delete expense" }, { status: 500 });

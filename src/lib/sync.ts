@@ -71,8 +71,9 @@ export async function getSyncState(): Promise<SyncState> {
         updatedAt: Number(parsed.updatedAt) || Date.now(),
       };
       globalForSync.syncCache = state;
-      // Cache in memory for 3 seconds to avoid spamming Turso on rapid client polling
-      globalForSync.syncCacheExpiresAt = Date.now() + 3000;
+      // Short 400ms coalesce window so rapid concurrent reads share 1 lookup
+      // while cross-container WAL updates reflect in <0.5s
+      globalForSync.syncCacheExpiresAt = Date.now() + 400;
       return state;
     }
   } catch (err) {
@@ -87,6 +88,7 @@ export async function getSyncState(): Promise<SyncState> {
  */
 export async function forceGlobalSessionRefresh(): Promise<SyncState> {
   const now = Date.now();
+  globalForSync.syncCacheExpiresAt = 0;
   const current = await getSyncState();
 
   const nextState: SyncState = {
@@ -102,12 +104,15 @@ export async function forceGlobalSessionRefresh(): Promise<SyncState> {
   };
 
   globalForSync.syncCache = nextState;
+  globalForSync.syncCacheExpiresAt = Date.now() + 400;
 
   await prisma.setting.upsert({
     where: { key: SYNC_SETTING_KEY },
     update: { value: JSON.stringify(nextState) },
     create: { key: SYNC_SETTING_KEY, value: JSON.stringify(nextState) },
   });
+
+  await flushDatabaseSync().catch(() => {});
 
   return nextState;
 }
@@ -119,20 +124,22 @@ export async function touchSyncState(
   entity: "leads" | "tickets" | "settings" | "collections" | "all"
 ): Promise<SyncState> {
   const now = Date.now();
+  globalForSync.syncCacheExpiresAt = 0;
   const current = await getSyncState();
 
   const nextState: SyncState = {
     ...current,
-    leads: entity === "leads" || entity === "all" ? now : current.leads,
-    tickets: entity === "tickets" || entity === "all" ? now : current.tickets,
-    settings: entity === "settings" || entity === "all" ? now : current.settings,
-    collections: entity === "collections" || entity === "all" ? now : current.collections,
+    leads: Math.max(entity === "leads" || entity === "all" ? now : current.leads, current.leads),
+    tickets: Math.max(entity === "tickets" || entity === "all" ? now : current.tickets, current.tickets),
+    settings: Math.max(entity === "settings" || entity === "all" ? now : current.settings, current.settings),
+    collections: Math.max(entity === "collections" || entity === "all" ? now : current.collections, current.collections),
     // version always = raw SERVER_VERSION, never decorated.
     version: SERVER_VERSION,
     updatedAt: now,
   };
 
   globalForSync.syncCache = nextState;
+  globalForSync.syncCacheExpiresAt = Date.now() + 400;
 
   // Persist sync state setting
   await prisma.setting

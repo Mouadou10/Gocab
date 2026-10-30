@@ -1,30 +1,33 @@
 /**
  * Leads In-Memory Cache Helper
- * Extracted from route.ts to prevent Next.js 15+ invalid export typecheck errors.
+ * Stored on globalThis so cross-container Cloud WAL replay can invalidate immediately.
  */
 
-let leadsCache: { leads: any[]; timestamp: number } | null = null;
-let lastRecallCheckAt = 0;
+const gLeads = globalThis as unknown as {
+  __gocabLeadsCache?: { leads: any[]; timestamp: number } | null;
+  __gocabLastRecallCheckAt?: number;
+};
 
 export function getCachedLeads(): any[] | null {
-  if (leadsCache && Date.now() - leadsCache.timestamp < 3000) {
-    return leadsCache.leads;
+  const cached = gLeads.__gocabLeadsCache;
+  if (cached && Date.now() - cached.timestamp < 3000) {
+    return cached.leads;
   }
   return null;
 }
 
 export function setCachedLeads(leads: any[]): void {
-  leadsCache = { leads, timestamp: Date.now() };
+  gLeads.__gocabLeadsCache = { leads, timestamp: Date.now() };
 }
 
 export function invalidateLeadsCache(): void {
-  leadsCache = null;
+  gLeads.__gocabLeadsCache = null;
 }
 
 export function shouldRunRecallCheck(): boolean {
   const now = Date.now();
-  if (now - lastRecallCheckAt > 300000) {
-    lastRecallCheckAt = now;
+  if (now - (gLeads.__gocabLastRecallCheckAt || 0) > 300000) {
+    gLeads.__gocabLastRecallCheckAt = now;
     return true;
   }
   return false;

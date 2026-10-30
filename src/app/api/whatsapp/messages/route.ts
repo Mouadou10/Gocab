@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import {
   sendOutboundWhatsAppMessage,
   ensureWhatsAppTables,
@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
       templateLanguage: templateLanguage || undefined,
       templateParams: Array.isArray(templateParams) ? templateParams : undefined,
     });
+
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({
       success: result.success,

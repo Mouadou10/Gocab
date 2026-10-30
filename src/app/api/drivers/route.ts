@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDatabaseSynced } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
@@ -29,14 +29,16 @@ export async function GET(request: NextRequest) {
 
     const isSimpleFetch = !unassignedOnly && !currentVehicleId && !query && !stage && !showArchived;
 
-    // Return from in-memory server cache if fresh (5s TTL)
+    await ensureDatabaseSynced();
+
+    // Return from in-memory server cache if fresh (3s TTL) and no WAL invalidation occurred
     const cached = getDriverCache();
-    if (isSimpleFetch && cached && Date.now() - cached.timestamp < 5000) {
+    if (isSimpleFetch && cached && Date.now() - cached.timestamp < 3000) {
       return NextResponse.json(
         { drivers: cached.data },
         {
           headers: {
-            "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
           },
         }
       );
@@ -120,7 +122,7 @@ export async function GET(request: NextRequest) {
       { drivers: enrichedDrivers },
       {
         headers: {
-          "Cache-Control": "private, max-age=5, stale-while-revalidate=30",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       }
     );

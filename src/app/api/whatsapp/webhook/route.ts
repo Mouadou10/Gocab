@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { flushDatabaseSync } from "@/lib/prisma";
 import {
   getWhatsAppApiConfig,
   handleInboundWhatsAppMessage,
@@ -208,6 +209,9 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Flush cross-container Cloud WAL before returning so [✅ Créé sur Fleet] clicks reflect immediately
+    await flushDatabaseSync().catch(() => {});
 
     // Always respond 200 to Meta quickly so it doesn't retry
     return NextResponse.json({ success: true }, { status: 200 });

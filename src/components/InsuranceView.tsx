@@ -40,12 +40,9 @@ interface VehicleItem {
 export default function InsuranceView() {
   const [claims, setClaims] = useState<AccidentClaim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const fetchSeqRef = useRef(0);
 
   const { notifyMutation } = useLiveSync("tickets", () => {
-    fetchClaims();
-    fetchReminders();
-  });
-  useLiveSync("all", () => {
     fetchClaims();
     fetchReminders();
   });
@@ -108,23 +105,26 @@ export default function InsuranceView() {
   }, []);
 
   const fetchClaims = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setIsLoading(true);
     try {
-      const res = await fetch("/api/accidents");
+      const res = await fetch("/api/accidents", { cache: "no-store" });
       const data = await res.json();
-      if (data.success) {
+      if (seq === fetchSeqRef.current && data.success) {
         setClaims(data.claims || []);
       }
     } catch (err) {
       console.error("Failed to fetch claims:", err);
     } finally {
-      setIsLoading(false);
+      if (seq === fetchSeqRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   const fetchReminders = useCallback(async () => {
     try {
-      const res = await fetch("/api/insurance/repair-reminders");
+      const res = await fetch("/api/insurance/repair-reminders", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setReminders(data.reminders || []);
@@ -139,7 +139,7 @@ export default function InsuranceView() {
 
   const fetchVehicles = useCallback(async () => {
     try {
-      const res = await fetch("/api/vehicles");
+      const res = await fetch("/api/vehicles", { cache: "no-store" });
       const data = await res.json();
       setVehicles(data.vehicles || []);
     } catch (err) {
@@ -245,12 +245,23 @@ export default function InsuranceView() {
         setVehicleSearch("");
         setIsDropdownOpen(false);
         setLeftTabFilter("open");
-        notifyMutation("tickets");
-        notifyMutation("all");
-        await fetchClaims();
-        if (data.claim?.id) {
-          setSelectedClaimId(data.claim.id);
+        if (data.claim) {
+          const optimisticClaim: AccidentClaim = {
+            ...data.claim,
+            vehicle:
+              data.claim.vehicle ||
+              selectedV || {
+                id: newVehicleId,
+                plate_number: "",
+              },
+          };
+          setClaims((prev) => [
+            optimisticClaim,
+            ...prev.filter((c) => c.id !== optimisticClaim.id),
+          ]);
+          setSelectedClaimId(optimisticClaim.id);
         }
+        notifyMutation("tickets");
       } else {
         toast.error(data?.error || "Échec de la création du dossier d'accident");
       }

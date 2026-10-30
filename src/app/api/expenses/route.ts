@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { touchSyncState } from "@/lib/sync";
+
+export const dynamic = "force-dynamic";
 
 const EXPENSE_CATEGORIES = [
   { key: "REPAIR", label: "🔧 Réparation / Garage", group: "Maintenance & Réparations" },
@@ -157,6 +160,8 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    await touchSyncState("collections");
 
     return NextResponse.json({ success: true, expense: newExpense });
   } catch (error: any) {

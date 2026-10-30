@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -277,6 +278,8 @@ export async function POST(request: NextRequest) {
         created_by: createdBy,
       },
     });
+
+    await touchSyncState("tickets");
 
     return NextResponse.json({
       success: true,

@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,8 @@ export async function PATCH(
       }
     }
 
+    await touchSyncState("tickets");
+
     return NextResponse.json({
       success: true,
       message: "Rappel de réparation mis à jour avec succès",
@@ -120,6 +123,8 @@ export async function DELETE(
     await (prisma as any).repairReminder.delete({
       where: { id },
     });
+
+    await touchSyncState("tickets");
 
     return NextResponse.json({
       success: true,

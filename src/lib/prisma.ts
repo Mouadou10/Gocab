@@ -4,7 +4,7 @@
  * Uses @prisma/adapter-libsql configured with Turso Cloud database.
  * Automatically fails over to the bundled SQLite replica (dev.db) if Turso Cloud
  * blocks SQL operations (e.g. monthly row-read quota limit) and synchronizes
- * mutations across Vercel Serverless containers via sqliteCloudSync when available.
+ * mutations across all Vercel Serverless containers in real time via sqliteCloudSync.
  */
 
 import fs from "node:fs";
@@ -13,8 +13,12 @@ import os from "node:os";
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 import {
+  isCloudWalEnabled,
   registerActiveSqlitePath,
   pullSqliteSnapshotIfNewer,
+  syncCloudWalToClient,
+  prepareDeterministicWriteArgs,
+  recordWalEntry,
   pushSqliteSnapshotNow,
   scheduleSqliteSnapshotPush,
 } from "@/lib/sqliteCloudSync";
@@ -28,7 +32,8 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const PRODUCTION_TURSO_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io";
-const PRODUCTION_TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
+const PRODUCTION_TURSO_TOKEN =
+  "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
 
 const WRITE_METHODS = new Set([
   "create",
@@ -77,6 +82,17 @@ function getPrimaryClient(): PrismaClient {
 }
 
 function resolveFallbackSqlitePath(): string {
+  const explicitOverride = process.env.GOCAB_SQLITE_OVERRIDE_PATH;
+  if (explicitOverride) {
+    if (globalForPrisma.fallbackSqlitePath !== explicitOverride) {
+      globalForPrisma.fallbackSqlitePath = explicitOverride;
+      globalForPrisma.fallbackPrisma = undefined;
+      registerActiveSqlitePath(explicitOverride, () => globalForPrisma.fallbackPrisma);
+      optimizeSqlitePerformance(explicitOverride);
+    }
+    return explicitOverride;
+  }
+
   if (globalForPrisma.fallbackSqlitePath) {
     return globalForPrisma.fallbackSqlitePath;
   }
@@ -107,7 +123,7 @@ function resolveFallbackSqlitePath(): string {
       }
       if (fs.existsSync(tmpDbPath)) {
         globalForPrisma.fallbackSqlitePath = tmpDbPath;
-        registerActiveSqlitePath(tmpDbPath);
+        registerActiveSqlitePath(tmpDbPath, () => globalForPrisma.fallbackPrisma);
         optimizeSqlitePerformance(tmpDbPath);
         return tmpDbPath;
       }
@@ -117,7 +133,7 @@ function resolveFallbackSqlitePath(): string {
   }
 
   globalForPrisma.fallbackSqlitePath = srcPath;
-  registerActiveSqlitePath(srcPath);
+  registerActiveSqlitePath(srcPath, () => globalForPrisma.fallbackPrisma);
   optimizeSqlitePerformance(srcPath);
   return srcPath;
 }
@@ -131,28 +147,29 @@ function optimizeSqlitePerformance(sqlitePath: string): void {
     client.execute("PRAGMA temp_store = MEMORY;").catch(() => {});
     client.execute("PRAGMA mmap_size = 268435456;").catch(() => {});
     client.execute("PRAGMA cache_size = -64000;").catch(() => {});
-  } catch (_) {}
+  } catch {}
 }
 
 function getFallbackClient(forceRecreate = false): PrismaClient {
+  const sqlitePath = resolveFallbackSqlitePath();
   if (globalForPrisma.fallbackPrisma && !forceRecreate) {
     return globalForPrisma.fallbackPrisma;
   }
-  const sqlitePath = resolveFallbackSqlitePath();
   const url = `file:${sqlitePath.replace(/\\/g, "/")}`;
   const adapter = new PrismaLibSql({ url });
   const client = new PrismaClient({ adapter });
   globalForPrisma.fallbackPrisma = client;
+  registerActiveSqlitePath(sqlitePath, () => globalForPrisma.fallbackPrisma);
   return client;
 }
 
-async function getSyncedFallbackClient(): Promise<PrismaClient> {
+async function getSyncedFallbackClient(force = false): Promise<PrismaClient> {
   const sqlitePath = resolveFallbackSqlitePath();
-  if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
-    const updated = await pullSqliteSnapshotIfNewer(sqlitePath);
-    if (updated) {
-      return getFallbackClient(true);
-    }
+  if (isCloudWalEnabled()) {
+    const snapshotUpdated = await pullSqliteSnapshotIfNewer(sqlitePath, force);
+    const client = getFallbackClient(snapshotUpdated);
+    await syncCloudWalToClient(client, force);
+    return client;
   }
   return getFallbackClient(false);
 }
@@ -171,10 +188,11 @@ function isTursoQuotaOrBlockError(err: any): boolean {
 }
 
 function isTursoCurrentlyBlocked(): boolean {
-  // If Turso Cloud free-tier is blocked or failover is configured, route to high-speed SQLite replica
-  if (process.env.USE_SQLITE_FAILOVER === "true") return true;
+  if (process.env.USE_SQLITE_FAILOVER === "true" || process.env.FORCE_CLOUD_WAL === "true") {
+    return true;
+  }
   if (globalForPrisma.tursoBlockedUntil === undefined) {
-    // Proactively mark blocked to prevent cold-start 3-second block stalls on production Turso
+    // Proactively route to SQLite replica while Turso Cloud monthly read quota is blocked
     globalForPrisma.tursoBlockedUntil = Date.now() + 60 * 60 * 1000;
     return true;
   }
@@ -188,12 +206,21 @@ function markTursoBlocked(): void {
 }
 
 /**
+ * Ensures the active SQLite database has replayed any cross-container WAL mutations
+ * before checking route-level in-memory caches (e.g. leadsCache / driverCache).
+ */
+export async function ensureDatabaseSynced(): Promise<void> {
+  if (!isTursoCurrentlyBlocked()) return;
+  await getSyncedFallbackClient(false);
+}
+
+/**
  * Explicitly flushes any SQLite failover mutations to cross-container cloud storage
- * before serverless bulk endpoints return.
+ * before serverless endpoints return.
  */
 export async function flushDatabaseSync(): Promise<void> {
   if (!isTursoCurrentlyBlocked()) return;
-  if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
+  if (isCloudWalEnabled()) {
     const sqlitePath = resolveFallbackSqlitePath();
     await pushSqliteSnapshotNow(sqlitePath);
   }
@@ -205,9 +232,13 @@ function wrapModelDelegate(modelProp: string | symbol): any {
     return primaryDelegate;
   }
 
+  const modelName = String(modelProp);
+
   return new Proxy(primaryDelegate, {
     get(_target, methodProp) {
-      const activeClient = isTursoCurrentlyBlocked() ? getFallbackClient() : getPrimaryClient();
+      const activeClient = isTursoCurrentlyBlocked()
+        ? getFallbackClient()
+        : getPrimaryClient();
       const activeDelegate = (activeClient as any)[modelProp];
       const val = activeDelegate?.[methodProp];
 
@@ -215,16 +246,26 @@ function wrapModelDelegate(modelProp: string | symbol): any {
         return val;
       }
 
-      const isWrite = WRITE_METHODS.has(String(methodProp));
+      const methodName = String(methodProp);
+      const isWrite = WRITE_METHODS.has(methodName);
 
       return async (...args: any[]) => {
         if (isTursoCurrentlyBlocked()) {
-          const fbClient = await getSyncedFallbackClient();
-          const res = await (fbClient as any)[modelProp][methodProp](...args);
-          if (isWrite && (process.env.VERCEL || process.cwd().startsWith("/var/task"))) {
+          const fbClient = await getSyncedFallbackClient(false);
+          if (isWrite && isCloudWalEnabled()) {
+            const preparedArgs = prepareDeterministicWriteArgs(
+              modelName,
+              methodName,
+              args
+            );
+            const res = await (fbClient as any)[modelProp][methodProp](
+              ...preparedArgs
+            );
+            recordWalEntry(modelName, methodName, preparedArgs, res);
             scheduleSqliteSnapshotPush();
+            return res;
           }
-          return res;
+          return await (fbClient as any)[modelProp][methodProp](...args);
         }
 
         try {
@@ -232,12 +273,21 @@ function wrapModelDelegate(modelProp: string | symbol): any {
         } catch (err: any) {
           if (isTursoQuotaOrBlockError(err)) {
             markTursoBlocked();
-            const fbClient = await getSyncedFallbackClient();
-            const res = await (fbClient as any)[modelProp][methodProp](...args);
-            if (isWrite && (process.env.VERCEL || process.cwd().startsWith("/var/task"))) {
+            const fbClient = await getSyncedFallbackClient(false);
+            if (isWrite && isCloudWalEnabled()) {
+              const preparedArgs = prepareDeterministicWriteArgs(
+                modelName,
+                methodName,
+                args
+              );
+              const res = await (fbClient as any)[modelProp][methodProp](
+                ...preparedArgs
+              );
+              recordWalEntry(modelName, methodName, preparedArgs, res);
               scheduleSqliteSnapshotPush();
+              return res;
             }
-            return res;
+            return await (fbClient as any)[modelProp][methodProp](...args);
           }
           throw err;
         }
@@ -254,9 +304,9 @@ function createFailoverPrismaClient(): PrismaClient {
       if (prop === "$transaction") {
         return async (arg: any, options?: any) => {
           if (isTursoCurrentlyBlocked()) {
-            const fb = await getSyncedFallbackClient();
+            const fb = await getSyncedFallbackClient(false);
             const res = await fb.$transaction(arg, options);
-            if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
+            if (isCloudWalEnabled()) {
               scheduleSqliteSnapshotPush();
             }
             return res;
@@ -266,9 +316,9 @@ function createFailoverPrismaClient(): PrismaClient {
           } catch (err: any) {
             if (isTursoQuotaOrBlockError(err)) {
               markTursoBlocked();
-              const fb = await getSyncedFallbackClient();
+              const fb = await getSyncedFallbackClient(false);
               const res = await fb.$transaction(arg, options);
-              if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
+              if (isCloudWalEnabled()) {
                 scheduleSqliteSnapshotPush();
               }
               return res;
@@ -287,9 +337,9 @@ function createFailoverPrismaClient(): PrismaClient {
         const isRawWrite = prop === "$executeRaw" || prop === "$executeRawUnsafe";
         return async (...args: any[]) => {
           if (isTursoCurrentlyBlocked()) {
-            const fb = await getSyncedFallbackClient();
+            const fb = await getSyncedFallbackClient(false);
             const res = await (fb as any)[prop](...args);
-            if (isRawWrite && (process.env.VERCEL || process.cwd().startsWith("/var/task"))) {
+            if (isRawWrite && isCloudWalEnabled()) {
               scheduleSqliteSnapshotPush();
             }
             return res;
@@ -299,9 +349,9 @@ function createFailoverPrismaClient(): PrismaClient {
           } catch (err: any) {
             if (isTursoQuotaOrBlockError(err)) {
               markTursoBlocked();
-              const fb = await getSyncedFallbackClient();
+              const fb = await getSyncedFallbackClient(false);
               const res = await (fb as any)[prop](...args);
-              if (isRawWrite && (process.env.VERCEL || process.cwd().startsWith("/var/task"))) {
+              if (isRawWrite && isCloudWalEnabled()) {
                 scheduleSqliteSnapshotPush();
               }
               return res;
@@ -311,9 +361,15 @@ function createFailoverPrismaClient(): PrismaClient {
         };
       }
 
-      const activeClient = isTursoCurrentlyBlocked() ? getFallbackClient() : getPrimaryClient();
+      const activeClient = isTursoCurrentlyBlocked()
+        ? getFallbackClient()
+        : getPrimaryClient();
       const val = (activeClient as any)[prop];
-      if (val && typeof val === "object" && !Symbol.iterator.toString().includes(String(prop))) {
+      if (
+        val &&
+        typeof val === "object" &&
+        !Symbol.iterator.toString().includes(String(prop))
+      ) {
         return wrapModelDelegate(prop);
       }
       if (typeof val === "function") {
@@ -325,7 +381,4 @@ function createFailoverPrismaClient(): PrismaClient {
 }
 
 export const prisma = globalForPrisma.prisma ?? createFailoverPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;

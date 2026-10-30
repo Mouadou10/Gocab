@@ -6,7 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDatabaseSynced } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { getCachedLeads, setCachedLeads, invalidateLeadsCache, shouldRunRecallCheck } from "@/lib/leads-cache";
 import { requireAuth } from "@/lib/api-auth";
@@ -24,6 +24,9 @@ export async function GET() {
     if ("error" in authResult) {
       return authResult.error;
     }
+    // Sync cross-container WAL before reading cache so mutations from /api/leads/[id] invalidate immediately
+    await ensureDatabaseSynced();
+
     // Return cached leads if fresh (3s TTL)
     const cached = getCachedLeads();
     if (cached) {

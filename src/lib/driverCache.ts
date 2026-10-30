@@ -1,17 +1,20 @@
 /**
  * In-memory server cache for driver profiles
+ * Stored on globalThis so cross-container Cloud WAL replay can invalidate immediately.
  */
 
-let driverCache: { data: any; timestamp: number } | null = null;
+const gDrivers = globalThis as unknown as {
+  __gocabDriverCache?: { data: any; timestamp: number } | null;
+};
 
 export function getDriverCache(): { data: any; timestamp: number } | null {
-  return driverCache;
+  return gDrivers.__gocabDriverCache || null;
 }
 
 export function setDriverCache(data: any) {
-  driverCache = { data, timestamp: Date.now() };
+  gDrivers.__gocabDriverCache = { data, timestamp: Date.now() };
 }
 
 export function invalidateDriverCache() {
-  driverCache = null;
+  gDrivers.__gocabDriverCache = null;
 }
