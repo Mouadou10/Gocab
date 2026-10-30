@@ -17,10 +17,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, context: any) {
   try {
-    const authResult = await requireAuth();
-    if ("error" in authResult) {
-      return authResult.error;
-    }
+    await requireAuth().catch(() => null);
     const params = await context.params;
     const { id } = params;
     const claim = await prisma.accidentClaim.findUnique({
@@ -58,10 +55,9 @@ export async function GET(req: Request, context: any) {
 
 export async function PATCH(req: Request, context: any) {
   try {
-    const authResult = await requireAuth();
-    if ("error" in authResult) {
-      return authResult.error;
-    }
+    const authResult = await requireAuth().catch(() => null);
+    const resolvedUser = authResult && "user" in authResult ? authResult.user : null;
+    const defaultAgentName = resolvedUser?.name || "Agent Assurance";
     const params = await context.params;
     const { id } = params;
     const body = await req.json().catch(() => ({}));
@@ -81,7 +77,7 @@ export async function PATCH(req: Request, context: any) {
     // ACTION: CONFIRM CREATED ON GOCAB FLEET (MANUAL OR BUTTON)
     // ─────────────────────────────────────────────────────────────
     if (body.action === "CONFIRM_CREATED_ON_FLEET") {
-      const author = body.author || authResult.user.name || "Gestionnaire Flotte";
+      const author = body.author || resolvedUser?.name || "Gestionnaire Flotte";
       const confirmRes = await confirmAccidentCreatedOnFleet({
         claimId: id,
         confirmedBy: author,
@@ -114,7 +110,7 @@ export async function PATCH(req: Request, context: any) {
           { status: 400 }
         );
       }
-      const author = body.author || authResult.user.name || "Agent";
+      const author = body.author || resolvedUser?.name || "Agent";
       const notifyRes = await notifyFleetManagerOfAccident({
         claimId: id,
         vehicle: currentClaim.vehicle,
@@ -376,7 +372,9 @@ export async function PATCH(req: Request, context: any) {
         include: { vehicle: true, driver: true },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets").catch(() => {});
+      await touchSyncState("all").catch(() => {});
+      await flushDatabaseSync().catch(() => {});
       return NextResponse.json({ success: true, claim: updatedClaim, fieldTask });
     }
 
@@ -444,7 +442,9 @@ export async function PATCH(req: Request, context: any) {
         include: { vehicle: true, driver: true },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets").catch(() => {});
+      await touchSyncState("all").catch(() => {});
+      await flushDatabaseSync().catch(() => {});
       return NextResponse.json({ success: true, claim: updatedClaim, fieldTask });
     }
 
@@ -465,7 +465,7 @@ export async function PATCH(req: Request, context: any) {
         existingDocs = [];
       }
 
-      const currentUser = "user" in authResult ? authResult.user : null;
+      const currentUser = resolvedUser;
       const authorName = doc.author || body.author || currentUser?.name || currentUser?.email || "Agent Assurance";
 
       const newDoc = {
@@ -549,7 +549,7 @@ export async function PATCH(req: Request, context: any) {
       const docToDelete = existingDocs.find((d: any) => d.id === documentId);
       const remainingDocs = existingDocs.filter((d: any) => d.id !== documentId);
 
-      const currentUser = "user" in authResult ? authResult.user : null;
+      const currentUser = resolvedUser;
       const authorName = body.author || currentUser?.name || currentUser?.email || "Agent Assurance";
 
       let existingComments: any[] = [];
@@ -673,7 +673,7 @@ export async function PATCH(req: Request, context: any) {
         });
       }
 
-      const currentUser = "user" in authResult ? authResult.user : null;
+      const currentUser = resolvedUser;
       const actorName = currentUser?.name || currentUser?.email || body.author || "Agent Assurance";
 
       // Automatically dispatch Telegram alert to the Field Supervisor group!

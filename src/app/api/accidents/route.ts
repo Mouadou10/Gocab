@@ -191,18 +191,17 @@ export async function GET() {
       }
     }
 
-    // 4. For any active claim whose vehicle is NO LONGER in maintenance status (e.g. Actif or Available):
-    // Sync to VEHICLE_BACK
+    // 4. For any active claim whose vehicle is not yet in maintenance status:
+    // Ensure the vehicle's status is synchronized to "Accident" so it remains in "Dossiers En Cours"
     for (const c of allClaims) {
       if (c.timeline_step !== "VEHICLE_BACK" && c.vehicle && !maintenanceVehicleIds.has(c.vehicle_id)) {
-        await prisma.accidentClaim.update({
-          where: { id: c.id },
-          data: {
-            timeline_step: "VEHICLE_BACK",
-            step_updated_at: new Date(),
-          },
-        });
-        hasMutated = true;
+        await prisma.vehicle
+          .update({
+            where: { id: c.vehicle_id },
+            data: { status: "Accident" },
+          })
+          .catch(() => {});
+        maintenanceVehicleIds.add(c.vehicle_id);
       }
     }
 

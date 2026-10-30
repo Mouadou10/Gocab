@@ -765,6 +765,18 @@ export default function InsuranceView() {
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.2 rounded border border-amber-200">
                               <span>🏬</span> {garageName}
                             </span>
+                            {claim.fieldTask && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 text-[10px] font-extrabold px-1.5 py-0.2 rounded border ${
+                                  claim.fieldTask.status === "COMPLETED"
+                                    ? "text-emerald-900 bg-emerald-100 border-emerald-300"
+                                    : "text-purple-900 bg-purple-100 border-purple-300"
+                                }`}
+                                title={`Mission Terrain : ${claim.fieldTask.task_type} (${claim.fieldTask.status})`}
+                              >
+                                🚀 {claim.fieldTask.task_type === "GARAGE_PICKUP" ? "Reprise Garage" : "Mission Terrain"}
+                              </span>
+                            )}
                             {fleetCreatedOnGoCabFleet ? (
                               <span
                                 className="inline-flex items-center gap-0.5 text-[10px] font-extrabold text-emerald-900 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300"
