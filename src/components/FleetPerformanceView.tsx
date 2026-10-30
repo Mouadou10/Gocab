@@ -15,7 +15,7 @@
  *    - Accumulated unpaid days display as cumulative debt (+300 MAD, +600 MAD...).
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import {
   Calendar,
@@ -851,6 +851,121 @@ export default function FleetPerformanceView() {
     return true;
   });
 
+  const isAzizSelected = selectedManager.toLowerCase().includes("aziz");
+  const isMehdiSelected = selectedManager.toLowerCase().includes("mehdi");
+
+  // Compute live active KPIs adapting immediately when selecting Mohamed Aziz, Mehdi Elyattouti, or Flotte Complète (ALL)
+  const activeKPIs = useMemo(() => {
+    // 1. Mehdi Elyattouti Selected (26 Vehicles)
+    if (isMehdiSelected) {
+      const p = portfolios?.mehdi;
+      const target = (p?.targetMAD !== undefined && p.targetMAD > 0)
+        ? p.targetMAD
+        : filteredDrivers.reduce((acc, d) => {
+            const mDebt = d.morningBalance !== null && d.morningBalance !== undefined ? Math.abs(Math.min(0, d.morningBalance)) : (d.expectedTodayMAD || 300);
+            return acc + mDebt;
+          }, 0);
+      const cleared = p?.clearedMAD !== undefined
+        ? p.clearedMAD
+        : filteredDrivers.reduce((acc, d) => acc + (d.clearedTodayMAD || 0), 0);
+      const remaining = p?.remainingMAD !== undefined ? p.remainingMAD : Math.max(0, target - cleared);
+      const arrears = p?.arrearsMAD !== undefined
+        ? p.arrearsMAD
+        : filteredDrivers.reduce((acc, d) => acc + (d.currentArrearsMAD || 0), 0);
+      const redCount = p?.criticalRedCount !== undefined
+        ? p.criticalRedCount
+        : filteredDrivers.filter((d) => d.isCriticalRed).length;
+      const driverCount = p?.driverCount || filteredDrivers.length;
+      const vehicleCount = p?.vehicleCount ?? 26;
+      const hasCsv = summary?.hasMorningCsv ?? (target > 0);
+
+      return {
+        managerName: "Mehdi Elyattouti",
+        target,
+        cleared,
+        remaining,
+        arrears,
+        redCount,
+        driverCount,
+        vehicleCount,
+        hasMorningCsv: hasCsv,
+        target50: Math.round(target * 0.5),
+        target60: Math.round(target * 0.6),
+        target85: Math.round(target * 0.85),
+        target95: Math.round(target * 0.95),
+        pct: target > 0 ? (cleared / target) * 100 : 0,
+      };
+    }
+
+    // 2. Mohamed Aziz Selected (75 Vehicles)
+    if (isAzizSelected) {
+      const p = portfolios?.aziz;
+      const target = (p?.targetMAD !== undefined && p.targetMAD > 0)
+        ? p.targetMAD
+        : filteredDrivers.reduce((acc, d) => {
+            const mDebt = d.morningBalance !== null && d.morningBalance !== undefined ? Math.abs(Math.min(0, d.morningBalance)) : (d.expectedTodayMAD || 300);
+            return acc + mDebt;
+          }, 0);
+      const cleared = p?.clearedMAD !== undefined
+        ? p.clearedMAD
+        : filteredDrivers.reduce((acc, d) => acc + (d.clearedTodayMAD || 0), 0);
+      const remaining = p?.remainingMAD !== undefined ? p.remainingMAD : Math.max(0, target - cleared);
+      const arrears = p?.arrearsMAD !== undefined
+        ? p.arrearsMAD
+        : filteredDrivers.reduce((acc, d) => acc + (d.currentArrearsMAD || 0), 0);
+      const redCount = p?.criticalRedCount !== undefined
+        ? p.criticalRedCount
+        : filteredDrivers.filter((d) => d.isCriticalRed).length;
+      const driverCount = p?.driverCount || filteredDrivers.length;
+      const vehicleCount = p?.vehicleCount ?? 75;
+      const hasCsv = summary?.hasMorningCsv ?? (target > 0);
+
+      return {
+        managerName: "Mohamed Aziz",
+        target,
+        cleared,
+        remaining,
+        arrears,
+        redCount,
+        driverCount,
+        vehicleCount,
+        hasMorningCsv: hasCsv,
+        target50: Math.round(target * 0.5),
+        target60: Math.round(target * 0.6),
+        target85: Math.round(target * 0.85),
+        target95: Math.round(target * 0.95),
+        pct: target > 0 ? (cleared / target) * 100 : 0,
+      };
+    }
+
+    // 3. Global Fleet Selected (ALL - 101 Vehicles)
+    const target = summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0;
+    const cleared = summary?.totalClearedTodayMAD || 0;
+    const remaining = summary?.remainingToCollectMAD ?? Math.max(0, target - cleared);
+    const arrears = summary?.totalArrearsAllMAD || 0;
+    const redCount = summary?.criticalRedCount || 0;
+    const driverCount = summary?.totalDrivers || filteredDrivers.length;
+    const vehicleCount = (portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26);
+    const hasCsv = summary?.hasMorningCsv ?? false;
+
+    return {
+      managerName: "Flotte Complète",
+      target,
+      cleared,
+      remaining,
+      arrears,
+      redCount,
+      driverCount,
+      vehicleCount,
+      hasMorningCsv: hasCsv,
+      target50: Math.round(target * 0.5),
+      target60: Math.round(target * 0.6),
+      target85: Math.round(target * 0.85),
+      target95: Math.round(target * 0.95),
+      pct: target > 0 ? (cleared / target) * 100 : 0,
+    };
+  }, [isMehdiSelected, isAzizSelected, portfolios, filteredDrivers, summary]);
+
   const startDateObj = new Date(`${startDate}T00:00:00.000Z`);
   const endDateObj = new Date(`${endDate}T00:00:00.000Z`);
   const dayName = startDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -1065,7 +1180,7 @@ export default function FleetPerformanceView() {
               🚗 Flotte Totale : <strong className="text-navy">{(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules</strong>
             </span>
             <span className="text-2xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
-              👨‍✈️ Chauffeurs Portefeuille : <strong className="text-emerald-900">{summary?.totalDrivers || filteredDrivers.length}</strong>
+              👨‍✈️ Chauffeurs Portefeuille : <strong className="text-emerald-900">{activeKPIs.driverCount}</strong>
             </span>
           </div>
         </div>
@@ -1351,20 +1466,20 @@ export default function FleetPerformanceView() {
             </span>
             <span
               className={`text-3xs font-black px-2 py-0.5 rounded-full ${
-                isRangeMode || summary?.hasMorningCsv ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-500"
+                isRangeMode || activeKPIs.hasMorningCsv ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-500"
               }`}
             >
               {isRangeMode
                 ? `${daysCount} jours`
-                : summary?.hasMorningCsv
+                : activeKPIs.hasMorningCsv
                 ? "Base 100%"
                 : "En attente CSV"}
             </span>
           </div>
           <p className="text-2xl font-black text-navy mt-1">
-            {summary?.hasMorningCsv || (summary?.totalMorningTargetMAD || 0) > 0 || isRangeMode ? (
+            {activeKPIs.hasMorningCsv || activeKPIs.target > 0 || isRangeMode ? (
               <>
-                {(summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0).toLocaleString()}{" "}
+                {activeKPIs.target.toLocaleString()}{" "}
                 <span className="text-xs font-normal text-gray-500">MAD</span>
               </>
             ) : (
@@ -1372,36 +1487,36 @@ export default function FleetPerformanceView() {
             )}
           </p>
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-semibold text-emerald-700" : "font-medium text-gray-400"}>
               🎯 Objectif 50%–60% :
             </span>
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
-              {summary?.hasMorningCsv || isRangeMode
-                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.5).toLocaleString()} – ${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.6).toLocaleString()} MAD`
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-black text-emerald-800" : "font-bold text-gray-300"}>
+              {activeKPIs.hasMorningCsv || isRangeMode
+                ? `${activeKPIs.target50.toLocaleString()} – ${activeKPIs.target60.toLocaleString()} MAD`
                 : "—"}
             </span>
           </div>
 
           {/* Objective: Weekly Target 85% by end of week */}
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-bold text-indigo-700 flex items-center gap-1" : "font-medium text-gray-400"}>
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-bold text-indigo-700 flex items-center gap-1" : "font-medium text-gray-400"}>
               <span>🏁</span> Objectif Hebdo (85%) :
             </span>
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-indigo-900 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200" : "font-bold text-gray-300"}>
-              {summary?.hasMorningCsv || isRangeMode
-                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.85).toLocaleString()} MAD`
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-black text-indigo-900 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200" : "font-bold text-gray-300"}>
+              {activeKPIs.hasMorningCsv || isRangeMode
+                ? `${activeKPIs.target85.toLocaleString()} MAD`
                 : "—"}
             </span>
           </div>
 
           {/* Objective: Monthly Target 95% by end of month */}
           <div className="pt-1 border-t border-gray-100 flex items-center justify-between text-2xs">
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-bold text-purple-700 flex items-center gap-1" : "font-medium text-gray-400"}>
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-bold text-purple-700 flex items-center gap-1" : "font-medium text-gray-400"}>
               <span>👑</span> Objectif Mensuel (95%) :
             </span>
-            <span className={summary?.hasMorningCsv || isRangeMode ? "font-black text-purple-900 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200" : "font-bold text-gray-300"}>
-              {summary?.hasMorningCsv || isRangeMode
-                ? `${Math.round((summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0) * 0.95).toLocaleString()} MAD`
+            <span className={activeKPIs.hasMorningCsv || isRangeMode ? "font-black text-purple-900 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200" : "font-bold text-gray-300"}>
+              {activeKPIs.hasMorningCsv || isRangeMode
+                ? `${activeKPIs.target95.toLocaleString()} MAD`
                 : "—"}
             </span>
           </div>
@@ -1409,10 +1524,10 @@ export default function FleetPerformanceView() {
 
         {/* Collected Today / in Period with 50%–60%, 85% Weekly & 95% Monthly Target Progress */}
         {(() => {
-          const hasCsv = summary?.hasMorningCsv ?? false;
-          const target = (summary?.totalMorningTargetMAD || summary?.totalExpectedTodayMAD || 0);
-          const cleared = summary?.totalClearedTodayMAD || 0;
-          const pct = target > 0 ? (cleared / target) * 100 : 0;
+          const hasCsv = activeKPIs.hasMorningCsv;
+          const target = activeKPIs.target;
+          const cleared = activeKPIs.cleared;
+          const pct = activeKPIs.pct;
           const isMinTargetAchieved = pct >= 50;
           const isMaxTargetAchieved = pct >= 60;
           const isWeekly85Achieved = pct >= 85;
@@ -1536,22 +1651,22 @@ export default function FleetPerformanceView() {
               className={`text-3xs font-black px-2 py-0.5 rounded-full ${
                 isRangeMode
                   ? "bg-amber-100 text-amber-900"
-                  : summary?.hasMorningCsv
+                  : activeKPIs.hasMorningCsv
                   ? "bg-amber-100 text-amber-900"
                   : "bg-gray-100 text-gray-500"
               }`}
             >
               {isRangeMode
                 ? `Cible – Encaissé`
-                : summary?.hasMorningCsv
+                : activeKPIs.hasMorningCsv
                 ? "Solde Net"
                 : "En attente CSV"}
             </span>
           </div>
           <p className="text-2xl font-black text-amber-600 mt-1">
-            {summary?.hasMorningCsv || isRangeMode ? (
+            {activeKPIs.hasMorningCsv || isRangeMode ? (
               <>
-                {(summary?.remainingToCollectMAD || 0).toLocaleString()}{" "}
+                {activeKPIs.remaining.toLocaleString()}{" "}
                 <span className="text-xs font-normal text-gray-500">MAD</span>
               </>
             ) : (
@@ -1563,11 +1678,13 @@ export default function FleetPerformanceView() {
               <span>
                 {isRangeMode
                   ? `Impayés Actuels Flotte :`
-                  : summary?.hasMorningCsv
-                  ? "Flotte active (avec véhicule) :"
+                  : activeKPIs.hasMorningCsv
+                  ? selectedManager !== "ALL"
+                    ? `Portefeuille actif (${activeKPIs.vehicleCount} v.) :`
+                    : "Flotte active (avec véhicule) :"
                   : "En attente de l'import CSV du matin"}
               </span>
-              <span className="font-bold text-gray-700">{(summary?.totalArrearsAllMAD || 0).toLocaleString()} MAD</span>
+              <span className="font-bold text-gray-700">{activeKPIs.arrears.toLocaleString()} MAD</span>
             </div>
             {summary?.unassignedArrearsMAD && summary.unassignedArrearsMAD > 0 && selectedManager === "ALL" ? (
               <div
@@ -1590,13 +1707,13 @@ export default function FleetPerformanceView() {
         {/* Critical 3rd Day Red Alert Count */}
         <div
           onClick={() => {
-            if (!summary?.hasMorningCsv) return;
+            if (!activeKPIs.hasMorningCsv) return;
             setFilterType(filterType === "RED" ? "ALL" : "RED");
           }}
           className={`p-5 rounded-3xl border shadow-xs transition-all ${
-            !summary?.hasMorningCsv
+            !activeKPIs.hasMorningCsv
               ? "bg-white border-gray-100 opacity-75 cursor-default"
-              : summary.criticalRedCount > 0
+              : activeKPIs.redCount > 0
               ? "bg-red-50 border-red-300 hover:border-red-500 animate-pulse-subtle cursor-pointer"
               : "bg-white border-gray-100 cursor-pointer"
           }`}
@@ -1604,12 +1721,12 @@ export default function FleetPerformanceView() {
           <div className="flex items-center justify-between">
             <span
               className={`text-2xs font-bold uppercase flex items-center gap-1 ${
-                summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-700" : "text-gray-500"
+                activeKPIs.hasMorningCsv && activeKPIs.redCount > 0 ? "text-red-700" : "text-gray-500"
               }`}
             >
               <ShieldAlert
                 className={`w-3.5 h-3.5 ${
-                  summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-600" : "text-gray-400"
+                  activeKPIs.hasMorningCsv && activeKPIs.redCount > 0 ? "text-red-600" : "text-gray-400"
                 }`}
               />
               {selectedManager.toLowerCase().includes("aziz")
@@ -1620,22 +1737,22 @@ export default function FleetPerformanceView() {
             </span>
             <span
               className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
-                summary?.hasMorningCsv && summary.criticalRedCount > 0
+                activeKPIs.hasMorningCsv && activeKPIs.redCount > 0
                   ? "bg-red-600 text-white"
                   : "bg-gray-100 text-gray-400"
               }`}
             >
-              {summary?.hasMorningCsv ? summary?.criticalRedCount || 0 : "0"}
+              {activeKPIs.hasMorningCsv ? activeKPIs.redCount : "0"}
             </span>
           </div>
           <p
             className={`text-2xl font-black mt-1.5 ${
-              summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-700" : "text-gray-300 font-extrabold"
+              activeKPIs.hasMorningCsv && activeKPIs.redCount > 0 ? "text-red-700" : "text-gray-300 font-extrabold"
             }`}
           >
-            {summary?.hasMorningCsv ? (
+            {activeKPIs.hasMorningCsv ? (
               <>
-                {summary?.criticalRedCount}{" "}
+                {activeKPIs.redCount}{" "}
                 <span className="text-xs font-medium text-red-600">Chauffeurs</span>
               </>
             ) : (
@@ -1646,10 +1763,10 @@ export default function FleetPerformanceView() {
           </p>
           <p
             className={`text-2xs mt-1 font-medium ${
-              summary?.hasMorningCsv && summary.criticalRedCount > 0 ? "text-red-600" : "text-gray-400"
+              activeKPIs.hasMorningCsv && activeKPIs.redCount > 0 ? "text-red-600" : "text-gray-400"
             }`}
           >
-            {summary?.hasMorningCsv
+            {activeKPIs.hasMorningCsv
               ? "≥ 2-3 jours sans versement (Risque d'immobilisation)"
               : "Calculé après import du CSV matin"}
           </p>
