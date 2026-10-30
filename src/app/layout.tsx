@@ -21,6 +21,15 @@ export const metadata: Metadata = {
   title: "GoCab CRM — Growth & Fleet Operations",
   description:
     "Kanban-style lead management and fleet operations for GoCab driver onboarding, vehicle assignment, collections, and field supervisor tasks.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.png", sizes: "32x32", type: "image/png" },
+      { url: "/gocab-official-logo.png", sizes: "412x390", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
