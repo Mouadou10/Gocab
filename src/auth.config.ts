@@ -21,7 +21,8 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon") ||
-        pathname.startsWith("/field-missions");
+        pathname.startsWith("/field-missions") ||
+        pathname.startsWith("/confirm-fleet-accident");
 
       if (isPublic) return true;
 

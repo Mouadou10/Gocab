@@ -8,6 +8,10 @@ import {
 } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import {
+  confirmAccidentCreatedOnFleet,
+  notifyFleetManagerOfAccident,
+} from "@/lib/services/fleetAccidentNotifyService";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +78,68 @@ export async function PATCH(req: Request, context: any) {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // ACTION: CONFIRM CREATED ON GOCAB FLEET (MANUAL OR BUTTON)
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "CONFIRM_CREATED_ON_FLEET") {
+      const author = body.author || authResult.user.name || "Gestionnaire Flotte";
+      const confirmRes = await confirmAccidentCreatedOnFleet({
+        claimId: id,
+        confirmedBy: author,
+        source: "CRM_MANUAL",
+        sendWhatsAppAck: false,
+      });
+
+      if (!confirmRes.success) {
+        return NextResponse.json(
+          { success: false, error: confirmRes.error || "Échec de la confirmation" },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        alreadyConfirmed: confirmRes.alreadyConfirmed,
+        claim: confirmRes.claim,
+        meta: confirmRes.meta,
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTION: RE-SEND WHATSAPP NOTIFICATION TO FLEET MANAGER
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "NOTIFY_FLEET_MANAGER_WHATSAPP") {
+      if (!currentClaim.vehicle) {
+        return NextResponse.json(
+          { success: false, error: "Véhicule introuvable sur ce dossier" },
+          { status: 400 }
+        );
+      }
+      const author = body.author || authResult.user.name || "Agent";
+      const notifyRes = await notifyFleetManagerOfAccident({
+        claimId: id,
+        vehicle: currentClaim.vehicle,
+        driverName: currentClaim.driver_name || currentClaim.driver?.fullName || null,
+        driverPhone: currentClaim.driver_phone || currentClaim.driver?.phoneSanitized || null,
+        reportedBy: author,
+        requestUrl: req.url,
+      });
+
+      return NextResponse.json({
+        success: true,
+        claim: notifyRes.claim || currentClaim,
+        whatsappNotification: {
+          sent: notifyRes.success,
+          managerName: notifyRes.manager.name,
+          managerPhone: notifyRes.targetPhone,
+          windowOpen24h: notifyRes.windowOpen24h,
+          waMeFallbackUrl: notifyRes.waMeFallbackUrl,
+          confirmUrl: notifyRes.confirmUrl,
+          error: notifyRes.whatsappError,
+        },
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // ACTION: UPDATE INSURANCE DOSSIER (PORTAIL SUIVI ASSUREUR)
     // ─────────────────────────────────────────────────────────────
     if (body.action === "UPDATE_INSURANCE_DOSSIER") {
@@ -94,6 +160,7 @@ export async function PATCH(req: Request, context: any) {
       const existingNotes = existingDossier.insurance_notes || [];
 
       const updatedDossier = {
+        ...existingDossier,
         id: "INSURANCE_DOSSIER_META",
         type: "INSURANCE_INFO",
         timeline_step: "INSURANCE_DOCS",

@@ -4,6 +4,11 @@ import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import {
+  extractFleetSyncFromComments,
+  notifyFleetManagerOfAccident,
+  resolveFleetManagerContactForVehicle,
+} from "@/lib/services/fleetAccidentNotifyService";
 
 export const dynamic = "force-dynamic";
 
@@ -160,12 +165,22 @@ export async function GET(request: Request) {
           effectiveStatus = "IN_PROGRESS";
         }
 
+        const fleetSync = extractFleetSyncFromComments(claim?.comments);
+        const defaultMgr = resolveFleetManagerContactForVehicle({
+          plate_number: t.plate_number,
+        });
+
         return {
           ...t,
           ...extra,
           status: effectiveStatus,
           accident_claim_id: claim?.id || null,
           accident_step: claimStep,
+          fleet_manager_name: fleetSync.fleet_manager_name || defaultMgr.name,
+          fleet_whatsapp_notified: Boolean(fleetSync.fleet_whatsapp_notified),
+          fleet_created_on_gocab_fleet: Boolean(fleetSync.fleet_created_on_gocab_fleet),
+          fleet_created_at: fleetSync.fleet_created_at || null,
+          fleet_created_by: fleetSync.fleet_created_by || null,
         };
       }
       return {
@@ -390,27 +405,119 @@ export async function POST(request: Request) {
         targetStatus = "Actif";
       }
       
-      await prisma.vehicle.update({
-        where: { id: vehicle_id },
-        data: { status: targetStatus },
-      }).catch((e) => console.warn("Failed to update vehicle status on ticket creation:", e));
+      if (cleanVehicleId && cleanVehicleId !== "UNASSIGNED") {
+        await prisma.vehicle
+          .update({
+            where: { id: cleanVehicleId },
+            data: { status: targetStatus },
+          })
+          .catch((e) => console.warn("Failed to update vehicle status on ticket creation:", e));
+      }
     }
 
-    if (ticket_type === "Accident") {
-      const activeClaim = await prisma.accidentClaim.findFirst({
-        where: { 
-          vehicle_id,
-          timeline_step: { not: "VEHICLE_BACK" }
-        }
+    let whatsappNotification: any = null;
+
+    if (ticket_type === "Accident" && cleanVehicleId && cleanVehicleId !== "UNASSIGNED") {
+      const targetVehicle = await prisma.vehicle
+        .findUnique({
+          where: { id: cleanVehicleId },
+          include: { driverProfile: true },
+        })
+        .catch(() => null);
+
+      let activeClaim = await prisma.accidentClaim.findFirst({
+        where: {
+          vehicle_id: cleanVehicleId,
+          timeline_step: { not: "VEHICLE_BACK" },
+        },
+        orderBy: { created_at: "desc" },
       });
-      if (!activeClaim) {
-        await prisma.accidentClaim.create({
+
+      const agentName = authResult.user.name || "Agent Support";
+
+      if (!activeClaim && targetVehicle) {
+        await prisma.accidentClaim
+          .deleteMany({
+            where: {
+              vehicle_id: cleanVehicleId,
+              timeline_step: "VEHICLE_BACK",
+            },
+          })
+          .catch(() => {});
+
+        activeClaim = await prisma.accidentClaim.create({
           data: {
-            vehicle_id,
-            driver_name: driver_name ? driver_name.trim() : null,
-            driver_phone: driver_phone ? driver_phone.trim() : null,
-          }
+            vehicle_id: cleanVehicleId,
+            driver_id: targetVehicle.driverProfile?.id || null,
+            driver_name: driver_name
+              ? driver_name.trim()
+              : targetVehicle.assigned_driver_name || targetVehicle.driverProfile?.fullName || null,
+            driver_phone: driver_phone
+              ? driver_phone.trim()
+              : targetVehicle.assigned_driver_phone ||
+                targetVehicle.driverProfile?.phoneSanitized ||
+                null,
+            severity: "HARD",
+            timeline_step: "NEW_ACCIDENT",
+            comments: JSON.stringify([
+              {
+                id: "INSURANCE_DOSSIER_META",
+                type: "INSURANCE_INFO",
+                timeline_step: "INSURANCE_DOCS",
+                claim_number: "",
+                insurance_company: "Sanlam",
+                garage_name: garage_name ? String(garage_name).trim() : "Emergence",
+                policy_number: targetVehicle.insurance_policy_number || "",
+                claim_status: "DECLARED",
+                declaration_date: new Date().toISOString().split("T")[0],
+                expert_name: "",
+                expert_phone: "",
+                expertise_date: "",
+                estimated_amount: 0,
+                covered_amount: 0,
+                franchise_amount: 0,
+                payout_status: "PENDING",
+                insurance_notes: [],
+                updated_at: new Date().toISOString(),
+                updated_by: agentName,
+              },
+              {
+                id: crypto.randomUUID(),
+                timeline_step: "NEW_ACCIDENT",
+                comment: `Dossier accident ouvert depuis Support Tickets par ${agentName}. ${description.trim()}`,
+                author: agentName,
+                created_at: new Date().toISOString(),
+              },
+            ]),
+          },
         });
+      }
+
+      if (activeClaim && targetVehicle) {
+        const existingSync = extractFleetSyncFromComments(activeClaim.comments);
+        if (!existingSync.fleet_whatsapp_notified) {
+          const notifyRes = await notifyFleetManagerOfAccident({
+            claimId: activeClaim.id,
+            vehicle: targetVehicle,
+            driverName:
+              (driver_name ? driver_name.trim() : null) ||
+              activeClaim.driver_name ||
+              targetVehicle.assigned_driver_name,
+            driverPhone:
+              (driver_phone ? driver_phone.trim() : null) ||
+              activeClaim.driver_phone ||
+              targetVehicle.assigned_driver_phone,
+            reportedBy: agentName,
+            requestUrl: request.url,
+          });
+          whatsappNotification = {
+            sent: notifyRes.success,
+            managerName: notifyRes.manager.name,
+            managerPhone: notifyRes.targetPhone,
+            windowOpen24h: notifyRes.windowOpen24h,
+            waMeFallbackUrl: notifyRes.waMeFallbackUrl,
+          };
+        }
       }
     }
 
@@ -419,7 +526,7 @@ export async function POST(request: Request) {
     await touchSyncState("all").catch(() => {});
     await flushDatabaseSync().catch(() => {});
 
-    return NextResponse.json({ ticket }, { status: 201 });
+    return NextResponse.json({ ticket, whatsappNotification }, { status: 201 });
   } catch (error: any) {
     console.error("POST /api/tickets error:", error);
     return NextResponse.json(

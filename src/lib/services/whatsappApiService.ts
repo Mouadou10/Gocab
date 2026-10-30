@@ -1361,6 +1361,11 @@ async function processInboundBotWorkflow(
   const trimmed = (inboundText || "").trim();
   const lower = trimmed.toLowerCase();
 
+  // Internal GoCab team members should never trigger customer Lead Acquisition / Bot menus
+  if (conversation.contact_type === "TEAM") {
+    return;
+  }
+
   // =========================================================================
   // CRITICAL PRE-CHECK: VERIFY NUMBER IN DRIVERS LIST OR LEADS/TRAINING PAGE
   // =========================================================================
@@ -1668,6 +1673,72 @@ export async function handleInboundWhatsAppMessage(payload: InboundMessagePayloa
       unread_count: { increment: 1 },
     },
   });
+
+  // Intercept Fleet Manager button click "[✅ Créé sur Fleet]" (or text reply) for Accident Dossiers
+  const trimmedInbound = (payload.text || "").trim();
+  const isFleetConfirmButton = Boolean(
+    payload.interactiveReplyId && payload.interactiveReplyId.startsWith("CONFIRM_FLEET_ACCIDENT:")
+  );
+  const isTeamContact =
+    conversation.contact_type === "TEAM" ||
+    cleanPhone.endsWith("666563066") ||
+    cleanPhone.endsWith("667960025");
+  const isFleetConfirmText =
+    isTeamContact &&
+    /^(✅\s*)?(cr[ée]{1,2}\s+sur\s+(gocab\s+)?fleet|ok\s+fleet|fait\s+sur\s+fleet)$/i.test(
+      trimmedInbound
+    );
+
+  if (isFleetConfirmButton || isFleetConfirmText) {
+    try {
+      let targetClaimId = isFleetConfirmButton
+        ? payload.interactiveReplyId!.replace("CONFIRM_FLEET_ACCIDENT:", "").trim()
+        : "";
+
+      if (!targetClaimId) {
+        const recentAlertMsgs = await getDbMsg().findMany({
+          where: {
+            conversation_id: conversation.id,
+            direction: "OUTBOUND",
+          },
+          orderBy: { created_at: "desc" },
+          take: 10,
+        });
+        for (const m of recentAlertMsgs) {
+          const match = String(m.text || "").match(/\/confirm-fleet-accident\/([a-zA-Z0-9-]+)/);
+          if (match && match[1]) {
+            targetClaimId = match[1];
+            break;
+          }
+        }
+      }
+
+      if (targetClaimId) {
+        const { confirmAccidentCreatedOnFleet } = await import("./fleetAccidentNotifyService");
+        const managerDisplayName =
+          conversation.contact_name && !conversation.contact_name.startsWith("Contact +")
+            ? conversation.contact_name
+            : payload.contactName || undefined;
+
+        await confirmAccidentCreatedOnFleet({
+          claimId: targetClaimId,
+          confirmedBy: managerDisplayName,
+          source: "WHATSAPP_BUTTON",
+          sendWhatsAppAck: true,
+          replyPhone: cleanPhone,
+          conversationId: conversation.id,
+        });
+        return {
+          success: true,
+          message,
+          conversationId: conversation.id,
+          fleetAccidentConfirmed: true,
+        };
+      }
+    } catch (confirmErr) {
+      console.error("Error confirming Fleet Accident via WhatsApp:", confirmErr);
+    }
+  }
 
   // Run automated 2-option routing workflow unless explicitly skipped (e.g., reaction emoji)
   const isReaction = payload.text.startsWith("Réaction ") || payload.text.includes("[reaction]");

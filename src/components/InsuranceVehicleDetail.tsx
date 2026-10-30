@@ -34,7 +34,10 @@ import {
   ShieldCheck,
   BookmarkCheck,
   Share2,
+  RefreshCw,
 } from "lucide-react";
+import { useLiveSync } from "@/context/LiveSyncContext";
+import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
 import RedFlagBadge from "./RedFlagBadge";
 import {
   AccidentClaim,
@@ -84,6 +87,7 @@ export default function InsuranceVehicleDetail({
   onCloseMobile,
 }: InsuranceVehicleDetailProps) {
   const { data: session } = useSession() || {};
+  const { notifyMutation } = useLiveSync("tickets");
 
   // Active sub-tab inside the right detail view
   // "insurance": Featured Insurance Company Follow-up
@@ -95,6 +99,9 @@ export default function InsuranceVehicleDetail({
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [isCopiedPlate, setIsCopiedPlate] = useState(false);
+  const [isConfirmingFleet, setIsConfirmingFleet] = useState(false);
+  const [isNotifyingManager, setIsNotifyingManager] = useState(false);
+  const [fallbackManagerWaUrl, setFallbackManagerWaUrl] = useState<string | null>(null);
 
   // Parse comments and extract insurance dossier metadata if present
   let commentsList: AccidentComment[] = [];
@@ -108,6 +115,13 @@ export default function InsuranceVehicleDetail({
   }
 
   const dossierMeta = commentsList.find((c: any) => c.id === "INSURANCE_DOSSIER_META") as InsuranceDossierInfo | undefined;
+
+  const resolvedManagerKey = resolveVehicleFleetManager(claim.vehicle as any);
+  const resolvedFleetManagerName =
+    dossierMeta?.fleet_manager_name ||
+    (resolvedManagerKey === "mehdi elyattouti" ? "Mehdi Elyattouti" : "Mohamed Aziz");
+  const isFleetCreated = Boolean(dossierMeta?.fleet_created_on_gocab_fleet);
+  const isFleetWhatsappNotified = Boolean(dossierMeta?.fleet_whatsapp_notified);
 
   // Insurance Dossier Form States
   const [claimNumber, setClaimNumber] = useState(dossierMeta?.claim_number || "");
@@ -489,6 +503,80 @@ export default function InsuranceVehicleDetail({
     }
   };
 
+  // Confirm accident created on GoCab Fleet directly from CRM
+  const handleConfirmCreatedOnFleet = async () => {
+    if (isConfirmingFleet) return;
+    setIsConfirmingFleet(true);
+    try {
+      const agentName = session?.user?.name || resolvedFleetManagerName;
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "CONFIRM_CREATED_ON_FLEET",
+          author: agentName,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Accident marqué comme « Créé sur GoCab Fleet » !");
+        notifyMutation("tickets");
+        notifyMutation("all");
+        onUpdate();
+      } else {
+        toast.error("Échec de la validation GoCab Fleet");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setIsConfirmingFleet(false);
+    }
+  };
+
+  // Send / resend WhatsApp notification to the owning Fleet Manager
+  const handleNotifyFleetManagerWhatsApp = async () => {
+    if (isNotifyingManager) return;
+    setIsNotifyingManager(true);
+    try {
+      const agentName = session?.user?.name || "Agent";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "NOTIFY_FLEET_MANAGER_WHATSAPP",
+          author: agentName,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const waNotif = data.whatsappNotification;
+        if (waNotif?.waMeFallbackUrl) {
+          setFallbackManagerWaUrl(waNotif.waMeFallbackUrl);
+        }
+        if (waNotif?.sent) {
+          toast.success(
+            `WhatsApp envoyé à ${waNotif.managerName} avec le bouton « ✅ Créé sur Fleet » !`
+          );
+        } else {
+          toast.error(
+            waNotif?.error ||
+              `Envoi direct impossible — utilisez le bouton WhatsApp Web de secours.`
+          );
+        }
+        notifyMutation("tickets");
+        notifyMutation("all");
+        onUpdate();
+      } else {
+        toast.error("Échec de l'envoi WhatsApp au gestionnaire");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setIsNotifyingManager(false);
+    }
+  };
+
   // Reopen claim
   const handleReopenClaim = async () => {
     setIsUpdating(true);
@@ -656,6 +744,117 @@ export default function InsuranceVehicleDetail({
                 </a>
               )}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 1B. GOCAB FLEET SYNC & FLEET MANAGER WHATSAPP BANNER                   */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <div
+        className={`px-4 py-2.5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 ${
+          isFleetCreated
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-amber-50/80 border-amber-200"
+        }`}
+      >
+        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+          <div
+            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm ${
+              isFleetCreated
+                ? "bg-emerald-600 text-white"
+                : "bg-amber-500 text-white"
+            }`}
+          >
+            {isFleetCreated ? "✅" : "📲"}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`text-xs font-black ${
+                  isFleetCreated ? "text-emerald-950" : "text-amber-950"
+                }`}
+              >
+                {isFleetCreated
+                  ? "Accident créé & synchronisé sur GoCab Fleet"
+                  : "En attente de création sur GoCab Fleet"}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-200 text-navy">
+                👤 Gestionnaire : {resolvedFleetManagerName}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-600 truncate">
+              {isFleetCreated ? (
+                <>
+                  Confirmé par{" "}
+                  <strong>{dossierMeta?.fleet_created_by || resolvedFleetManagerName}</strong>
+                  {dossierMeta?.fleet_created_at
+                    ? ` le ${new Date(dossierMeta.fleet_created_at).toLocaleString("fr-FR")}`
+                    : ""}
+                  {dossierMeta?.fleet_created_source === "WHATSAPP_BUTTON"
+                    ? " · via bouton WhatsApp"
+                    : dossierMeta?.fleet_created_source === "WEB_LINK"
+                    ? " · via lien WhatsApp"
+                    : ""}
+                </>
+              ) : isFleetWhatsappNotified ? (
+                <>
+                  Alerte WhatsApp envoyée à <strong>{resolvedFleetManagerName}</strong>
+                  {dossierMeta?.fleet_whatsapp_notified_at
+                    ? ` (${new Date(dossierMeta.fleet_whatsapp_notified_at).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })})`
+                    : ""}{" "}
+                  — En attente du clic sur « ✅ Créé sur Fleet ».
+                </>
+              ) : (
+                <>
+                  Notifiez <strong>{resolvedFleetManagerName}</strong> sur WhatsApp ou validez dès que l&apos;accident est créé sur GoCab Fleet.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {!isFleetCreated && (
+            <button
+              type="button"
+              onClick={handleConfirmCreatedOnFleet}
+              disabled={isConfirmingFleet}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-2xs font-extrabold shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>
+                {isConfirmingFleet ? "Validation..." : "✅ Créé sur GoCab Fleet"}
+              </span>
+            </button>
+          )}
+
+          {!isFleetCreated && (
+            <button
+              type="button"
+              onClick={handleNotifyFleetManagerWhatsApp}
+              disabled={isNotifyingManager}
+              className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-60 text-navy border border-gray-300 text-2xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title={`Envoyer / Relancer la notification WhatsApp à ${resolvedFleetManagerName}`}
+            >
+              <RefreshCw className={`w-3 h-3 ${isNotifyingManager ? "animate-spin" : ""}`} />
+              <span>{isFleetWhatsappNotified ? "Relancer WhatsApp" : "Notifier WhatsApp"}</span>
+            </button>
+          )}
+
+          {!isFleetCreated && fallbackManagerWaUrl && (
+            <a
+              href={fallbackManagerWaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-2xs font-bold flex items-center gap-1 transition-all"
+            >
+              <MessageCircle className="w-3 h-3" />
+              <span>WhatsApp Web</span>
+            </a>
           )}
         </div>
       </div>

@@ -64,6 +64,19 @@ export interface InsuranceDossierInfo {
   insurance_notes?: InsuranceNoteItem[];
   updated_at?: string;
   updated_by?: string;
+  fleet_manager_key?: "mehdi elyattouti" | "mohamed aziz";
+  fleet_manager_name?: string;
+  fleet_manager_phone?: string;
+  fleet_whatsapp_notified?: boolean;
+  fleet_whatsapp_notified_at?: string | null;
+  fleet_whatsapp_status?: "SENT" | "DELIVERED" | "FAILED" | "PENDING" | null;
+  fleet_whatsapp_window_open?: boolean;
+  fleet_whatsapp_error?: string | null;
+  fleet_confirm_url?: string | null;
+  fleet_created_on_gocab_fleet?: boolean;
+  fleet_created_at?: string | null;
+  fleet_created_by?: string | null;
+  fleet_created_source?: "WHATSAPP_BUTTON" | "WEB_LINK" | "CRM_MANUAL" | null;
 }
 
 export interface AccidentDocument {

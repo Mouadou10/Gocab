@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLiveSync } from "@/context/LiveSyncContext";
+import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
 import { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
 import InsuranceVehicleDetail from "./InsuranceVehicleDetail";
 import RepairReminderModal from "./RepairReminderModal";
@@ -74,11 +75,23 @@ export default function InsuranceView() {
 
   // States for reporting a new accident with searchable combobox
   const [isReporting, setIsReporting] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [newVehicleId, setNewVehicleId] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const getFleetManagerDisplayName = (v?: {
+    plate_number?: string | null;
+    assigned_collector?: string | null;
+    assigned_supervisor?: string | null;
+  } | null) => {
+    if (!v) return "Mohamed Aziz";
+    return resolveVehicleFleetManager(v) === "mehdi elyattouti"
+      ? "Mehdi Elyattouti"
+      : "Mohamed Aziz";
+  };
 
   // Mobile detail view toggle
   const [showMobileDetail, setShowMobileDetail] = useState(false);
@@ -196,22 +209,38 @@ export default function InsuranceView() {
   const selectedClaim = claims.find((c) => c.id === selectedClaimId) || (filteredLeftClaims.length > 0 ? filteredLeftClaims[0] : null);
 
   const handleReportAccident = async () => {
-    if (!newVehicleId) return;
+    if (!newVehicleId || isSubmittingReport) return;
+    setIsSubmittingReport(true);
     try {
       const res = await fetch("/api/accidents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ vehicle_id: newVehicleId }),
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success("Dossier accident ouvert avec succès !");
+        const waNotif = data.whatsappNotification;
+        if (waNotif?.sent) {
+          toast.success(
+            `Dossier accident ouvert ! WhatsApp envoyé à ${waNotif.managerName} avec le bouton « ✅ Créé sur Fleet ».`,
+            { duration: 5000 }
+          );
+        } else if (waNotif?.managerName) {
+          toast.success(
+            `Dossier accident ouvert ! Gestionnaire associé : ${waNotif.managerName}.`,
+            { duration: 4500 }
+          );
+        } else {
+          toast.success("Dossier accident ouvert avec succès !");
+        }
         setIsReporting(false);
         setNewVehicleId("");
         setVehicleSearch("");
         setIsDropdownOpen(false);
         setLeftTabFilter("open");
         notifyMutation("tickets");
+        notifyMutation("all");
         await fetchClaims();
         if (data.claim?.id) {
           setSelectedClaimId(data.claim.id);
@@ -221,6 +250,8 @@ export default function InsuranceView() {
       }
     } catch (err) {
       toast.error("Erreur réseau");
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -378,26 +409,34 @@ export default function InsuranceView() {
               </label>
 
               {selectedVehicleToReport ? (
-                <div className="p-2.5 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono font-black text-xs text-navy bg-white px-2 py-1 rounded-lg border border-red-200 shadow-2xs">
-                      🚗 {selectedVehicleToReport.plate_number}
-                    </span>
-                    <div className="text-xs font-bold text-gray-800">
-                      {selectedVehicleToReport.make_model || "Modèle non spécifié"}
+                <div className="space-y-1.5">
+                  <div className="p-2.5 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between shadow-2xs gap-2 flex-wrap">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-mono font-black text-xs text-navy bg-white px-2 py-1 rounded-lg border border-red-200 shadow-2xs">
+                        🚗 {selectedVehicleToReport.plate_number}
+                      </span>
+                      <div className="text-xs font-bold text-gray-800">
+                        {selectedVehicleToReport.make_model || "Modèle non spécifié"}
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300">
+                        📲 WhatsApp auto → {getFleetManagerDisplayName(selectedVehicleToReport)}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewVehicleId("");
+                        setVehicleSearch("");
+                        setIsDropdownOpen(true);
+                      }}
+                      className="text-xs font-bold text-red-600 hover:text-red-800 bg-white px-2.5 py-1 rounded-lg border border-red-200 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      Changer
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewVehicleId("");
-                      setVehicleSearch("");
-                      setIsDropdownOpen(true);
-                    }}
-                    className="text-xs font-bold text-red-600 hover:text-red-800 bg-white px-2.5 py-1 rounded-lg border border-red-200 transition-colors shadow-2xs cursor-pointer"
-                  >
-                    Changer
-                  </button>
+                  <p className="text-[11px] text-emerald-800 font-medium pl-1">
+                    En cliquant sur <strong>Ouvrir Dossier</strong>, {getFleetManagerDisplayName(selectedVehicleToReport)} recevra un message WhatsApp avec un bouton <strong>« ✅ Créé sur Fleet »</strong> synchronisé au CRM.
+                  </p>
                 </div>
               ) : (
                 <div className="relative">
@@ -423,24 +462,41 @@ export default function InsuranceView() {
                           Aucun véhicule trouvé
                         </div>
                       ) : (
-                        filteredVehiclesToReport.map((v) => (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => {
-                              setNewVehicleId(v.id);
-                              setIsDropdownOpen(false);
-                              setVehicleSearch("");
-                            }}
-                            className="w-full p-2 text-left hover:bg-red-50/60 transition-colors flex items-center justify-between text-xs"
-                          >
-                            <span className="font-mono font-bold bg-gray-100 px-2 py-0.5 rounded text-navy">
-                              {v.plate_number}
-                            </span>
-                            <span className="text-gray-600 truncate max-w-xs">{v.make_model}</span>
-                            <span className="text-3xs text-gray-400">{v.hub_city || "Casablanca"}</span>
-                          </button>
-                        ))
+                        filteredVehiclesToReport.map((v) => {
+                          const mgrName = getFleetManagerDisplayName(v);
+                          const isMehdi = mgrName.includes("Mehdi");
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                setNewVehicleId(v.id);
+                                setIsDropdownOpen(false);
+                                setVehicleSearch("");
+                              }}
+                              className="w-full p-2 text-left hover:bg-red-50/60 transition-colors flex items-center justify-between text-xs gap-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono font-bold bg-gray-100 px-2 py-0.5 rounded text-navy shrink-0">
+                                  {v.plate_number}
+                                </span>
+                                <span className="text-gray-600 truncate max-w-[160px]">{v.make_model}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                    isMehdi
+                                      ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  }`}
+                                >
+                                  👤 {isMehdi ? "Mehdi" : "Aziz"}
+                                </span>
+                                <span className="text-3xs text-gray-400">{v.hub_city || "Casablanca"}</span>
+                              </div>
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -452,10 +508,10 @@ export default function InsuranceView() {
               <button
                 type="button"
                 onClick={handleReportAccident}
-                disabled={!newVehicleId}
+                disabled={!newVehicleId || isSubmittingReport}
                 className="px-5 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
-                <span>🚨 Ouvrir Dossier</span>
+                <span>{isSubmittingReport ? "⏳ Ouverture & WhatsApp..." : "🚨 Ouvrir Dossier"}</span>
               </button>
               <button
                 type="button"
@@ -646,17 +702,24 @@ export default function InsuranceView() {
                   const isSelected = claim.id === selectedClaim?.id;
                   const daysInStatus = calculateDaysInStatus(claim.step_updated_at || claim.created_at);
 
-                  // Extract garage name & insurance from claim comments if present
+                  // Extract garage name, insurance & GoCab Fleet sync status from claim comments
                   let garageName = "Emergence";
+                  let fleetCreatedOnGoCabFleet = false;
+                  let fleetWhatsappNotified = false;
+                  let fleetManagerName = getFleetManagerDisplayName(claim.vehicle as any);
                   try {
                     if (claim.comments) {
                       const parsed = JSON.parse(claim.comments);
                       if (Array.isArray(parsed)) {
                         const meta = parsed.find((c: any) => c.id === "INSURANCE_DOSSIER_META");
                         if (meta?.garage_name) garageName = meta.garage_name;
+                        if (meta?.fleet_created_on_gocab_fleet) fleetCreatedOnGoCabFleet = true;
+                        if (meta?.fleet_whatsapp_notified) fleetWhatsappNotified = true;
+                        if (meta?.fleet_manager_name) fleetManagerName = meta.fleet_manager_name;
                       }
                     }
                   } catch {}
+                  const managerShort = fleetManagerName.includes("Mehdi") ? "Mehdi" : "Aziz";
 
                   // Color based on days in status
                   const daysColor =
@@ -696,6 +759,21 @@ export default function InsuranceView() {
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.2 rounded border border-amber-200">
                               <span>🏬</span> {garageName}
                             </span>
+                            {fleetCreatedOnGoCabFleet ? (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] font-extrabold text-emerald-900 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300"
+                                title={`Créé sur GoCab Fleet (${fleetManagerName})`}
+                              >
+                                ✅ Créé GoCab Fleet
+                              </span>
+                            ) : fleetWhatsappNotified ? (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] font-bold text-sky-900 bg-sky-100 px-1.5 py-0.2 rounded border border-sky-200"
+                                title={`WhatsApp envoyé à ${fleetManagerName} — En attente de confirmation GoCab Fleet`}
+                              >
+                                ⏳ Attente Fleet ({managerShort})
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       </div>

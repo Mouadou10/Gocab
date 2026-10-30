@@ -3,6 +3,7 @@ import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
+import { notifyFleetManagerOfAccident } from "@/lib/services/fleetAccidentNotifyService";
 
 export async function GET() {
   try {
@@ -285,6 +286,12 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const agentName = authResult.user.name || "Agent";
+
     const body = await req.json();
     const { vehicle_id, driver_id, driver_name, driver_phone, severity, fault } = body;
 
@@ -298,64 +305,94 @@ export async function POST(req: Request) {
       include: { driverProfile: true },
     });
 
-    const finalDriverName = driver_name || vehicle?.assigned_driver_name || vehicle?.driverProfile?.fullName || null;
-    const finalDriverPhone = driver_phone || vehicle?.assigned_driver_phone || vehicle?.driverProfile?.phoneSanitized || null;
-    const finalDriverId = driver_id || vehicle?.driverProfile?.id || null;
+    if (!vehicle) {
+      return NextResponse.json({ success: false, error: "Véhicule introuvable" }, { status: 404 });
+    }
 
-    // Create the accident claim
-    const claim = await prisma.accidentClaim.create({
-      data: {
+    const finalDriverName = driver_name || vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || null;
+    const finalDriverPhone = driver_phone || vehicle.assigned_driver_phone || vehicle.driverProfile?.phoneSanitized || null;
+    const finalDriverId = driver_id || vehicle.driverProfile?.id || null;
+
+    // Check if an active claim already exists for this vehicle so we reuse its ID cleanly
+    const existingActiveClaim = await prisma.accidentClaim.findFirst({
+      where: {
         vehicle_id,
-        driver_id: finalDriverId,
-        driver_name: finalDriverName,
-        driver_phone: finalDriverPhone,
-        severity: severity || "HARD",
-        fault: fault || null,
-        timeline_step: "NEW_ACCIDENT",
-        comments: JSON.stringify([
-          {
-            id: "INSURANCE_DOSSIER_META",
-            type: "INSURANCE_INFO",
-            timeline_step: "INSURANCE_DOCS",
-            claim_number: "",
-            insurance_company: "Sanlam",
-            garage_name: "Emergence",
-            policy_number: vehicle?.insurance_policy_number || "",
-            claim_status: "DECLARED",
-            declaration_date: new Date().toISOString().split("T")[0],
-            expert_name: "",
-            expert_phone: "",
-            expertise_date: "",
-            estimated_amount: 0,
-            covered_amount: 0,
-            franchise_amount: 0,
-            payout_status: "PENDING",
-            notes: [],
-            updated_at: new Date().toISOString(),
-            updated_by: "Agent",
-          },
-          {
-            id: crypto.randomUUID(),
-            timeline_step: "NEW_ACCIDENT",
-            comment: "Dossier accident ouvert manuellement par l'agent depuis la page Assurance. Compagnie: Sanlam · Garage: Emergence",
-            author: "Agent",
-            created_at: new Date().toISOString(),
-          },
-        ]),
+        timeline_step: { not: "VEHICLE_BACK" },
       },
+      orderBy: { created_at: "desc" },
       include: {
         vehicle: true,
         driver: true,
-      }
+      },
     });
 
-    // Also update the vehicle's status to Accident
+    let claim = existingActiveClaim;
+
+    if (!claim) {
+      // Remove any old completed duplicate claims before opening the new active dossier
+      await prisma.accidentClaim
+        .deleteMany({
+          where: {
+            vehicle_id,
+            timeline_step: "VEHICLE_BACK",
+          },
+        })
+        .catch(() => {});
+
+      claim = await prisma.accidentClaim.create({
+        data: {
+          vehicle_id,
+          driver_id: finalDriverId,
+          driver_name: finalDriverName,
+          driver_phone: finalDriverPhone,
+          severity: severity || "HARD",
+          fault: fault || null,
+          timeline_step: "NEW_ACCIDENT",
+          comments: JSON.stringify([
+            {
+              id: "INSURANCE_DOSSIER_META",
+              type: "INSURANCE_INFO",
+              timeline_step: "INSURANCE_DOCS",
+              claim_number: "",
+              insurance_company: "Sanlam",
+              garage_name: "Emergence",
+              policy_number: vehicle.insurance_policy_number || "",
+              claim_status: "DECLARED",
+              declaration_date: new Date().toISOString().split("T")[0],
+              expert_name: "",
+              expert_phone: "",
+              expertise_date: "",
+              estimated_amount: 0,
+              covered_amount: 0,
+              franchise_amount: 0,
+              payout_status: "PENDING",
+              insurance_notes: [],
+              updated_at: new Date().toISOString(),
+              updated_by: agentName,
+            },
+            {
+              id: crypto.randomUUID(),
+              timeline_step: "NEW_ACCIDENT",
+              comment: `Dossier accident ouvert par ${agentName} depuis la page Assurance. Compagnie: Sanlam · Garage: Emergence`,
+              author: agentName,
+              created_at: new Date().toISOString(),
+            },
+          ]),
+        },
+        include: {
+          vehicle: true,
+          driver: true,
+        },
+      });
+    }
+
+    // Update the vehicle's status to Accident
     await prisma.vehicle.update({
       where: { id: vehicle_id },
-      data: { status: "Accident" }
+      data: { status: "Accident" },
     });
 
-    // Also ensure a Support ticket exists
+    // Ensure a Support ticket exists
     const existingTicket = await prisma.maintenanceTicket.findFirst({
       where: {
         vehicle_id,
@@ -363,7 +400,7 @@ export async function POST(req: Request) {
       },
     });
 
-    if (!existingTicket && vehicle) {
+    if (!existingTicket) {
       await prisma.maintenanceTicket.create({
         data: {
           vehicle_id,
@@ -373,18 +410,41 @@ export async function POST(req: Request) {
           ticket_type: "Accident",
           priority: "Urgent",
           status: "OPEN",
-          description: `💥 Véhicule signalé en accident depuis la page Assurance. Réparation mécanique requise.`,
+          description: `💥 Véhicule signalé en accident depuis la page Assurance par ${agentName}. Réparation mécanique requise.`,
           sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       }).catch((e: any) => console.warn("Could not create support ticket:", e));
     }
 
-    // Touch sync state so Insurance and Tickets pages immediately refresh
+    // Automatically notify the owning Fleet Manager (Mohamed Aziz or Mehdi Elyattouti) on WhatsApp
+    // with interactive button "[✅ Créé sur Fleet]" + 1-click confirmation link
+    const notifyResult = await notifyFleetManagerOfAccident({
+      claimId: claim.id,
+      vehicle,
+      driverName: finalDriverName,
+      driverPhone: finalDriverPhone,
+      reportedBy: agentName,
+      requestUrl: req.url,
+    });
+
+    // Touch sync state so Insurance, Tickets, and WhatsApp pages immediately refresh
     await touchSyncState("tickets").catch(() => {});
     await touchSyncState("all").catch(() => {});
     await flushDatabaseSync().catch(() => {});
 
-    return NextResponse.json({ success: true, claim });
+    return NextResponse.json({
+      success: true,
+      claim: notifyResult.claim || claim,
+      whatsappNotification: {
+        sent: notifyResult.success,
+        managerName: notifyResult.manager.name,
+        managerPhone: notifyResult.targetPhone,
+        windowOpen24h: notifyResult.windowOpen24h,
+        waMeFallbackUrl: notifyResult.waMeFallbackUrl,
+        confirmUrl: notifyResult.confirmUrl,
+        error: notifyResult.whatsappError,
+      },
+    });
   } catch (error: any) {
     console.error("Error creating accident claim:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

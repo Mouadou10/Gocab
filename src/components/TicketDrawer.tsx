@@ -17,6 +17,7 @@ import { Vehicle } from "./VehicleDrawer";
 import BonDeCommandeModal from "./BonDeCommandeModal";
 import { BonDeCommandeData, getFormattedToday } from "@/lib/bonDeCommandeCatalog";
 import { VidangeStats } from "@/lib/vidangeStats";
+import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
 import RedFlagBadge from "./RedFlagBadge";
 
 export interface MaintenanceTicket {
@@ -40,6 +41,11 @@ export interface MaintenanceTicket {
   resolution_notes?: string | null;
   accident_claim_id?: string | null;
   accident_step?: string | null;
+  fleet_manager_name?: string | null;
+  fleet_whatsapp_notified?: boolean;
+  fleet_created_on_gocab_fleet?: boolean;
+  fleet_created_at?: string | null;
+  fleet_created_by?: string | null;
   started_at?: string | null;
   created_at: string;
   resolved_at: string | null;
@@ -367,8 +373,16 @@ export default function TicketDrawer({
         throw new Error(data.error || "Failed to log ticket.");
       }
 
-      toast.success("Ticket créé avec succès !");
+      if (data.whatsappNotification?.sent && data.whatsappNotification?.managerName) {
+        toast.success(
+          `Ticket Accident créé ! WhatsApp envoyé à ${data.whatsappNotification.managerName} (bouton « ✅ Créé sur Fleet »).`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success("Ticket créé avec succès !");
+      }
       notifyMutation("tickets");
+      notifyMutation("all");
       onSaveSuccess();
       handleClose();
     } catch (err: any) {
@@ -736,6 +750,25 @@ export default function TicketDrawer({
               ))}
             </div>
           </div>
+
+          {/* Alerte WhatsApp Gestionnaire Flotte pour Ticket Accident */}
+          {ticketType === "Accident" && (
+            <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3 flex items-start gap-2.5 shadow-2xs animate-fadeIn">
+              <span className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs shrink-0">📲</span>
+              <div className="text-xs text-emerald-950 space-y-0.5">
+                <p className="font-bold">
+                  Notification WhatsApp automatique →{" "}
+                  {resolveVehicleFleetManager({ plate_number: plateNumber }) === "mehdi elyattouti"
+                    ? "Mehdi Elyattouti"
+                    : "Mohamed Aziz"}
+                </p>
+                <p className="text-[11px] text-emerald-800">
+                  À la validation du ticket, le gestionnaire recevra l&apos;alerte WhatsApp avec le bouton{" "}
+                  <strong>« ✅ Créé sur Fleet »</strong> pour synchroniser le dossier sur le CRM.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Suivi des Vidanges Réalisées pour le véhicule sélectionné */}
           {ticketType === "Vidange" && (

@@ -222,10 +222,27 @@ export default function TicketKanbanCard({
             <span>Récupération Véhicule</span>
           </span>
         ) : ticket.ticket_type === "Accident" ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-50 text-orange-800 border border-orange-200">
-            <span className="text-sm">💥</span>
-            <span>Dossier Accident</span>
-          </span>
+          <>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-50 text-orange-800 border border-orange-200">
+              <span className="text-sm">💥</span>
+              <span>Dossier Accident</span>
+            </span>
+            {ticket.fleet_created_on_gocab_fleet ? (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300"
+                title={`Confirmé sur GoCab Fleet par ${ticket.fleet_created_by || ticket.fleet_manager_name || "Gestionnaire"}`}
+              >
+                ✅ Créé sur GoCab Fleet
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200"
+                title={`En attente de création sur GoCab Fleet par ${ticket.fleet_manager_name || "Gestionnaire Flotte"}`}
+              >
+                ⏳ Attente Fleet ({ticket.fleet_manager_name?.includes("Mehdi") ? "Mehdi" : "Aziz"})
+              </span>
+            )}
+          </>
         ) : ticket.ticket_type === "Vidange" ? (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 text-sky-800 border border-sky-200">
             <span className="text-sm">🛢️</span>
