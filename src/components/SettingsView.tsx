@@ -3058,42 +3058,79 @@ export default function SettingsView() {
                 <span>📥</span>
                 <span>Télécharger Archive Complète (.json)</span>
               </button>
+
+              <a
+                href="/backups/GoCab_Complete_Backup_2026-10-30.zip"
+                download="GoCab_Complete_Backup_2026-10-30.zip"
+                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-2"
+              >
+                <span>📦</span>
+                <span>Télécharger Pack ZIP (Tous les CSV + JSON)</span>
+              </a>
             </div>
 
             {/* Quick CSV Export Grid */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
               <div className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                <span>📊</span> Exports Rapides Excel / CSV (1 clic)
+                <span>📊</span> Exports Rapides Excel / CSV Prêts pour Google Drive (1 clic)
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleDownloadCsv("leads")}
+                <a
+                  href="/backups/01_Leads_GoCab.csv"
+                  download="01_Leads_GoCab.csv"
                   className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
                 >
-                  <span>💼</span> Leads (.csv)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadCsv("vehicles")}
+                  <span>💼</span> 01_Leads (3 178)
+                </a>
+                <a
+                  href="/backups/02_Chauffeurs_GoCab.csv"
+                  download="02_Chauffeurs_GoCab.csv"
                   className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
                 >
-                  <span>🚗</span> Véhicules (.csv)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadCsv("drivers")}
+                  <span>🚖</span> 02_Chauffeurs (225)
+                </a>
+                <a
+                  href="/backups/03_Flotte_Vehicules_GoCab.csv"
+                  download="03_Flotte_Vehicules_GoCab.csv"
                   className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
                 >
-                  <span>🚖</span> Chauffeurs (.csv)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadCsv("payments")}
+                  <span>🚗</span> 03_Véhicules (101)
+                </a>
+                <a
+                  href="/backups/04_Paiements_Encaissements_GoCab.csv"
+                  download="04_Paiements_Encaissements_GoCab.csv"
                   className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
                 >
-                  <span>💳</span> Versements & Solde (.csv)
-                </button>
+                  <span>💳</span> 04_Paiements (3 433)
+                </a>
+                <a
+                  href="/backups/05_Tickets_Maintenance_GoCab.csv"
+                  download="05_Tickets_Maintenance_GoCab.csv"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>🔧</span> 05_Tickets (186)
+                </a>
+                <a
+                  href="/backups/06_Missions_Terrain_GoCab.csv"
+                  download="06_Missions_Terrain_GoCab.csv"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>📍</span> 06_Missions (35)
+                </a>
+                <a
+                  href="/backups/08_WhatsApp_Conversations_GoCab.csv"
+                  download="08_WhatsApp_Conversations_GoCab.csv"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>💬</span> 08_WhatsApp (315)
+                </a>
+                <a
+                  href="/backups/GoCab_Master_Snapshot_Latest.json"
+                  download="GoCab_Master_Snapshot_Latest.json"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-navy text-xs font-bold rounded-lg border border-navy/30 shadow-2xs transition-all flex items-center gap-1.5"
+                >
+                  <span>⚡</span> Master JSON (5.4 Mo)
+                </a>
               </div>
             </div>
           </div>
