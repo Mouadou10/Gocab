@@ -457,12 +457,29 @@ export async function POST(request: NextRequest) {
             },
           });
 
+          const IMMOBILIZED_OR_GARAGE_STATUSES = [
+            "In garage",
+            "in garage",
+            "Accident",
+            "accident",
+            "Accidenté",
+            "Maintenance",
+            "maintenance",
+            "police_immobilization",
+            "impounded",
+            "impounded by police",
+            "missing_document",
+            "missing_key",
+            "Blocked",
+          ];
+          const shouldUpdateStatus = !IMMOBILIZED_OR_GARAGE_STATUSES.includes(vehicle.status);
+
           await prisma.vehicle.update({
             where: { id: vehicle.id },
             data: {
               assigned_driver_name: driver.fullName,
               assigned_driver_phone: driver.phoneSanitized,
-              status: "Actif",
+              ...(shouldUpdateStatus ? { status: "Actif" } : {}),
             },
           });
 
