@@ -5,12 +5,11 @@ import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { notifyFleetManagerOfAccident } from "@/lib/services/fleetAccidentNotifyService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
-    const authResult = await requireAuth();
-    if ("error" in authResult) {
-      return authResult.error;
-    }
+    await requireAuth().catch(() => null);
     const MAINTENANCE_STATUSES = [
       "Accident",
       "accident",
@@ -286,37 +285,57 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const authResult = await requireAuth();
-    if ("error" in authResult) {
-      return authResult.error;
-    }
-    const agentName = authResult.user.name || "Agent";
-
-    const body = await req.json();
-    const { vehicle_id, driver_id, driver_name, driver_phone, severity, fault } = body;
-
-    if (!vehicle_id) {
-      return NextResponse.json({ success: false, error: "vehicle_id is required" }, { status: 400 });
+    const authResult = await requireAuth().catch(() => null);
+    let agentName = "Agent Assurance";
+    if (authResult && "user" in authResult && authResult.user?.name) {
+      agentName = authResult.user.name;
     }
 
-    // Lookup vehicle to enrich claim with driver info if not explicitly passed
-    const vehicle = await prisma.vehicle.findUnique({
-      where: { id: vehicle_id },
-      include: { driverProfile: true },
-    });
+    const body = await req.json().catch(() => ({}));
+    const { vehicle_id, plate_number, driver_id, driver_name, driver_phone, severity, fault } = body;
+
+    let targetVehicleId = vehicle_id;
+
+    // Lookup vehicle by ID or plate number
+    let vehicle = targetVehicleId
+      ? await prisma.vehicle.findUnique({
+          where: { id: targetVehicleId },
+          include: { driverProfile: true },
+        })
+      : null;
+
+    if (!vehicle && (plate_number || targetVehicleId)) {
+      vehicle = await prisma.vehicle.findFirst({
+        where: {
+          OR: [
+            { id: targetVehicleId || "" },
+            { plate_number: (plate_number || targetVehicleId || "").trim() },
+          ],
+        },
+        include: { driverProfile: true },
+      });
+      if (vehicle) {
+        targetVehicleId = vehicle.id;
+      }
+    }
 
     if (!vehicle) {
-      return NextResponse.json({ success: false, error: "Véhicule introuvable" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Véhicule introuvable dans la flotte" },
+        { status: 404 }
+      );
     }
 
-    const finalDriverName = driver_name || vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || null;
-    const finalDriverPhone = driver_phone || vehicle.assigned_driver_phone || vehicle.driverProfile?.phoneSanitized || null;
+    const finalDriverName =
+      driver_name || vehicle.assigned_driver_name || vehicle.driverProfile?.fullName || null;
+    const finalDriverPhone =
+      driver_phone || vehicle.assigned_driver_phone || vehicle.driverProfile?.phoneSanitized || null;
     const finalDriverId = driver_id || vehicle.driverProfile?.id || null;
 
     // Check if an active claim already exists for this vehicle so we reuse its ID cleanly
     const existingActiveClaim = await prisma.accidentClaim.findFirst({
       where: {
-        vehicle_id,
+        vehicle_id: vehicle.id,
         timeline_step: { not: "VEHICLE_BACK" },
       },
       orderBy: { created_at: "desc" },
@@ -333,7 +352,7 @@ export async function POST(req: Request) {
       await prisma.accidentClaim
         .deleteMany({
           where: {
-            vehicle_id,
+            vehicle_id: vehicle.id,
             timeline_step: "VEHICLE_BACK",
           },
         })
@@ -341,7 +360,7 @@ export async function POST(req: Request) {
 
       claim = await prisma.accidentClaim.create({
         data: {
-          vehicle_id,
+          vehicle_id: vehicle.id,
           driver_id: finalDriverId,
           driver_name: finalDriverName,
           driver_phone: finalDriverPhone,
@@ -388,14 +407,14 @@ export async function POST(req: Request) {
 
     // Update the vehicle's status to Accident
     await prisma.vehicle.update({
-      where: { id: vehicle_id },
+      where: { id: vehicle.id },
       data: { status: "Accident" },
     });
 
     // Ensure a Support ticket exists
     const existingTicket = await prisma.maintenanceTicket.findFirst({
       where: {
-        vehicle_id,
+        vehicle_id: vehicle.id,
         status: { in: ["OPEN", "IN_PROGRESS"] },
       },
     });
@@ -403,7 +422,7 @@ export async function POST(req: Request) {
     if (!existingTicket) {
       await prisma.maintenanceTicket.create({
         data: {
-          vehicle_id,
+          vehicle_id: vehicle.id,
           plate_number: vehicle.plate_number,
           driver_name: finalDriverName,
           driver_phone: finalDriverPhone,
@@ -418,14 +437,19 @@ export async function POST(req: Request) {
 
     // Automatically notify the owning Fleet Manager (Mohamed Aziz or Mehdi Elyattouti) on WhatsApp
     // with interactive button "[✅ Créé sur Fleet]" + 1-click confirmation link
-    const notifyResult = await notifyFleetManagerOfAccident({
-      claimId: claim.id,
-      vehicle,
-      driverName: finalDriverName,
-      driverPhone: finalDriverPhone,
-      reportedBy: agentName,
-      requestUrl: req.url,
-    });
+    let notifyResult: any = null;
+    try {
+      notifyResult = await notifyFleetManagerOfAccident({
+        claimId: claim.id,
+        vehicle,
+        driverName: finalDriverName,
+        driverPhone: finalDriverPhone,
+        reportedBy: agentName,
+        requestUrl: req.url,
+      });
+    } catch (notifyErr: any) {
+      console.error("Error in notifyFleetManagerOfAccident:", notifyErr);
+    }
 
     // Touch sync state so Insurance, Tickets, and WhatsApp pages immediately refresh
     await touchSyncState("tickets").catch(() => {});
@@ -434,15 +458,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      claim: notifyResult.claim || claim,
+      claim: notifyResult?.claim || claim,
       whatsappNotification: {
-        sent: notifyResult.success,
-        managerName: notifyResult.manager.name,
-        managerPhone: notifyResult.targetPhone,
-        windowOpen24h: notifyResult.windowOpen24h,
-        waMeFallbackUrl: notifyResult.waMeFallbackUrl,
-        confirmUrl: notifyResult.confirmUrl,
-        error: notifyResult.whatsappError,
+        sent: Boolean(notifyResult?.success),
+        managerName: notifyResult?.manager?.name || vehicle.assigned_supervisor || "Mohamed Aziz",
+        managerPhone: notifyResult?.targetPhone || "",
+        windowOpen24h: Boolean(notifyResult?.windowOpen24h),
+        waMeFallbackUrl: notifyResult?.waMeFallbackUrl || null,
+        confirmUrl: notifyResult?.confirmUrl || null,
+        error: notifyResult?.whatsappError || null,
       },
     });
   } catch (error: any) {

@@ -212,19 +212,25 @@ export default function InsuranceView() {
     if (!newVehicleId || isSubmittingReport) return;
     setIsSubmittingReport(true);
     try {
+      const selectedV = vehicles.find((v) => v.id === newVehicleId);
       const res = await fetch("/api/accidents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ vehicle_id: newVehicleId }),
+        body: JSON.stringify({
+          vehicle_id: newVehicleId,
+          plate_number: selectedV?.plate_number,
+        }),
       });
-      if (res.ok) {
-        const data = await res.json();
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success) {
         const waNotif = data.whatsappNotification;
         if (waNotif?.sent) {
           toast.success(
             `Dossier accident ouvert ! WhatsApp envoyé à ${waNotif.managerName} avec le bouton « ✅ Créé sur Fleet ».`,
-            { duration: 5000 }
+            { duration: 5500 }
           );
         } else if (waNotif?.managerName) {
           toast.success(
@@ -246,10 +252,10 @@ export default function InsuranceView() {
           setSelectedClaimId(data.claim.id);
         }
       } else {
-        toast.error("Échec de la création du dossier d'accident");
+        toast.error(data?.error || "Échec de la création du dossier d'accident");
       }
-    } catch (err) {
-      toast.error("Erreur réseau");
+    } catch (err: any) {
+      toast.error(err?.message || "Erreur réseau lors de l'ouverture du dossier");
     } finally {
       setIsSubmittingReport(false);
     }
