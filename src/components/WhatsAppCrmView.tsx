@@ -80,7 +80,7 @@ interface ConversationItem {
   id: string;
   phoneNumber: string;
   contactName: string;
-  contactType: "DRIVER" | "LEAD" | "UNKNOWN";
+  contactType: "DRIVER" | "LEAD" | "TEAM" | "UNKNOWN";
   workflowState?: string;
   routedDepartment?: "FLEET_SUPPORT" | "LEAD_ACQUISITION" | null;
   matchedPlate?: string | null;
@@ -267,10 +267,11 @@ export default function WhatsAppCrmView() {
           setLeadAcquisitionCount(data.leadAcquisitionCount);
         }
 
-        // If no conversation is selected or selected conversation is not in list, pick the first one
+        // If no conversation is selected or selected conversation is not in list, pick the first active customer lead/driver
         const stillInList = selectedConvId && list.some((c) => c.id === selectedConvId);
         if (!preserveSelection || !stillInList) {
-          setSelectedConvId(list.length > 0 ? list[0].id : null);
+          const defaultConv = list.find((c) => c.contactType !== "TEAM") || list[0];
+          setSelectedConvId(defaultConv ? defaultConv.id : null);
         }
       } catch (err: any) {
         console.error("Failed to load WhatsApp conversations", err);
@@ -961,6 +962,8 @@ export default function WhatsAppCrmView() {
                           ? "bg-amber-100 text-amber-800 ring-1 ring-amber-300/50"
                           : conv.contactType === "LEAD"
                           ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300/50"
+                          : conv.contactType === "TEAM"
+                          ? "bg-purple-100 text-purple-800 ring-1 ring-purple-300/50"
                           : "bg-gray-200 text-gray-700"
                       }`}
                     >
@@ -982,6 +985,10 @@ export default function WhatsAppCrmView() {
                     ) : conv.contactType === "LEAD" ? (
                       <span className="absolute -bottom-1 -right-1 text-[9px] bg-blue-500 text-white rounded-full px-1 py-0.2 shadow-2xs font-bold">
                         💼
+                      </span>
+                    ) : conv.contactType === "TEAM" ? (
+                      <span className="absolute -bottom-1 -right-1 text-[9px] bg-purple-600 text-white rounded-full px-1 py-0.2 shadow-2xs font-bold">
+                        👥
                       </span>
                     ) : null}
                   </div>

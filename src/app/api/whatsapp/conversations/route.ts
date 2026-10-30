@@ -301,18 +301,22 @@ export async function GET(request: NextRequest) {
     });
 
     const isFleetSupportConv = (c: any) =>
-      c.routedDepartment === "FLEET_SUPPORT" ||
-      c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
-      c.workflowState === "AWAITING_IMMAT" ||
-      c.matchedPlate !== null ||
-      c.contactType === "DRIVER" ||
-      c.driver !== null;
+      c.contactType !== "TEAM" && (
+        c.routedDepartment === "FLEET_SUPPORT" ||
+        c.workflowState === "ROUTED_DRIVER_SUPPORT" ||
+        c.workflowState === "AWAITING_IMMAT" ||
+        c.matchedPlate !== null ||
+        c.contactType === "DRIVER" ||
+        c.driver !== null
+      );
 
     const isLeadAcquisitionConv = (c: any) =>
-      c.routedDepartment === "LEAD_ACQUISITION" ||
-      c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
-      c.contactType === "LEAD" ||
-      c.lead !== null;
+      c.contactType !== "TEAM" && (
+        c.routedDepartment === "LEAD_ACQUISITION" ||
+        c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
+        c.contactType === "LEAD" ||
+        c.lead !== null
+      );
 
     // Role-based queue restriction:
     // - FLEET_PERF_MANAGER only sees Support Flotte
@@ -348,6 +352,24 @@ export async function GET(request: NextRequest) {
         const bBot = b.workflowState === "ROUTED_LEAD_ACQUISITION" ? 1 : 0;
         if (bBot !== aBot) return bBot - aBot;
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      });
+    } else {
+      // General view (Tous):
+      // 1. Prioritize real drivers and leads over internal TEAM staff notifications
+      // 2. Pinned conversations first
+      // 3. Newest message timestamp (lastMessageAt DESC)
+      results.sort((a, b) => {
+        const aIsTeam = a.contactType === "TEAM" ? 1 : 0;
+        const bIsTeam = b.contactType === "TEAM" ? 1 : 0;
+        if (aIsTeam !== bIsTeam) return aIsTeam - bIsTeam;
+
+        const aPinned = a.isPinned ? 1 : 0;
+        const bPinned = b.isPinned ? 1 : 0;
+        if (bPinned !== aPinned) return bPinned - aPinned;
+
+        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return timeB - timeA;
       });
     }
 

@@ -158,7 +158,7 @@ async function logWhatsAppToDb(member: TeamMemberDef, waMessageId: string | null
   db.prepare(`
     INSERT OR REPLACE INTO "WhatsAppConversation"
     (id, phone_number, contact_name, contact_type, last_message, last_message_at, unread_count, is_pinned, is_archived, created_at, updated_at)
-    VALUES (?, ?, ?, 'TEAM', ?, ?, 0, 1, 0, ?, ?)
+    VALUES (?, ?, ?, 'TEAM', ?, ?, 0, 0, 0, ?, ?)
   `).run(
     convId,
     `+${member.phoneSanitized}`,
