@@ -54,6 +54,36 @@ export async function GET(request: Request) {
       ];
     }
 
+    // Ensure today's requested test vehicle (2026-10-30) assigned to Mohamed Aziz exists in active DB replica
+    if (new Date().toISOString().slice(0, 10) === "2026-10-30") {
+      const existingTestCar = await prisma.vehicle
+        .findUnique({ where: { plate_number: "TEST-AZIZ-3010" } })
+        .catch(() => null);
+      if (!existingTestCar) {
+        await prisma.vehicle
+          .create({
+            data: {
+              plate_number: "TEST-AZIZ-3010",
+              make_model: "Dacia Logan [VÉHICULE TEST 30/10]",
+              year: 2026,
+              current_mileage: 1000,
+              hub_city: "Casablanca",
+              status: "Available",
+              insurance_policy_number: "TEST-SANLAM-3010",
+              assigned_driver_name: "Chauffeur Test (Validation Fleet)",
+              assigned_driver_phone: "+212600000000",
+              assigned_supervisor: "Mohamed Aziz",
+              assigned_collector: "Mohamed Aziz",
+              isInsuranceActive: true,
+              is_archived: false,
+              notes:
+                "Véhicule de test temporaire du 30/10/2026 assigné à Mohamed Aziz pour tester la notification WhatsApp accident et la confirmation GoCab Fleet.",
+            },
+          })
+          .catch(() => null);
+      }
+    }
+
     const [vehicles, redFlagsLookup] = await Promise.all([
       prisma.vehicle.findMany({
         where,
