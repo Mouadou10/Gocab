@@ -18,6 +18,137 @@ export const GOOGLE_SERVICE_ACCOUNT_EMAIL = "google-drive@gen-lang-client-086867
 export const BACKUP_SETTING_KEY = "last_backup_google_drive";
 export const WEBHOOK_SETTING_KEY = "google_drive_webhook_url";
 
+const DEFAULT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCyIhj5Hz6a1dbD
+LO9EkbR97hoiOH9sRMZf9RNNmwxrVxvU8ApPAw8sBhQxOMlIiLMMViUVfaChVSUt
+uvqbJLyPG6X45aspZNbkghxkcNLMAMkcN0MZ/WDW+On62RJ2LWy5S1NEfAPqhPb2
+Y7ubFHRIwB/IAx6k4709vpTh+NFIciJdnKnjlMjRaVVQ+mGspoSMcGlndthyHg0u
+4mAcFg+HE9G2f6tQnc4kLD96Uag0CQrEeaxhs6P1ZDLIvDUKQGQnvRaLqqXw9Fn5
+Rw8C8pYUvYDaII7xiyLlLgBYegCUU/PEQTQPvf/B82vkkVWGQGOM/SxwFt2GsEXn
+UvGX88PNAgMBAAECggEAUm6L/vCyAGXXad9n4+PHUgU2q8JYWQpkgHBBXAbVkvCv
+DPV9171zLmyruHFuV/YGYT2WEKFfjXkA6O4fXV79MP5a6lihwdiLxxfcurApJEVy
+y29ZSnQh9akfYblFHVH8/6w3XrhC+apJPJC/ds7a1vWtX1nuOuC2qJWCgSWq92ov
+jDqyCgcqg2nH0rojTJbFK8okiPg6iMrNNaj62zrPlgd6M1o09y3zr/JYmcCE2/3T
+QDoXaWtyTViWScCZp+2tSR/72IpHZqXoKzml7U9nK9lKP/7E/dOqRVKBaQpzMPIg
+bh/shAMOGrNCsbe3fw1+gaX/xSBlMN+HhQVbOItKcwKBgQDlgQIDSnWe696Pra6D
+CqjsJFrh1t92oyAYRSCz6QxPPnUy6P6r3JjJeboq1eq5HTAjZifC05kkJOuuX9LF
+btBxORpYTOcGddneTDtAV9IXeNhC71NjVsoywD7Aw/fkcp46Tv4arMVA2OjS4Ywh
+JSOXHoCGPFzK2NnbVQwncRyqYwKBgQDGstOeOPu9aO5Ludwnk0opwlBAi0EYo+SJ
+OrBijXACWIFgzKovFnd3BPXM+cidSAuPvonDIowRvjjMPc29wE46lSYA+PeYiM4b
+2+VvxeU2WJk1AmPiMNLs5yjewU+d8xP8+hos1Ne245gARvbT1L5/VCADG9/4oJZX
+FaF+CumYDwKBgCfpQHVcDIpfkGvCE3gccXXneJqPqHrUMW+nDeHbpFVfkjgRRsCS
+c0uOTK7IVrJsfgOZ7041SAt+FDJV3ayR8dPOz2MNtJtuAT5kWWV+ID4OuOUjA4hh
+/nXG8uLI8aIbwKJ5PD1dUExPrGWH7buR3teX6VfuxWBNR82Zw6xUQlzrAoGBAI3u
+45ccIUbVk5LoOsjSP6HAuc7BKkjNmcwk7iYX3jDuw8w/pjlolQGhu2sl6hXfhtKx
+SnrnTKLH/I54f2TR34+dRr5fGY4N+xyPYT8MX4UImLfy8yJ5udGb9efYsmSjZF3K
+0bPAfi6YONXJ2zrJtyIBF7TgzoYtP/cI7oi4htAlAoGBAJndFmGETkZ8ZfRfsU4j
+mW23Sp0I1BcKnNcoK+kvviL5b4CQ3T6kDhNo5JLl/N8nl4kFtzD7bgYgXSBwCkok
+86pc4C3xS8S9UpcDNaDxfQd2+ZLxUH1gnxhWa1sWd35kQV4ALlboztkmmoJQDP4q
+H8C3qj1PipBONGputALVlcis
+-----END PRIVATE KEY-----`;
+
+/**
+ * Obtains an OAuth2 Google Bearer Access Token using Service Account RSA-SHA256 JWT
+ */
+export async function getGoogleAccessToken(): Promise<string | null> {
+  const privateKey = (process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || DEFAULT_PRIVATE_KEY).replace(/\\n/g, "\n");
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  if (!privateKey || !clientEmail) return null;
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+    const claimSet = Buffer.from(
+      JSON.stringify({
+        iss: clientEmail,
+        scope: "https://www.googleapis.com/auth/drive",
+        aud: "https://oauth2.googleapis.com/token",
+        exp: now + 3600,
+        iat: now,
+      })
+    ).toString("base64url");
+
+    const signer = crypto.createSign("RSA-SHA256");
+    signer.update(header + "." + claimSet);
+    const signature = signer.sign(privateKey, "base64url");
+    const jwt = header + "." + claimSet + "." + signature;
+
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${encodeURIComponent(jwt)}`,
+    });
+
+    const data = await res.json();
+    return data.access_token || null;
+  } catch (err) {
+    console.warn("Failed to acquire Google Drive access token:", err);
+    return null;
+  }
+}
+
+/**
+ * Uploads files directly to Google Drive via Google Drive API v3
+ */
+export async function pushDirectToGoogleDrive(payload: BackupPayload): Promise<{
+  success: boolean;
+  uploadedCount: number;
+  error?: string;
+}> {
+  const accessToken = await getGoogleAccessToken();
+  if (!accessToken) {
+    return { success: false, uploadedCount: 0, error: "Token d'accès Google Drive indisponible" };
+  }
+
+  let uploaded = 0;
+  for (const file of payload.files) {
+    try {
+      const boundary = "-------gocab_drive_boundary_" + Date.now();
+      const metadata = {
+        name: file.filename,
+        parents: [GOOGLE_DRIVE_FOLDER_ID],
+      };
+      const content = file.content || Buffer.from(file.contentBase64 || "", "base64").toString("utf-8");
+
+      const multipartRequestBody =
+        `\r\n--${boundary}\r\n` +
+        `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+        JSON.stringify(metadata) +
+        `\r\n--${boundary}\r\n` +
+        `Content-Type: ${file.mimeType}\r\n\r\n` +
+        content +
+        `\r\n--${boundary}--`;
+
+      const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartRequestBody,
+      });
+
+      const resData = await uploadRes.json();
+      if (resData.id) {
+        uploaded++;
+      } else if (resData.error?.message?.includes("quota") || resData.error?.code === 403) {
+        return {
+          success: false,
+          uploadedCount: uploaded,
+          error: "QUOTA_EXCEEDED: Compte Google personnel. Utilisez le Webhook Google Apps Script pour stocker directement sur votre Google Drive (15 Go gratuits).",
+        };
+      }
+    } catch (e: any) {
+      console.warn(`Error uploading ${file.filename} to Google Drive:`, e);
+    }
+  }
+
+  return {
+    success: uploaded > 0,
+    uploadedCount: uploaded,
+  };
+}
+
 export interface BackupFileItem {
   filename: string;
   mimeType: string;
@@ -194,7 +325,16 @@ export async function triggerBackup(): Promise<{
   let method: "webhook" | "direct_api" | "local_only" = "local_only";
   let errorMsg: string | undefined = undefined;
 
-  if (webhookSetting?.value && webhookSetting.value.trim().startsWith("http")) {
+  // 1. Try Direct Google Drive API First (Works with Shared Drives or Service Account Quota)
+  const directRes = await pushDirectToGoogleDrive(payload);
+  if (directRes.success) {
+    success = true;
+    method = "direct_api";
+    message = `Sauvegarde Google Drive réussie directement via API v3 (${directRes.uploadedCount} fichiers synchronisés).`;
+  }
+
+  // 2. If direct API failed or personal account quota was detected, use Webhook (Personal Drive 15GB)
+  if (!success && webhookSetting?.value && webhookSetting.value.trim().startsWith("http")) {
     try {
       const webhookRes = await pushToWebhook(webhookSetting.value.trim(), payload);
       if (webhookRes.success !== false) {
@@ -209,9 +349,9 @@ export async function triggerBackup(): Promise<{
     }
   }
 
-  // If webhook is not configured or failed, record status
+  // 3. If neither worked, provide clear status
   if (!success && !errorMsg) {
-    message = "Données prêtes et archivées localement. Pour synchroniser automatiquement vers Google Drive personnel (@gmail.com), configurez le Webhook Google Apps Script.";
+    message = directRes.error || "Données prêtes et archivées localement. Pour synchroniser vers Google Drive personnel (@gmail.com), configurez le Webhook Google Apps Script.";
     method = "local_only";
     success = true;
   }

@@ -1142,15 +1142,24 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board_column: targetBoardColumn, brand_status: targetColumn, training_status: targetTrainingStatus }),
           });
-          if (!lead.reminder_date) {
-            setSelectedLead({ ...lead, brand_status: "Training fixed", training_status: targetTrainingStatus });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur lors du déplacement du prospect");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+            if (!lead.reminder_date) {
+              setSelectedLead({ ...lead, brand_status: "Training fixed", training_status: targetTrainingStatus });
+            }
           }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       } else {
@@ -1167,7 +1176,7 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1176,7 +1185,16 @@ export default function KanbanBoard() {
               reminder_date: isRecall ? lead.reminder_date : null,
             }),
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur lors du déplacement du prospect");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+          }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       }
@@ -1207,16 +1225,25 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle", reminder_date: null }),
           });
-          // Trigger WhatsApp thank you & Alert
-          const waUrl = generateThankYouURL(lead.sanitized_phone);
-          window.open(waUrl, "_blank");
-          setSelectedLead(lead as any);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur lors de l'assignation");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+            // Trigger WhatsApp thank you & Alert
+            const waUrl = generateThankYouURL(lead.sanitized_phone);
+            window.open(waUrl, "_blank");
+            setSelectedLead(lead as any);
+          }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       } else if (targetColumn === "Pending") {
@@ -1227,13 +1254,22 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board_column: "TRAINING_PIPELINE", training_status: targetColumn }),
           });
-          setSelectedLead({ ...lead, training_status: "Pending" });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur de mise à jour");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+            setSelectedLead({ ...lead, training_status: "Pending" });
+          }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       } else if (targetColumn === "Preorder") {
@@ -1244,13 +1280,22 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board_column: "TRAINING_PIPELINE", training_status: targetColumn }),
           });
-          setSelectedLead({ ...lead, training_status: "Preorder" });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur de mise à jour");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+            setSelectedLead({ ...lead, training_status: "Preorder" });
+          }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       } else {
@@ -1261,12 +1306,21 @@ export default function KanbanBoard() {
           prev.map((l) => (l.id === leadId ? updated : l))
         );
         try {
-          await fetch(`/api/leads/${leadId}`, {
+          const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board_column: "TRAINING_PIPELINE", training_status: targetColumn, reminder_date: null }),
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            toast.error(errData.error || "Erreur de mise à jour");
+            fetchLeads();
+          } else {
+            const data = await res.json();
+            if (data.lead) saveLocalLeadOverride(data.lead);
+          }
         } catch (err) {
+          toast.error("Erreur de connexion");
           fetchLeads();
         }
       }

@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { RefreshCw, Sparkles, CheckCircle2 } from "lucide-react";
 
-export type SyncEntity = "leads" | "tickets" | "settings" | "all";
+export type SyncEntity = "leads" | "tickets" | "settings" | "collections" | "all";
 
 interface LiveSyncContextValue {
   subscribe: (entity: SyncEntity, callback: () => void) => () => void;
@@ -50,10 +50,12 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
     leads: number;
     tickets: number;
     settings: number;
+    collections: number;
   }>({
     leads: 0,
     tickets: 0,
     settings: 0,
+    collections: 0,
   });
 
   // Subscribers map
@@ -81,6 +83,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       notifySet("leads");
       notifySet("tickets");
       notifySet("settings");
+      notifySet("collections");
       notifySet("all");
     } else {
       notifySet(entity);
@@ -220,6 +223,9 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       if (lastSyncRef.current.settings > 0) {
         params.set("settings", lastSyncRef.current.settings.toString());
       }
+      if (lastSyncRef.current.collections > 0) {
+        params.set("collections", lastSyncRef.current.collections.toString());
+      }
       if (clientVersionRef.current) {
         params.set("version", clientVersionRef.current);
       }
@@ -292,6 +298,17 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
           dispatchUpdate("settings");
         }
         lastSyncRef.current.settings = data.settings;
+      }
+
+      // Check for collections updates
+      if (data.collections) {
+        if (
+          lastSyncRef.current.collections > 0 &&
+          data.collections > lastSyncRef.current.collections
+        ) {
+          dispatchUpdate("collections");
+        }
+        lastSyncRef.current.collections = data.collections;
       }
     } catch (e) {
       // Network hiccup — keep previous state

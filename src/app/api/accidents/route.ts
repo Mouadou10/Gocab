@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 
@@ -377,6 +378,11 @@ export async function POST(req: Request) {
         },
       }).catch((e: any) => console.warn("Could not create support ticket:", e));
     }
+
+    // Touch sync state so Insurance and Tickets pages immediately refresh
+    await touchSyncState("tickets").catch(() => {});
+    await touchSyncState("all").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ success: true, claim });
   } catch (error: any) {

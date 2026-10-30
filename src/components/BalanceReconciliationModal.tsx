@@ -66,6 +66,7 @@ interface BalanceReconciliationModalProps {
   onClose: () => void;
   selectedDate: string;
   onSuccess: () => void;
+  onDateChange?: (newDate: string) => void;
   hasMorningCsv?: boolean;
   morningTargetMAD?: number;
 }
@@ -77,6 +78,7 @@ export default function BalanceReconciliationModal({
   onClose,
   selectedDate,
   onSuccess,
+  onDateChange,
   hasMorningCsv = false,
   morningTargetMAD = 0,
 }: BalanceReconciliationModalProps) {
@@ -242,6 +244,9 @@ export default function BalanceReconciliationModal({
         );
       }
 
+      if (onDateChange) {
+        onDateChange(date);
+      }
       onSuccess();
     } catch (err) {
       console.error("Upload error:", err);

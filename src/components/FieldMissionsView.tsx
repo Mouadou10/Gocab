@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import {
   Calendar,
   Clock,
@@ -146,6 +147,9 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [telegramUser, setTelegramUser] = useState<string | null>(null);
+
+  const { notifyMutation } = useLiveSync("tickets", () => fetchTasks(true));
+  useLiveSync("all", () => fetchTasks(true));
 
   // Completion modal state
   const [completingTask, setCompletingTask] = useState<FieldTask | null>(null);
@@ -436,6 +440,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
       if (res.ok) {
         toast.success(`🎉 Mission terminée avec succès pour ${completingTask.plate_number || "le véhicule"} !`);
         setCompletingTask(null);
+        notifyMutation("tickets");
         fetchTasks(true);
       } else {
         toast.error("Erreur lors de la validation.");
@@ -470,6 +475,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
       if (res.ok) {
         toast.error(`Échec signalé : ${failingTask.plate_number || "Véhicule"}`);
         setFailingTask(null);
+        notifyMutation("tickets");
         fetchTasks(true);
       } else {
         toast.error("Erreur lors de l'enregistrement.");
@@ -537,6 +543,7 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
         setCreatePhone("");
         setCreateScheduledTime("");
         setCreateVehicleId(null);
+        notifyMutation("tickets");
         fetchTasks(true);
       } else {
         const d = await res.json().catch(() => ({}));

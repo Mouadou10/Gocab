@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
 import InsuranceVehicleDetail from "./InsuranceVehicleDetail";
 import RepairReminderModal from "./RepairReminderModal";
@@ -38,6 +39,15 @@ interface VehicleItem {
 export default function InsuranceView() {
   const [claims, setClaims] = useState<AccidentClaim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+
+  const { notifyMutation } = useLiveSync("tickets", () => {
+    fetchClaims();
+    fetchReminders();
+  });
+  useLiveSync("all", () => {
+    fetchClaims();
+    fetchReminders();
+  });
 
   const [reminders, setReminders] = useState<RepairReminderItem[]>([]);
   const [remindersSummary, setRemindersSummary] = useState({
@@ -201,6 +211,7 @@ export default function InsuranceView() {
         setVehicleSearch("");
         setIsDropdownOpen(false);
         setLeftTabFilter("open");
+        notifyMutation("tickets");
         await fetchClaims();
         if (data.claim?.id) {
           setSelectedClaimId(data.claim.id);

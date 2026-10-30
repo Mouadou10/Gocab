@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import NationalBlacklistBadge from "./NationalBlacklistBadge";
@@ -123,6 +124,7 @@ export default function LeadDrawer({
   onOpenWhatsAppChat,
 }: LeadDrawerProps) {
   const { data: session } = useSession() || {};
+  const { notifyMutation } = useLiveSync("leads");
   const [rawName, setRawName] = useState(lead.raw_name || "");
   const [phone, setPhone] = useState(lead.sanitized_phone || "");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -654,6 +656,7 @@ export default function LeadDrawer({
         if (res.ok) {
           const data = await res.json();
           toast.success("Lead mis à jour avec succès");
+          notifyMutation("leads");
           onUpdate(data.lead);
           handleClose();
         } else {
@@ -684,6 +687,7 @@ export default function LeadDrawer({
       });
       if (res.ok) {
         toast.success("Prospect supprimé avec succès");
+        notifyMutation("leads");
         onDelete?.(lead.id);
         handleClose();
       } else {

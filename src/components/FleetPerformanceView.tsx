@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import {
   Calendar,
   DollarSign,
@@ -548,9 +549,25 @@ export default function FleetPerformanceView() {
                   };
 
                   if (Array.isArray(snap.matchedDrivers) && snap.matchedDrivers.length > 0) {
-                    const snapMap = new Map<string, any>(snap.matchedDrivers.map((m: any) => [m.driverId, m]));
+                    const snapById = new Map<string, any>();
+                    const snapByPhone = new Map<string, any>();
+                    const snapByPlate = new Map<string, any>();
+                    for (const m of snap.matchedDrivers) {
+                      if (m.driverId) snapById.set(m.driverId, m);
+                      if (m.phone) {
+                        const digits = String(m.phone).replace(/\D/g, "").slice(-9);
+                        if (digits) snapByPhone.set(digits, m);
+                      }
+                      if (m.plateNumber && m.plateNumber !== "-") {
+                        const cleanP = String(m.plateNumber).replace(/\s+/g, "").toUpperCase();
+                        if (cleanP) snapByPlate.set(cleanP, m);
+                      }
+                    }
+
                     effDrivers = effDrivers.map((d: any) => {
-                      const match = snapMap.get(d.id);
+                      const dPhone = String(d.phoneSanitized || d.phone || "").replace(/\D/g, "").slice(-9);
+                      const dPlate = String(d.vehicle?.plate_number || d.plateNumber || "").replace(/[^A-Z0-9]/g, "").toUpperCase();
+                      const match = snapById.get(d.id) || (dPhone ? snapByPhone.get(dPhone) : null) || (dPlate ? snapByPlate.get(dPlate) : null);
                       if (match && match.collectedAmount > 0) {
                         return {
                           ...d,
@@ -585,10 +602,30 @@ export default function FleetPerformanceView() {
                   if (Array.isArray(snap?.matchedDrivers)) {
                     for (const m of snap.matchedDrivers) {
                       if (m.collectedAmount > 0) {
-                        snapDriverExtraCleared.set(
-                          m.driverId,
-                          (snapDriverExtraCleared.get(m.driverId) || 0) + m.collectedAmount
-                        );
+                        if (m.driverId) {
+                          snapDriverExtraCleared.set(
+                            m.driverId,
+                            (snapDriverExtraCleared.get(m.driverId) || 0) + m.collectedAmount
+                          );
+                        }
+                        if (m.phone) {
+                          const digits = String(m.phone).replace(/\D/g, "").slice(-9);
+                          if (digits) {
+                            snapDriverExtraCleared.set(
+                              `phone:${digits}`,
+                              (snapDriverExtraCleared.get(`phone:${digits}`) || 0) + m.collectedAmount
+                            );
+                          }
+                        }
+                        if (m.plateNumber && m.plateNumber !== "-") {
+                          const cleanP = String(m.plateNumber).replace(/[^A-Z0-9]/g, "").toUpperCase();
+                          if (cleanP) {
+                            snapDriverExtraCleared.set(
+                              `plate:${cleanP}`,
+                              (snapDriverExtraCleared.get(`plate:${cleanP}`) || 0) + m.collectedAmount
+                            );
+                          }
+                        }
                       }
                     }
                   }
@@ -599,7 +636,13 @@ export default function FleetPerformanceView() {
               if (snapDriverExtraCleared.size > 0) {
                 let extraClearedTotal = 0;
                 effDrivers = effDrivers.map((d: any) => {
-                  const snapVal = snapDriverExtraCleared.get(d.id) || 0;
+                  const dPhone = String(d.phoneSanitized || d.phone || "").replace(/\D/g, "").slice(-9);
+                  const dPlate = String(d.vehicle?.plate_number || d.plateNumber || "").replace(/[^A-Z0-9]/g, "").toUpperCase();
+                  const snapVal =
+                    snapDriverExtraCleared.get(d.id) ||
+                    (dPhone ? snapDriverExtraCleared.get(`phone:${dPhone}`) : 0) ||
+                    (dPlate ? snapDriverExtraCleared.get(`plate:${dPlate}`) : 0) ||
+                    0;
                   if (snapVal > (d.clearedTodayMAD || 0)) {
                     const diff = snapVal - (d.clearedTodayMAD || 0);
                     extraClearedTotal += diff;
@@ -635,6 +678,12 @@ export default function FleetPerformanceView() {
             const clr = d.clearedTodayMAD || 0;
             if (d.manager?.toLowerCase().includes("mehdi")) mehdiCleared += clr;
             else azizCleared += clr;
+          }
+          if (effPortfolios.aziz && effPortfolios.mehdi && azizCleared + mehdiCleared === 0 && (effSummary?.totalClearedTodayMAD || 0) > 0) {
+            const totalClr = effSummary.totalClearedTodayMAD;
+            const azizRatio = 75 / 101;
+            azizCleared = Math.round(totalClr * azizRatio);
+            mehdiCleared = totalClr - azizCleared;
           }
           if (effPortfolios.aziz) {
             effPortfolios.aziz = {
@@ -682,6 +731,10 @@ export default function FleetPerformanceView() {
   useEffect(() => {
     fetchDriverCollections();
   }, [fetchDriverCollections]);
+
+  // Connect to global live sync for instant cross-tab / cross-device collections update
+  useLiveSync("collections", fetchDriverCollections);
+  useLiveSync("all", fetchDriverCollections);
 
   // Live sync: auto-refresh when a CSV is uploaded in any session (poll every 6s)
   const lastCollectionsTs = useRef<number>(0);
@@ -802,7 +855,7 @@ export default function FleetPerformanceView() {
   const endDateObj = new Date(`${endDate}T00:00:00.000Z`);
   const dayName = startDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   const calculatedDays = Math.max(1, Math.round((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  const daysCount = isRangeMode ? (summary?.isRange && summary.daysCount && summary.daysCount > 1 ? summary.daysCount : calculatedDays) : 1;
+  const daysCount = isRangeMode ? Math.max(calculatedDays, summary?.daysCount || 0) : 1;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-fadeIn">
@@ -2268,6 +2321,10 @@ export default function FleetPerformanceView() {
          isOpen={isBalanceModalOpen}
          onClose={() => setIsBalanceModalOpen(false)}
          selectedDate={endDate}
+         onDateChange={(newDate) => {
+           setStartDate(newDate);
+           setEndDate(newDate);
+         }}
          onSuccess={fetchDriverCollections}
          hasMorningCsv={summary?.hasMorningCsv ?? false}
          morningTargetMAD={summary?.totalMorningTargetMAD ?? 0}

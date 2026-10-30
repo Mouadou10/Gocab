@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { touchSyncState } from "@/lib/sync";
@@ -321,8 +321,15 @@ export async function POST(request: Request) {
     let resolvedPlate: string | null = plate_number ? plate_number.trim() : null;
     let finalLinkedTicketId: string | null = linked_ticket_id || null;
 
-    // Resolve vehicle if VEHICLE_RECOVERY
-    if (cleanType === "VEHICLE_RECOVERY") {
+    const isRecovery =
+      cleanType === "VEHICLE_RECOVERY" ||
+      cleanType === "RECUPERATION_VEHICULE" ||
+      cleanType.toUpperCase().includes("RECOVERY") ||
+      cleanType.toUpperCase().includes("RECUPERATION") ||
+      cleanType.toUpperCase().includes("BLOCAGE");
+
+    // Universal vehicle resolution for all mission types
+    if (!resolvedVehicleId || !resolvedPlate) {
       const matchedVehicle = await prisma.vehicle.findFirst({
         where: {
           OR: [
@@ -339,10 +346,15 @@ export async function POST(request: Request) {
       if (matchedVehicle) {
         resolvedVehicleId = matchedVehicle.id;
         resolvedPlate = matchedVehicle.plate_number;
+      }
+    }
 
+    // Resolve vehicle status & linked ticket if VEHICLE_RECOVERY
+    if (isRecovery) {
+      if (resolvedVehicleId) {
         // Block vehicle in fleet
         await prisma.vehicle.update({
-          where: { id: matchedVehicle.id },
+          where: { id: resolvedVehicleId },
           data: { status: "Blocked" },
         }).catch(() => {});
       }
@@ -351,7 +363,7 @@ export async function POST(request: Request) {
       if (!finalLinkedTicketId) {
         const existingOpenTicket = await prisma.maintenanceTicket.findFirst({
           where: {
-            ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery"] },
+            ticket_type: { in: ["VEHICLE_RECOVERY", "Vehicle Recovery", "RECUPERATION_VEHICULE"] },
             status: { in: ["OPEN", "IN_PROGRESS"] },
             OR: [
               ...(resolvedVehicleId ? [{ vehicle_id: resolvedVehicleId }] : []),
@@ -394,22 +406,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Resolve vehicle for any other task type if plate was specified
-    if (!resolvedVehicleId && resolvedPlate && resolvedPlate !== "Véhicule non assigné") {
-      const v = await prisma.vehicle.findFirst({
-        where: {
-          plate_number: resolvedPlate,
-        },
-      }).catch(() => null);
-      if (v) {
-        resolvedVehicleId = v.id;
-        resolvedPlate = v.plate_number;
-      }
-    }
-
     // Create or update the FieldTask on the Vehicle Recovery Page (Field Supervisor)
     let task;
-    if (cleanType === "VEHICLE_RECOVERY") {
+    if (isRecovery) {
       const existingPendingTask = await prisma.fieldTask.findFirst({
         where: {
           task_type: "VEHICLE_RECOVERY",
@@ -495,6 +494,7 @@ export async function POST(request: Request) {
     // Touch sync state so Ticket page and Field Recovery page immediately refresh
     await touchSyncState("tickets").catch(() => {});
     await touchSyncState("all").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ task, ticket_id: finalLinkedTicketId }, { status: 201 });
   } catch (error) {
@@ -566,6 +566,7 @@ export async function DELETE(request: Request) {
 
     const result = await prisma.fieldTask.deleteMany({ where });
     await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
     return NextResponse.json({ success: true, count: result.count });
   } catch (error: any) {
     console.error("DELETE /api/field-tasks error:", error);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskCancelledTelegramAlert } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
@@ -178,6 +178,8 @@ export async function PATCH(
 
     // Touch sync state so all open sessions refresh immediately
     await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     // When ticket transitions to IN_PROGRESS, auto-synchronize linked Field Task to IN_PROGRESS
     if (updateData.status === "IN_PROGRESS" && currentTicket.status !== "IN_PROGRESS") {
@@ -333,6 +335,7 @@ export async function DELETE(
     }
 
     await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("DELETE /api/tickets/[id] error:", error);

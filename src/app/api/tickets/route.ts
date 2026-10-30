@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
@@ -215,9 +215,45 @@ export async function POST(request: Request) {
       duration_hours,
     } = body;
 
-    if (!vehicle_id || !plate_number || !ticket_type || !description) {
+    let cleanPlate = plate_number ? String(plate_number).trim() : "";
+    let cleanVehicleId = vehicle_id ? String(vehicle_id).trim() : "";
+
+    if (!cleanVehicleId && cleanPlate) {
+      const v = await prisma.vehicle.findFirst({
+        where: {
+          OR: [
+            { plate_number: cleanPlate },
+            { plate_number: { contains: cleanPlate } },
+          ],
+        },
+      }).catch(() => null);
+      if (v) {
+        cleanVehicleId = v.id;
+        cleanPlate = v.plate_number;
+      } else {
+        cleanVehicleId = "UNASSIGNED";
+      }
+    } else if (cleanVehicleId && !cleanPlate) {
+      const v = await prisma.vehicle.findUnique({
+        where: { id: cleanVehicleId },
+      }).catch(() => null);
+      if (v) {
+        cleanPlate = v.plate_number;
+      } else {
+        cleanPlate = "Véhicule non assigné";
+      }
+    }
+
+    if (!cleanPlate && !cleanVehicleId) {
       return NextResponse.json(
-        { error: "Vehicle, Plate Number, Ticket Type, and Description are required." },
+        { error: "Veuillez spécifier un véhicule ou un matricule d'immatriculation." },
+        { status: 400 }
+      );
+    }
+
+    if (!ticket_type || !description) {
+      return NextResponse.json(
+        { error: "Le type de ticket et la description sont obligatoires." },
         { status: 400 }
       );
     }
@@ -226,8 +262,8 @@ export async function POST(request: Request) {
 
     const ticket = await prisma.maintenanceTicket.create({
       data: {
-        vehicle_id,
-        plate_number: plate_number.trim(),
+        vehicle_id: cleanVehicleId || "UNASSIGNED",
+        plate_number: cleanPlate || "Véhicule non assigné",
         driver_name: driver_name ? driver_name.trim() : null,
         driver_phone: driver_phone ? driver_phone.trim() : null,
         ticket_type: ticket_type.trim(),
@@ -380,6 +416,8 @@ export async function POST(request: Request) {
 
     // Touch sync state so all open sessions refresh immediately
     await touchSyncState("tickets").catch(() => {});
+    await touchSyncState("all").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error: any) {

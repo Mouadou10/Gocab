@@ -449,6 +449,9 @@ export async function PATCH(
       }
     }
     // ───────────────────────────────────────────────────────────────────────
+    // Invalidate memory cache and trigger live sync & cloud replica flush
+    invalidateLeadsCache();
+    await touchSyncState("leads").catch(() => {});
 
     const leadNationalMatch = matchNationalBlacklist(updatedLead.raw_name);
     return NextResponse.json({

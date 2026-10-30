@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import {
   sendCarReadyTelegramAlert,
@@ -753,8 +753,11 @@ export async function PATCH(req: Request, context: any) {
           field_status: null,
         },
       }).catch(() => {});
-      touchSyncState("tickets").catch(() => {});
     }
+
+    // Touch sync state & flush database so Insurance & Tickets refresh immediately
+    await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ success: true, claim: updatedClaim });
   } catch (error: any) {
@@ -787,6 +790,9 @@ export async function DELETE(req: Request, context: any) {
         });
       }
     }
+
+    await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

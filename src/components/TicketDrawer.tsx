@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Car, X, Check, FileText, Flag } from "lucide-react";
+import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
 import { Vehicle } from "./VehicleDrawer";
 import BonDeCommandeModal from "./BonDeCommandeModal";
@@ -67,6 +68,7 @@ export default function TicketDrawer({
   onClose,
   onSaveSuccess,
 }: TicketDrawerProps) {
+  const { notifyMutation } = useLiveSync("tickets");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicle?.id || "");
   const [plateNumber, setPlateNumber] = useState(vehicle?.plate_number || "");
@@ -301,6 +303,7 @@ export default function TicketDrawer({
       }
 
       toast.success("Ticket créé et Bon de Commande validé avec succès !");
+      notifyMutation("tickets");
       setIsBcModalOpen(false);
       onSaveSuccess();
       handleClose();
@@ -317,13 +320,14 @@ export default function TicketDrawer({
     e.preventDefault();
     setErrorMsg("");
 
-    if (!selectedVehicleId || !plateNumber) {
-      setErrorMsg("Please select a valid vehicle.");
+    const cleanPlate = plateNumber.trim();
+    if (!selectedVehicleId && !cleanPlate) {
+      setErrorMsg("Veuillez sélectionner un véhicule ou saisir l'immatriculation.");
       return;
     }
 
     if (!description.trim()) {
-      setErrorMsg("Please provide a description for the support ticket.");
+      setErrorMsg("Veuillez renseigner la description du problème.");
       return;
     }
 
@@ -338,8 +342,8 @@ export default function TicketDrawer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          vehicle_id: selectedVehicleId,
-          plate_number: plateNumber,
+          vehicle_id: selectedVehicleId || null,
+          plate_number: cleanPlate,
           driver_name: driverName || null,
           driver_phone: driverPhone || null,
           ticket_type: ticketType,
@@ -363,6 +367,8 @@ export default function TicketDrawer({
         throw new Error(data.error || "Failed to log ticket.");
       }
 
+      toast.success("Ticket créé avec succès !");
+      notifyMutation("tickets");
       onSaveSuccess();
       handleClose();
     } catch (err: any) {

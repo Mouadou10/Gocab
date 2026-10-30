@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import {
   sendFieldTaskCancelledTelegramAlert,
@@ -218,6 +218,7 @@ export async function PATCH(
     }
 
     await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({ task });
   } catch (error) {
@@ -280,6 +281,7 @@ export async function DELETE(
     }
 
     await touchSyncState("tickets").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("DELETE /api/field-tasks/[id] error:", error);
