@@ -6,6 +6,7 @@ import {
   APPROVED_360_TEMPLATES,
   Approved360TemplateDef,
   GOCAB_HQ_LOCATION,
+  GOCAB_RABAT_LOCATION,
   detectApproved360Template,
 } from "@/lib/whatsapp";
 
@@ -15,6 +16,7 @@ export {
   GOCAB_WHATSAPP_TEMPLATES,
   APPROVED_360_TEMPLATES,
   GOCAB_HQ_LOCATION,
+  GOCAB_RABAT_LOCATION,
 };
 
 export const getDbConv = () =>
@@ -773,22 +775,24 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
     const tplLang = matchedTemplate?.language || opts.templateLanguage || "ar";
     const components: any[] = [];
 
-    // 1. HEADER component (CRITICAL: "formation" & "vendredi" both have format: "LOCATION" in 360dialog!)
+    // 1. HEADER component (CRITICAL: "formation", "vendredi" & "rabat" all have format: "LOCATION" in 360dialog!)
     const headerFormat =
       matchedTemplate?.headerFormat ||
-      (tplName === "formation" || tplName === "vendredi" ? "LOCATION" : "NONE");
+      (tplName === "formation" || tplName === "vendredi" || tplName === "rabat" ? "LOCATION" : "NONE");
 
     if (headerFormat === "LOCATION") {
+      const isRabat = tplName.toLowerCase() === "rabat";
+      const targetLoc = isRabat ? GOCAB_RABAT_LOCATION : GOCAB_HQ_LOCATION;
       components.push({
         type: "header",
         parameters: [
           {
             type: "location",
             location: {
-              latitude: opts.locationHeader?.latitude ?? GOCAB_HQ_LOCATION.latitude,
-              longitude: opts.locationHeader?.longitude ?? GOCAB_HQ_LOCATION.longitude,
-              name: opts.locationHeader?.name ?? GOCAB_HQ_LOCATION.name,
-              address: opts.locationHeader?.address ?? GOCAB_HQ_LOCATION.address,
+              latitude: opts.locationHeader?.latitude ?? targetLoc.latitude,
+              longitude: opts.locationHeader?.longitude ?? targetLoc.longitude,
+              name: opts.locationHeader?.name ?? targetLoc.name,
+              address: opts.locationHeader?.address ?? targetLoc.address,
             },
           },
         ],

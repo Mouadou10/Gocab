@@ -15,6 +15,14 @@ export const GOCAB_HQ_LOCATION = {
     "https://www.google.com/maps/place/33%C2%B033'57.8%22N+7%C2%B038'10.4%22W/@33.566063,-7.6387978,17z/data=!3m1!4b1!4m4!3m3!8m2!3d33.566063!4d-7.6362229?hl=en&entry=ttu&g_ep=EgoyMDI2MTAwNy4wIKXMDSoASAFQAw%3D%3D",
 };
 
+export const GOCAB_RABAT_LOCATION = {
+  latitude: 34.0253,
+  longitude: -6.8496,
+  name: "GoCab Rabat",
+  address: "32 زنقة سيام، العمارة 32، حي المحيط، الرباط",
+  mapsUrl: "https://maps.app.goo.gl/WaXbchnwMGhzC4kn6",
+};
+
 export const DEFAULT_INVITE_TEMPLATE =
   `نؤكد لكم موعد تكوينكم على الساعة 3 زوالا \nيقع مكتبنا في: زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف، يمكنكم معرفة موقعنا عبر رابط غوغل مابس: ${GOCAB_HQ_LOCATION.mapsUrl}\n إلى اللقاء قريباً`;
 
@@ -86,6 +94,26 @@ export const APPROVED_360_TEMPLATES: Approved360TemplateDef[] = [
     template:
       "مرحباً، نؤكد لكم موعد تكوينكم مع GoCab يوم الجمعة على الساعة 11 صباحاً. يقع مكتبنا في: زنقة العربي الدغمي، عمارة 96، الطابق الأول، رقم 5، المعاريف، يمكنكم معرفة موقعنا عبر رابط غوغل مابس:",
   },
+  {
+    id: "rabat",
+    name: "rabat",
+    language: "ar",
+    category: "MARKETING",
+    status: "approved",
+    title: "rabat (Session 15h30 Rabat)",
+    badge: "Approuvé 360dialog",
+    icon: "🏛️",
+    description:
+      "Convocation officielle Rabat 15h30 avec carte GPS حي المحيط & bouton Localisation (Approuvé 360dialog)",
+    defaultTime: "3:30 مساءً (15h30)",
+    headerFormat: "LOCATION",
+    bodyParamCount: 0,
+    buttonLabel: "Localisation",
+    buttonUrl: GOCAB_RABAT_LOCATION.mapsUrl,
+    hasDynamicButtonUrl: false,
+    template:
+      "مرحباً ، نؤكد لكم موعد تكوينكم مع  على الساعة الثالثة و نصف زوالا. نحن متواجدون في 32 زنقة سيام، العمارة 32، حي المحيط، الرباط . إلى اللقاء قريباً\nhttps://maps.app.goo.gl/WaXbchnwMGhzC4kn6",
+  },
 ];
 
 /**
@@ -106,12 +134,16 @@ export function getApproved360Template(
 }
 
 /**
- * Automatically resolves whether to use "vendredi" or "formation" based on training date
+ * Automatically resolves whether to use "rabat", "vendredi" or "formation" based on city and training date
  */
 export function resolve360TemplateByDate(
   trainingDate?: string | Date | null,
-  availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES
+  availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES,
+  city?: string | null
 ): Approved360TemplateDef {
+  if (city && /rabat|kenitra/i.test(city)) {
+    return getApproved360Template("rabat", availableTemplates);
+  }
   if (!trainingDate) return getApproved360Template("formation", availableTemplates);
   try {
     const d = typeof trainingDate === "string" ? new Date(trainingDate) : trainingDate;
