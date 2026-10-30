@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { reconcileAllVehicleAssignmentsWithLeads } from "@/lib/services/leadVehicleReconciliation";
 import { requireAuth } from "@/lib/auth-guard";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export async function POST() {
   try {
     await requireAuth();
     const result = await reconcileAllVehicleAssignmentsWithLeads();
+    await touchSyncState("leads");
     return NextResponse.json({
       success: true,
       ...result,

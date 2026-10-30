@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth-guard";
 import { logAudit } from "@/lib/services/auditLogger";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { isMehdiPlate } from "@/lib/fleet-managers";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * GET /api/vehicles
@@ -204,6 +205,8 @@ export async function POST(request: Request) {
     } catch (auditErr) {
       console.error("Failed to write audit log:", auditErr);
     }
+
+    await touchSyncState("all");
 
     return NextResponse.json({ vehicle }, { status: 201 });
   } catch (error) {

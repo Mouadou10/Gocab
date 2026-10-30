@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError } from "@/lib/auth-guard";
 import { ensureLeadActivityLogTable, normalizeAgentName } from "@/lib/activity-log";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,8 @@ export async function POST(
         detail,
       },
     });
+
+    await touchSyncState("leads");
 
     return NextResponse.json({ success: true, log });
   } catch (error) {

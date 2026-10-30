@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * GET /api/collections
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
         notes: notes ? notes.trim() : null,
       },
     });
+
+    await touchSyncState("collections");
 
     return NextResponse.json({ collection }, { status: 201 });
   } catch (error) {

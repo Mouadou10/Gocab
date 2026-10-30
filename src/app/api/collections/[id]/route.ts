@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { touchSyncState } from "@/lib/sync";
 
 /**
  * PATCH /api/collections/[id]
@@ -24,6 +25,8 @@ export async function PATCH(
       data: updateData,
     });
 
+    await touchSyncState("collections");
+
     return NextResponse.json({ collection });
   } catch (error) {
     console.error("PATCH /api/collections/[id] error:", error);
@@ -41,6 +44,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     await prisma.dailyCollection.delete({ where: { id } });
+    await touchSyncState("collections");
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/collections/[id] error:", error);

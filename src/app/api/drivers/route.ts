@@ -10,6 +10,7 @@ import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
 import { getDriverCache, setDriverCache, invalidateDriverCache } from "@/lib/driverCache";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -233,6 +234,7 @@ export async function POST(request: NextRequest) {
     }
 
     invalidateDriverCache();
+    await touchSyncState("all");
 
     return NextResponse.json({ driver }, { status: 201 });
   } catch (error: any) {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-guard";
 import { logAudit } from "@/lib/services/auditLogger";
 import { v4 as uuidv4 } from "uuid";
+import { touchSyncState } from "@/lib/sync";
 
 export interface VehicleDocument {
   id: string;
@@ -130,6 +131,8 @@ export async function POST(
       },
     }).catch(() => {});
 
+    await touchSyncState("all");
+
     return NextResponse.json({
       success: true,
       documents: updatedDocs,
@@ -194,6 +197,8 @@ export async function DELETE(
         deletedDocumentName: deletedDoc?.name,
       },
     }).catch(() => {});
+
+    await touchSyncState("all");
 
     return NextResponse.json({
       success: true,
