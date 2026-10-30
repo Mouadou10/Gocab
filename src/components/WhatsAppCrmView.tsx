@@ -130,7 +130,7 @@ export default function WhatsAppCrmView() {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [filter, setFilter] = useState<
-    "ALL" | "FLEET_SUPPORT" | "LEAD_ACQUISITION" | "DRIVERS" | "LEADS" | "ARREARS" | "UNREAD"
+    "ALL" | "FLEET_SUPPORT" | "LEAD_ACQUISITION" | "DRIVERS" | "LEADS" | "ARREARS" | "UNREAD" | "TEAM"
   >("ALL");
   const [restrictedQueue, setRestrictedQueue] = useState<"FLEET_SUPPORT" | "LEAD_ACQUISITION" | null>(null);
   const [fleetSupportCount, setFleetSupportCount] = useState(0);
@@ -893,10 +893,12 @@ export default function WhatsAppCrmView() {
             {(isLeadAcquisitionOnly
               ? [
                   { id: "ALL", label: "Tous" },
+                  { id: "TEAM", label: "👥 Équipe" },
                   { id: "UNREAD", label: "Non lus" },
                 ]
               : [
                   { id: "ALL", label: "Tous" },
+                  { id: "TEAM", label: "👥 Équipe" },
                   { id: "ARREARS", label: "⚠️ Impayés" },
                   { id: "UNREAD", label: "Non lus" },
                 ]
@@ -1064,6 +1066,11 @@ export default function WhatsAppCrmView() {
                       {conv.lead && (
                         <span className="px-1.5 py-0.2 bg-sky-100 text-sky-800 text-[9px] font-bold rounded-md">
                           {conv.lead.boardColumn}
+                        </span>
+                      )}
+                      {conv.contactType === "TEAM" && (
+                        <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 border border-purple-200 text-[9px] font-extrabold rounded-md flex items-center gap-0.5">
+                          👥 Équipe GoCab
                         </span>
                       )}
                       {conv.unreadCount > 0 && (

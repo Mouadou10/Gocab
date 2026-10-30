@@ -223,19 +223,24 @@ export async function GET(request: NextRequest) {
         matchedVehicle?.make_model ||
         "-";
 
-      const resolvedContactType = driver ? "DRIVER" : lead ? "LEAD" : conv.contact_type;
-      const resolvedDepartment = driver
+      const isTeam = conv.contact_type === "TEAM";
+      const resolvedContactType = isTeam ? "TEAM" : driver ? "DRIVER" : lead ? "LEAD" : conv.contact_type;
+      const resolvedDepartment = isTeam
+        ? null
+        : driver
         ? "FLEET_SUPPORT"
         : lead
         ? "LEAD_ACQUISITION"
         : conv.routed_department || null;
-      const resolvedWorkflowState = driver
+      const resolvedWorkflowState = isTeam
+        ? "NONE"
+        : driver
         ? "ROUTED_DRIVER_SUPPORT"
         : lead
         ? "ROUTED_LEAD_ACQUISITION"
         : conv.workflow_state || "NONE";
 
-      const resolvedContactName = driver?.fullName || lead?.raw_name || conv.contact_name;
+      const resolvedContactName = isTeam ? conv.contact_name : (driver?.fullName || lead?.raw_name || conv.contact_name);
       const nationalMatch = matchNationalBlacklist(resolvedContactName);
 
       return {
@@ -355,14 +360,8 @@ export async function GET(request: NextRequest) {
       });
     } else {
       // General view (Tous):
-      // 1. Prioritize real drivers and leads over internal TEAM staff notifications
-      // 2. Pinned conversations first
-      // 3. Newest message timestamp (lastMessageAt DESC)
+      // Pinned conversations first, then newest message timestamp (lastMessageAt DESC)
       results.sort((a, b) => {
-        const aIsTeam = a.contactType === "TEAM" ? 1 : 0;
-        const bIsTeam = b.contactType === "TEAM" ? 1 : 0;
-        if (aIsTeam !== bIsTeam) return aIsTeam - bIsTeam;
-
         const aPinned = a.isPinned ? 1 : 0;
         const bPinned = b.isPinned ? 1 : 0;
         if (bPinned !== aPinned) return bPinned - aPinned;
@@ -373,7 +372,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (filter === "DRIVERS") {
+    if (filter === "TEAM") {
+      results = results.filter((c) => c.contactType === "TEAM");
+    } else if (filter === "DRIVERS") {
       results = results.filter((c) => c.contactType === "DRIVER" || c.driver !== null);
     } else if (filter === "LEADS") {
       results = results.filter((c) => c.contactType === "LEAD" || c.lead !== null);
