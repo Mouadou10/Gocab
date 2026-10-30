@@ -432,9 +432,9 @@ export default function FleetPerformanceView() {
       const data = await res.json();
 
       if (data.drivers) {
-        // Detect stale container data (e.g. old 67190 MAD seed)
+        // Detect stale container data (e.g. old 67190 MAD seed) - only on single-day views
         const isStaleServerSeed =
-          data.summary?.totalMorningTargetMAD === 67190;
+          !isRangeMode && data.summary?.totalMorningTargetMAD === 67190;
 
         // Clean up any stale 67190 / 46930 entries from localStorage
         if (typeof window !== "undefined") {
@@ -446,153 +446,211 @@ export default function FleetPerformanceView() {
           } catch (e) {}
         }
 
-        // Resilient client-side caching: if server has valid morning CSV, cache it (ignore stale 67K)
-        if (data.summary?.hasMorningCsv && !isStaleServerSeed && typeof window !== "undefined") {
+        // Resilient client-side caching: only for single-day views! Range queries should not pollute or read single-day cache
+        if (!isRangeMode && data.summary?.hasMorningCsv && !isStaleServerSeed && typeof window !== "undefined") {
           try {
             localStorage.setItem(`gocab_collections_fullcache_${endDate}`, JSON.stringify(data));
           } catch (e) {}
         }
 
-        // Rehydrate or preserve 59K target
+        // Rehydrate or preserve target
         let effSummary = data.summary;
         let effPortfolios = data.portfolios;
         let effDrivers = data.drivers;
 
-        if (isStaleServerSeed) {
-          // If server returned stale 67K, recover 59790 MAD from cache if available or normalize
-          let recovered = false;
-          if (typeof window !== "undefined") {
+        if (!isRangeMode) {
+          if (isStaleServerSeed) {
+            // If server returned stale 67K, recover 59790 MAD from cache if available or normalize
+            let recovered = false;
+            if (typeof window !== "undefined") {
+              try {
+                const rawCache = localStorage.getItem(`gocab_collections_fullcache_${endDate}`);
+                if (rawCache) {
+                  const cached = JSON.parse(rawCache);
+                  if (cached?.summary?.totalMorningTargetMAD === 59790) {
+                    effSummary = cached.summary;
+                    if (cached.portfolios) effPortfolios = cached.portfolios;
+                    if (cached.drivers) effDrivers = cached.drivers;
+                    recovered = true;
+                  }
+                }
+              } catch (e) {}
+            }
+            if (!recovered && effSummary) {
+              effSummary = {
+                ...effSummary,
+                totalMorningTargetMAD: 59790,
+                totalExpectedTodayMAD: 59790,
+                remainingToCollectMAD: Math.max(0, 59790 - (effSummary.totalClearedTodayMAD || 0)),
+                unassignedArrearsMAD: 0,
+                globalSystemArrearsMAD: 59790,
+                target50PercentMAD: 29895,
+                target60PercentMAD: 35874,
+                target85PercentMAD: 50822,
+                target95PercentMAD: 56801,
+                criticalRedCount: 36,
+              };
+              if (effPortfolios?.aziz) {
+                effPortfolios.aziz = {
+                  ...effPortfolios.aziz,
+                  driverCount: 59,
+                  targetMAD: 44980,
+                  target50PercentMAD: 22490,
+                  target60PercentMAD: 26988,
+                  target85PercentMAD: 38233,
+                  target95PercentMAD: 42731,
+                  remainingMAD: Math.max(0, 44980 - (effPortfolios.aziz.clearedMAD || 0)),
+                };
+              }
+              if (effPortfolios?.mehdi) {
+                effPortfolios.mehdi = {
+                  ...effPortfolios.mehdi,
+                  driverCount: 21,
+                  targetMAD: 14810,
+                  target50PercentMAD: 7405,
+                  target60PercentMAD: 8886,
+                  target85PercentMAD: 12589,
+                  target95PercentMAD: 14070,
+                  remainingMAD: Math.max(0, 14810 - (effPortfolios.mehdi.clearedMAD || 0)),
+                };
+              }
+            }
+          } else if (!data.summary?.hasMorningCsv && typeof window !== "undefined") {
             try {
               const rawCache = localStorage.getItem(`gocab_collections_fullcache_${endDate}`);
               if (rawCache) {
                 const cached = JSON.parse(rawCache);
-                if (cached?.summary?.totalMorningTargetMAD === 59790) {
+                if (cached?.summary?.hasMorningCsv) {
                   effSummary = cached.summary;
                   if (cached.portfolios) effPortfolios = cached.portfolios;
                   if (cached.drivers) effDrivers = cached.drivers;
-                  recovered = true;
                 }
               }
             } catch (e) {}
           }
-          if (!recovered && effSummary) {
-            effSummary = {
-              ...effSummary,
-              totalMorningTargetMAD: 59790,
-              totalExpectedTodayMAD: 59790,
-              remainingToCollectMAD: Math.max(0, 59790 - (effSummary.totalClearedTodayMAD || 0)),
-              unassignedArrearsMAD: 0,
-              globalSystemArrearsMAD: 59790,
-              target50PercentMAD: 29895,
-              target60PercentMAD: 35874,
-              target85PercentMAD: 50822,
-              target95PercentMAD: 56801,
-              criticalRedCount: 36,
-            };
-            if (effPortfolios?.aziz) {
-              effPortfolios.aziz = {
-                ...effPortfolios.aziz,
-                driverCount: 59,
-                targetMAD: 44980,
-                target50PercentMAD: 22490,
-                target60PercentMAD: 26988,
-                target85PercentMAD: 38233,
-                target95PercentMAD: 42731,
-                remainingMAD: Math.max(0, 44980 - (effPortfolios.aziz.clearedMAD || 0)),
-              };
-            }
-            if (effPortfolios?.mehdi) {
-              effPortfolios.mehdi = {
-                ...effPortfolios.mehdi,
-                driverCount: 21,
-                targetMAD: 14810,
-                target50PercentMAD: 7405,
-                target60PercentMAD: 8886,
-                target85PercentMAD: 12589,
-                target95PercentMAD: 14070,
-                remainingMAD: Math.max(0, 14810 - (effPortfolios.mehdi.clearedMAD || 0)),
-              };
-            }
-          }
-        } else if (!data.summary?.hasMorningCsv && typeof window !== "undefined") {
-          try {
-            const rawCache = localStorage.getItem(`gocab_collections_fullcache_${endDate}`);
-            if (rawCache) {
-              const cached = JSON.parse(rawCache);
-              if (cached?.summary?.hasMorningCsv) {
-                effSummary = cached.summary;
-                if (cached.portfolios) effPortfolios = cached.portfolios;
-                if (cached.drivers) effDrivers = cached.drivers;
-              }
-            }
-          } catch (e) {}
-        }
 
-        // Rehydrate latest evening reconciliation snapshot if server has 0 cleared cash
-        if (typeof window !== "undefined") {
-          try {
-            const rawSnap = localStorage.getItem(`gocab_collections_snapshot_${endDate}`);
-            if (rawSnap) {
-              const snap = JSON.parse(rawSnap);
-              const snapCleared = snap?.summary?.totalCollectedTodayMAD || 0;
-              if (snapCleared > 0 && (effSummary?.totalClearedTodayMAD === 0 || !effSummary?.totalClearedTodayMAD || effSummary.totalClearedTodayMAD < snapCleared)) {
-                const morningBase = effSummary?.totalMorningTargetMAD || 59790;
-                effSummary = {
-                  ...effSummary,
-                  totalMorningTargetMAD: morningBase,
-                  totalExpectedTodayMAD: morningBase,
-                  totalClearedTodayMAD: snapCleared,
-                  remainingToCollectMAD: Math.max(0, morningBase - snapCleared),
-                  hasEveningCsv: true,
-                };
+          // Single-day evening reconciliation snapshot rehydration
+          if (typeof window !== "undefined") {
+            try {
+              const rawSnap = localStorage.getItem(`gocab_collections_snapshot_${endDate}`);
+              if (rawSnap) {
+                const snap = JSON.parse(rawSnap);
+                const snapCleared = snap?.summary?.totalCollectedTodayMAD || 0;
+                if (snapCleared > 0 && (effSummary?.totalClearedTodayMAD === 0 || !effSummary?.totalClearedTodayMAD || effSummary.totalClearedTodayMAD < snapCleared)) {
+                  const morningBase = effSummary?.totalMorningTargetMAD || 59790;
+                  effSummary = {
+                    ...effSummary,
+                    totalMorningTargetMAD: morningBase,
+                    totalExpectedTodayMAD: morningBase,
+                    totalClearedTodayMAD: snapCleared,
+                    remainingToCollectMAD: Math.max(0, morningBase - snapCleared),
+                    hasEveningCsv: true,
+                  };
 
-                // Merge driver payments from reconciliation snapshot
-                if (Array.isArray(snap.matchedDrivers) && snap.matchedDrivers.length > 0) {
-                  const snapMap = new Map<string, any>(snap.matchedDrivers.map((m: any) => [m.driverId, m]));
-                  effDrivers = effDrivers.map((d: any) => {
-                    const match = snapMap.get(d.id);
-                    if (match && match.collectedAmount > 0) {
-                      return {
-                        ...d,
-                        clearedTodayMAD: match.collectedAmount,
-                        eveningBalance: match.eveningBalance,
-                        isPaidToday: match.status === "PAID" || match.collectedAmount >= (d.expectedTodayMAD || 300),
-                      };
-                    }
-                    return d;
-                  });
-
-                  // Recalculate portfolio breakdown for Aziz and Mehdi
-                  if (effPortfolios) {
-                    let azizCleared = 0;
-                    let mehdiCleared = 0;
-                    for (const d of effDrivers) {
-                      const clr = d.clearedTodayMAD || 0;
-                      if (d.manager?.toLowerCase().includes("mehdi")) mehdiCleared += clr;
-                      else azizCleared += clr;
-                    }
-                    if (effPortfolios.aziz) {
-                      effPortfolios.aziz = {
-                        ...effPortfolios.aziz,
-                        clearedMAD: azizCleared,
-                        remainingMAD: Math.max(0, effPortfolios.aziz.targetMAD - azizCleared),
-                        collectionPercentage: effPortfolios.aziz.targetMAD > 0 ? (azizCleared / effPortfolios.aziz.targetMAD) * 100 : 0,
-                      };
-                    }
-                    if (effPortfolios.mehdi) {
-                      effPortfolios.mehdi = {
-                        ...effPortfolios.mehdi,
-                        clearedMAD: mehdiCleared,
-                        remainingMAD: Math.max(0, effPortfolios.mehdi.targetMAD - mehdiCleared),
-                        collectionPercentage: effPortfolios.mehdi.targetMAD > 0 ? (mehdiCleared / effPortfolios.mehdi.targetMAD) * 100 : 0,
-                      };
-                    }
+                  if (Array.isArray(snap.matchedDrivers) && snap.matchedDrivers.length > 0) {
+                    const snapMap = new Map<string, any>(snap.matchedDrivers.map((m: any) => [m.driverId, m]));
+                    effDrivers = effDrivers.map((d: any) => {
+                      const match = snapMap.get(d.id);
+                      if (match && match.collectedAmount > 0) {
+                        return {
+                          ...d,
+                          clearedTodayMAD: match.collectedAmount,
+                          eveningBalance: match.eveningBalance,
+                          isPaidToday: match.status === "PAID" || match.collectedAmount >= (d.expectedTodayMAD || 300),
+                        };
+                      }
+                      return d;
+                    });
                   }
                 }
               }
+            } catch (e) {
+              console.warn("Could not rehydrate single-day snapshot:", e);
             }
-          } catch (e) {
-            console.warn("Could not rehydrate collections snapshot:", e);
+          }
+        } else {
+          // ─── RANGE MODE: MULTI-DAY SNAPSHOT SCAN ───
+          // Check for any client-side evening snapshots within this date range (e.g. if uploaded on serverless)
+          if (typeof window !== "undefined") {
+            try {
+              const curD = new Date(`${startDate}T00:00:00.000Z`);
+              const endD = new Date(`${endDate}T23:59:59.999Z`);
+              const snapDriverExtraCleared = new Map<string, number>();
+
+              while (curD <= endD) {
+                const dStr = curD.toISOString().split("T")[0];
+                const rawSnap = localStorage.getItem(`gocab_collections_snapshot_${dStr}`);
+                if (rawSnap) {
+                  const snap = JSON.parse(rawSnap);
+                  if (Array.isArray(snap?.matchedDrivers)) {
+                    for (const m of snap.matchedDrivers) {
+                      if (m.collectedAmount > 0) {
+                        snapDriverExtraCleared.set(
+                          m.driverId,
+                          (snapDriverExtraCleared.get(m.driverId) || 0) + m.collectedAmount
+                        );
+                      }
+                    }
+                  }
+                }
+                curD.setUTCDate(curD.getUTCDate() + 1);
+              }
+
+              if (snapDriverExtraCleared.size > 0) {
+                let extraClearedTotal = 0;
+                effDrivers = effDrivers.map((d: any) => {
+                  const snapVal = snapDriverExtraCleared.get(d.id) || 0;
+                  if (snapVal > (d.clearedTodayMAD || 0)) {
+                    const diff = snapVal - (d.clearedTodayMAD || 0);
+                    extraClearedTotal += diff;
+                    return {
+                      ...d,
+                      clearedTodayMAD: snapVal,
+                      isPaidToday: snapVal >= (d.expectedTodayMAD || 300),
+                    };
+                  }
+                  return d;
+                });
+
+                if (extraClearedTotal > 0) {
+                  const newCleared = (effSummary.totalClearedTodayMAD || 0) + extraClearedTotal;
+                  effSummary = {
+                    ...effSummary,
+                    totalClearedTodayMAD: newCleared,
+                    remainingToCollectMAD: Math.max(0, (effSummary.totalExpectedTodayMAD || 0) - newCleared),
+                  };
+                }
+              }
+            } catch (e) {
+              console.warn("Could not merge range snapshots:", e);
+            }
+          }
+        }
+
+        // Recalculate portfolio breakdown for Aziz and Mehdi based on effective driver numbers
+        if (effPortfolios) {
+          let azizCleared = 0;
+          let mehdiCleared = 0;
+          for (const d of effDrivers) {
+            const clr = d.clearedTodayMAD || 0;
+            if (d.manager?.toLowerCase().includes("mehdi")) mehdiCleared += clr;
+            else azizCleared += clr;
+          }
+          if (effPortfolios.aziz) {
+            effPortfolios.aziz = {
+              ...effPortfolios.aziz,
+              clearedMAD: azizCleared,
+              remainingMAD: Math.max(0, effPortfolios.aziz.targetMAD - azizCleared),
+              collectionPercentage: effPortfolios.aziz.targetMAD > 0 ? (azizCleared / effPortfolios.aziz.targetMAD) * 100 : 0,
+            };
+          }
+          if (effPortfolios.mehdi) {
+            effPortfolios.mehdi = {
+              ...effPortfolios.mehdi,
+              clearedMAD: mehdiCleared,
+              remainingMAD: Math.max(0, effPortfolios.mehdi.targetMAD - mehdiCleared),
+              collectionPercentage: effPortfolios.mehdi.targetMAD > 0 ? (mehdiCleared / effPortfolios.mehdi.targetMAD) * 100 : 0,
+            };
           }
         }
 
@@ -743,7 +801,8 @@ export default function FleetPerformanceView() {
   const startDateObj = new Date(`${startDate}T00:00:00.000Z`);
   const endDateObj = new Date(`${endDate}T00:00:00.000Z`);
   const dayName = startDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  const daysCount = summary?.daysCount || Math.max(1, Math.round((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const calculatedDays = Math.max(1, Math.round((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const daysCount = isRangeMode ? (summary?.isRange && summary.daysCount && summary.daysCount > 1 ? summary.daysCount : calculatedDays) : 1;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-fadeIn">

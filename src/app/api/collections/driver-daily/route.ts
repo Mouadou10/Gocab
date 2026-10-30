@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
         const workingDays = daysInRange.filter((d) => d.dayOfWeek >= 1 && d.dayOfWeek <= 6).length;
         if (contract === "WEEKLY") {
           const mondayCount = daysInRange.filter((d) => d.dayOfWeek === 1).length;
-          if (mondayCount > 0 && daysCount % 7 === 0) {
+          if (mondayCount > 0 && (daysCount % 7 === 0 || workingDays >= 5 || daysCount >= 5)) {
             expectedTodayMAD = mondayCount * 1800;
           } else {
             expectedTodayMAD = workingDays * 300;
