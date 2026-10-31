@@ -197,19 +197,27 @@ export async function GET(request: NextRequest) {
       const matchedVehicle = conv.matched_vehicle_id
         ? vehicleMap.get(conv.matched_vehicle_id)
         : null;
-      let driverFromMap: any = conv.driver_id ? driverMap.get(conv.driver_id) : null;
-      if (!driverFromMap) {
-        driverFromMap =
-          drivers.find((d) => d.phoneSanitized && d.phoneSanitized.includes(shortPhone)) ||
-          matchedVehicle?.driverProfile ||
-          null;
-      }
-      const driver: any = driverFromMap || matchedVehicle?.driverProfile || null;
+      const isTeam = conv.contact_type === "TEAM";
 
-      let lead = conv.lead_id ? leadMap.get(conv.lead_id) : null;
-      if (!lead) {
-        lead =
-          leads.find((l) => l.sanitized_phone && l.sanitized_phone.includes(shortPhone)) || null;
+      let driverFromMap: any = null;
+      let driver: any = null;
+      let lead: any = null;
+
+      if (!isTeam) {
+        driverFromMap = conv.driver_id ? driverMap.get(conv.driver_id) : null;
+        if (!driverFromMap) {
+          driverFromMap =
+            drivers.find((d) => d.phoneSanitized && d.phoneSanitized.includes(shortPhone)) ||
+            matchedVehicle?.driverProfile ||
+            null;
+        }
+        driver = driverFromMap || matchedVehicle?.driverProfile || null;
+
+        lead = conv.lead_id ? leadMap.get(conv.lead_id) : null;
+        if (!lead) {
+          lead =
+            leads.find((l) => l.sanitized_phone && l.sanitized_phone.includes(shortPhone)) || null;
+        }
       }
 
       const resolvedPlate =
@@ -223,7 +231,6 @@ export async function GET(request: NextRequest) {
         matchedVehicle?.make_model ||
         "-";
 
-      const isTeam = conv.contact_type === "TEAM";
       const resolvedContactType = isTeam ? "TEAM" : driver ? "DRIVER" : lead ? "LEAD" : conv.contact_type;
       const resolvedDepartment = isTeam
         ? null
@@ -241,7 +248,7 @@ export async function GET(request: NextRequest) {
         : conv.workflow_state || "NONE";
 
       const resolvedContactName = isTeam ? conv.contact_name : (driver?.fullName || lead?.raw_name || conv.contact_name);
-      const nationalMatch = matchNationalBlacklist(resolvedContactName);
+      const nationalMatch = isTeam ? matchNationalBlacklist("") : matchNationalBlacklist(resolvedContactName);
 
       return {
         id: conv.id,

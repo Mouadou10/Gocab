@@ -1118,7 +1118,7 @@ export default function WhatsAppCrmView() {
                     <h3 className="text-sm font-black text-gray-900 truncate">
                       {activeConversation.contactName}
                     </h3>
-                    {activeConversation.national_blacklist_match?.isBlacklisted && (
+                    {activeConversation.contactType !== "TEAM" && activeConversation.national_blacklist_match?.isBlacklisted && (
                       <NationalBlacklistBadge match={activeConversation.national_blacklist_match} size="sm" />
                     )}
                     {activeConversation.driver?.isRedFlagged && (
@@ -1126,14 +1126,18 @@ export default function WhatsAppCrmView() {
                     )}
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
-                        activeConversation.contactType === "DRIVER"
+                        activeConversation.contactType === "TEAM"
+                          ? "bg-purple-100 text-purple-900 border border-purple-200"
+                          : activeConversation.contactType === "DRIVER"
                           ? "bg-amber-100 text-amber-800"
                           : activeConversation.contactType === "LEAD"
                           ? "bg-blue-100 text-blue-800"
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {activeConversation.contactType === "DRIVER"
+                      {activeConversation.contactType === "TEAM"
+                        ? "👥 Équipe GoCab"
+                        : activeConversation.contactType === "DRIVER"
                         ? "🚖 Support Chauffeur"
                         : activeConversation.contactType === "LEAD"
                         ? "💼 Lead Acquisition"
@@ -1434,6 +1438,28 @@ export default function WhatsAppCrmView() {
                           </p>
                         )}
 
+                        {/* Interactive 1-click Fleet confirmation link inside bubble */}
+                        {msg.text && msg.text.includes("/confirm-fleet-accident/") && (
+                          <div className="pt-2 border-t border-emerald-200/60 mt-1.5 flex items-center gap-2">
+                            {(() => {
+                              const match = msg.text.match(/(https?:\/\/[^\s]+confirm-fleet-accident\/[^\s]+)/);
+                              const link = match ? match[1] : null;
+                              if (!link) return null;
+                              return (
+                                <a
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95"
+                                >
+                                  <span>✅ Valider création GoCab Fleet</span>
+                                  <ExternalLink className="w-3 h-3 opacity-80" />
+                                </a>
+                              );
+                            })()}
+                          </div>
+                        )}
+
                         {/* Delivery Status & Inline Retry */}
                         {isOutbound && (
                           <div className="flex items-center justify-end gap-1.5 pt-0.5 text-[10px]">
@@ -1443,9 +1469,20 @@ export default function WhatsAppCrmView() {
                               </span>
                             )}
                             {msg.status === "SENT" && (
-                              <span className="text-gray-500 font-bold text-[11px]" title="Envoyé au serveur WhatsApp">
-                                ✓
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-500 font-bold text-[11px]" title="Envoyé au serveur WhatsApp (en attente de réception sur le téléphone)">
+                                  ✓
+                                </span>
+                                <a
+                                  href={`https://wa.me/${normalizeWhatsAppPhone(activeConversation.phoneNumber)}?text=${encodeURIComponent(msg.text)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded transition-colors ml-1"
+                                  title="Ouvrir WhatsApp Web / App pour forcer l'envoi direct"
+                                >
+                                  <span>📲 Renvoyer via WhatsApp Web</span>
+                                </a>
+                              </div>
                             )}
                             {msg.status === "DELIVERED" && (
                               <span className="text-gray-600 font-bold text-[11px]" title="Reçu sur le téléphone">
