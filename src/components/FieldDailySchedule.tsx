@@ -104,6 +104,43 @@ function computeEndTime(startTime: string, durationHours: number): string {
   return `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
 }
 
+export function matchesSupervisor(
+  assignedTo: string | null | undefined,
+  supervisor: FieldSupervisorInfo | null,
+  fallbackAgentId?: string
+): boolean {
+  if (!assignedTo) return false;
+  const rawAssigned = assignedTo.trim().toLowerCase();
+  // Strip off roles like "(Superviseur Terrain)", "(Agent)", etc.
+  const cleanAssigned = rawAssigned.replace(/\s*\([^)]*\)/g, "").trim();
+
+  const candidates: string[] = [];
+  if (fallbackAgentId) candidates.push(fallbackAgentId.trim().toLowerCase());
+  if (supervisor) {
+    if (supervisor.id) candidates.push(supervisor.id.trim().toLowerCase());
+    if (supervisor.name) candidates.push(supervisor.name.trim().toLowerCase());
+    if (supervisor.fullName) candidates.push(supervisor.fullName.trim().toLowerCase());
+    if (supervisor.email) candidates.push(supervisor.email.trim().toLowerCase());
+  }
+
+  for (const c of candidates) {
+    if (!c) continue;
+    const cleanCandidate = c.replace(/\s*\([^)]*\)/g, "").trim();
+    if (rawAssigned === c || cleanAssigned === cleanCandidate) return true;
+    if (cleanAssigned.includes(cleanCandidate) || cleanCandidate.includes(cleanAssigned)) return true;
+    const slugAssigned = cleanAssigned.replace(/[\s._-]+/g, "");
+    const slugCandidate = cleanCandidate.replace(/[\s._-]+/g, "");
+    if (
+      slugAssigned &&
+      slugCandidate &&
+      (slugAssigned === slugCandidate || slugAssigned.includes(slugCandidate) || slugCandidate.includes(slugAssigned))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export default function FieldDailySchedule({
   tasks,
   onTaskUpdated,
@@ -242,40 +279,52 @@ export default function FieldDailySchedule({
     return supervisors.find((s) => s.id === selectedAgentId || s.name === selectedAgentId) || supervisors[0] || null;
   }, [supervisors, selectedAgentId]);
 
-  // 2. Identify Tasks: Scheduled for this Agent on this Date vs Unscheduled Pool
+  // 2. Identify Tasks: Scheduled for this Agent on this Date vs Unscheduled / Overdue Pool
   const { scheduledTasksMap, spanningSlotsMap, poolTasks, agentTotalHours, agentIsFull } = useMemo(() => {
     const scheduledMap: Record<string, FieldTask> = {};
     const spanMap: Record<string, { parentTime: string; task: FieldTask }> = {};
     const pool: FieldTask[] = [];
 
-    const activeAgentKey = currentSupervisor ? currentSupervisor.name : selectedAgentId;
-    const activeAgentId = currentSupervisor ? currentSupervisor.id : selectedAgentId;
-
     tasks.forEach((task) => {
       // Exclude completed or failed from the backlog pool
       const isArchived = task.status === "COMPLETED" || task.status === "FAILED";
 
-      // Match agent: either matches this agent or unassigned
-      const isAssignedToThisAgent =
-        task.assigned_to === activeAgentId ||
-        task.assigned_to === activeAgentKey ||
-        (task.assigned_to && currentSupervisor?.fullName && task.assigned_to === currentSupervisor.fullName);
+      // Match agent: either matches this agent or is unassigned
+      const isAssignedToThisAgent = matchesSupervisor(task.assigned_to, currentSupervisor, selectedAgentId);
+      const isUnassigned = !task.assigned_to || task.assigned_to.trim() === "";
 
-      if (task.scheduled_date === selectedDate && isAssignedToThisAgent && task.scheduled_time) {
-        scheduledMap[task.scheduled_time] = task;
+      const taskDate = task.scheduled_date ? task.scheduled_date.trim().split("T")[0] : null;
+      let rawTime = task.scheduled_time ? task.scheduled_time.trim().slice(0, 5) : null;
+      if (rawTime && rawTime.length === 4 && rawTime[1] === ":") {
+        rawTime = `0${rawTime}`;
+      }
+      const normalizedTime = rawTime;
+
+      if (taskDate === selectedDate && isAssignedToThisAgent && normalizedTime) {
+        scheduledMap[normalizedTime] = task;
 
         // If duration > 1h, calculate spanned subsequent slots
         const dur = task.duration_hours && task.duration_hours > 0 ? task.duration_hours : 1.0;
         if (dur > 1.0) {
-          const startH = parseInt(task.scheduled_time.split(":")[0], 10);
+          const startH = parseInt(normalizedTime.split(":")[0], 10);
           for (let i = 1; i < Math.ceil(dur); i++) {
             const nextSlot = `${(startH + i).toString().padStart(2, "0")}:00`;
-            spanMap[nextSlot] = { parentTime: task.scheduled_time, task };
+            spanMap[nextSlot] = { parentTime: normalizedTime, task };
           }
         }
-      } else if (!task.scheduled_date || !task.scheduled_time) {
-        if (!isArchived) {
-          pool.push(task);
+      } else if (!isArchived) {
+        // Collect into pool:
+        // - Past overdue missions that were scheduled before today/selectedDate and never completed
+        // - Missions scheduled for today that don't have a specific time or are unassigned
+        // - General backlog missions without date/time
+        const isPastOverdue = Boolean(taskDate && taskDate < selectedDate);
+        const isTodayUnscheduled = Boolean(taskDate === selectedDate && (!normalizedTime || isUnassigned));
+        const isGeneralUnscheduled = Boolean(!taskDate || !normalizedTime);
+
+        if (isTodayUnscheduled || isPastOverdue || isGeneralUnscheduled) {
+          if (isAssignedToThisAgent || isUnassigned || isPastOverdue) {
+            pool.push(task);
+          }
         }
       }
     });
@@ -839,6 +888,24 @@ export default function FieldDailySchedule({
 
           {/* Timeline Slots */}
           <div className="space-y-2.5 pt-1">
+            {/* Evening highlight banner if 17:00 or 18:00 has missions */}
+            {Boolean(scheduledTasksMap["17:00"] || scheduledTasksMap["18:00"]) && (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-950 dark:text-indigo-200 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🌇</span>
+                  <span>
+                    <strong>Missions de fin de journée planifiées :</strong>{" "}
+                    {scheduledTasksMap["17:00"] && `17:00 (${scheduledTasksMap["17:00"].plate_number || scheduledTasksMap["17:00"].task_type})`}
+                    {scheduledTasksMap["17:00"] && scheduledTasksMap["18:00"] && " • "}
+                    {scheduledTasksMap["18:00"] && `18:00 (${scheduledTasksMap["18:00"].plate_number || scheduledTasksMap["18:00"].task_type})`}
+                  </span>
+                </div>
+                <span className="text-3xs font-bold bg-indigo-200/80 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200 px-2 py-0.5 rounded-full shrink-0">
+                  À retrouver en bas de l&apos;agenda ⬇
+                </span>
+              </div>
+            )}
+
             {WORKING_HOURS.map((hour) => {
               const task = scheduledTasksMap[hour];
               const spanInfo = spanningSlotsMap[hour];
@@ -1293,6 +1360,13 @@ export default function FieldDailySchedule({
                           )}
                         </div>
                       </div>
+
+                      {Boolean(t.scheduled_date && t.scheduled_date < selectedDate) && (
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800/60">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                          <span>Reportée (prévue le {t.scheduled_date}{t.scheduled_time ? ` à ${t.scheduled_time}` : ""})</span>
+                        </div>
+                      )}
 
                       {t.driver_name && (
                         <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">

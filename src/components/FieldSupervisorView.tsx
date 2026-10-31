@@ -38,6 +38,7 @@ import {
   ShieldAlert,
   ClipboardCheck,
   Plus,
+  Sparkles,
   Play,
   Key,
   FileText,
@@ -239,7 +240,7 @@ export default function FieldSupervisorView() {
   const [mainViewMode, setMainViewMode] = useState<"SCHEDULE" | "QUEUE">("SCHEDULE");
 
   // Tabs: ALL, VEHICLE_RECOVERY, GARAGE_PICKUP, MONTHLY_CHECKUP, COMPLETED
-  const [activeTab, setActiveTab] = useState<"ALL" | "VEHICLE_RECOVERY" | "GARAGE_PICKUP" | "MONTHLY_CHECKUP" | "COMPLETED">("ALL");
+  const [activeTab, setActiveTab] = useState<"ALL" | "VEHICLE_RECOVERY" | "REPAIR" | "GARAGE_PICKUP" | "OTHER" | "MONTHLY_CHECKUP" | "COMPLETED">("ALL");
 
   // Filters
   const [filterStatus, setFilterStatus] = useState("ALL");
@@ -669,18 +670,12 @@ export default function FieldSupervisorView() {
     return `https://wa.me/${full}`;
   };
 
-  // Helper: Only accident-related garage pickups appear in the field supervisor queue.
-  // Routine maintenance like Vidange or AdBlue does not require a field pickup.
+  // Helper: Filter out pure fluid top-ups that do not require physical garage vehicle intervention
   const isAccidentPickup = (task: FieldTask) => {
     if (task.task_type !== "GARAGE_PICKUP") return true;
     const desc = (task.description || "").toLowerCase();
-    // Exclude vidange, adblue, and routine maintenance
-    if (desc.includes("vidange") || desc.includes("adbleu") || desc.includes("adblue") || desc.includes("bon de commande")) {
+    if (desc.includes("vidange périodique") || desc.includes("recharge adblue")) {
       return false;
-    }
-    // Linked tickets must be accident-related
-    if (task.linked_ticket_id) {
-      return desc.includes("accident") || desc.includes("claim") || desc.includes("sinistre");
     }
     return true;
   };
@@ -688,7 +683,9 @@ export default function FieldSupervisorView() {
   // KPI Calculations across all valid tasks
   const validTasks = useMemo(() => tasks.filter(isAccidentPickup), [tasks]);
   const pendingRecoveries = validTasks.filter((t) => t.task_type === "VEHICLE_RECOVERY" && t.status !== "COMPLETED").length;
+  const pendingRepairs = validTasks.filter((t) => (t.task_type === "REPAIR" || t.task_type === "EMERGENCY_REPAIR") && t.status !== "COMPLETED").length;
   const pendingPickups = validTasks.filter((t) => t.task_type === "GARAGE_PICKUP" && t.status !== "COMPLETED").length;
+  const pendingOthers = validTasks.filter((t) => t.task_type !== "VEHICLE_RECOVERY" && t.task_type !== "GARAGE_PICKUP" && t.task_type !== "REPAIR" && t.task_type !== "EMERGENCY_REPAIR" && t.task_type !== "MONTHLY_CHECKUP" && t.status !== "COMPLETED").length;
   const checkupsDueCount = checkupsDue.length;
   const completedTodayCount = validTasks.filter(
     (t) => t.status === "COMPLETED" && t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()
@@ -702,7 +699,9 @@ export default function FieldSupervisorView() {
     return validTasks.filter((task) => {
       // Tab filter
       if (activeTab === "VEHICLE_RECOVERY" && task.task_type !== "VEHICLE_RECOVERY") return false;
+      if (activeTab === "REPAIR" && task.task_type !== "REPAIR" && task.task_type !== "EMERGENCY_REPAIR") return false;
       if (activeTab === "GARAGE_PICKUP" && task.task_type !== "GARAGE_PICKUP") return false;
+      if (activeTab === "OTHER" && task.task_type !== "OTHER" && task.task_type !== "FIELD_VISIT" && task.task_type !== "FIELD_INSPECTION") return false;
       if (activeTab === "MONTHLY_CHECKUP" && task.task_type !== "MONTHLY_CHECKUP") return false;
       if (activeTab === "COMPLETED" && task.status !== "COMPLETED") return false;
       if (activeTab !== "COMPLETED" && activeTab !== "ALL" && task.status === "COMPLETED") return false;
@@ -729,7 +728,9 @@ export default function FieldSupervisorView() {
 
   // Group filtered tasks by type
   const recoveryTasks = filteredTasks.filter((t) => t.task_type === "VEHICLE_RECOVERY");
+  const repairTasks = filteredTasks.filter((t) => t.task_type === "REPAIR" || t.task_type === "EMERGENCY_REPAIR");
   const pickupTasks = filteredTasks.filter((t) => t.task_type === "GARAGE_PICKUP");
+  const otherTasks = filteredTasks.filter((t) => t.task_type !== "VEHICLE_RECOVERY" && t.task_type !== "GARAGE_PICKUP" && t.task_type !== "REPAIR" && t.task_type !== "EMERGENCY_REPAIR" && t.task_type !== "MONTHLY_CHECKUP");
 
   const hasActiveFilters = searchTerm.trim() !== "" || filterStatus !== "ALL" || filterPriority !== "ALL";
 
@@ -1189,7 +1190,7 @@ export default function FieldSupervisorView() {
             </h3>
             <span
               className={`px-2.5 py-0.5 rounded-full text-xs font-bold text-white ${
-                type === "VEHICLE_RECOVERY" ? "bg-red-600" : "bg-amber-600"
+                type === "VEHICLE_RECOVERY" ? "bg-red-600" : type === "REPAIR" ? "bg-orange-600" : type === "OTHER" ? "bg-slate-700" : "bg-amber-600"
               }`}
             >
               {pending}
@@ -1576,108 +1577,160 @@ export default function FieldSupervisorView() {
       ) : (
         <>
           {/* KPI Metrics Row (Clickable Quick Filters) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Card 1: Récupérations (Recovery) */}
         <button
           type="button"
           onClick={() => setActiveTab(activeTab === "VEHICLE_RECOVERY" ? "ALL" : "VEHICLE_RECOVERY")}
-          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
             activeTab === "VEHICLE_RECOVERY"
               ? "bg-red-50 dark:bg-red-950/40 border-red-500 ring-2 ring-red-500/20"
               : "bg-white dark:bg-slate-900 hover:border-red-300 border-gray-200 dark:border-slate-800"
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">
               Récupérations
             </span>
-            <div className="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
-              <ShieldAlert className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
+              <ShieldAlert className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-red-600 dark:text-red-400">
+          <div className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400">
             {pendingRecoveries}
           </div>
-          <div className="text-3xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Véhicules bloqués à récupérer
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Impayés & blocages
           </div>
         </button>
 
-        {/* Card 2: Retraits Garages (Pickups) */}
+        {/* Card 2: Dépôts Garages (Repair) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab(activeTab === "REPAIR" ? "ALL" : "REPAIR")}
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+            activeTab === "REPAIR"
+              ? "bg-orange-50 dark:bg-orange-950/40 border-orange-500 ring-2 ring-orange-500/20"
+              : "bg-white dark:bg-slate-900 hover:border-orange-300 border-gray-200 dark:border-slate-800"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider">
+              Dépôts Garages
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+              <Wrench className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-orange-600 dark:text-orange-400">
+            {pendingRepairs}
+          </div>
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Réparations d&apos;urgence
+          </div>
+        </button>
+
+        {/* Card 3: Retraits Garages (Pickups) */}
         <button
           type="button"
           onClick={() => setActiveTab(activeTab === "GARAGE_PICKUP" ? "ALL" : "GARAGE_PICKUP")}
-          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
             activeTab === "GARAGE_PICKUP"
               ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/20"
               : "bg-white dark:bg-slate-900 hover:border-amber-300 border-gray-200 dark:border-slate-800"
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
               Retraits Garages
             </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-              <Wrench className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+              <Car className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
+          <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">
             {pendingPickups}
           </div>
-          <div className="text-3xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Véhicules accidentés prêts après réparation
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Prêts après réparation
           </div>
         </button>
 
-        {/* Card 3: Checkups Dus */}
+        {/* Card 4: Autres Missions (Other / Visits) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab(activeTab === "OTHER" ? "ALL" : "OTHER")}
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+            activeTab === "OTHER"
+              ? "bg-slate-100 dark:bg-slate-800 border-slate-500 ring-2 ring-slate-500/20"
+              : "bg-white dark:bg-slate-900 hover:border-slate-300 border-gray-200 dark:border-slate-800"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              Autres Missions
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-slate-700 dark:text-slate-200">
+            {pendingOthers}
+          </div>
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Visites terrain & divers
+          </div>
+        </button>
+
+        {/* Card 5: Checkups Dus */}
         <button
           type="button"
           onClick={() => setActiveTab(activeTab === "MONTHLY_CHECKUP" ? "ALL" : "MONTHLY_CHECKUP")}
-          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
             activeTab === "MONTHLY_CHECKUP"
               ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 ring-2 ring-blue-500/20"
               : "bg-white dark:bg-slate-900 hover:border-blue-300 border-gray-200 dark:border-slate-800"
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
               Checkups Dus
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-              <ClipboardCheck className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+              <ClipboardCheck className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400">
+          <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">
             {checkupsDueCount}
           </div>
-          <div className="text-3xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Inspections à réaliser ce mois
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Inspections du mois
           </div>
         </button>
 
-        {/* Card 4: Validés Aujourd'hui */}
+        {/* Card 6: Validés Aujourd'hui */}
         <button
           type="button"
           onClick={() => setActiveTab(activeTab === "COMPLETED" ? "ALL" : "COMPLETED")}
-          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
+          className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer shadow-xs ${
             activeTab === "COMPLETED"
               ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20"
               : "bg-white dark:bg-slate-900 hover:border-emerald-300 border-gray-200 dark:border-slate-800"
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-              Validés Aujourd&apos;hui
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+              Aujourd&apos;hui
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
+          <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
             {completedTodayCount}
           </div>
-          <div className="text-3xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Interventions finalisées
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+            Missions clôturées
           </div>
         </button>
       </div>
@@ -1722,6 +1775,24 @@ export default function FieldSupervisorView() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("REPAIR")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === "REPAIR"
+              ? "bg-navy text-white shadow-md shadow-navy/20"
+              : "bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 border border-gray-200 dark:border-slate-800"
+          }`}
+        >
+          <span>🛠️</span>
+          <span>Dépôts Garages</span>
+          <span className={`px-2 py-0.5 rounded-full text-3xs font-mono font-bold ${
+            activeTab === "REPAIR" ? "bg-white/20 text-white" : "bg-orange-100 text-orange-800"
+          }`}>
+            {pendingRepairs}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("GARAGE_PICKUP")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === "GARAGE_PICKUP"
@@ -1735,6 +1806,24 @@ export default function FieldSupervisorView() {
             activeTab === "GARAGE_PICKUP" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"
           }`}>
             {pendingPickups}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("OTHER")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === "OTHER"
+              ? "bg-navy text-white shadow-md shadow-navy/20"
+              : "bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 border border-gray-200 dark:border-slate-800"
+          }`}
+        >
+          <span>📌</span>
+          <span>Autres Missions</span>
+          <span className={`px-2 py-0.5 rounded-full text-3xs font-mono font-bold ${
+            activeTab === "OTHER" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-800"
+          }`}>
+            {pendingOthers}
           </span>
         </button>
 
@@ -1866,18 +1955,28 @@ export default function FieldSupervisorView() {
           {/* Active Tab Logic */}
           {activeTab === "ALL" && (
             <>
-              {renderSection("Vehicle Recovery", "VEHICLE_RECOVERY", recoveryTasks)}
-              {renderSection("Garage Pickup", "GARAGE_PICKUP", pickupTasks)}
+              {renderSection("Récupérations de Véhicules", "VEHICLE_RECOVERY", recoveryTasks)}
+              {renderSection("Dépôts Garages & Réparations", "REPAIR", repairTasks)}
+              {renderSection("Retraits au Garage", "GARAGE_PICKUP", pickupTasks)}
+              {renderSection("Autres Missions Terrain", "OTHER", otherTasks)}
               {renderCheckupsDueSection()}
             </>
           )}
 
           {activeTab === "VEHICLE_RECOVERY" && (
-            renderSection("Vehicle Recovery", "VEHICLE_RECOVERY", recoveryTasks)
+            renderSection("Récupérations de Véhicules", "VEHICLE_RECOVERY", recoveryTasks)
+          )}
+
+          {activeTab === "REPAIR" && (
+            renderSection("Dépôts Garages & Réparations", "REPAIR", repairTasks)
           )}
 
           {activeTab === "GARAGE_PICKUP" && (
-            renderSection("Garage Pickup", "GARAGE_PICKUP", pickupTasks)
+            renderSection("Retraits au Garage", "GARAGE_PICKUP", pickupTasks)
+          )}
+
+          {activeTab === "OTHER" && (
+            renderSection("Autres Missions Terrain", "OTHER", otherTasks)
           )}
 
           {activeTab === "MONTHLY_CHECKUP" && (

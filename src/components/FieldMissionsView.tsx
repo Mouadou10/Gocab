@@ -338,19 +338,27 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
       if (selectedAgent === "UNASSIGNED") {
         if (t.assigned_to) return false;
       } else if (selectedAgent && selectedAgent !== "ALL") {
+        const rawAssigned = (t.assigned_to || "").toLowerCase().trim();
+        const cleanAssigned = rawAssigned.replace(/\s*\([^)]*\)/g, "").trim();
+        const rawAgent = selectedAgent.toLowerCase().trim();
+        const cleanAgent = rawAgent.replace(/\s*\([^)]*\)/g, "").trim();
         const matchesAgent =
-          t.assigned_to === selectedAgent ||
-          (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase())) ||
-          (selectedAgent.toLowerCase().includes((t.assigned_to || "").toLowerCase()) && Boolean(t.assigned_to));
-        
+          rawAssigned === rawAgent ||
+          cleanAssigned === cleanAgent ||
+          cleanAssigned.includes(cleanAgent) ||
+          cleanAgent.includes(cleanAssigned) ||
+          cleanAssigned.replace(/[\s._-]+/g, "") === cleanAgent.replace(/[\s._-]+/g, "");
+
         // Also show unassigned tasks waiting for assignment so field agents can see and claim them
         const isUnassignedPending = !t.assigned_to && t.status !== "COMPLETED";
         if (!matchesAgent && !isUnassignedPending) return false;
       }
 
-      // 3. Date filter: if task is scheduled for this date, or if unscheduled and pending
+      // 3. Date filter: if task is scheduled for this date, or if unscheduled and pending, or overdue incomplete
       if (selectedDate) {
-        const matchesDate = t.scheduled_date === selectedDate || (!t.scheduled_date && t.status !== "COMPLETED");
+        const tDate = t.scheduled_date ? t.scheduled_date.trim().split("T")[0] : null;
+        const isPastIncomplete = Boolean(tDate && tDate < selectedDate && t.status !== "COMPLETED");
+        const matchesDate = tDate === selectedDate || (!tDate && t.status !== "COMPLETED") || isPastIncomplete;
         if (!matchesDate) return false;
       }
 
@@ -368,18 +376,27 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
     return tasks.filter((t) => {
       if (!selectedAgent || selectedAgent === "ALL") return true;
       if (selectedAgent === "UNASSIGNED") return !t.assigned_to;
-      return (
-        t.assigned_to === selectedAgent ||
-        (t.assigned_to && t.assigned_to.toLowerCase().includes(selectedAgent.toLowerCase())) ||
-        (!t.assigned_to && t.status !== "COMPLETED")
-      );
+      const rawAssigned = (t.assigned_to || "").toLowerCase().trim();
+      const cleanAssigned = rawAssigned.replace(/\s*\([^)]*\)/g, "").trim();
+      const rawAgent = selectedAgent.toLowerCase().trim();
+      const cleanAgent = rawAgent.replace(/\s*\([^)]*\)/g, "").trim();
+      const matchesAgent =
+        rawAssigned === rawAgent ||
+        cleanAssigned === cleanAgent ||
+        cleanAssigned.includes(cleanAgent) ||
+        cleanAgent.includes(cleanAssigned) ||
+        cleanAssigned.replace(/[\s._-]+/g, "") === cleanAgent.replace(/[\s._-]+/g, "");
+
+      return matchesAgent || (!t.assigned_to && t.status !== "COMPLETED");
     });
   }, [tasks, selectedAgent]);
 
   const stats = useMemo(() => {
-    const todayTasks = agentTasks.filter(
-      (t) => t.scheduled_date === selectedDate || (!t.scheduled_date && t.status !== "COMPLETED")
-    );
+    const todayTasks = agentTasks.filter((t) => {
+      const tDate = t.scheduled_date ? t.scheduled_date.trim().split("T")[0] : null;
+      const isPastIncomplete = Boolean(tDate && tDate < selectedDate && t.status !== "COMPLETED");
+      return tDate === selectedDate || (!tDate && t.status !== "COMPLETED") || isPastIncomplete;
+    });
     return {
       total: todayTasks.length,
       pending: todayTasks.filter((t) => t.status === "PENDING").length,
@@ -996,6 +1013,13 @@ function FieldMissionsContent({ standalone = false, onBackToAgenda }: FieldMissi
                           }`}
                         >
                           {task.priority}
+                        </span>
+                      )}
+
+                      {Boolean(task.scheduled_date && task.scheduled_date < selectedDate && task.status !== "COMPLETED") && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 px-2 py-0.5 rounded-md">
+                          <AlertTriangle className="w-3 h-3 text-amber-600" />
+                          <span>Reportée du {task.scheduled_date}</span>
                         </span>
                       )}
 

@@ -42,25 +42,11 @@ async function syncRecoveryTasksAndOrphans() {
 
       if (orphanedTasks.length > 0) {
         const orphanIds = orphanedTasks.map((t) => t.id);
-        await prisma.fieldTask.deleteMany({
+        // Unlink rather than destroying user-created field tasks so missions are never lost
+        await prisma.fieldTask.updateMany({
           where: { id: { in: orphanIds } },
-        });
-
-        // Unblock vehicles if they were blocked by orphaned recovery tasks
-        for (const orphan of orphanedTasks) {
-          if (orphan.task_type === "VEHICLE_RECOVERY" && (orphan.vehicle_id || orphan.plate_number)) {
-            await prisma.vehicle.updateMany({
-              where: {
-                OR: [
-                  ...(orphan.vehicle_id ? [{ id: orphan.vehicle_id }] : []),
-                  ...(orphan.plate_number ? [{ plate_number: orphan.plate_number }] : []),
-                ],
-                status: "Blocked",
-              },
-              data: { status: "Actif" },
-            }).catch(() => {});
-          }
-        }
+          data: { linked_ticket_id: null },
+        }).catch(() => {});
       }
     }
 
