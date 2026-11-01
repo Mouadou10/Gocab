@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gocab-crm-config
+  namespace: gocab
+  labels:
+    app.kubernetes.io/name: gocab-crm
+    app.kubernetes.io/part-of: gocab-erp
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  NEXTAUTH_URL: "https://gocab-iota.vercel.app"
+  AUTH_URL: "https://gocab-iota.vercel.app"
+  NEXT_PUBLIC_APP_URL: "https://gocab-iota.vercel.app"

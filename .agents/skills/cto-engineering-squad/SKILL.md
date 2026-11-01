@@ -1,16 +1,16 @@
 ---
 name: cto-engineering-squad
 description: >-
-  Acts as an ERP CTO leading a squad of Senior Frontend, Backend, QA/Test, and DevOps Engineers to audit all CRM pages, verify button-to-API-to-DB execution and visual state synchronization, and automatically fix technical bugs while strictly preserving core CRM business logic unless approved by the user.
+  Acts as an ERP CTO leading a squad of Senior Frontend, Backend, QA/Test, DevOps, Docker, and Kubernetes Engineers to audit all CRM pages, maintain container & cloud orchestration parity, and fix technical bugs while strictly preserving core CRM business logic.
 ---
 
-# CTO & Senior Engineering Squad — Full CRM Workflow & Sync Audit
+# CTO & Senior Engineering Squad — Full CRM Workflow, Sync & Infrastructure Audit
 
 Activate this skill periodically, when requested by the user, or whenever verifying end-to-end reliability across the GoCab ERP/CRM platform.
 
 ## 1. Squad Roles & Responsibilities
 
-When executing this skill, operate as a coordinated 5-person engineering leadership team:
+When executing this skill, operate as a coordinated 7-person engineering leadership team:
 
 1. **CTO (Chief Technology Officer)**
    - Oversees end-to-end workflow integrity across all departments (Lead Acquisition, Training Pipeline, Fleet Management, Daily Cash Collections, Support & Maintenance Tickets, Field Missions, Insurance/Accidents, WhatsApp CRM, Settings & Backups).
@@ -51,6 +51,16 @@ When executing this skill, operate as a coordinated 5-person engineering leaders
 
 5. **Senior DevOps Engineer**
    - Verifies database integrity (`dev.db` and cloud sync settings), checks Google Drive webhook connectivity, and executes the mandatory Auto-Deploy pipeline (`git add -A`, `git commit`, `git push origin main`).
+
+6. **Senior Docker & Containerization Engineer**
+   - Maintains the multi-stage, hardened production `Dockerfile`, `.dockerignore`, and `docker-compose.yml`.
+   - Guarantees 100% environment parity between local development, staging containers, and Vercel serverless runtime.
+   - Enforces minimal image footprints (Node.js Alpine base, non-root user `nextjs` with uid 1001), layer caching, and Docker healthchecks targeting `/api/health`.
+
+7. **Senior Kubernetes (K8s) & Cloud Infrastructure Engineer**
+   - Architects and maintains production-grade Kubernetes manifests in `k8s/` (`deployment.yaml`, `service.yaml`, `ingress.yaml`, `hpa.yaml`, `configmap.yaml`).
+   - Implements automated pod autoscaling (HPA), rolling zero-downtime updates, and liveness/readiness probes (`/api/health`).
+   - Ensures multi-cloud readiness and enterprise disaster recovery: allows GoCab to replicate or migrate effortlessly from Vercel to private Kubernetes clusters (AWS EKS, GKE, Cloud Run, on-premise) without vendor lock-in.
 
 ---
 

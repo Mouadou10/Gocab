@@ -5,7 +5,8 @@
  * 1. Database integrity & table row counts (SQLite dev.db)
  * 2. Backend API Write Endpoints (POST/PUT/PATCH/DELETE persistence & sync)
  * 3. Frontend Component Interactive Handlers & LiveSync wiring
- * 4. Cloud Redundancy & Google Drive Webhook status
+ * 4. Docker, Kubernetes & Cloud Infrastructure (Container parity & probes)
+ * 5. Cloud Redundancy & Google Drive Webhook status
  */
 
 import fs from "node:fs";
@@ -45,7 +46,7 @@ console.log(" 🛡️  GOCAB CTO & SENIOR ENGINEERING SQUAD — WORKFLOW AUDIT")
 console.log("==================================================================\n");
 
 // 1. DATABASE INTEGRITY AUDIT
-console.log("▶ [1/4] Auditing Database Persistence & Core Tables...");
+console.log("▶ [1/5] Auditing Database Persistence & Core Tables...");
 if (!fs.existsSync(DB_PATH)) {
   issues.push({
     severity: "ERROR",
@@ -113,7 +114,7 @@ if (!fs.existsSync(DB_PATH)) {
 }
 
 // 2. BACKEND API WRITE-PATH AUDIT
-console.log("\n▶ [2/4] Auditing Backend API Write Endpoints (POST/PUT/PATCH/DELETE)...");
+console.log("\n▶ [2/5] Auditing Backend API Write Endpoints (POST/PUT/PATCH/DELETE)...");
 const apiRoutes = walkFiles(API_DIR, ["route.ts"]);
 let writeRouteCount = 0;
 
@@ -160,7 +161,7 @@ for (const routeFile of apiRoutes) {
 console.log(`  ✓ Audited ${apiRoutes.length} total API route files (${writeRouteCount} write-enabled endpoints).`);
 
 // 3. FRONTEND UI-TO-BACKEND SYNC AUDIT
-console.log("\n▶ [3/4] Auditing Frontend Interactive Views & LiveSync Wiring...");
+console.log("\n▶ [3/5] Auditing Frontend Interactive Views & LiveSync Wiring...");
 const criticalComponents = [
   "KanbanBoard.tsx",
   "LeadDrawer.tsx",
@@ -204,8 +205,36 @@ for (const compName of criticalComponents) {
   }
 }
 
-// 4. SUMMARY REPORT
-console.log("\n▶ [4/4] CTO Engineering Squad Diagnostic Summary:");
+// 4. DOCKER & KUBERNETES INFRASTRUCTURE AUDIT
+console.log("\n▶ [4/5] Auditing Docker, Kubernetes & Cloud Infrastructure...");
+const infraFiles = [
+  { file: "Dockerfile", desc: "Multi-stage Production Dockerfile", required: true },
+  { file: ".dockerignore", desc: "Docker Build Context Ignore", required: true },
+  { file: "docker-compose.yml", desc: "Local/Staging Orchestration", required: true },
+  { file: "k8s/deployment.yaml", desc: "Kubernetes Deployment & Pod Spec", required: true },
+  { file: "k8s/service.yaml", desc: "Kubernetes Service (ClusterIP)", required: true },
+  { file: "k8s/ingress.yaml", desc: "Kubernetes TLS Ingress", required: true },
+  { file: "k8s/hpa.yaml", desc: "Horizontal Pod Autoscaler (HPA)", required: true },
+  { file: "k8s/configmap.yaml", desc: "Kubernetes ConfigMap", required: true },
+  { file: "src/app/api/health/route.ts", desc: "Unified Health Probe (/api/health)", required: true },
+];
+
+for (const item of infraFiles) {
+  const p = path.join(ROOT_DIR, item.file);
+  const exists = fs.existsSync(p);
+  console.log(`  • ${item.desc.padEnd(36)} | File: ${item.file.padEnd(24)} | Status: ${exists ? "HEALTHY" : "MISSING"}`);
+  if (!exists && item.required) {
+    issues.push({
+      severity: "ERROR",
+      layer: "DEVOPS_SYNC",
+      target: item.file,
+      detail: `${item.desc} is missing from repository.`,
+    });
+  }
+}
+
+// 5. SUMMARY REPORT
+console.log("\n▶ [5/5] CTO Engineering Squad Diagnostic Summary:");
 const errors = issues.filter((i) => i.severity === "ERROR");
 const warnings = issues.filter((i) => i.severity === "WARN");
 

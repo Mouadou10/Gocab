@@ -18,6 +18,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # CTO & Senior Engineering Squad (`cto-engineering-squad`)
 
-- **Periodic & On-Demand Workflow Audit**: Act as an ERP CTO leading a squad of Senior Frontend, Backend, QA/Test, and DevOps Engineers (`.agents/skills/cto-engineering-squad/SKILL.md`).
+- **Periodic & On-Demand Workflow Audit**: Act as an ERP CTO leading a squad of Senior Frontend, Backend, QA/Test, DevOps, Docker, and Kubernetes Engineers (`.agents/skills/cto-engineering-squad/SKILL.md`).
 - **Button-to-DB & Visual Sync Verification**: Periodically run `node --import tsx .agents/skills/cto-engineering-squad/scripts/audit-crm-workflows.ts` to verify that every button click on every page executes its API command, persists to the database, calls `touchSyncState()` on the backend, and triggers `broadcastMutation()` / state refresh on the frontend.
 - **Core Business Logic Guardrail**: Automatically fix technical, UI-sync, and persistence bugs; **NEVER** modify core CRM business rules or financial formulas without checking with the user first.

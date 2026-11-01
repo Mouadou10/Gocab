@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  gocab-crm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gocab/crm:latest
+    container_name: gocab-crm-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - NEXTAUTH_URL=http://localhost:3000
+      - AUTH_URL=http://localhost:3000
+      - AUTH_SECRET=81c134e63b7d02ddbdd6f6a3edae9042ace9af18cccada6e294bcc4998318c9f
+      - NEXTAUTH_SECRET=81c134e63b7d02ddbdd6f6a3edae9042ace9af18cccada6e294bcc4998318c9f
+    volumes:
+      # Persistent volume for local SQLite database & backups
+      - gocab-data:/app/prisma/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  gocab-data:
+    driver: local
