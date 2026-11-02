@@ -93,15 +93,17 @@ export async function GET() {
       });
 
       if (existing) {
-        // Ensure active and names are retained
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            name: existing.name || member.name,
-            fullName: existing.fullName || member.fullName,
-            isActive: true,
-          },
-        });
+        // Ensure active and names are retained only when fields are missing or user is inactive
+        if (!existing.isActive || !existing.name || !existing.fullName) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              name: existing.name || member.name,
+              fullName: existing.fullName || member.fullName,
+              isActive: true,
+            },
+          });
+        }
       } else {
         const rawPass = member.email === "mouad.koudia@gocab.io" ? "Moulana@pc1995" : "GoCab2024!";
         const passwordHash = await bcrypt.hash(rawPass, 12);

@@ -665,9 +665,19 @@ export default function LeadDrawer({
 
         if (res.ok) {
           const data = await res.json();
+          const nowIso = new Date().toISOString();
+          const committedLead = {
+            ...lead,
+            ...payload,
+            ...(data.lead || {}),
+            status_changed_at:
+              payload.board_column === "NEW_LEADS" && !payload.brand_status
+                ? null
+                : data.lead?.status_changed_at || nowIso,
+            updated_at: data.lead?.updated_at || nowIso,
+          };
           toast.success("Lead mis à jour avec succès");
-          notifyMutation("leads");
-          onUpdate(data.lead);
+          onUpdate(committedLead);
           handleClose();
         } else {
           const errorData = await res.json().catch(() => ({}));

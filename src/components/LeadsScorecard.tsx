@@ -53,6 +53,18 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
       .catch(console.error);
   }, []);
 
+  // Format display date
+  const nowDate = new Date();
+  const todayStr = nowDate.toISOString().split('T')[0];
+  const todayLocalStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`;
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+  const isToday = dateFilter === todayStr || dateFilter === todayLocalStr;
+  const isYesterday = dateFilter === yesterdayStr;
+  const isAllTime = !dateFilter;
+
   // Filter called leads by the date they were actually called (status_changed_at)
   // Dedicated unique counter for the Leads Acquisition Agent
   const calledLeads = leads.filter(l => {
@@ -65,8 +77,19 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
 
     if (!dateFilter) return true; // No filter = show all
     try {
-      const changedDate = new Date(l.status_changed_at).toISOString().split('T')[0];
-      return changedDate === dateFilter;
+      const d = new Date(l.status_changed_at);
+      if (isNaN(d.getTime())) return false;
+      const changedUtc = d.toISOString().split('T')[0];
+      const changedLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (isToday) {
+        return (
+          changedUtc === todayStr ||
+          changedUtc === todayLocalStr ||
+          changedLocal === todayStr ||
+          changedLocal === todayLocalStr
+        );
+      }
+      return changedUtc === dateFilter || changedLocal === dateFilter;
     } catch {
       return false;
     }
@@ -78,16 +101,6 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
   const trainingFixed = calledLeads.filter(
     l => l.brand_status === 'Training fixed'
   ).length;
-
-  // Format display date
-  const todayStr = new Date().toISOString().split('T')[0];
-  const yesterdayDate = new Date();
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
-  const isToday = dateFilter === todayStr;
-  const isYesterday = dateFilter === yesterdayStr;
-  const isAllTime = !dateFilter;
 
   const displayDate = isToday
     ? "Aujourd'hui"

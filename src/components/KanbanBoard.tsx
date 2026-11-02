@@ -154,35 +154,97 @@ const TRAINING_COLUMNS = [
   "Preorder",
 ] as const;
 
-const OVERRIDE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const OVERRIDE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-function getLocalLeadOverrides(): Record<string, { lead: Lead; timestamp: number }> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem("gocab_lead_overrides");
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    const now = Date.now();
-    const valid: Record<string, { lead: Lead; timestamp: number }> = {};
-    for (const [id, entry] of Object.entries(parsed)) {
-      if (entry && typeof entry === "object" && (now - (entry as any).timestamp) < OVERRIDE_TTL_MS) {
-        valid[id] = entry as any;
-      }
+interface LeadOverrideRecord {
+  lead: Lead;
+  savedAtClientMs: number;
+  serverUpdatedMs: number;
+}
+
+const memoryLeadOverrides = new Map<string, LeadOverrideRecord>();
+
+function getLocalLeadOverrides(): Record<string, LeadOverrideRecord> {
+  const now = Date.now();
+  const valid: Record<string, LeadOverrideRecord> = {};
+
+  for (const [id, entry] of memoryLeadOverrides.entries()) {
+    if (entry && now - entry.savedAtClientMs < OVERRIDE_TTL_MS) {
+      valid[id] = entry;
+    } else {
+      memoryLeadOverrides.delete(id);
     }
-    return valid;
-  } catch {
-    return {};
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("gocab_lead_overrides");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        for (const [id, rawEntry] of Object.entries(parsed)) {
+          if (!rawEntry || typeof rawEntry !== "object") continue;
+          const entryObj = rawEntry as any;
+          const savedAtClientMs = Number(entryObj.savedAtClientMs ?? entryObj.timestamp ?? 0);
+          if (savedAtClientMs > 0 && now - savedAtClientMs < OVERRIDE_TTL_MS && entryObj.lead) {
+            const serverUpdatedMs = Number(
+              entryObj.serverUpdatedMs ??
+                (entryObj.lead.updated_at ? new Date(entryObj.lead.updated_at).getTime() : 0)
+            );
+            const existingMem = valid[id];
+            if (!existingMem || savedAtClientMs >= existingMem.savedAtClientMs) {
+              const mergedRecord: LeadOverrideRecord = {
+                lead: existingMem?.lead ? { ...existingMem.lead, ...entryObj.lead } : entryObj.lead,
+                savedAtClientMs,
+                serverUpdatedMs: Number.isFinite(serverUpdatedMs) ? serverUpdatedMs : 0,
+              };
+              valid[id] = mergedRecord;
+              memoryLeadOverrides.set(id, mergedRecord);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return valid;
+}
+
+function saveLocalLeadOverride(lead: Partial<Lead> & { id: string }, serverUpdatedIso?: string | null) {
+  if (!lead?.id) return;
+  const now = Date.now();
+  const overrides = getLocalLeadOverrides();
+  const existing = overrides[lead.id];
+  const mergedLead = { ...(existing?.lead || ({} as Lead)), ...lead } as Lead;
+
+  // Only set serverUpdatedMs from an authoritative server response timestamp (never from client Date.now())
+  const parsedServerMs = serverUpdatedIso ? new Date(serverUpdatedIso).getTime() : NaN;
+  const serverUpdatedMs = Number.isFinite(parsedServerMs) ? parsedServerMs : 0;
+
+  const record: LeadOverrideRecord = {
+    lead: mergedLead,
+    savedAtClientMs: now,
+    serverUpdatedMs,
+  };
+
+  memoryLeadOverrides.set(lead.id, record);
+  overrides[lead.id] = record;
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
+    } catch {}
   }
 }
 
-function saveLocalLeadOverride(lead: Partial<Lead> & { id: string }) {
-  if (typeof window === "undefined" || !lead?.id) return;
-  try {
-    const overrides = getLocalLeadOverrides();
-    const existing = overrides[lead.id]?.lead || ({} as Lead);
-    overrides[lead.id] = { lead: { ...existing, ...lead } as Lead, timestamp: Date.now() };
-    localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
-  } catch {}
+function removeLocalLeadOverride(leadId: string) {
+  memoryLeadOverrides.delete(leadId);
+  if (typeof window !== "undefined") {
+    try {
+      const overrides = getLocalLeadOverrides();
+      delete overrides[leadId];
+      localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
+    } catch {}
+  }
 }
 
 export default function KanbanBoard() {
@@ -415,27 +477,27 @@ export default function KanbanBoard() {
 
       const updatePatch = data.updateData || {};
       const nowIso = new Date().toISOString();
-      setLeads((prev) =>
-        prev.map((l) => {
-          if (!selectedLeadIds.includes(l.id)) return l;
-          const nextLead: Lead = {
-            ...l,
-            ...updatePatch,
-            updated_at: updatePatch.updated_at || nowIso,
-            status_changed_at:
-              bulkStatus === "NEW_LEADS"
-                ? null
-                : updatePatch.status_changed_at || nowIso,
-            reminder_date: bulkDate
-              ? new Date(bulkDate).toISOString()
-              : updatePatch.reminder_date !== undefined
-              ? updatePatch.reminder_date
-              : l.reminder_date,
-          };
-          saveLocalLeadOverride(nextLead);
-          return nextLead;
-        })
-      );
+      const updatedMap = new Map<string, Lead>();
+      for (const l of leads) {
+        if (!selectedLeadIds.includes(l.id)) continue;
+        const nextLead: Lead = {
+          ...l,
+          ...updatePatch,
+          updated_at: updatePatch.updated_at || nowIso,
+          status_changed_at:
+            bulkStatus === "NEW_LEADS"
+              ? null
+              : updatePatch.status_changed_at || nowIso,
+          reminder_date: bulkDate
+            ? new Date(bulkDate).toISOString()
+            : updatePatch.reminder_date !== undefined
+            ? updatePatch.reminder_date
+            : l.reminder_date,
+        };
+        saveLocalLeadOverride(nextLead, updatePatch.updated_at || null);
+        updatedMap.set(l.id, nextLead);
+      }
+      setLeads((prev) => prev.map((l) => updatedMap.get(l.id) || l));
 
       toast.success(`✅ Statut mis à jour pour ${selectedLeadIds.length} lead(s) !`);
       setSelectedLeadIds([]);
@@ -471,10 +533,20 @@ export default function KanbanBoard() {
         const now = Date.now();
         const mergedLeads = data.leads.map((serverLead: Lead) => {
           const override = overrides[serverLead.id];
-          if (override?.lead) {
+          if (override?.lead && now - override.savedAtClientMs < OVERRIDE_TTL_MS) {
             const serverUpdated = serverLead.updated_at ? new Date(serverLead.updated_at).getTime() : 0;
-            // Retain local client override if saved within the last 5 minutes and server hasn't committed a newer update
-            if (serverUpdated <= override.timestamp && now - override.timestamp < OVERRIDE_TTL_MS) {
+            const overrideMovedOutOfNewLeads =
+              Boolean(override.lead.board_column) &&
+              override.lead.board_column !== "NEW_LEADS" &&
+              serverLead.board_column === "NEW_LEADS";
+            // Retain local override if:
+            // 1. The agent moved this lead out of NEW_LEADS and a stale container still reports NEW_LEADS, OR
+            // 2. The server record hasn't advanced past the override's serverUpdatedMs (comparing server clock to server clock)
+            if (
+              overrideMovedOutOfNewLeads ||
+              !override.serverUpdatedMs ||
+              serverUpdated <= override.serverUpdatedMs
+            ) {
               return { ...serverLead, ...override.lead };
             }
           }
@@ -713,36 +785,18 @@ export default function KanbanBoard() {
     // Strictly Leads page interactions: either BRAND_PRE_FILTER or newly moved to Training fixed
     const isLeadsWorkflow = l.board_column === "BRAND_PRE_FILTER" || l.brand_status === "Training fixed";
     if (!isLeadsWorkflow) return false;
-    try {
-      const d = new Date(l.status_changed_at);
-      if (isNaN(d.getTime())) return false;
-      return d.toISOString().split("T")[0] === todayStr;
-    } catch {
-      return false;
-    }
+    return isScheduledDateToday(l.status_changed_at);
   }).length;
 
   const trainingFixedToday = leads.filter((l) => {
     if (l.brand_status !== "Training fixed") return false;
     if (!l.status_changed_at) return false;
-    try {
-      const d = new Date(l.status_changed_at);
-      if (isNaN(d.getTime())) return false;
-      return d.toISOString().split("T")[0] === todayStr;
-    } catch {
-      return false;
-    }
+    return isScheduledDateToday(l.status_changed_at);
   }).length;
 
   const ayoubCallsDoneToday = leads.filter((l) => {
     if (!l.presence_confirmed_at) return false;
-    try {
-      const d = new Date(l.presence_confirmed_at);
-      if (isNaN(d.getTime())) return false;
-      return d.toISOString().split("T")[0] === todayStr;
-    } catch {
-      return false;
-    }
+    return isScheduledDateToday(l.presence_confirmed_at);
   }).length;
 
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
@@ -1017,23 +1071,17 @@ export default function KanbanBoard() {
 
   /** After drawer update, update the lead in state and notify live sessions. */
   function handleLeadUpdate(updatedLead: Lead) {
-    saveLocalLeadOverride(updatedLead);
+    saveLocalLeadOverride(updatedLead, updatedLead.updated_at || null);
     setLeads((prev) =>
-      prev.map((l) => (l.id === updatedLead.id ? updatedLead : l))
+      prev.map((l) => (l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
     );
-    setSelectedLead((prev) => (prev?.id === updatedLead.id ? updatedLead : prev));
+    setSelectedLead((prev) => (prev?.id === updatedLead.id ? { ...prev, ...updatedLead } : prev));
     notifyMutation("leads");
   }
 
   /** After drawer deletion, remove the lead from state and notify live sessions. */
   function handleLeadDelete(deletedLeadId: string) {
-    if (typeof window !== "undefined") {
-      try {
-        const overrides = getLocalLeadOverrides();
-        delete overrides[deletedLeadId];
-        localStorage.setItem("gocab_lead_overrides", JSON.stringify(overrides));
-      } catch {}
-    }
+    removeLocalLeadOverride(deletedLeadId);
     setLeads((prev) => prev.filter((l) => l.id !== deletedLeadId));
     setSelectedLead(null);
     notifyMutation("leads");
@@ -1075,35 +1123,60 @@ export default function KanbanBoard() {
   const kanbanCollisionDetection: CollisionDetection = useCallback((args) => {
     const isColumnDrag = args.active.data.current?.type === "Column";
     const columnIdSet = new Set<string>([...LEADS_COLUMNS, ...TRAINING_COLUMNS, "VEHICLE_ASSIGNMENT", "Accept offer"]);
+    const columnContainers = args.droppableContainers.filter(
+      (c) => c.data.current?.type === "Column" || columnIdSet.has(String(c.id))
+    );
 
     if (isColumnDrag) {
-      const columnContainers = args.droppableContainers.filter(
-        (c) => c.data.current?.type === "Column" || columnIdSet.has(String(c.id))
-      );
       return closestCorners({ ...args, droppableContainers: columnContainers });
     }
 
+    // 1. Direct pointer hit on a column container
+    const colPointerCollisions = pointerWithin({ ...args, droppableContainers: columnContainers });
+    if (colPointerCollisions.length > 0) {
+      return [colPointerCollisions[0]];
+    }
+
+    // 2. Direct pointer hit on any card
     const pointerCollisions = pointerWithin(args);
     if (pointerCollisions.length > 0) {
-      // Prefer the column droppable that the pointer is directly inside so `over.id`
-      // is always the exact target column ID rather than active.id or a neighbor card
       const colHit = pointerCollisions.find((c) => columnIdSet.has(String(c.id)));
       if (colHit) return [colHit];
       const nonSelfHit = pointerCollisions.find((c) => c.id !== args.active.id);
       if (nonSelfHit) return [nonSelfHit];
-      return pointerCollisions;
     }
 
-    const rectCollisions = rectIntersection(args);
+    // 3. Horizontal X-coordinate column match (handles dropping in the 20px gap between columns
+    //    or below short columns without ever snapping back to tall 133-card NEW_LEADS column)
+    const pointerX =
+      args.pointerCoordinates?.x ??
+      (args.collisionRect ? args.collisionRect.left + args.collisionRect.width / 2 : null);
+
+    if (pointerX !== null && columnContainers.length > 0) {
+      let bestCol = columnContainers[0];
+      let bestDist = Infinity;
+      for (const col of columnContainers) {
+        const rect = args.droppableRects.get(col.id);
+        if (!rect) continue;
+        const dist =
+          pointerX >= rect.left && pointerX <= rect.right
+            ? 0
+            : Math.min(Math.abs(pointerX - rect.left), Math.abs(pointerX - rect.right));
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestCol = col;
+        }
+      }
+      return [{ id: bestCol.id, data: { droppableContainer: bestCol, value: bestDist } }];
+    }
+
+    // 4. Rect intersection against column containers
+    const rectCollisions = rectIntersection({ ...args, droppableContainers: columnContainers });
     if (rectCollisions.length > 0) {
-      const colHit = rectCollisions.find((c) => columnIdSet.has(String(c.id)));
-      if (colHit) return [colHit];
-      const nonSelfHit = rectCollisions.find((c) => c.id !== args.active.id);
-      if (nonSelfHit) return [nonSelfHit];
-      return rectCollisions;
+      return [rectCollisions[0]];
     }
 
-    return closestCorners(args);
+    return closestCorners({ ...args, droppableContainers: columnContainers });
   }, []);
 
   function resolveDropTargetColumn(overId: string, draggedLeadId?: string): string {
@@ -1232,7 +1305,7 @@ export default function KanbanBoard() {
           if (res.ok) {
             const data = await res.json();
             if (data.lead) {
-              saveLocalLeadOverride(data.lead);
+              saveLocalLeadOverride(data.lead, data.lead.updated_at);
               setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...data.lead } : l)));
             }
           }
@@ -1274,7 +1347,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
             if (!committedLead.reminder_date) {
               setSelectedLead(committedLead);
@@ -1319,7 +1392,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
           }
         } catch (err) {
@@ -1373,7 +1446,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
             // Trigger WhatsApp thank you & Alert
             const waUrl = generateThankYouURL(lead.sanitized_phone);
@@ -1410,7 +1483,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
             setSelectedLead(committedLead);
           }
@@ -1444,7 +1517,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
             setSelectedLead(committedLead);
           }
@@ -1479,7 +1552,7 @@ export default function KanbanBoard() {
           } else {
             const data = await res.json();
             const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
-            saveLocalLeadOverride(committedLead);
+            saveLocalLeadOverride(committedLead, data.lead?.updated_at);
             setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
           }
         } catch (err) {
@@ -1501,98 +1574,17 @@ export default function KanbanBoard() {
     }
 
     const leadId = active.id as string;
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) return;
+    if (over.id === leadId) return;
 
     const targetColumn = resolveDropTargetColumn(over.id as string, leadId);
-    lastDragTargetColumnRef.current = targetColumn;
-    const nowIso = new Date().toISOString();
-
-    // Move optimistically for drag feedback across all columns
-    if (activeTab === "leads") {
-      if (targetColumn === "NEW_LEADS") {
-        if (lead.board_column !== "NEW_LEADS") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === leadId
-                ? { ...l, board_column: "NEW_LEADS", brand_status: null, status_changed_at: null, updated_at: nowIso }
-                : l
-            )
-          );
-        }
-      } else if (targetColumn === "Training fixed") {
-        const targetTrainingStatus = lead.training_status || "Scheduled";
-        const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
-        const isAlreadyInTrainingFixed =
-          (lead.board_column === "TRAINING_PIPELINE" || lead.board_column === "VEHICLE_ASSIGNMENT") &&
-          lead.brand_status === "Training fixed";
-        if (!isAlreadyInTrainingFixed) {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === leadId
-                ? {
-                    ...l,
-                    board_column: targetBoardColumn,
-                    brand_status: "Training fixed",
-                    training_status: targetTrainingStatus,
-                    status_changed_at: nowIso,
-                    updated_at: nowIso,
-                  }
-                : l
-            )
-          );
-        }
-      } else {
-        if (lead.brand_status !== targetColumn || lead.board_column !== "BRAND_PRE_FILTER") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === leadId
-                ? {
-                    ...l,
-                    board_column: "BRAND_PRE_FILTER",
-                    brand_status: targetColumn,
-                    status_changed_at: nowIso,
-                    updated_at: nowIso,
-                  }
-                : l
-            )
-          );
-        }
-      }
-    } else {
-      if (targetColumn === "Assign vehicle" || targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
-        if (lead.board_column !== "VEHICLE_ASSIGNMENT" || lead.training_status !== "Assign vehicle") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === leadId
-                ? {
-                    ...l,
-                    board_column: "VEHICLE_ASSIGNMENT",
-                    training_status: "Assign vehicle",
-                    status_changed_at: nowIso,
-                    updated_at: nowIso,
-                  }
-                : l
-            )
-          );
-        }
-      } else {
-        if (lead.training_status !== targetColumn || lead.board_column !== "TRAINING_PIPELINE") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === leadId
-                ? {
-                    ...l,
-                    board_column: "TRAINING_PIPELINE",
-                    training_status: targetColumn,
-                    status_changed_at: nowIso,
-                    updated_at: nowIso,
-                  }
-                : l
-            )
-          );
-        }
-      }
+    const columnIdSet = new Set<string>([
+      ...LEADS_COLUMNS,
+      ...TRAINING_COLUMNS,
+      "VEHICLE_ASSIGNMENT",
+      "Accept offer",
+    ]);
+    if (columnIdSet.has(targetColumn)) {
+      lastDragTargetColumnRef.current = targetColumn;
     }
   }
 

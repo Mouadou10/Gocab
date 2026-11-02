@@ -117,9 +117,6 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
   const notifyMutation = useCallback(
     (entity: SyncEntity) => {
       const now = Date.now();
-      if (entity === "leads" || entity === "all") lastSyncRef.current.leads = now;
-      if (entity === "tickets" || entity === "all") lastSyncRef.current.tickets = now;
-      if (entity === "settings" || entity === "all") lastSyncRef.current.settings = now;
 
       // 1. Post to same-browser tabs via BroadcastChannel (<5ms latency)
       if (broadcastChannelRef.current) {

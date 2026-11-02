@@ -188,30 +188,23 @@ function isTursoQuotaOrBlockError(err: any): boolean {
 }
 
 function isTursoCurrentlyBlocked(): boolean {
-  if (process.env.USE_SQLITE_FAILOVER === "true" || process.env.FORCE_CLOUD_WAL === "true") {
-    return true;
+  if (process.env.USE_SQLITE_FAILOVER === "false") {
+    return false;
   }
-  if (globalForPrisma.tursoBlockedUntil === undefined) {
-    // Proactively route to SQLite replica while Turso Cloud monthly read quota is blocked
-    globalForPrisma.tursoBlockedUntil = Date.now() + 60 * 60 * 1000;
-    return true;
-  }
-  return Boolean(
-    globalForPrisma.tursoBlockedUntil && Date.now() < globalForPrisma.tursoBlockedUntil
-  );
+  return true;
 }
 
 function markTursoBlocked(): void {
-  globalForPrisma.tursoBlockedUntil = Date.now() + 60 * 60 * 1000;
+  globalForPrisma.tursoBlockedUntil = Date.now() + 24 * 60 * 60 * 1000;
 }
 
 /**
  * Ensures the active SQLite database has replayed any cross-container WAL mutations
  * before checking route-level in-memory caches (e.g. leadsCache / driverCache).
  */
-export async function ensureDatabaseSynced(): Promise<void> {
+export async function ensureDatabaseSynced(force = true): Promise<void> {
   if (!isTursoCurrentlyBlocked()) return;
-  await getSyncedFallbackClient(false);
+  await getSyncedFallbackClient(force);
 }
 
 /**
