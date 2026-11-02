@@ -82,24 +82,44 @@ When executing this skill, operate as a coordinated 7-person engineering leaders
 
 ---
 
-## 3. Step-by-Step Execution Protocol
+## 3. Persistent Squad Memory Architecture (`MEMORY.md`)
+
+To ensure that the engineering squad continuously learns, improves, and prevents regressions:
+- All past architectural challenges, root cause analyses, solutions, and anti-regression guardrails are maintained in `.agents/skills/cto-engineering-squad/MEMORY.md`.
+- **Pre-Flight Memory Check**: Every Dev agent MUST read `MEMORY.md` before beginning an investigation or writing code.
+- **Post-Fix Memory Recording**: After running tests and resolving any issue, the Dev agent MUST record the incident in `MEMORY.md` following the standardized format (Symptom, Root Cause, Applied Solution, Anti-Regression Guardrail).
+
+---
+
+## 4. Step-by-Step Execution Protocol
 
 Whenever this skill is triggered, execute the following steps in order:
+
+0. **Pre-Flight Squad Memory Consultation**:
+   - Read `.agents/skills/cto-engineering-squad/MEMORY.md` to inherit lessons from previous bugs, understand known failure modes, and guarantee that new changes adhere to existing anti-regression rules.
 
 1. **Run Automated Workflow & Sync Audit**:
    ```powershell
    node --import tsx .agents/skills/cto-engineering-squad/scripts/audit-crm-workflows.ts
    ```
+
 2. **Inspect Frontend-to-Backend Wiring**:
    - Review any warnings or anomalies flagged by the audit script across API routes and UI components.
    - Verify that every write endpoint updates `touchSyncState` and every UI mutation refreshes local state and calls `broadcastMutation`.
+   - Ensure NO `GET` route contains destructive database operations (`delete`, `deleteMany`, or forced state resets).
+
 3. **Apply Safe Surgical Fixes**:
    - Automatically patch any technical, persistence, or UI-sync bugs discovered (respecting the Core Business Logic Guardrail).
+
 4. **Run QA Verification Suite**:
    ```powershell
    npx tsc --noEmit
    npm test
    ```
-5. **Deploy & Report**:
+
+5. **Record Incident & Solution in Squad Memory**:
+   - Append a new `MEM-YYYY-MM-DD-XXX` entry to `.agents/skills/cto-engineering-squad/MEMORY.md` detailing the problem, root cause, applied solution, and anti-regression guardrail so the squad retains permanent institutional memory.
+
+6. **Deploy & Report**:
    - Commit and push via the `auto-deploy` workflow (`git add -A ; git commit -m "..." ; git push origin main`).
-   - Present a structured **CTO Engineering Squad Report** summarizing the health of Frontend, Backend, QA Tests, Database Sync, and DevOps Deployment.
+   - Present a structured **CTO Engineering Squad Report** summarizing the health of Frontend, Backend, QA Tests, Database Sync, Squad Memory, and DevOps Deployment.

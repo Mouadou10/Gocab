@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, flushDatabaseSync } from "@/lib/prisma";
+import { prisma, flushDatabaseSync, ensureDatabaseSynced } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import {
   sendCarReadyTelegramAlert,
@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, context: any) {
   try {
     await requireAuth().catch(() => null);
+    await ensureDatabaseSynced(false);
     const params = await context.params;
     const { id } = params;
     const claim = await prisma.accidentClaim.findUnique({
@@ -214,7 +215,7 @@ export async function PATCH(req: Request, context: any) {
         },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets");
       return NextResponse.json({ success: true, claim: updatedClaim });
     }
 
@@ -285,7 +286,7 @@ export async function PATCH(req: Request, context: any) {
         },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets");
       return NextResponse.json({ success: true, claim: updatedClaim });
     }
 
@@ -525,7 +526,7 @@ export async function PATCH(req: Request, context: any) {
         },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets");
       return NextResponse.json({ success: true, claim: updatedClaim });
     }
 
@@ -586,7 +587,7 @@ export async function PATCH(req: Request, context: any) {
         },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets");
       return NextResponse.json({ success: true, claim: updatedClaim });
     }
 
@@ -791,7 +792,7 @@ export async function PATCH(req: Request, context: any) {
         data: { comments: JSON.stringify(backComments) },
       });
 
-      touchSyncState("tickets").catch(() => {});
+      await touchSyncState("tickets").catch(() => {});
     }
 
     // When ticket is REOPENED from VEHICLE_BACK

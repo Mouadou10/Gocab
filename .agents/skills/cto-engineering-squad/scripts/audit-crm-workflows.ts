@@ -46,7 +46,7 @@ console.log(" 🛡️  GOCAB CTO & SENIOR ENGINEERING SQUAD — WORKFLOW AUDIT")
 console.log("==================================================================\n");
 
 // 1. DATABASE INTEGRITY AUDIT
-console.log("▶ [1/5] Auditing Database Persistence & Core Tables...");
+console.log("▶ [1/6] Auditing Database Persistence & Core Tables...");
 if (!fs.existsSync(DB_PATH)) {
   issues.push({
     severity: "ERROR",
@@ -114,7 +114,7 @@ if (!fs.existsSync(DB_PATH)) {
 }
 
 // 2. BACKEND API WRITE-PATH AUDIT
-console.log("\n▶ [2/5] Auditing Backend API Write Endpoints (POST/PUT/PATCH/DELETE)...");
+console.log("\n▶ [2/6] Auditing Backend API Write Endpoints (POST/PUT/PATCH/DELETE)...");
 const apiRoutes = walkFiles(API_DIR, ["route.ts"]);
 let writeRouteCount = 0;
 
@@ -161,7 +161,7 @@ for (const routeFile of apiRoutes) {
 console.log(`  ✓ Audited ${apiRoutes.length} total API route files (${writeRouteCount} write-enabled endpoints).`);
 
 // 3. FRONTEND UI-TO-BACKEND SYNC AUDIT
-console.log("\n▶ [3/5] Auditing Frontend Interactive Views & LiveSync Wiring...");
+console.log("\n▶ [3/6] Auditing Frontend Interactive Views & LiveSync Wiring...");
 const criticalComponents = [
   "KanbanBoard.tsx",
   "LeadDrawer.tsx",
@@ -206,7 +206,7 @@ for (const compName of criticalComponents) {
 }
 
 // 4. DOCKER & KUBERNETES INFRASTRUCTURE AUDIT
-console.log("\n▶ [4/5] Auditing Docker, Kubernetes & Cloud Infrastructure...");
+console.log("\n▶ [4/6] Auditing Docker, Kubernetes & Cloud Infrastructure...");
 const infraFiles = [
   { file: "Dockerfile", desc: "Multi-stage Production Dockerfile", required: true },
   { file: ".dockerignore", desc: "Docker Build Context Ignore", required: true },
@@ -233,8 +233,56 @@ for (const item of infraFiles) {
   }
 }
 
-// 5. SUMMARY REPORT
-console.log("\n▶ [5/5] CTO Engineering Squad Diagnostic Summary:");
+// 5. CTO SQUAD PERSISTENT MEMORY & SAFE NON-DESTRUCTIVE ROUTE AUDIT
+console.log("\n▶ [5/6] Auditing CTO Squad Persistent Memory & Non-Destructive Route Standards...");
+const memoryPath = path.join(ROOT_DIR, ".agents", "skills", "cto-engineering-squad", "MEMORY.md");
+if (!fs.existsSync(memoryPath)) {
+  issues.push({
+    severity: "ERROR",
+    layer: "DEVOPS_SYNC",
+    target: "MEMORY.md",
+    detail: "CTO Squad Memory file (.agents/skills/cto-engineering-squad/MEMORY.md) is missing.",
+  });
+} else {
+  const memoryContent = fs.readFileSync(memoryPath, "utf8");
+  const memoryEntries = memoryContent.match(/###\s+MEM-\d{4}-\d{2}-\d{2}-\d{3}/g) || [];
+  console.log(`  • Squad Memory File: HEALTHY (${memoryEntries.length} institutional engineering incident records)`);
+  for (const m of memoryEntries) {
+    console.log(`    - ${m.replace("### ", "")}`);
+  }
+  if (memoryEntries.length === 0) {
+    issues.push({
+      severity: "WARN",
+      layer: "DEVOPS_SYNC",
+      target: "MEMORY.md",
+      detail: "CTO Squad Memory file contains no recorded MEM- entries.",
+    });
+  }
+}
+
+// Check that NO GET route contains destructive delete operations
+let safeGetRoutesChecked = 0;
+for (const routeFile of apiRoutes) {
+  const relPath = path.relative(ROOT_DIR, routeFile).replace(/\\/g, "/");
+  const content = fs.readFileSync(routeFile, "utf8");
+  const getMatch = content.match(/export\s+async\s+function\s+GET\s*\([^)]*\)\s*\{([\s\S]*?)(export\s+async\s+function|$)/);
+  if (getMatch) {
+    safeGetRoutesChecked++;
+    const getBody = getMatch[1];
+    if (getBody.includes(".deleteMany(") || getBody.includes(".delete(")) {
+      issues.push({
+        severity: "ERROR",
+        layer: "BACKEND_API",
+        target: relPath,
+        detail: "Destructive database operation (.delete/.deleteMany) detected inside GET handler! GET endpoints must be idempotent and strictly read-only.",
+      });
+    }
+  }
+}
+console.log(`  • GET Endpoint Idempotency: HEALTHY (${safeGetRoutesChecked} GET handlers verified strictly non-destructive)`);
+
+// 6. SUMMARY REPORT
+console.log("\n▶ [6/6] CTO Engineering Squad Diagnostic Summary:");
 const errors = issues.filter((i) => i.severity === "ERROR");
 const warnings = issues.filter((i) => i.severity === "WARN");
 

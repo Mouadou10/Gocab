@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, flushDatabaseSync } from "@/lib/prisma";
+import { prisma, flushDatabaseSync, ensureDatabaseSynced } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { requireAuth } from "@/lib/api-auth";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await requireAuth().catch(() => null);
+    await ensureDatabaseSynced(false);
     const MAINTENANCE_STATUSES = [
       "Accident",
       "accident",
@@ -20,11 +21,26 @@ export async function GET() {
       "maintenance",
     ];
 
-    // 1. Fetch all non-archived vehicles currently in maintenance or accident status
+    // Pre-fetch open maintenance & repair tickets to identify vehicles actively in repair
+    const openMaintenanceTickets = await prisma.maintenanceTicket.findMany({
+      where: {
+        ticket_type: { in: ["Accident", "Repair", "Entretien"] },
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+      },
+      select: { vehicle_id: true, plate_number: true },
+    });
+    const ticketVehicleIds = openMaintenanceTickets.map((t) => t.vehicle_id).filter(Boolean);
+    const ticketPlates = openMaintenanceTickets.map((t) => t.plate_number).filter(Boolean);
+
+    // 1. Fetch all non-archived vehicles currently in maintenance or with open accident/repair ticket
     const maintenanceVehicles = await prisma.vehicle.findMany({
       where: {
-        status: { in: MAINTENANCE_STATUSES },
         is_archived: false,
+        OR: [
+          { status: { in: MAINTENANCE_STATUSES } },
+          { id: { in: ticketVehicleIds } },
+          { plate_number: { in: ticketPlates } },
+        ],
       },
       include: {
         driverProfile: true,
@@ -58,32 +74,29 @@ export async function GET() {
 
     let hasMutated = false;
 
-    // 3. For any vehicle in maintenance status (In garage, Accident, etc.):
-    // Requirement: "if there is a maintenance status need to be in dossiers en cours and get removed from retablis"
+    // 3. For any vehicle in maintenance status or with open accident/repair ticket:
     for (const v of maintenanceVehicles) {
+      // Ensure vehicle status aligns with "In garage" if it was still "Actif" or "Available"
+      if (!MAINTENANCE_STATUSES.includes(v.status)) {
+        await prisma.vehicle
+          .update({
+            where: { id: v.id },
+            data: { status: "In garage" },
+          })
+          .catch(() => {});
+        v.status = "In garage";
+        hasMutated = true;
+      }
+
       const vClaims = claimsByVehicleId.get(v.id) || [];
       const activeClaim = vClaims.find((c) => c.timeline_step !== "VEHICLE_BACK");
 
       if (activeClaim) {
         // Vehicle already has an active claim in "Dossiers En Cours".
-        // Clean up any old completed duplicates in "VEHICLE_BACK" so it is completely removed from retablis!
-        const restoredDuplicates = vClaims.filter((c) => c.timeline_step === "VEHICLE_BACK");
-        if (restoredDuplicates.length > 0) {
-          await prisma.accidentClaim.deleteMany({
-            where: { id: { in: restoredDuplicates.map((c) => c.id) } },
-          });
-          hasMutated = true;
-        }
-        const extraActiveDuplicates = vClaims.filter((c) => c.timeline_step !== "VEHICLE_BACK" && c.id !== activeClaim.id);
-        if (extraActiveDuplicates.length > 0) {
-          await prisma.accidentClaim.deleteMany({
-            where: { id: { in: extraActiveDuplicates.map((c) => c.id) } },
-          });
-          hasMutated = true;
-        }
+        // Respect the agent's current stage and data — DO NOT overwrite or delete!
       } else if (vClaims.length > 0) {
-        // Vehicle is in maintenance, but its claims are currently in VEHICLE_BACK (in retablis).
-        // Move the primary claim back to CAR_IN_GARAGE so it is in "Dossiers En Cours" and removed from "retablis"!
+        // Vehicle is in maintenance, but its previous claims were closed in VEHICLE_BACK.
+        // Reopen the latest primary claim to CAR_IN_GARAGE so it appears in "Dossiers En Cours".
         const sortedClaims = [...vClaims].sort((a, b) => {
           let aComments = 0;
           let bComments = 0;
@@ -92,7 +105,6 @@ export async function GET() {
           return bComments - aComments;
         });
         const primaryClaim = sortedClaims[0];
-        const extraDuplicates = sortedClaims.slice(1);
 
         const claimDate = v.total_downtime_days && v.total_downtime_days > 0
           ? new Date(Date.now() - v.total_downtime_days * 24 * 60 * 60 * 1000)
@@ -107,12 +119,6 @@ export async function GET() {
             driver_phone: v.assigned_driver_phone || v.driverProfile?.phoneSanitized || primaryClaim.driver_phone,
           },
         });
-
-        if (extraDuplicates.length > 0) {
-          await prisma.accidentClaim.deleteMany({
-            where: { id: { in: extraDuplicates.map((c) => c.id) } },
-          });
-        }
         hasMutated = true;
       } else {
         // Vehicle in maintenance with no claim at all -> create one in CAR_IN_GARAGE
@@ -192,21 +198,21 @@ export async function GET() {
     }
 
     // 4. For any active claim whose vehicle is not yet in maintenance status:
-    // Ensure the vehicle's status is synchronized to "Accident" so it remains in "Dossiers En Cours"
+    // Ensure the vehicle's status is synchronized to "In garage" so it remains in "Dossiers En Cours"
     for (const c of allClaims) {
       if (c.timeline_step !== "VEHICLE_BACK" && c.vehicle && !maintenanceVehicleIds.has(c.vehicle_id)) {
         await prisma.vehicle
           .update({
             where: { id: c.vehicle_id },
-            data: { status: "Accident" },
+            data: { status: "In garage" },
           })
           .catch(() => {});
         maintenanceVehicleIds.add(c.vehicle_id);
       }
     }
 
-    // 5. Reload and ensure no duplicate records in VEHICLE_BACK for the same vehicle
-    const refreshedClaims = hasMutated
+    // 5. Reload final claims safely (strictly non-destructive)
+    const finalClaims = hasMutated
       ? await prisma.accidentClaim.findMany({
           include: {
             vehicle: true,
@@ -219,27 +225,6 @@ export async function GET() {
           orderBy: { created_at: "desc" },
         })
       : allClaims;
-
-    const seenRestoredVehicles = new Set<string>();
-    const finalClaims: typeof refreshedClaims = [];
-    const duplicatesToDelete: string[] = [];
-
-    for (const c of refreshedClaims) {
-      if (c.timeline_step === "VEHICLE_BACK" && c.vehicle_id) {
-        if (seenRestoredVehicles.has(c.vehicle_id)) {
-          duplicatesToDelete.push(c.id);
-          continue;
-        }
-        seenRestoredVehicles.add(c.vehicle_id);
-      }
-      finalClaims.push(c);
-    }
-
-    if (duplicatesToDelete.length > 0) {
-      prisma.accidentClaim.deleteMany({
-        where: { id: { in: duplicatesToDelete } },
-      }).catch(() => {});
-    }
 
     // Attach active or latest FieldTask for each claim
     const claimIds = finalClaims.map((c) => c.id);
