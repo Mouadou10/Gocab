@@ -91,7 +91,28 @@ To ensure that the engineering squad continuously learns, improves, and prevents
 
 ---
 
-## 4. Step-by-Step Execution Protocol
+## 4. Multi-Department "full check" Simulation Engine
+
+When the user initiates a diagnostic with the command **"full check"**, execute the end-to-end multi-department test engine:
+```powershell
+node --import tsx .agents/skills/cto-engineering-squad/scripts/full-diagnostic-check.ts
+```
+
+This engine acts as a live agent across **all 8 departments**:
+1. **Acquisition & Prospection** (`LEAD_ACQUISITION_JR`): Ingestion, qualification, call scorecard attribution, date-filtered Kanban columns.
+2. **Formation & Recrutement** (`ONBOARDING_SPECIALIST`): Candidate scheduling, training presence, chauffeur conversion (`DriverProfile`).
+3. **Flotte & Encaissements** (`FLEET_PERF_MANAGER`): Daily collections (300 MAD/j, 1800 MAD/sem), Mohamed Aziz (75) vs Mehdi Elyattouti (26) locked vehicle boundaries, vidange & mileage alerts.
+4. **Support & Maintenance** (`OPS_MANAGER`): Mechanical ticket lifecycle (`OPEN` -> `IN_PROGRESS` -> `RESOLVED`), garage repair costs.
+5. **Opérations Terrain & Dispatch** (`FIELD_SUPERVISOR`): Recovery & immobilization field tasks, slot assignment, Telegram alerts.
+6. **Assurance & Sinistres** (`FINANCE_OFFICER`): 12 maintenance/accident fleet parity, dossier timeline progression, non-destructive GET polling.
+7. **WhatsApp CRM & Support** (`SUPPORT_AGENT`): 24h active window, conversation routing, inbound/outbound messaging.
+8. **Direction, Paramètres & DevOps** (`ADMIN`): Daily calls target (153), permissions, `/api/health` probe, Cloud WAL persistence.
+
+All errors are automatically structured into actionable diagnosis packages and passed to the CTO Squad for immediate resolution.
+
+---
+
+## 5. Step-by-Step Execution Protocol
 
 Whenever this skill is triggered, execute the following steps in order:
 

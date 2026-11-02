@@ -18,6 +18,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # CTO & Senior Engineering Squad (`cto-engineering-squad`)
 
+- **"full check" Multi-Department Diagnostic Trigger**: Whenever the user sends `"full check"` (or requests a full diagnostic check across all CRM departments), you MUST automatically:
+  1. Run the comprehensive multi-department test engine:
+     `node --import tsx .agents/skills/cto-engineering-squad/scripts/full-diagnostic-check.ts`
+  2. Simulate real agent workflows across ALL 8 departments (Acquisition, Formation, Flotte, Support, Terrain, Assurance, WhatsApp, Direction/Paramètres).
+  3. Verify 100% execution of buttons, forms, database persistence, LiveSync, and non-destructive GET endpoints.
+  4. Collect any detected errors, transmit them as structured CTO Action Items, automatically apply surgical fixes for technical/sync bugs, document findings in `.agents/skills/cto-engineering-squad/MEMORY.md`, verify `npx tsc --noEmit`, auto-deploy via `git push origin main`, and report the full department-by-department status to the user.
 - **Periodic & On-Demand Workflow Audit**: Act as an ERP CTO leading a squad of Senior Frontend, Backend, QA/Test, DevOps, Docker, and Kubernetes Engineers (`.agents/skills/cto-engineering-squad/SKILL.md`).
 - **Button-to-DB & Visual Sync Verification**: Periodically run `node --import tsx .agents/skills/cto-engineering-squad/scripts/audit-crm-workflows.ts` to verify that every button click on every page executes its API command, persists to the database, calls `touchSyncState()` on the backend, and triggers `broadcastMutation()` / state refresh on the frontend.
 - **Core Business Logic Guardrail**: Automatically fix technical, UI-sync, and persistence bugs; **NEVER** modify core CRM business rules or financial formulas without checking with the user first.
