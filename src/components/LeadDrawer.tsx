@@ -80,6 +80,7 @@ interface Lead {
   has_permis: boolean;
   campaign_source: string;
   created_at: string;
+  updated_at?: string;
   status_changed_at?: string | null;
   handled_by?: string | null;
   notes?: string | null;
@@ -311,6 +312,7 @@ export default function LeadDrawer({
       return;
     }
 
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
@@ -431,57 +433,91 @@ export default function LeadDrawer({
       }
       payload.presence_confirmed = presenceConfirmed;
 
+      const nowIso = new Date().toISOString();
+      const isStatusChanged =
+        payload.brand_status !== lead.brand_status ||
+        payload.board_column !== lead.board_column ||
+        payload.training_status !== lead.training_status ||
+        Boolean(payload.mark_as_called);
+
+      const optimisticLead: Lead = {
+        ...lead,
+        ...payload,
+        status_changed_at:
+          payload.board_column === "NEW_LEADS" && !payload.brand_status
+            ? null
+            : isStatusChanged
+            ? nowIso
+            : lead.status_changed_at || nowIso,
+        updated_at: nowIso,
+      };
+
+      // ⚡ INSTANT OPTIMISTIC UI:
+      // Update Kanban board immediately and close drawer with 0ms perceived delay
+      onUpdate(optimisticLead);
+      handleClose();
+
+      if (payload.brand_status === "Training fixed") {
+        toast.success(
+          `⚡ Formation Fixée ! Convocation WhatsApp en cours d'envoi automatique...`,
+          { duration: 4000 }
+        );
+      } else {
+        toast.success("Lead mis à jour avec succès", { duration: 2500 });
+      }
+
+      // Background asynchronous server persistence
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
-      try {
-        const res = await fetch(`/api/leads/${lead.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: abortController.signal,
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          const nowIso = new Date().toISOString();
-          const committedLead = {
-            ...lead,
-            ...payload,
-            ...(data.lead || {}),
-            status_changed_at:
-              payload.board_column === "NEW_LEADS" && !payload.brand_status
-                ? null
-                : data.lead?.status_changed_at || nowIso,
-            updated_at: data.lead?.updated_at || nowIso,
-          };
-          if (payload.brand_status === "Training fixed" || data.whatsappSent?.success) {
-            toast.success(
-              `⚡ Formation Fixée ! Convocation WhatsApp envoyée automatiquement via l'API.`,
-              { duration: 5500 }
-            );
+      fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: abortController.signal,
+      })
+        .then(async (res) => {
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            const confirmedLead: Lead = {
+              ...optimisticLead,
+              ...(data.lead || {}),
+              status_changed_at:
+                payload.board_column === "NEW_LEADS" && !payload.brand_status
+                  ? null
+                  : data.lead?.status_changed_at || optimisticLead.status_changed_at,
+              updated_at: data.lead?.updated_at || nowIso,
+            };
+            onUpdate(confirmedLead);
+            if (payload.brand_status === "Training fixed" && data.whatsappSent?.success) {
+              toast.success("✉️ Convocation WhatsApp transmise avec succès via 360dialog.", {
+                duration: 3500,
+              });
+            }
           } else {
-            toast.success("Lead mis à jour avec succès");
+            const errorData = await res.json().catch(() => ({}));
+            toast.error(
+              errorData.error || "Échec de l'enregistrement sur le serveur. Rétablissement de l'état précédent."
+            );
+            onUpdate(lead);
           }
-          onUpdate(committedLead);
-          handleClose();
-        } else {
-          const errorData = await res.json().catch(() => ({}));
-          toast.error(errorData.error || "Échec de la mise à jour du prospect");
-        }
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        if (fetchErr.name === "AbortError") {
-          toast.error("Le serveur met trop de temps à répondre. Veuillez réessayer.");
-        } else {
-          throw fetchErr;
-        }
-      }
+        })
+        .catch((fetchErr: any) => {
+          clearTimeout(timeoutId);
+          if (fetchErr.name === "AbortError") {
+            toast.error("Délai d'attente serveur dépassé. Rétablissement de l'état précédent.");
+          } else {
+            toast.error("Erreur de connexion. Rétablissement de l'état précédent.");
+          }
+          onUpdate(lead);
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+        });
     } catch (err: any) {
       toast.error(err.message || "Failed to save updates");
       console.error("Failed to save updates:", err);
-    } finally {
       setIsSubmitting(false);
     }
   }

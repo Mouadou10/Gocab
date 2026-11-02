@@ -360,7 +360,9 @@ export async function PATCH(
     }
 
     if (logEntries.length > 0) {
-      await logManyLeadActivities(logEntries).catch(() => {});
+      void logManyLeadActivities(logEntries).catch((err) => {
+        console.warn("logManyLeadActivities background warning:", err?.message || err);
+      });
     }
     // ───────────────────────────────────────────────────────────────────────
 

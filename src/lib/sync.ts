@@ -125,8 +125,7 @@ export async function touchSyncState(
   entity: "leads" | "tickets" | "settings" | "collections" | "all"
 ): Promise<SyncState> {
   const now = Date.now();
-  globalForSync.syncCacheExpiresAt = 0;
-  const current = await getSyncState();
+  const current = globalForSync.syncCache || (await getSyncState());
 
   const nextState: SyncState = {
     ...current,
@@ -142,8 +141,8 @@ export async function touchSyncState(
   globalForSync.syncCache = nextState;
   globalForSync.syncCacheExpiresAt = Date.now() + 400;
 
-  // Persist sync state setting
-  await prisma.setting
+  // Persist sync state setting in background (non-blocking for sub-50ms API responses)
+  void prisma.setting
     .upsert({
       where: { key: SYNC_SETTING_KEY },
       update: { value: JSON.stringify(nextState) },
