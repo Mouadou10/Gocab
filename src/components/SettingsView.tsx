@@ -180,6 +180,7 @@ export default function SettingsView() {
   const [backupStatus, setBackupStatus] = useState<any>(null);
   const [isLoadingBackup, setIsLoadingBackup] = useState(false);
   const [isSyncingBackup, setIsSyncingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [webhookInput, setWebhookInput] = useState("");
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [showScriptModal, setShowScriptModal] = useState(false);
@@ -389,6 +390,36 @@ export default function SettingsView() {
       toast.error("Échec de la sauvegarde: " + e.message, { id: "sync-drive" });
     } finally {
       setIsSyncingBackup(false);
+    }
+  };
+
+  const handleRestoreFromDrive = async () => {
+    if (
+      !confirm(
+        "⚠️ PLAN DE SECOURS / RESTAURATION GOOGLE DRIVE :\n\nCette action va recharger l'état complet du CRM (Leads, Chauffeurs, Flotte, Versements, Tickets, WhatsApp, Signalements, Formations) depuis le miroir Google Drive (GoCab_Master_Snapshot_Latest.json).\n\nVoulez-vous procéder à la restauration d'urgence ?"
+      )
+    ) {
+      return;
+    }
+    setIsRestoringBackup(true);
+    try {
+      toast.loading("Restauration d'urgence depuis le miroir Google Drive en cours...", { id: "restore-drive" });
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore-from-drive" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || "Restauration terminée avec succès !", { id: "restore-drive", duration: 6000 });
+        fetchBackupStatus();
+      } else {
+        toast.error(data.error || "Erreur lors de la restauration", { id: "restore-drive" });
+      }
+    } catch (e: any) {
+      toast.error("Échec de la restauration : " + e.message, { id: "restore-drive" });
+    } finally {
+      setIsRestoringBackup(false);
     }
   };
 
@@ -3048,6 +3079,21 @@ export default function SettingsView() {
                   <span>🚀</span>
                 )}
                 <span>Synchroniser Maintenant sur Google Drive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRestoreFromDrive}
+                disabled={isRestoringBackup || isSyncingBackup}
+                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                title="Restaure l'intégralité du CRM depuis le snapshot Master sauvegardé sur Google Drive"
+              >
+                {isRestoringBackup ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>🔄</span>
+                )}
+                <span>Restaurer depuis Google Drive (Plan de Secours)</span>
               </button>
 
               <button

@@ -6,6 +6,7 @@
  */
 
 import { prisma, flushDatabaseSync } from "@/lib/prisma";
+import { scheduleGoogleDriveSync } from "@/lib/services/googleDriveBackup";
 
 export interface SyncState {
   leads: number;
@@ -157,6 +158,11 @@ export async function touchSyncState(
   await flushDatabaseSync().catch((err) => {
     console.warn("touchSyncState flushDatabaseSync warning:", err?.message || err);
   });
+
+  // Mirror state to Google Drive twin backend
+  try {
+    scheduleGoogleDriveSync();
+  } catch (_) {}
 
   return nextState;
 }

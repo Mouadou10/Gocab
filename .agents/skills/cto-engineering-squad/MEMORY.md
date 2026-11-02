@@ -91,6 +91,26 @@
 
 ---
 
+### MEM-2026-11-02-005: Google Drive Twin Backend & Continuous Cloud Storage Replication
+- **Date**: 2026-11-02
+- **Layer**: DevOps Sync / Disaster Recovery / Cloud Storage / Media Replication
+- **Symptom**:
+  Need a secondary operational twin backend in Google Drive running alongside Vercel so that if Vercel cloud is down or undergoing maintenance, Google Drive holds the complete CRM state, all operational records, uploaded files, documents, and WhatsApp images, and can immediately rehydrate the CRM upon disaster recovery.
+- **Root Cause**:
+  - Google Cloud Service Accounts have 0 MB personal drive storage quota on personal Gmail folders (403 `storageQuotaExceeded`), preventing direct binary writes.
+  - Previous backups only bundled a partial subset of CSVs, lacking daily collections, accident claims, driver comments, and WhatsApp messages.
+  - Documents and WhatsApp media were stored as local files or base64 mock URIs rather than persistent cloud storage in Google Drive.
+- **Applied Solution**:
+  1. Expanded `src/lib/services/googleDriveBackup.ts` to export all 14 operational tables into dedicated CSVs and a master snapshot `GoCab_Master_Snapshot_Latest.json`.
+  2. Implemented chunked webhook delivery via the user's Google Apps Script web app running under personal quota (15 GB).
+  3. Integrated `uploadMediaToGoogleDrive()` for document uploads (`/api/upload-document`) and WhatsApp media (`/api/whatsapp/media/upload`), plus a streaming proxy (`/api/drive/media/[id]`).
+  4. Built disaster recovery rehydration engine (`restoreDatabaseFromGoogleDrive()` and `{ action: "restore-from-drive" }` endpoint in `/api/backup`).
+  5. Added continuous replication hook in `touchSyncState()` in `src/lib/sync.ts` and disaster recovery button in `SettingsView.tsx`.
+- **Anti-Regression Guardrail**:
+  - Department 8 in `full-diagnostic-check.ts` now automatically validates the presence and wiring of the Google Drive Twin Backend, media streaming proxy, and disaster recovery endpoints.
+
+---
+
 ## Standard Squad Memory Entry Template
 
 Whenever a new issue is investigated and resolved by the CTO Engineering Squad, append a new entry using this template:

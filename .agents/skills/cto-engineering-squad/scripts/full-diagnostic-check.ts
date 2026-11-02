@@ -567,6 +567,61 @@ async function main() {
     }
   );
 
+  await runCheck(
+    deptAdmin,
+    "Google Drive Twin Backend & Media Storage Endpoints Readiness",
+    "SYNC",
+    async () => {
+      // 1. Verify backup route with restore-from-drive support
+      const backupRoutePath = path.join(API_DIR, "backup", "route.ts");
+      if (!fs.existsSync(backupRoutePath)) {
+        throw new Error("Backup API route src/app/api/backup/route.ts missing");
+      }
+      const backupCode = fs.readFileSync(backupRoutePath, "utf8");
+      if (!backupCode.includes("restore-from-drive")) {
+        throw new Error("Backup route missing restore-from-drive disaster recovery action");
+      }
+
+      // 2. Verify media upload routes wired to Google Drive
+      const uploadDocRoute = path.join(API_DIR, "upload-document", "route.ts");
+      if (!fs.existsSync(uploadDocRoute)) {
+        throw new Error("Document upload route src/app/api/upload-document/route.ts missing");
+      }
+      const uploadDocCode = fs.readFileSync(uploadDocRoute, "utf8");
+      if (!uploadDocCode.includes("uploadMediaToGoogleDrive")) {
+        throw new Error("Document upload route not wired to uploadMediaToGoogleDrive");
+      }
+
+      // 3. Verify WhatsApp media upload wired to Google Drive
+      const waMediaRoute = path.join(API_DIR, "whatsapp", "media", "upload", "route.ts");
+      if (!fs.existsSync(waMediaRoute)) {
+        throw new Error("WhatsApp media upload route missing");
+      }
+      const waMediaCode = fs.readFileSync(waMediaRoute, "utf8");
+      if (!waMediaCode.includes("uploadMediaToGoogleDrive")) {
+        throw new Error("WhatsApp media upload route not wired to uploadMediaToGoogleDrive");
+      }
+
+      // 4. Verify Google Drive media proxy streaming endpoint
+      const driveMediaRoute = path.join(API_DIR, "drive", "media", "[id]", "route.ts");
+      if (!fs.existsSync(driveMediaRoute)) {
+        throw new Error("Drive media proxy route src/app/api/drive/media/[id]/route.ts missing");
+      }
+
+      // 5. Verify Google Drive backup service module
+      const gdServicePath = path.join(ROOT_DIR, "src", "lib", "services", "googleDriveBackup.ts");
+      if (!fs.existsSync(gdServicePath)) {
+        throw new Error("Google Drive backup service src/lib/services/googleDriveBackup.ts missing");
+      }
+      const gdCode = fs.readFileSync(gdServicePath, "utf8");
+      if (!gdCode.includes("restoreDatabaseFromGoogleDrive") || !gdCode.includes("uploadMediaToGoogleDrive")) {
+        throw new Error("Google Drive backup service missing restore or media upload functions");
+      }
+    },
+    "Google Drive Twin Backend or Media Proxy endpoints misconfigured",
+    "Ensure all Google Drive routes and helper functions are implemented"
+  );
+
   // ============================================================================
   // COMPREHENSIVE BUTTON-TO-BACKEND AUDIT ACROSS ALL UI COMPONENTS
   // ============================================================================

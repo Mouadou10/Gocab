@@ -3,6 +3,7 @@ import {
   getBackupStatus,
   triggerBackup,
   generateBackupPayload,
+  restoreDatabaseFromGoogleDrive,
   WEBHOOK_SETTING_KEY,
 } from "@/lib/services/googleDriveBackup";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest) {
         update: { value: webhookUrl },
       });
       return NextResponse.json({ success: true, webhookUrl });
+    }
+
+    if (action === "restore-from-drive") {
+      const restoreRes = await restoreDatabaseFromGoogleDrive();
+      return NextResponse.json(restoreRes, { status: restoreRes.success ? 200 : 500 });
     }
 
     if (action === "export-json") {

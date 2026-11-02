@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWhatsAppApiConfig } from "@/lib/services/whatsappApiService";
+import { uploadMediaToGoogleDrive } from "@/lib/services/googleDriveBackup";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -32,10 +33,21 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // 1. Mirror directly to Google Drive (GoCab Backups folder)
+    const driveRes = await uploadMediaToGoogleDrive({
+      buffer,
+      filename: file.name || `whatsapp_${Date.now()}.jpg`,
+      mimeType,
+      category: "whatsapp",
+    }).catch((err) => {
+      console.warn("Google Drive WhatsApp media upload warning:", err);
+      return null;
+    });
+
     const config = await getWhatsAppApiConfig();
     let mediaId: string | null = null;
 
-    // Upload to live 360dialog / Meta if configured
+    // 2. Upload to live 360dialog / Meta if configured
     if (config.isLiveConfigured && config.provider === "360dialog" && config.d360ApiKey) {
       try {
         const d360Base = config.d360ApiUrl.replace(/\/$/, "");
@@ -66,9 +78,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fallback to local media ID if live provider upload not available
+    // Fallback to Google Drive ID or local ID if live provider upload not available
     if (!mediaId) {
-      mediaId = `local-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      mediaId = driveRes?.fileId || `local-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     }
 
     // Cache the uploaded image locally so it can be served immediately
@@ -77,16 +89,26 @@ export async function POST(request: NextRequest) {
       fs.writeFileSync(path.join(CACHE_DIR, `${mediaId}${ext}`), buffer);
       fs.writeFileSync(
         path.join(CACHE_DIR, `${mediaId}.meta.json`),
-        JSON.stringify({ mime_type: mimeType, original_name: file.name, uploaded_at: new Date().toISOString() })
+        JSON.stringify({
+          mime_type: mimeType,
+          original_name: file.name,
+          uploaded_at: new Date().toISOString(),
+          google_drive_id: driveRes?.fileId,
+          google_drive_url: driveRes?.driveUrl,
+        })
       );
     } catch (e) {
       console.warn("Failed to cache uploaded media:", e);
     }
 
+    const mediaUrl = driveRes?.directUrl || `/api/whatsapp/media/${mediaId}`;
+
     return NextResponse.json({
       success: true,
       mediaId,
-      mediaUrl: `/api/whatsapp/media/${mediaId}`,
+      mediaUrl,
+      driveUrl: driveRes?.driveUrl,
+      googleDriveId: driveRes?.fileId,
       mimeType,
       fileName: file.name,
       fileSize: file.size,
