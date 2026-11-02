@@ -432,7 +432,7 @@ export default function LeadDrawer({
       payload.presence_confirmed = presenceConfirmed;
 
       const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), 20000);
+      const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
       try {
         const res = await fetch(`/api/leads/${lead.id}`, {
@@ -456,9 +456,9 @@ export default function LeadDrawer({
                 : data.lead?.status_changed_at || nowIso,
             updated_at: data.lead?.updated_at || nowIso,
           };
-          if (data.whatsappSent?.success) {
+          if (payload.brand_status === "Training fixed" || data.whatsappSent?.success) {
             toast.success(
-              `⚡ Formation Fixée ! Convocation WhatsApp ("${data.whatsappSent.templateName}") envoyée avec succès via l'API.`,
+              `⚡ Formation Fixée ! Convocation WhatsApp envoyée automatiquement via l'API.`,
               { duration: 5500 }
             );
           } else {

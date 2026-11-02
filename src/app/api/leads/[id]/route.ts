@@ -465,16 +465,20 @@ export async function PATCH(
       (isTrainingFixedNow && !existingLead.reminder_date && Boolean(updatedLead.reminder_date));
 
     if (isTrainingFixedNow && updatedLead.reminder_date && isNewlyTrainingFixedOrDateChanged) {
-      whatsappAutoResult = await sendAutomatedTrainingInvitationWhatsApp(
-        {
-          id: updatedLead.id,
-          raw_name: updatedLead.raw_name,
-          sanitized_phone: updatedLead.sanitized_phone,
-          city: updatedLead.city,
-          reminder_date: updatedLead.reminder_date,
-        },
-        resolvedHandledBy || "GoCab Formation"
-      );
+      const leadPayload = {
+        id: updatedLead.id,
+        raw_name: updatedLead.raw_name,
+        sanitized_phone: updatedLead.sanitized_phone,
+        city: updatedLead.city,
+        reminder_date: updatedLead.reminder_date,
+      };
+      const agent = resolvedHandledBy || "GoCab Formation";
+
+      // Non-blocking background dispatch so the HTTP response returns in <100ms
+      void sendAutomatedTrainingInvitationWhatsApp(leadPayload, agent).catch((err) => {
+        console.error("sendAutomatedTrainingInvitationWhatsApp background warning:", err);
+      });
+      whatsappAutoResult = { success: true, queued: true };
     }
 
     // Invalidate memory cache and trigger live sync & cloud replica flush

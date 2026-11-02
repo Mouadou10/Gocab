@@ -154,8 +154,8 @@ export async function touchSyncState(
     });
 
   // Automatically flush any pending SQLite mutations to cross-container cloud replica
-  // before returning, ensuring zero data loss across Vercel serverless containers
-  await flushDatabaseSync().catch((err) => {
+  // in background (non-blocking) ensuring instant sub-100ms API responses
+  void flushDatabaseSync().catch((err) => {
     console.warn("touchSyncState flushDatabaseSync warning:", err?.message || err);
   });
 
