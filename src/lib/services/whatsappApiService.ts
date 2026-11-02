@@ -1098,11 +1098,11 @@ export async function sendWhatsAppWelcomeMenu(phoneNumber: string, conversationI
   }
 
   const menuText =
-    `Bonjour et bienvenue chez *GoCab* ! 🚖\n\n` +
-    `Comment pouvons-nous vous aider aujourd'hui ?\n` +
-    `Choisissez une option ci-dessous (ou répondez *1* ou *2*) :\n\n` +
-    `1️⃣ *Contacter le Support Chauffeur* (Flotte & Assistance)\n` +
-    `2️⃣ *Obtenir des informations* (Devenir Chauffeur GoCab)`;
+    `أهلًا وسهلًا بك في *GoCab*! 🚖\n\n` +
+    `كيف يُمكننا مساعدتك اليوم؟\n\n` +
+    `اختر أحد الخيارات أدناه (أو أجب بـ *1* أو *2*):\n\n` +
+    `1️⃣ *تواصل مع دعم السائقين* (أسطول المركبات والمساعدة)\n` +
+    `2️⃣ *احصل على معلومات* (انضم إلى فريق سائقي GoCab)`;
 
   return sendOutboundWhatsAppMessage({
     conversationId: conv?.id,
@@ -1110,8 +1110,8 @@ export async function sendWhatsAppWelcomeMenu(phoneNumber: string, conversationI
     senderName: "🤖 Bot GoCab",
     text: menuText,
     interactiveButtons: [
-      { id: "FLOW_DRIVER_SUPPORT", title: "1. Support Chauffeur" },
-      { id: "FLOW_GET_INFO", title: "2. Infos GoCab" },
+      { id: "FLOW_DRIVER_SUPPORT", title: "1. دعم السائقين" },
+      { id: "FLOW_GET_INFO", title: "2. معلومات GoCab" },
     ],
   });
 }
@@ -1489,6 +1489,9 @@ async function processInboundBotWorkflow(
     interactiveReplyId === "FLOW_DRIVER_SUPPORT" ||
     lower === "1" ||
     lower === "1️⃣" ||
+    lower === "١" ||
+    lower.includes("دعم السائقين") ||
+    lower.includes("تواصل مع دعم السائقين") ||
     lower === "1. support chauffeur" ||
     lower === "support chauffeur" ||
     lower === "contact driver support";
@@ -1497,6 +1500,10 @@ async function processInboundBotWorkflow(
     interactiveReplyId === "FLOW_GET_INFO" ||
     lower === "2" ||
     lower === "2️⃣" ||
+    lower === "٢" ||
+    lower.includes("معلومات") ||
+    lower.includes("احصل على معلومات") ||
+    lower.includes("انضم") ||
     lower === "2. infos gocab" ||
     lower === "getting information" ||
     lower === "obtenir des informations";
