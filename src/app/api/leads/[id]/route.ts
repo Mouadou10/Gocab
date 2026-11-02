@@ -14,6 +14,7 @@ import { touchSyncState } from "@/lib/sync";
 import { logManyLeadActivities, normalizeAgentName } from "@/lib/activity-log";
 import { invalidateLeadsCache } from "@/lib/leads-cache";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
+import { sendAutomatedTrainingInvitationWhatsApp } from "@/lib/services/whatsappApiService";
 
 export async function PATCH(
   request: NextRequest,
@@ -448,6 +449,34 @@ export async function PATCH(
       }
     }
     // ───────────────────────────────────────────────────────────────────────
+    // ── Automated WhatsApp Training Invitation ──────────────────────────
+    // When an agent sets the lead as "Training fixed" and sets the date,
+    // the CRM checks the date and the city to send the appropriate WhatsApp
+    // message through the WhatsApp API directly without quitting the page.
+    let whatsappAutoResult: any = null;
+    const isTrainingFixedNow =
+      updatedLead.brand_status === "Training fixed" ||
+      updatedLead.board_column === "TRAINING_PIPELINE" ||
+      updatedLead.training_status === "Scheduled";
+
+    const isNewlyTrainingFixedOrDateChanged =
+      isMovingToTrainingFixed ||
+      (isTrainingFixedNow && isReminderChanged) ||
+      (isTrainingFixedNow && !existingLead.reminder_date && Boolean(updatedLead.reminder_date));
+
+    if (isTrainingFixedNow && updatedLead.reminder_date && isNewlyTrainingFixedOrDateChanged) {
+      whatsappAutoResult = await sendAutomatedTrainingInvitationWhatsApp(
+        {
+          id: updatedLead.id,
+          raw_name: updatedLead.raw_name,
+          sanitized_phone: updatedLead.sanitized_phone,
+          city: updatedLead.city,
+          reminder_date: updatedLead.reminder_date,
+        },
+        resolvedHandledBy || "GoCab Formation"
+      );
+    }
+
     // Invalidate memory cache and trigger live sync & cloud replica flush
     invalidateLeadsCache();
     await touchSyncState("leads").catch(() => {});
@@ -458,6 +487,7 @@ export async function PATCH(
         ...updatedLead,
         national_blacklist_match: leadNationalMatch.isBlacklisted ? leadNationalMatch : null,
       },
+      whatsappSent: whatsappAutoResult,
     });
   } catch (error) {
     console.error("Error updating lead:", error);

@@ -15,21 +15,7 @@ import toast from "react-hot-toast";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import NationalBlacklistBadge from "./NationalBlacklistBadge";
 import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
-import {
-  generateTrainingInviteURL,
-  generateThankYouURL,
-  formatDisplayPhone,
-  getTemplateForLeadStatus,
-  formatLeadWhatsAppMessage,
-  generateWhatsAppWebURL,
-  APPROVED_360_TEMPLATES,
-  Approved360TemplateDef,
-  getApproved360Template,
-  resolve360TemplateByDate,
-  formatTemplateForWhatsAppWeb,
-  LEAD_STATUS_TEMPLATES,
-  LeadStatusTemplateDef,
-} from "@/lib/whatsapp";
+import { formatDisplayPhone } from "@/lib/whatsapp";
 
 const BRAND_STATUS_OPTIONS = [
   "Not interested",
@@ -240,29 +226,6 @@ export default function LeadDrawer({
     return () => clearTimeout(timer);
   }, []);
 
-  // WhatsApp Direct Hub State
-  const [live360Templates, setLive360Templates] =
-    useState<Approved360TemplateDef[]>(APPROVED_360_TEMPLATES);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [waMessageText, setWaMessageText] = useState<string>("");
-  const [isManualEdit, setIsManualEdit] = useState<boolean>(false);
-  const [isSendingWa, setIsSendingWa] = useState<boolean>(false);
-  const [waSentSuccessAt, setWaSentSuccessAt] = useState<string | null>(null);
-  const [waDeliveryMode, setWaDeliveryMode] = useState<string | null>(null);
-  const [recentWaMessages, setRecentWaMessages] = useState<any[]>([]);
-  const [isLoadingWaHistory, setIsLoadingWaHistory] = useState<boolean>(false);
-
-  useEffect(() => {
-    fetch("/api/whatsapp/templates")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data?.templates) && data.templates.length > 0) {
-          setLive360Templates(data.templates);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   // ── Activity Log ──────────────────────────────────────────────────────────
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
@@ -316,189 +279,6 @@ export default function LeadDrawer({
   if (!hasFiche) missingDocsList.push("Fiche anthropométrique (Casier judiciaire)");
   if (!hasConfirmation) missingDocsList.push("Confirmation / Justificatif d'adresse");
   if (!hasPermis) missingDocsList.push("Permis de conduire (2+ ans)");
-
-  // Active status key based on board
-  const activeStatusKey = boardType === "leads" ? (brandStatus || "NEW_LEADS") : (trainingStatus || "Scheduled");
-
-  // Determine approved 360dialog template ("formation" vs "vendredi" or any live synced template)
-  const default360Tpl = resolve360TemplateByDate(trainingDate || recallDate, live360Templates);
-
-  // Re-generate or update template text when active status or context fields change
-  useEffect(() => {
-    if (isManualEdit) return;
-
-    const targetTplId = selectedTemplateId || default360Tpl.id;
-    const activeTpl = getApproved360Template(targetTplId, live360Templates);
-    setSelectedTemplateId(activeTpl.id);
-
-    const formatted =
-      (activeTpl.bodyParamCount ?? 0) > 0
-        ? formatLeadWhatsAppMessage(activeTpl.template, {
-            name: lead.raw_name,
-            city: city || lead.city || "Casablanca",
-            date: trainingDate || recallDate || "",
-            time: recallTime ? recallTime : undefined,
-            missingDocs: missingDocsList,
-            templateId: activeTpl.id,
-          })
-        : activeTpl.template;
-
-    setWaMessageText(formatted);
-  }, [
-    trainingDate,
-    recallDate,
-    recallTime,
-    city,
-    isManualEdit,
-    lead.raw_name,
-    lead.city,
-    hasCin,
-    hasFiche,
-    hasConfirmation,
-    hasPermis,
-    live360Templates,
-  ]);
-
-  // Handle template selection from dropdown (Live approved 360dialog templates)
-  const handleSelectCustomTemplate = (templateId: string) => {
-    const activeTpl = getApproved360Template(templateId, live360Templates);
-    setSelectedTemplateId(activeTpl.id);
-
-    const formatted =
-      (activeTpl.bodyParamCount ?? 0) > 0
-        ? formatLeadWhatsAppMessage(activeTpl.template, {
-            name: lead.raw_name,
-            city: city || lead.city || "Casablanca",
-            date: trainingDate || recallDate || "",
-            time: recallTime ? recallTime : undefined,
-            missingDocs: missingDocsList,
-            templateId: activeTpl.id,
-          })
-        : activeTpl.template;
-    setWaMessageText(formatted);
-    setIsManualEdit(false);
-  };
-
-  // Reset template to default approved 360dialog template
-  const handleResetTemplate = () => {
-    setIsManualEdit(false);
-    const activeTpl = resolve360TemplateByDate(trainingDate || recallDate, live360Templates);
-    setSelectedTemplateId(activeTpl.id);
-    const formatted =
-      (activeTpl.bodyParamCount ?? 0) > 0
-        ? formatLeadWhatsAppMessage(activeTpl.template, {
-            name: lead.raw_name,
-            city: city || lead.city || "Casablanca",
-            date: trainingDate || recallDate || "",
-            time: recallTime ? recallTime : undefined,
-            missingDocs: missingDocsList,
-            templateId: activeTpl.id,
-          })
-        : activeTpl.template;
-    setWaMessageText(formatted);
-    toast.success(`Modèle réinitialisé à "${activeTpl.title}"`);
-  };
-
-  // Fetch recent message history with this lead
-  const fetchRecentWaMessages = async () => {
-    if (!lead?.sanitized_phone) return;
-    setIsLoadingWaHistory(true);
-    try {
-      const convRes = await fetch(
-        `/api/whatsapp/conversations?search=${encodeURIComponent(lead.sanitized_phone)}`
-      );
-      if (convRes.ok) {
-        const convData = await convRes.json();
-        const convList = convData.conversations || [];
-        if (convList.length > 0) {
-          const convId = convList[0].id;
-          const msgRes = await fetch(`/api/whatsapp/messages?conversationId=${convId}`);
-          if (msgRes.ok) {
-            const msgData = await msgRes.json();
-            const msgs = msgData.messages || [];
-            setRecentWaMessages(msgs.slice(-3));
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load recent WhatsApp messages:", e);
-    } finally {
-      setIsLoadingWaHistory(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRecentWaMessages();
-  }, [lead?.sanitized_phone]);
-
-  // Send message via GoCab WhatsApp CRM API (Meta Cloud API / 360dialog Official Template)
-  const handleSendWhatsAppApi = async () => {
-    if (!waMessageText.trim()) {
-      toast.error("Le message WhatsApp est vide");
-      return;
-    }
-    setIsSendingWa(true);
-    try {
-      const activeTpl = getApproved360Template(selectedTemplateId, live360Templates);
-      const templateNameToUse = activeTpl.name;
-      const res = await fetch("/api/whatsapp/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: lead.sanitized_phone,
-          text: activeTpl.template,
-          templateName: templateNameToUse,
-          templateLanguage: activeTpl.language || "ar",
-          senderName: session?.user?.name || session?.user?.email || "GoCab Operations",
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.message?.status !== "FAILED") {
-        const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        setWaSentSuccessAt(timeNow);
-        setWaDeliveryMode(data.mode || "360DIALOG_WABA");
-        toast.success(`✓ Modèle officiel 360dialog "${templateNameToUse}" envoyé avec succès !`);
-        fetchRecentWaMessages();
-        // Consigner l'envoi dans le journal d'activité
-        fetch(`/api/leads/${lead.id}/activity`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "WHATSAPP_SENT",
-            detail: `Modèle 360dialog (${templateNameToUse}) envoyé : "${activeTpl.template.slice(0, 60)}${activeTpl.template.length > 60 ? "..." : ""}"`,
-            agent: session?.user?.name || session?.user?.email || "Agent",
-          }),
-        }).then(() => fetchActivityLog()).catch(() => {});
-      } else {
-        toast.error(data.error || data.apiError || "Échec d'envoi du message WhatsApp");
-      }
-    } catch (err: any) {
-      console.error("Send WhatsApp error:", err);
-      toast.error(err.message || "Erreur lors de l'envoi WhatsApp");
-    } finally {
-      setIsSendingWa(false);
-    }
-  };
-
-  // Open message in WhatsApp Web / wa.me
-  const handleOpenWhatsAppWeb = () => {
-    const activeTpl = getApproved360Template(selectedTemplateId, live360Templates);
-    const webText = isManualEdit
-      ? waMessageText
-      : formatTemplateForWhatsAppWeb(activeTpl, waMessageText);
-    const url = generateWhatsAppWebURL(lead.sanitized_phone, webText);
-    window.open(url, "_blank");
-    fetch(`/api/leads/${lead.id}/activity`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "WHATSAPP_OPENED",
-        detail: "Discussion ouverte sur WhatsApp Web",
-        agent: session?.user?.name || session?.user?.email || "Agent",
-      }),
-    }).then(() => fetchActivityLog()).catch(() => {});
-  };
 
   // Jump to full WhatsApp CRM tab
   const handleJumpToWhatsAppCrm = () => {
@@ -676,7 +456,14 @@ export default function LeadDrawer({
                 : data.lead?.status_changed_at || nowIso,
             updated_at: data.lead?.updated_at || nowIso,
           };
-          toast.success("Lead mis à jour avec succès");
+          if (data.whatsappSent?.success) {
+            toast.success(
+              `⚡ Formation Fixée ! Convocation WhatsApp ("${data.whatsappSent.templateName}") envoyée avec succès via l'API.`,
+              { duration: 5500 }
+            );
+          } else {
+            toast.success("Lead mis à jour avec succès");
+          }
           onUpdate(committedLead);
           handleClose();
         } else {
@@ -892,8 +679,6 @@ export default function LeadDrawer({
                     const newStatus = e.target.value;
                     setBrandStatus(newStatus);
                     setTrainingDate("");
-                    setIsManualEdit(false);
-                    setWaSentSuccessAt(null);
                     if (newStatus !== "NEW_LEADS") {
                       setIsRecalled(true);
                     }
@@ -930,9 +715,9 @@ export default function LeadDrawer({
 
               {/* Conditional Date Picker for Training fixed */}
               {showDatePicker && (
-                <div className="animate-slide-down">
+                <div className="animate-slide-down space-y-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    Choose Training Date
+                    Date de formation fixée <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -941,9 +726,26 @@ export default function LeadDrawer({
                     min={getTodayDateStr()}
                     className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                   />
-                  <p className="text-xs text-gray-500 mt-2 leading-normal">
-                    📌 Setting <strong>Training fixed</strong> will automatically send the customized WhatsApp invitation and move the driver to the Training board.
-                  </p>
+                  {trainingDate ? (
+                    <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-950">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">⚡</span>
+                        <div>
+                          <div className="font-bold">Convocation WhatsApp Automatique via API 360dialog</div>
+                          <div className="text-[11px] text-emerald-700">
+                            Modèle sélectionné : <strong>{city && /rabat|kenitra/i.test(city) ? "rabat (Session 15h30 Rabat)" : new Date(trainingDate).getDay() === 5 ? "vendredi (Session 11h00)" : "formation (Session 15h00 Maârif)"}</strong>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold text-[10px]">
+                        Envoi Auto
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-2 leading-normal">
+                      📌 Dès l&apos;enregistrement, la convocation officielle WhatsApp 360dialog adaptée à la ville ({city || "Casablanca"}) et au jour de la session sera envoyée automatiquement via l&apos;API sans quitter la page.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1059,8 +861,6 @@ export default function LeadDrawer({
                     setTrainingStatus(e.target.value);
                     setReminderDate("");
                     setPreorderAmount("");
-                    setIsManualEdit(false);
-                    setWaSentSuccessAt(null);
                   }}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                 >
@@ -1344,195 +1144,6 @@ export default function LeadDrawer({
               )}
             </div>
           )}
-
-          {/* ========================================================= */}
-          {/* WHATSAPP INTERFACE & STATUS-DRIVEN CRM HUB */}
-          {/* ========================================================= */}
-          <div className="bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border-2 border-emerald-200/80 rounded-2xl p-4.5 space-y-4 shadow-xs">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-emerald-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-xs text-base font-bold">
-                  💬
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h4 className="text-xs font-bold text-gray-900 tracking-tight">
-                      WhatsApp CRM Direct
-                    </h4>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full border border-emerald-200">
-                      En direct
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 font-mono">
-                    {formatDisplayPhone(lead.sanitized_phone)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Jump to full CRM Tab */}
-              <button
-                type="button"
-                onClick={handleJumpToWhatsAppCrm}
-                title="Ouvrir dans l'interface complète WhatsApp CRM"
-                className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 text-2xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
-              >
-                <span>Accéder au CRM</span>
-                <span className="text-xs">↗</span>
-              </button>
-            </div>
-
-            {/* Template Selector & 360dialog Approved Badge */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-2xs">
-                <label className="font-bold text-emerald-950 flex items-center gap-1.5">
-                  <span>⚡</span> Modèles officiels 360dialog :
-                </label>
-                <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                  {live360Templates.length} Modèle(s) Approuvé(s)
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => handleSelectCustomTemplate(e.target.value)}
-                  className="w-full bg-white border border-emerald-200 rounded-xl px-2.5 py-1.5 text-xs text-gray-800 font-semibold focus:ring-2 focus:ring-emerald-400 focus:outline-none"
-                >
-                  {live360Templates.map((tmpl) => (
-                    <option key={tmpl.id} value={tmpl.id}>
-                      {tmpl.icon} {tmpl.title} · {tmpl.language.toUpperCase()} ({tmpl.category})
-                    </option>
-                  ))}
-                </select>
-
-                {isManualEdit && (
-                  <button
-                    type="button"
-                    onClick={handleResetTemplate}
-                    title="Réinitialiser au texte initial approuvé 360dialog"
-                    className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-3xs font-bold shrink-0 transition-colors cursor-pointer"
-                  >
-                    ↺ Reset
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Message Textarea */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px] text-gray-500">
-                <span className="text-3xs text-emerald-900/70 font-semibold">
-                  Aperçu exact du modèle 360dialog :
-                </span>
-                <span className="text-3xs font-mono">{waMessageText.length} car.</span>
-              </div>
-
-              <textarea
-                rows={4}
-                readOnly={!isManualEdit}
-                value={waMessageText}
-                onChange={(e) => {
-                  setWaMessageText(e.target.value);
-                  setIsManualEdit(true);
-                }}
-                placeholder="Écrivez le message WhatsApp..."
-                className="w-full bg-emerald-50/30 border border-emerald-200 rounded-xl p-3 text-xs text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none font-sans leading-relaxed resize-none shadow-inner"
-              />
-
-              {/* Official 360dialog Components Info Strip */}
-              <div className="flex items-center gap-1.5 flex-wrap text-3xs text-emerald-900/80 pt-0.5">
-                <span className="font-semibold text-emerald-950">Inclus dans l&apos;envoi API :</span>
-                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-emerald-800">
-                  📍 Carte GPS Maârif
-                </span>
-                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-blue-700">
-                  🔗 Bouton Localisation
-                </span>
-                <span className="bg-white px-1.5 py-0.5 rounded border border-emerald-200 font-semibold text-emerald-800">
-                  ⚡ Hors fenêtre 24h OK
-                </span>
-              </div>
-            </div>
-
-            {/* Success feedback badge */}
-            {waSentSuccessAt && (
-              <div className="p-2.5 bg-emerald-100 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between animate-fadeIn">
-                <span className="flex items-center gap-1.5 font-bold">
-                  <span>✓</span> Message WhatsApp envoyé à {waSentSuccessAt}
-                </span>
-                <span className="text-3xs font-mono bg-white px-1.5 py-0.5 rounded text-emerald-800">
-                  {waDeliveryMode === "360DIALOG_WABA"
-                    ? "360dialog WABA"
-                    : waDeliveryMode === "META_GRAPH_API" || waDeliveryMode === "META_CLOUD_API"
-                    ? "Meta API Direct"
-                    : "GoCab CRM"}
-                </span>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleSendWhatsAppApi}
-                disabled={isSendingWa || !waMessageText.trim()}
-                className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isSendingWa ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span>⚡</span>
-                )}
-                <span>Envoyer via WhatsApp API</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenWhatsAppWeb}
-                disabled={!waMessageText.trim()}
-                className="w-full py-2.5 px-3 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>💬</span>
-                <span>Ouvrir WhatsApp Web</span>
-              </button>
-            </div>
-
-            {/* Mini Message History */}
-            {recentWaMessages.length > 0 && (
-              <div className="pt-2 border-t border-emerald-100/80 space-y-1.5">
-                <div className="flex items-center justify-between text-3xs font-bold text-emerald-900">
-                  <span>Derniers messages échangés :</span>
-                  <button
-                    type="button"
-                    onClick={handleJumpToWhatsAppCrm}
-                    className="text-emerald-700 hover:underline cursor-pointer"
-                  >
-                    Voir toute la discussion ({recentWaMessages.length})
-                  </button>
-                </div>
-                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                  {recentWaMessages.map((m: any) => (
-                    <div
-                      key={m.id}
-                      className={`p-2 rounded-lg text-3xs leading-relaxed ${
-                        m.direction === "OUTBOUND"
-                          ? "bg-white border border-emerald-100 text-gray-700 ml-4"
-                          : "bg-emerald-100/70 border border-emerald-200 text-emerald-950 mr-4"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-[9px] text-gray-400 mb-0.5">
-                        <span className="font-bold text-gray-600">{m.direction === "OUTBOUND" ? "Vous" : lead.raw_name}</span>
-                        <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                      </div>
-                      <p className="line-clamp-2">{m.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Notes Section */}
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">

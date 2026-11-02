@@ -8,6 +8,7 @@ import {
   GOCAB_HQ_LOCATION,
   GOCAB_RABAT_LOCATION,
   detectApproved360Template,
+  resolve360TemplateByDate,
 } from "@/lib/whatsapp";
 
 export {
@@ -1114,6 +1115,79 @@ export async function sendWhatsAppWelcomeMenu(phoneNumber: string, conversationI
       { id: "FLOW_GET_INFO", title: "2. معلومات GoCab" },
     ],
   });
+}
+
+/**
+ * Automatically checks the scheduled date and city to dispatch the official approved
+ * WhatsApp training invitation through the WhatsApp API directly.
+ * 
+ * Rules:
+ * - City matches Rabat / Kenitra -> "rabat" template (Session 15h30 Rabat)
+ * - Scheduled training date is Friday -> "vendredi" template (Session 11h00 Vendredi)
+ * - Casablanca & other cities / days -> "formation" template (Session 15h00 Maârif)
+ */
+export async function sendAutomatedTrainingInvitationWhatsApp(
+  lead: {
+    id?: string;
+    raw_name: string;
+    sanitized_phone: string;
+    city?: string | null;
+    reminder_date?: Date | string | null;
+  },
+  senderName = "GoCab Formation"
+): Promise<{
+  success: boolean;
+  templateName?: string;
+  messageId?: string;
+  deliveryMode?: string;
+  error?: string;
+}> {
+  try {
+    const cleanPhone = normalizeWhatsAppPhone(lead.sanitized_phone);
+    if (!cleanPhone) {
+      return { success: false, error: "Numéro de téléphone invalide" };
+    }
+
+    if (!lead.reminder_date) {
+      return { success: false, error: "Date de formation non définie" };
+    }
+
+    const { templates: liveTemplates } = await fetchLive360Templates();
+    const resolvedTpl = resolve360TemplateByDate(lead.reminder_date, liveTemplates, lead.city);
+
+    const res = await sendOutboundWhatsAppMessage({
+      phoneNumber: cleanPhone,
+      text: resolvedTpl.template,
+      templateName: resolvedTpl.name,
+      templateLanguage: resolvedTpl.language || "ar",
+      senderName,
+    });
+
+    if (lead.id) {
+      const formattedDate = new Date(lead.reminder_date).toLocaleDateString("fr-FR");
+      const cityLabel = lead.city || "Casablanca";
+      await prisma.leadActivityLog
+        .create({
+          data: {
+            lead_id: lead.id,
+            agent: senderName,
+            action: "WHATSAPP_AUTO_INVITE",
+            detail: `Convocation WhatsApp officielle ("${resolvedTpl.name}") envoyée automatiquement via l'API pour la session du ${formattedDate} (${cityLabel}).`,
+          },
+        })
+        .catch(() => {});
+    }
+
+    return {
+      success: res.success,
+      templateName: res.usedTemplate || resolvedTpl.name,
+      messageId: res.message?.id || res.message?.wa_message_id,
+      deliveryMode: res.mode,
+    };
+  } catch (err: any) {
+    console.error("sendAutomatedTrainingInvitationWhatsApp error:", err);
+    return { success: false, error: err.message };
+  }
 }
 
 /**
