@@ -182,8 +182,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Touch sync state so all open sessions refresh immediately
-    touchSyncState("leads").catch(() => {});
+    // Touch sync state so all open sessions refresh immediately and cloud WAL flushes
+    await touchSyncState("leads");
 
     return NextResponse.json({
       success: true,

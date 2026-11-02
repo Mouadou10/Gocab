@@ -7,10 +7,32 @@ import { TargetSnapshot, getTargetForDate, getTargetsForRange, parseTargetHistor
 interface LeadsScorecardProps {
   leads: any[];
   onSelectStatus?: (status: string) => void;
+  selectedDate?: string;
+  onDateChange?: (date: string) => void;
 }
 
-export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecardProps) {
-  const [dateFilter, setDateFilter] = useState<string>('');
+export default function LeadsScorecard({
+  leads,
+  onSelectStatus,
+  selectedDate,
+  onDateChange,
+}: LeadsScorecardProps) {
+  const [internalDateFilter, setInternalDateFilter] = useState<string>(() => {
+    if (selectedDate !== undefined) return selectedDate;
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("gocab_leads_date_filter");
+      if (saved !== null) return saved;
+    }
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const dateFilter = selectedDate !== undefined ? selectedDate : internalDateFilter;
+
+  const setDateFilter = (newVal: string) => {
+    setInternalDateFilter(newVal);
+    onDateChange?.(newVal);
+  };
+
   const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
   const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
   const [targetConversionRate, setTargetConversionRate] = useState(20);
@@ -18,9 +40,11 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
   const [currentTargets, setCurrentTargets] = useState<any>(null);
 
   useEffect(() => {
-    // Default to today
-    const today = new Date().toISOString().split('T')[0];
-    setDateFilter(today);
+    // Only set default if no date was supplied and no internal date exists
+    if (selectedDate === undefined && !internalDateFilter) {
+      const today = new Date().toISOString().split("T")[0];
+      setInternalDateFilter(today);
+    }
 
     // Fetch objectives and date-effective history from Settings parameters
     fetch('/api/settings')
@@ -277,6 +301,28 @@ export default function LeadsScorecard({ leads, onSelectStatus }: LeadsScorecard
               }`}
             >
               Hier
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFilter("2026-10-30")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                dateFilter === "2026-10-30"
+                  ? "bg-white text-navy font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              30 Oct.
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFilter("2026-10-02")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                dateFilter === "2026-10-02"
+                  ? "bg-white text-navy font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              2 Oct. (65)
             </button>
             <button
               type="button"

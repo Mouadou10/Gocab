@@ -131,6 +131,28 @@ export const DEFAULT_TARGET_HISTORY: TargetSnapshot[] = [
     target_monthly_inspection_rate: 90,
     target_active_fleet_rate: 85,
   },
+  {
+    effective_date: "2026-11-02",
+    target_daily_calls: 153,
+    target_daily_training_fixed: 46,
+    target_daily_attended: 30,
+    target_daily_preorders: 12,
+    target_daily_tasks: 10,
+    target_lead_conversion_rate: 30,
+    target_training_showup_rate: 65,
+    target_preorder_conversion_rate: 25,
+    target_min_collection_rate: 50,
+    target_collection_rate: 60,
+    target_monthly_churn_rate: 20,
+    target_max_downtime_days: 10,
+    target_avg_available_days: 1.0,
+    target_max_missing_docs_days: 3.0,
+    target_max_vidange_hours: 1.0,
+    target_max_field_mission_hours: 3.0,
+    target_sla_resolution_rate: 95,
+    target_monthly_inspection_rate: 90,
+    target_active_fleet_rate: 85,
+  },
 ];
 
 function normalizeSnapshot(raw: any, fallback?: any): TargetSnapshot {

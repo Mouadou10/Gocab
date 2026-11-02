@@ -405,7 +405,7 @@ export function prepareDeterministicWriteArgs(
   args: any[]
 ): any[] {
   const cloned = deepClonePreserveSpecial(args);
-  if (model === "setting") return cloned;
+  if (model.toLowerCase() === "setting") return cloned;
 
   const first = cloned[0];
   if (!first || typeof first !== "object") return cloned;

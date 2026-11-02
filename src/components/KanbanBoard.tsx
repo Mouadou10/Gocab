@@ -87,7 +87,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
   BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
   ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "flagged-drivers", "whatsapp"],
-  FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
+  FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
   FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
   OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
@@ -354,6 +354,20 @@ export default function KanbanBoard() {
   const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [trainingDateFilter, setTrainingDateFilter] = useState<string>("ALL");
+  const [leadsDateFilter, setLeadsDateFilter] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("gocab_leads_date_filter");
+      if (saved !== null) return saved;
+    }
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const handleLeadsDateChange = (val: string) => {
+    setLeadsDateFilter(val);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("gocab_leads_date_filter", val);
+    }
+  };
 
   // Restore tab on mount/refresh or default to role's assigned page on sign in
   useEffect(() => {
@@ -960,6 +974,75 @@ export default function KanbanBoard() {
       return false;
     };
 
+    // Helper: Match leads page columns to the current leadsDateFilter
+    const isLeadMatchingLeadsDateFilter = (l: Lead, filter: string): boolean => {
+      if (!filter || filter === "ALL" || filter === "") return true;
+
+      const today = new Date();
+      const todayIso = today.toISOString().split("T")[0];
+      const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+      const isTodayFilter = filter === "TODAY" || filter === todayIso || filter === todayLocal;
+
+      if (isTodayFilter) {
+        if (isStatusChangedToday(l)) return true;
+        if (l.reminder_date && isScheduledDateToday(l.reminder_date)) return true;
+      }
+
+      if (l.status_changed_at) {
+        try {
+          const d = new Date(l.status_changed_at);
+          if (!isNaN(d.getTime())) {
+            const changedUtc = d.toISOString().split("T")[0];
+            const changedLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            if (isTodayFilter) {
+              if (changedUtc === todayIso || changedUtc === todayLocal || changedLocal === todayIso || changedLocal === todayLocal) {
+                return true;
+              }
+            } else if (changedUtc === filter || changedLocal === filter) {
+              return true;
+            }
+          }
+        } catch {}
+      }
+
+      if (l.reminder_date) {
+        try {
+          const rDate = new Date(l.reminder_date);
+          if (!isNaN(rDate.getTime())) {
+            const rUtc = rDate.toISOString().split("T")[0];
+            const rLocal = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}-${String(rDate.getDate()).padStart(2, "0")}`;
+            if (isTodayFilter) {
+              if (rUtc === todayIso || rUtc === todayLocal || rLocal === todayIso || rLocal === todayLocal) {
+                return true;
+              }
+            } else if (rUtc === filter || rLocal === filter) {
+              return true;
+            }
+          }
+        } catch {}
+      }
+
+      if ((l as any).updated_at) {
+        try {
+          const uDate = new Date((l as any).updated_at);
+          if (!isNaN(uDate.getTime())) {
+            const uUtc = uDate.toISOString().split("T")[0];
+            const uLocal = `${uDate.getFullYear()}-${String(uDate.getMonth() + 1).padStart(2, "0")}-${String(uDate.getDate()).padStart(2, "0")}`;
+            if (isTodayFilter) {
+              if (uUtc === todayIso || uUtc === todayLocal || uLocal === todayIso || uLocal === todayLocal) {
+                return true;
+              }
+            } else if (uUtc === filter || uLocal === filter) {
+              return true;
+            }
+          }
+        } catch {}
+      }
+
+      return false;
+    };
+
     if (activeTab === "leads") {
       if (column === "NEW_LEADS") {
         const allNewLeads = filteredLeads
@@ -999,8 +1082,7 @@ export default function KanbanBoard() {
             (l.brand_status || "").toLowerCase() === "training fixed";
           if (!isMatch) return false;
           if (isSearching || l.id === activeDragId) return true;
-          if (!l.reminder_date && isStatusChangedToday(l)) return true;
-          return isLeadTrainingDateMatch(l, trainingDateFilter);
+          return isLeadMatchingLeadsDateFilter(l, leadsDateFilter);
         });
       }
 
@@ -1008,8 +1090,7 @@ export default function KanbanBoard() {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== "to recall") return false;
           if (isSearching || l.id === activeDragId) return true;
-          if (l.reminder_date && isDateMatchToday(l.reminder_date)) return true;
-          return isStatusChangedToday(l);
+          return isLeadMatchingLeadsDateFilter(l, leadsDateFilter);
         });
       }
 
@@ -1017,7 +1098,7 @@ export default function KanbanBoard() {
       return filteredLeads.filter((l) => {
         if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== column.toLowerCase()) return false;
         if (isSearching || l.id === activeDragId) return true;
-        return isStatusChangedToday(l);
+        return isLeadMatchingLeadsDateFilter(l, leadsDateFilter);
       });
     } else {
       // Training Tab
@@ -2262,6 +2343,8 @@ export default function KanbanBoard() {
               <LeadsScorecard
                 leads={leads}
                 onSelectStatus={handleBringColumnToSecond}
+                selectedDate={leadsDateFilter}
+                onDateChange={handleLeadsDateChange}
               />
             )}
             {activeTab === "training" && (

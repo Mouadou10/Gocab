@@ -255,6 +255,9 @@ function wrapModelDelegate(modelProp: string | symbol): any {
               ...preparedArgs
             );
             recordWalEntry(modelName, methodName, preparedArgs, res);
+            if (isCloudWalEnabled()) {
+              await pushSqliteSnapshotNow().catch(() => {});
+            }
             scheduleSqliteSnapshotPush();
             return res;
           }
@@ -277,6 +280,9 @@ function wrapModelDelegate(modelProp: string | symbol): any {
                 ...preparedArgs
               );
               recordWalEntry(modelName, methodName, preparedArgs, res);
+              if (isCloudWalEnabled()) {
+                await pushSqliteSnapshotNow().catch(() => {});
+              }
               scheduleSqliteSnapshotPush();
               return res;
             }
@@ -300,6 +306,7 @@ function createFailoverPrismaClient(): PrismaClient {
             const fb = await getSyncedFallbackClient(false);
             const res = await fb.$transaction(arg, options);
             if (isCloudWalEnabled()) {
+              await pushSqliteSnapshotNow().catch(() => {});
               scheduleSqliteSnapshotPush();
             }
             return res;
@@ -312,6 +319,7 @@ function createFailoverPrismaClient(): PrismaClient {
               const fb = await getSyncedFallbackClient(false);
               const res = await fb.$transaction(arg, options);
               if (isCloudWalEnabled()) {
+                await pushSqliteSnapshotNow().catch(() => {});
                 scheduleSqliteSnapshotPush();
               }
               return res;
@@ -333,6 +341,7 @@ function createFailoverPrismaClient(): PrismaClient {
             const fb = await getSyncedFallbackClient(false);
             const res = await (fb as any)[prop](...args);
             if (isRawWrite && isCloudWalEnabled()) {
+              await pushSqliteSnapshotNow().catch(() => {});
               scheduleSqliteSnapshotPush();
             }
             return res;
@@ -345,6 +354,7 @@ function createFailoverPrismaClient(): PrismaClient {
               const fb = await getSyncedFallbackClient(false);
               const res = await (fb as any)[prop](...args);
               if (isRawWrite && isCloudWalEnabled()) {
+                await pushSqliteSnapshotNow().catch(() => {});
                 scheduleSqliteSnapshotPush();
               }
               return res;

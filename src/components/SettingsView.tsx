@@ -40,7 +40,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
   BRAND_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
   ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "whatsapp"],
-  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
+  FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
   FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
   OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],

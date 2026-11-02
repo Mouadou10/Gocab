@@ -33,15 +33,15 @@ const DEFAULT_SETTINGS: Record<string, string> = {
     LEAD_ACQUISITION_JR: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
     BRAND_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "whatsapp"],
     ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "whatsapp"],
-    FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
+    FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
     FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
     FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
     OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
     ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
   }),
   department_weekly_targets: JSON.stringify({
-    target_daily_calls: 133,
-    target_daily_training_fixed: 40,
+    target_daily_calls: 153,
+    target_daily_training_fixed: 46,
     target_weekly_leads: 250,
     target_daily_preorders: 10,
     target_daily_attended: 26,
@@ -163,8 +163,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Touch sync state so all open sessions refresh immediately
-    touchSyncState("settings").catch(() => {});
+    // Touch sync state so all open sessions refresh immediately and cloud WAL flushes
+    await touchSyncState("settings");
 
     return NextResponse.json({ setting });
   } catch (error) {
