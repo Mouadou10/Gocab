@@ -1330,13 +1330,12 @@ export async function routeConversationToLeadAcquisition(
 
   if (sendBotReply && (await hasInboundWithin24h(conversationId))) {
     const replyText =
-      `👋 Merci pour votre intérêt pour *GoCab* !\n\n` +
-      `Votre demande est transmise directement à notre équipe *Acquisition & Recrutement Chauffeurs*.\n` +
-      `📋 Pour accélérer votre inscription, merci de nous indiquer ci-dessous :\n` +
-      `• Votre *Nom et Prénom*\n` +
-      `• Votre *Ville* (Casablanca, Rabat...)\n` +
-      `• Si vous possédez le *Permis B (+2 ans)*\n\n` +
-      `Un conseiller prend le relais dans cette discussion !`;
+      `تم تحويل طلبك مباشرةً إلى فريق الإتصال و التواصل مع السائقين الجدد.\n\n` +
+      `📋 لتسريع عملية التسجيل، يُرجى تزويدنا بالمعلومات التالية:\n` +
+      `* *اسمك الكامل*\n` +
+      `* *مدينتك* (الدار البيضاء، الرباط، إلخ)\n` +
+      `* *هل تحمل رخصة قيادة من الفئة ب* (سنتان أو أكثر)؟\n\n` +
+      `سيتواصل معك أحد مستشارينا قريبًا!`;
 
     await sendOutboundWhatsAppMessage({
       conversationId,
