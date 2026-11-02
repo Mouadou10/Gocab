@@ -281,8 +281,9 @@ export function deserializeFromWal(val: any): any {
 
 /**
  * Deduplicates WAL entries by ID, preserves strict chronological ordering,
- * and compacts superseded `Setting` upserts (such as `data_sync_state`) so the
- * WAL remains lightweight regardless of polling/sync frequency.
+ * compacts superseded `Setting` upserts (such as `data_sync_state`), and
+ * coalesces repeated `update` mutations on the same `(model, where.id)` record
+ * so the WAL remains lightweight regardless of polling/sync frequency.
  */
 export function compactWalEntries(entries: WalEntry[]): WalEntry[] {
   const byId = new Map<string, WalEntry>();
@@ -298,24 +299,100 @@ export function compactWalEntries(entries: WalEntry[]): WalEntry[] {
 
   // Track the latest index of `setting.upsert` for each setting key
   const latestSettingUpsertIdx = new Map<string, number>();
+  // Track the latest index & merged data for single-record `model.update` by `model:id`
+  const latestRecordUpdateIdx = new Map<string, number>();
+  const mergedRecordUpdateData = new Map<string, Record<string, any>>();
+
   sorted.forEach((entry, idx) => {
     if (entry.model === "setting" && entry.method === "upsert") {
       const settingKey = entry.args?.[0]?.where?.key;
       if (typeof settingKey === "string" && settingKey.length > 0) {
         latestSettingUpsertIdx.set(settingKey, idx);
       }
+      return;
+    }
+
+    // If a bulk/destructive operation occurs on a model, do not merge earlier updates across it
+    if (
+      entry.method === "delete" ||
+      entry.method === "deleteMany" ||
+      entry.method === "updateMany"
+    ) {
+      for (const key of Array.from(latestRecordUpdateIdx.keys())) {
+        if (key.startsWith(`${entry.model}:`)) {
+          latestRecordUpdateIdx.delete(key);
+          mergedRecordUpdateData.delete(key);
+        }
+      }
+      return;
+    }
+
+    if (entry.method === "update") {
+      const firstArg = entry.args?.[0];
+      const where = firstArg?.where;
+      const data = firstArg?.data;
+      if (
+        where &&
+        typeof where === "object" &&
+        Object.keys(where).length === 1 &&
+        typeof where.id === "string" &&
+        where.id.length > 0 &&
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data)
+      ) {
+        const recordKey = `${entry.model}:${where.id}`;
+        const prevData = mergedRecordUpdateData.get(recordKey) || {};
+        mergedRecordUpdateData.set(recordKey, { ...prevData, ...data });
+        latestRecordUpdateIdx.set(recordKey, idx);
+      }
     }
   });
 
-  return sorted.filter((entry, idx) => {
+  const compacted: WalEntry[] = [];
+  sorted.forEach((entry, idx) => {
     if (entry.model === "setting" && entry.method === "upsert") {
       const settingKey = entry.args?.[0]?.where?.key;
       if (typeof settingKey === "string" && settingKey.length > 0) {
-        return latestSettingUpsertIdx.get(settingKey) === idx;
+        if (latestSettingUpsertIdx.get(settingKey) !== idx) return;
+      }
+      compacted.push(entry);
+      return;
+    }
+
+    if (entry.method === "update") {
+      const firstArg = entry.args?.[0];
+      const where = firstArg?.where;
+      const data = firstArg?.data;
+      if (
+        where &&
+        typeof where === "object" &&
+        Object.keys(where).length === 1 &&
+        typeof where.id === "string" &&
+        where.id.length > 0 &&
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data)
+      ) {
+        const recordKey = `${entry.model}:${where.id}`;
+        if (latestRecordUpdateIdx.has(recordKey)) {
+          if (latestRecordUpdateIdx.get(recordKey) !== idx) return;
+          const mergedData = mergedRecordUpdateData.get(recordKey);
+          if (mergedData) {
+            compacted.push({
+              ...entry,
+              args: [{ ...firstArg, data: mergedData }, ...entry.args.slice(1)],
+            });
+            return;
+          }
+        }
       }
     }
-    return true;
+
+    compacted.push(entry);
   });
+
+  return compacted;
 }
 
 /**
@@ -370,6 +447,18 @@ export function recordWalEntry(
   }
 
   ensureWalCollections();
+
+  // Skip no-op bulk writes (e.g. periodic "To Recall" checks matching 0 rows) to keep
+  // Drive write traffic low and avoid rate-limit (403/429) responses.
+  if (
+    (method === "updateMany" || method === "deleteMany") &&
+    result &&
+    typeof result === "object" &&
+    typeof (result as any).count === "number" &&
+    (result as any).count === 0
+  ) {
+    return null;
+  }
 
   const recordedArgs = deepClonePreserveSpecial(preparedArgs);
   const first = recordedArgs[0];
@@ -580,7 +669,8 @@ async function resolveOrRecreateWalFileId(token: string): Promise<string | null>
 
 async function driveFetchWithRetry(
   urlBuilder: (fileId: string) => string,
-  init: RequestInit
+  init: RequestInit,
+  timeoutMs = 6000
 ): Promise<Response | null> {
   ensureWalCollections();
   let token = await getCachedDriveAccessToken(false);
@@ -594,7 +684,7 @@ async function driveFetchWithRetry(
       Authorization: `Bearer ${token}`,
     },
     cache: "no-store",
-    signal: AbortSignal.timeout(6000),
+    signal: AbortSignal.timeout(timeoutMs),
   }).catch(() => null);
 
   if (res && res.status === 401) {
@@ -607,7 +697,7 @@ async function driveFetchWithRetry(
         Authorization: `Bearer ${token}`,
       },
       cache: "no-store",
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(timeoutMs),
     }).catch(() => null);
   }
 
@@ -622,7 +712,7 @@ async function driveFetchWithRetry(
           Authorization: `Bearer ${token}`,
         },
         cache: "no-store",
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(timeoutMs),
       }).catch(() => null);
     }
   }
@@ -797,7 +887,8 @@ export async function syncCloudWalToClient(
 
       const mediaRes = await driveFetchWithRetry(
         (id) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
-        { method: "GET" }
+        { method: "GET" },
+        20000
       );
       if (!mediaRes || !mediaRes.ok) {
         state.lastCheckedAt = Date.now();
@@ -892,6 +983,51 @@ export async function pullSqliteSnapshotIfNewer(
   }
 }
 
+/**
+ * Reads the remote WAL document. Returns `ok: false` whenever the read could not be
+ * trusted (network error, timeout, 403/429 rate limit, invalid JSON). Callers MUST NOT
+ * overwrite the remote WAL after a failed read — doing so would erase every mutation
+ * recorded by other containers (this was the root cause of lead statuses reverting).
+ */
+async function readRemoteWal(): Promise<{
+  ok: boolean;
+  entries: WalEntry[];
+  versionKey: string | null;
+}> {
+  const [metaRes, mediaRes] = await Promise.all([
+    driveFetchWithRetry(
+      (id) => `https://www.googleapis.com/drive/v3/files/${id}?fields=id,version,modifiedTime`,
+      { method: "GET" }
+    ),
+    driveFetchWithRetry(
+      (id) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
+      { method: "GET" },
+      20000
+    ),
+  ]);
+
+  let versionKey: string | null = null;
+  if (metaRes && metaRes.ok) {
+    const meta = await metaRes.json().catch(() => null);
+    versionKey = meta ? `${meta.version || ""}:${meta.modifiedTime || ""}` : null;
+  }
+
+  if (!mediaRes || !mediaRes.ok) return { ok: false, entries: [], versionKey };
+  const text = await mediaRes.text().catch(() => null);
+  if (text === null) return { ok: false, entries: [], versionKey };
+  if (text.trim() === "") return { ok: true, entries: [], versionKey };
+  let doc: WalDocument | null = null;
+  try {
+    doc = JSON.parse(text) as WalDocument;
+  } catch {
+    return { ok: false, entries: [], versionKey };
+  }
+  if (!doc || !Array.isArray(doc.entries)) return { ok: false, entries: [], versionKey };
+  return { ok: true, entries: doc.entries, versionKey };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function flushPendingWalToDrive(): Promise<void> {
   ensureWalCollections();
   if (!state.pendingEntries || state.pendingEntries.length === 0) {
@@ -899,58 +1035,64 @@ async function flushPendingWalToDrive(): Promise<void> {
   }
 
   const batch = state.pendingEntries.splice(0, state.pendingEntries.length);
+  const MAX_ATTEMPTS = 5;
 
   try {
-    // 1. Read latest remote WAL so concurrent writes from other Lambdas are merged
-    let remoteEntries: WalEntry[] = [];
-    const mediaRes = await driveFetchWithRetry(
-      (id) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
-      { method: "GET" }
-    );
-    if (mediaRes && mediaRes.ok) {
-      const doc = (await mediaRes.json().catch(() => null)) as WalDocument | null;
-      if (Array.isArray(doc?.entries)) {
-        remoteEntries = doc!.entries;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        // Jittered backoff to de-synchronize concurrent Lambda writers
+        await sleep(150 + Math.floor(Math.random() * 350) * attempt);
       }
-    }
 
-    // Replay any unseen remote entries onto local client as well
-    const rawClient = state.rawClientGetter?.();
-    if (rawClient && remoteEntries.length > 0) {
-      await replayWalEntriesOntoClient(rawClient, remoteEntries);
-    }
+      // 1. Read latest remote WAL. Abort (and re-queue) if the read is not trustworthy.
+      const remote = await readRemoteWal();
+      if (!remote.ok) continue;
 
-    // 2. Merge & compact remote + local batch
-    const mergedEntries = compactWalEntries([...remoteEntries, ...batch]);
-    const payload: WalDocument = {
-      version: Date.now(),
-      updatedAt: new Date().toISOString(),
-      entries: mergedEntries,
-    };
-
-    const uploadRes = await driveFetchWithRetry(
-      (id) =>
-        `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media&fields=id,version,modifiedTime`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json; charset=UTF-8" },
-        body: JSON.stringify(payload),
+      // Replay any unseen remote entries onto local client as well
+      const rawClient = state.rawClientGetter?.();
+      if (rawClient && remote.entries.length > 0) {
+        await replayWalEntriesOntoClient(rawClient, remote.entries);
       }
-    );
 
-    if (!uploadRes || !uploadRes.ok) {
-      // Re-queue batch at front so a transient network hiccup never drops mutations
-      state.pendingEntries!.unshift(...batch);
+      // 2. Merge & compact remote + local batch (never drops remote entries)
+      const mergedEntries = compactWalEntries([...remote.entries, ...batch]);
+
+      const payload: WalDocument = {
+        version: Date.now(),
+        updatedAt: new Date().toISOString(),
+        entries: mergedEntries,
+      };
+
+      // 3. Upload merged WAL
+      const uploadRes = await driveFetchWithRetry(
+        (id) =>
+          `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media&fields=id,version,modifiedTime`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json; charset=UTF-8" },
+          body: JSON.stringify(payload),
+        },
+        20000
+      );
+      if (!uploadRes || !uploadRes.ok) continue;
+
+      const updatedMeta = await uploadRes.json().catch(() => null);
+      if (updatedMeta) {
+        state.lastDriveVersion = `${updatedMeta.version || ""}:${updatedMeta.modifiedTime || ""}`;
+      }
+      state.lastCheckedAt = Date.now();
       return;
     }
 
-    const updatedMeta = await uploadRes.json().catch(() => null);
-    if (updatedMeta) {
-      state.lastDriveVersion = `${updatedMeta.version || ""}:${
-        updatedMeta.modifiedTime || ""
-      }`;
+    // All attempts failed — re-queue batch so mutations are never dropped
+    console.warn(`[CloudWAL] Flush failed after ${MAX_ATTEMPTS} attempts; re-queued ${batch.length} entries.`);
+    state.pendingEntries!.unshift(...batch);
+    if (!state.pendingFlushTimer) {
+      state.pendingFlushTimer = setTimeout(() => {
+        state.pendingFlushTimer = null;
+        void pushSqliteSnapshotNow();
+      }, 2000);
     }
-    state.lastCheckedAt = Date.now();
   } catch {
     state.pendingEntries!.unshift(...batch);
   }

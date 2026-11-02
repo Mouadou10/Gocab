@@ -11,7 +11,7 @@
  * Implements @dnd-kit drag-and-drop and sliding sidebar drawer detail views.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import toast from "react-hot-toast";
@@ -25,6 +25,9 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import KanbanColumn from "./KanbanColumn";
@@ -411,20 +414,27 @@ export default function KanbanBoard() {
       }
 
       const updatePatch = data.updateData || {};
+      const nowIso = new Date().toISOString();
       setLeads((prev) =>
-        prev.map((l) =>
-          selectedLeadIds.includes(l.id)
-            ? {
-                ...l,
-                ...updatePatch,
-                reminder_date: bulkDate
-                  ? new Date(bulkDate).toISOString()
-                  : updatePatch.reminder_date !== undefined
-                  ? updatePatch.reminder_date
-                  : l.reminder_date,
-              }
-            : l
-        )
+        prev.map((l) => {
+          if (!selectedLeadIds.includes(l.id)) return l;
+          const nextLead: Lead = {
+            ...l,
+            ...updatePatch,
+            updated_at: updatePatch.updated_at || nowIso,
+            status_changed_at:
+              bulkStatus === "NEW_LEADS"
+                ? null
+                : updatePatch.status_changed_at || nowIso,
+            reminder_date: bulkDate
+              ? new Date(bulkDate).toISOString()
+              : updatePatch.reminder_date !== undefined
+              ? updatePatch.reminder_date
+              : l.reminder_date,
+          };
+          saveLocalLeadOverride(nextLead);
+          return nextLead;
+        })
       );
 
       toast.success(`✅ Statut mis à jour pour ${selectedLeadIds.length} lead(s) !`);
@@ -934,7 +944,8 @@ export default function KanbanBoard() {
             l.board_column === "VEHICLE_ASSIGNMENT" ||
             (l.brand_status || "").toLowerCase() === "training fixed";
           if (!isMatch) return false;
-          if (isSearching) return true;
+          if (isSearching || l.id === activeDragId) return true;
+          if (!l.reminder_date && isStatusChangedToday(l)) return true;
           return isLeadTrainingDateMatch(l, trainingDateFilter);
         });
       }
@@ -942,7 +953,7 @@ export default function KanbanBoard() {
       if (column === "To Recall") {
         return filteredLeads.filter((l) => {
           if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== "to recall") return false;
-          if (isSearching) return true;
+          if (isSearching || l.id === activeDragId) return true;
           if (l.reminder_date && isDateMatchToday(l.reminder_date)) return true;
           return isStatusChangedToday(l);
         });
@@ -951,7 +962,7 @@ export default function KanbanBoard() {
       // All other BRAND_PRE_FILTER columns (Not interested, No response 1, No response 2, Wrong number, Already a client)
       return filteredLeads.filter((l) => {
         if (l.board_column !== "BRAND_PRE_FILTER" || (l.brand_status || "").toLowerCase() !== column.toLowerCase()) return false;
-        if (isSearching) return true;
+        if (isSearching || l.id === activeDragId) return true;
         return isStatusChangedToday(l);
       });
     } else {
@@ -1050,12 +1061,95 @@ export default function KanbanBoard() {
 
   // ─── Drag & Drop Handlers ───────────────────────────────
 
+  const lastDragTargetColumnRef = useRef<string | null>(null);
+  const dragStartLeadRef = useRef<Lead | null>(null);
+
+  /**
+   * Custom collision detector for Kanban columns:
+   * Because NEW_LEADS has up to 34 stacked cards (~3,500px tall) while status columns
+   * have fewer cards, `closestCorners` alone measures distance to top/bottom column
+   * corners (`dy = 500..3000px`) vs adjacent NEW_LEADS cards (`dx = 150px, dy = 0px`)
+   * and snaps dragged cards back to NEW_LEADS. Prioritizing `pointerWithin` on column
+   * droppables ensures dropping anywhere inside a column always lands in that column.
+   */
+  const kanbanCollisionDetection: CollisionDetection = useCallback((args) => {
+    const isColumnDrag = args.active.data.current?.type === "Column";
+    const columnIdSet = new Set<string>([...LEADS_COLUMNS, ...TRAINING_COLUMNS, "VEHICLE_ASSIGNMENT", "Accept offer"]);
+
+    if (isColumnDrag) {
+      const columnContainers = args.droppableContainers.filter(
+        (c) => c.data.current?.type === "Column" || columnIdSet.has(String(c.id))
+      );
+      return closestCorners({ ...args, droppableContainers: columnContainers });
+    }
+
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
+      // Prefer the column droppable that the pointer is directly inside so `over.id`
+      // is always the exact target column ID rather than active.id or a neighbor card
+      const colHit = pointerCollisions.find((c) => columnIdSet.has(String(c.id)));
+      if (colHit) return [colHit];
+      const nonSelfHit = pointerCollisions.find((c) => c.id !== args.active.id);
+      if (nonSelfHit) return [nonSelfHit];
+      return pointerCollisions;
+    }
+
+    const rectCollisions = rectIntersection(args);
+    if (rectCollisions.length > 0) {
+      const colHit = rectCollisions.find((c) => columnIdSet.has(String(c.id)));
+      if (colHit) return [colHit];
+      const nonSelfHit = rectCollisions.find((c) => c.id !== args.active.id);
+      if (nonSelfHit) return [nonSelfHit];
+      return rectCollisions;
+    }
+
+    return closestCorners(args);
+  }, []);
+
+  function resolveDropTargetColumn(overId: string, draggedLeadId?: string): string {
+    const columnIdSet = new Set<string>([...LEADS_COLUMNS, ...TRAINING_COLUMNS, "VEHICLE_ASSIGNMENT", "Accept offer"]);
+    if (columnIdSet.has(overId)) {
+      return overId;
+    }
+
+    if (draggedLeadId && overId === draggedLeadId && lastDragTargetColumnRef.current) {
+      return lastDragTargetColumnRef.current;
+    }
+
+    const overLead = leads.find((l) => l.id === overId);
+    if (overLead) {
+      if (activeTab === "leads") {
+        if (
+          overLead.board_column === "TRAINING_PIPELINE" ||
+          overLead.board_column === "VEHICLE_ASSIGNMENT" ||
+          (overLead.brand_status || "").toLowerCase() === "training fixed"
+        ) {
+          return "Training fixed";
+        }
+        if (overLead.board_column === "NEW_LEADS" && !overLead.brand_status) {
+          return "NEW_LEADS";
+        }
+        return overLead.brand_status || "NEW_LEADS";
+      } else {
+        return overLead.board_column === "VEHICLE_ASSIGNMENT"
+          ? "Assign vehicle"
+          : overLead.training_status || "Scheduled";
+      }
+    }
+
+    return overId;
+  }
+
   function handleDragStart(event: DragStartEvent) {
     if (event.active.data.current?.type === "Column") {
       setActiveColumnDragId(event.active.id as string);
       return;
     }
-    setActiveDragId(event.active.id as string);
+    const leadId = event.active.id as string;
+    const found = leads.find((l) => l.id === leadId);
+    dragStartLeadRef.current = found ? { ...found } : null;
+    lastDragTargetColumnRef.current = null;
+    setActiveDragId(leadId);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -1086,56 +1180,44 @@ export default function KanbanBoard() {
     }
 
     setActiveDragId(null);
-    if (!over) return;
-
     const leadId = active.id as string;
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) return;
+    const lead = dragStartLeadRef.current?.id === leadId
+      ? dragStartLeadRef.current
+      : leads.find((l) => l.id === leadId);
+    dragStartLeadRef.current = null;
 
-    // Determine target column
-    let targetColumn: string;
-    const overLead = leads.find((l) => l.id === over.id);
-    if (overLead) {
-      // If dropped over a card, map to its corresponding column
-      if (activeTab === "leads") {
-        targetColumn = overLead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (overLead.brand_status || "NEW_LEADS");
-      } else {
-        targetColumn = overLead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : (overLead.training_status || "Scheduled");
-      }
-    } else {
-      targetColumn = over.id as string;
+    const fallbackTarget = lastDragTargetColumnRef.current;
+    lastDragTargetColumnRef.current = null;
+
+    if (!lead) return;
+    if (!over && !fallbackTarget) return;
+
+    const targetColumn = over
+      ? resolveDropTargetColumn(over.id as string, leadId)
+      : fallbackTarget!;
+
+    // If dropped back onto NEW_LEADS when it started in NEW_LEADS, no-op
+    if (
+      activeTab === "leads" &&
+      targetColumn === "NEW_LEADS" &&
+      lead.board_column === "NEW_LEADS" &&
+      !lead.brand_status
+    ) {
+      return;
     }
 
-    // We do NOT return early here because handleDragOver has already updated the 
-    // local lead state to targetColumn for optimistic drag feedback. If we check
-    // currentColumn === targetColumn, it will always be true and abort the API call!
+    const nowIso = new Date().toISOString();
 
     // Handle Leads Tab Drops
     if (activeTab === "leads") {
       if (targetColumn === "NEW_LEADS") {
-        const updated = { ...lead, board_column: "NEW_LEADS", brand_status: null, reminder_date: null };
-        saveLocalLeadOverride(updated);
-        setLeads((prev) =>
-          prev.map((l) => (l.id === leadId ? updated : l))
-        );
-        try {
-          await fetch(`/api/leads/${leadId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null, reminder_date: null }),
-          });
-        } catch (err) {
-          fetchLeads();
-        }
-      } else if (targetColumn === "Training fixed") {
-        // Move to Training Pipeline, preserve existing training status if already progressed
-        const targetTrainingStatus = lead.training_status || "Scheduled";
-        const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
-        const updated = {
+        const updated: Lead = {
           ...lead,
-          board_column: targetBoardColumn,
-          brand_status: targetColumn,
-          training_status: targetTrainingStatus,
+          board_column: "NEW_LEADS",
+          brand_status: null,
+          reminder_date: null,
+          status_changed_at: null,
+          updated_at: nowIso,
         };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
@@ -1145,7 +1227,45 @@ export default function KanbanBoard() {
           const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: targetBoardColumn, brand_status: targetColumn, training_status: targetTrainingStatus }),
+            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null, reminder_date: null }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.lead) {
+              saveLocalLeadOverride(data.lead);
+              setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...data.lead } : l)));
+            }
+          }
+        } catch (err) {
+          fetchLeads();
+        }
+      } else if (targetColumn === "Training fixed") {
+        // Move to Training Pipeline, preserve existing training status if already progressed
+        const targetTrainingStatus = lead.training_status || "Scheduled";
+        const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
+        const updated: Lead = {
+          ...lead,
+          board_column: targetBoardColumn,
+          brand_status: targetColumn,
+          training_status: targetTrainingStatus,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
+        };
+        saveLocalLeadOverride(updated);
+        setLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? updated : l))
+        );
+        try {
+          const res = await fetch(`/api/leads/${leadId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              board_column: targetBoardColumn,
+              brand_status: targetColumn,
+              training_status: targetTrainingStatus,
+              mark_as_called: true,
+              is_recalled: true,
+            }),
           });
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
@@ -1153,9 +1273,11 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
-            if (!lead.reminder_date) {
-              setSelectedLead({ ...lead, brand_status: "Training fixed", training_status: targetTrainingStatus });
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
+            if (!committedLead.reminder_date) {
+              setSelectedLead(committedLead);
             }
           }
         } catch (err) {
@@ -1165,11 +1287,14 @@ export default function KanbanBoard() {
       } else {
         // Move to Brand Pre-Filter status
         const isRecall = targetColumn === "To Recall";
-        const updated = {
+        const updated: Lead = {
           ...lead,
           board_column: "BRAND_PRE_FILTER",
           brand_status: targetColumn,
+          training_status: null,
           reminder_date: isRecall ? lead.reminder_date : null,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
         };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
@@ -1183,6 +1308,8 @@ export default function KanbanBoard() {
               board_column: "BRAND_PRE_FILTER",
               brand_status: targetColumn,
               reminder_date: isRecall ? lead.reminder_date : null,
+              mark_as_called: true,
+              is_recalled: true,
             }),
           });
           if (!res.ok) {
@@ -1191,7 +1318,9 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
           }
         } catch (err) {
           toast.error("Erreur de connexion");
@@ -1219,7 +1348,14 @@ export default function KanbanBoard() {
         }
 
         // Move to Vehicle Assignment immediately and open drawer to choose vehicle
-        const updated = { ...lead, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle", reminder_date: null };
+        const updated: Lead = {
+          ...lead,
+          board_column: "VEHICLE_ASSIGNMENT",
+          training_status: "Assign vehicle",
+          reminder_date: null,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
+        };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? updated : l))
@@ -1236,11 +1372,13 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
             // Trigger WhatsApp thank you & Alert
             const waUrl = generateThankYouURL(lead.sanitized_phone);
             window.open(waUrl, "_blank");
-            setSelectedLead(lead as any);
+            setSelectedLead(committedLead as any);
           }
         } catch (err) {
           toast.error("Erreur de connexion");
@@ -1248,7 +1386,13 @@ export default function KanbanBoard() {
         }
       } else if (targetColumn === "Pending") {
         // Move to Pending immediately and open drawer
-        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn };
+        const updated: Lead = {
+          ...lead,
+          board_column: "TRAINING_PIPELINE",
+          training_status: targetColumn,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
+        };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? updated : l))
@@ -1265,8 +1409,10 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
-            setSelectedLead({ ...lead, training_status: "Pending" });
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
+            setSelectedLead(committedLead);
           }
         } catch (err) {
           toast.error("Erreur de connexion");
@@ -1274,7 +1420,13 @@ export default function KanbanBoard() {
         }
       } else if (targetColumn === "Preorder") {
         // Move to Preorder immediately and open drawer
-        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn };
+        const updated: Lead = {
+          ...lead,
+          board_column: "TRAINING_PIPELINE",
+          training_status: targetColumn,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
+        };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? updated : l))
@@ -1291,8 +1443,10 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
-            setSelectedLead({ ...lead, training_status: "Preorder" });
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
+            setSelectedLead(committedLead);
           }
         } catch (err) {
           toast.error("Erreur de connexion");
@@ -1300,7 +1454,14 @@ export default function KanbanBoard() {
         }
       } else {
         // Standard training status move
-        const updated = { ...lead, board_column: "TRAINING_PIPELINE", training_status: targetColumn, reminder_date: null };
+        const updated: Lead = {
+          ...lead,
+          board_column: "TRAINING_PIPELINE",
+          training_status: targetColumn,
+          reminder_date: null,
+          status_changed_at: nowIso,
+          updated_at: nowIso,
+        };
         saveLocalLeadOverride(updated);
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? updated : l))
@@ -1317,7 +1478,9 @@ export default function KanbanBoard() {
             fetchLeads();
           } else {
             const data = await res.json();
-            if (data.lead) saveLocalLeadOverride(data.lead);
+            const committedLead: Lead = data.lead ? { ...updated, ...data.lead } : updated;
+            saveLocalLeadOverride(committedLead);
+            setLeads((prev) => prev.map((l) => (l.id === leadId ? committedLead : l)));
           }
         } catch (err) {
           toast.error("Erreur de connexion");
@@ -1341,80 +1504,97 @@ export default function KanbanBoard() {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return;
 
-    let targetColumn: string;
-    const overLead = leads.find((l) => l.id === over.id);
-    if (overLead) {
-      if (activeTab === "leads") {
-        if (overLead.board_column === "NEW_LEADS") {
-          targetColumn = "NEW_LEADS";
-        } else if (
-          overLead.board_column === "TRAINING_PIPELINE" ||
-          overLead.board_column === "VEHICLE_ASSIGNMENT" ||
-          (overLead.brand_status || "").toLowerCase() === "training fixed"
-        ) {
-          targetColumn = "Training fixed";
-        } else {
-          targetColumn = overLead.brand_status || "NEW_LEADS";
-        }
-      } else {
-        targetColumn = overLead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : (overLead.training_status || "Scheduled");
-      }
-    } else {
-      targetColumn = over.id as string;
-    }
+    const targetColumn = resolveDropTargetColumn(over.id as string, leadId);
+    lastDragTargetColumnRef.current = targetColumn;
+    const nowIso = new Date().toISOString();
 
     // Move optimistically for drag feedback across all columns
     if (activeTab === "leads") {
-        if (targetColumn === "NEW_LEADS") {
-          if (lead.board_column !== "NEW_LEADS") {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "NEW_LEADS", brand_status: null } : l
-              )
-            );
-          }
-        } else if (targetColumn === "Training fixed") {
-          const targetTrainingStatus = lead.training_status || "Scheduled";
-          const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
-          const isAlreadyInTrainingFixed =
-            (lead.board_column === "TRAINING_PIPELINE" || lead.board_column === "VEHICLE_ASSIGNMENT") &&
-            lead.brand_status === "Training fixed";
-          if (!isAlreadyInTrainingFixed) {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: targetBoardColumn, brand_status: "Training fixed", training_status: targetTrainingStatus } : l
-              )
-            );
-          }
-        } else {
-          if (lead.brand_status !== targetColumn || lead.board_column !== "BRAND_PRE_FILTER") {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "BRAND_PRE_FILTER", brand_status: targetColumn } : l
-              )
-            );
-          }
+      if (targetColumn === "NEW_LEADS") {
+        if (lead.board_column !== "NEW_LEADS") {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === leadId
+                ? { ...l, board_column: "NEW_LEADS", brand_status: null, status_changed_at: null, updated_at: nowIso }
+                : l
+            )
+          );
+        }
+      } else if (targetColumn === "Training fixed") {
+        const targetTrainingStatus = lead.training_status || "Scheduled";
+        const targetBoardColumn = lead.board_column === "VEHICLE_ASSIGNMENT" ? "VEHICLE_ASSIGNMENT" : "TRAINING_PIPELINE";
+        const isAlreadyInTrainingFixed =
+          (lead.board_column === "TRAINING_PIPELINE" || lead.board_column === "VEHICLE_ASSIGNMENT") &&
+          lead.brand_status === "Training fixed";
+        if (!isAlreadyInTrainingFixed) {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === leadId
+                ? {
+                    ...l,
+                    board_column: targetBoardColumn,
+                    brand_status: "Training fixed",
+                    training_status: targetTrainingStatus,
+                    status_changed_at: nowIso,
+                    updated_at: nowIso,
+                  }
+                : l
+            )
+          );
         }
       } else {
-        if (targetColumn === "Assign vehicle" || targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
-          if (lead.board_column !== "VEHICLE_ASSIGNMENT" || lead.training_status !== "Assign vehicle") {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "VEHICLE_ASSIGNMENT", training_status: "Assign vehicle" } : l
-              )
-            );
-          }
-        } else {
-          if (lead.training_status !== targetColumn || lead.board_column !== "TRAINING_PIPELINE") {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === leadId ? { ...l, board_column: "TRAINING_PIPELINE", training_status: targetColumn } : l
-              )
-            );
-          }
+        if (lead.brand_status !== targetColumn || lead.board_column !== "BRAND_PRE_FILTER") {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === leadId
+                ? {
+                    ...l,
+                    board_column: "BRAND_PRE_FILTER",
+                    brand_status: targetColumn,
+                    status_changed_at: nowIso,
+                    updated_at: nowIso,
+                  }
+                : l
+            )
+          );
+        }
+      }
+    } else {
+      if (targetColumn === "Assign vehicle" || targetColumn === "VEHICLE_ASSIGNMENT" || targetColumn === "Accept offer") {
+        if (lead.board_column !== "VEHICLE_ASSIGNMENT" || lead.training_status !== "Assign vehicle") {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === leadId
+                ? {
+                    ...l,
+                    board_column: "VEHICLE_ASSIGNMENT",
+                    training_status: "Assign vehicle",
+                    status_changed_at: nowIso,
+                    updated_at: nowIso,
+                  }
+                : l
+            )
+          );
+        }
+      } else {
+        if (lead.training_status !== targetColumn || lead.board_column !== "TRAINING_PIPELINE") {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === leadId
+                ? {
+                    ...l,
+                    board_column: "TRAINING_PIPELINE",
+                    training_status: targetColumn,
+                    status_changed_at: nowIso,
+                    updated_at: nowIso,
+                  }
+                : l
+            )
+          );
         }
       }
     }
+  }
 
   const activeLead = activeDragId ? leads.find((l) => l.id === activeDragId) : null;
 
@@ -2081,7 +2261,7 @@ export default function KanbanBoard() {
 
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={kanbanCollisionDetection}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}

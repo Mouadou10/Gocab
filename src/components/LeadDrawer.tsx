@@ -135,13 +135,23 @@ export default function LeadDrawer({
     [rawName, lead.raw_name, lead.national_blacklist_match]
   );
 
+  const resolveBrandStatusFromLead = (l: Lead): string => {
+    if (l.brand_status) return l.brand_status;
+    if (l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT") {
+      return "Training fixed";
+    }
+    return l.board_column === "NEW_LEADS" ? "NEW_LEADS" : "";
+  };
+
+  const [brandStatus, setBrandStatus] = useState(() => resolveBrandStatusFromLead(lead));
+  const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
+
   useEffect(() => {
     setRawName(lead.raw_name || "");
     setPhone(lead.sanitized_phone || "");
-  }, [lead]);
-
-  const [brandStatus, setBrandStatus] = useState(lead.board_column === "NEW_LEADS" ? "NEW_LEADS" : (lead.brand_status || ""));
-  const [trainingStatus, setTrainingStatus] = useState(lead.training_status || "");
+    setBrandStatus(resolveBrandStatusFromLead(lead));
+    setTrainingStatus(lead.training_status || "");
+  }, [lead.id, lead.brand_status, lead.board_column, lead.training_status, lead.raw_name, lead.sanitized_phone]);
   const [city, setCity] = useState(lead.city || "");
   const [presenceConfirmed, setPresenceConfirmed] = useState(Boolean(lead.presence_confirmed));
   

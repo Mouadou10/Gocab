@@ -37,9 +37,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Mark conversation unread count as read
-    await getDbConv().update({
-      where: { id: conversationId },
+    // Mark conversation unread count as read only if it actually has unread messages
+    // (avoids triggering a WAL write on every 3s read poll)
+    await getDbConv().updateMany({
+      where: { id: conversationId, unread_count: { gt: 0 } },
       data: { unread_count: 0 },
     }).catch(() => {});
 

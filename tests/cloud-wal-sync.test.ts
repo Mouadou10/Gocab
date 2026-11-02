@@ -162,4 +162,74 @@ describe("Cloud WAL Sync Engine Unit Tests", () => {
       else process.env.FORCE_CLOUD_WAL = prevEnv;
     }
   });
+
+  test("recordWalEntry skips no-op updateMany and deleteMany when result.count === 0", () => {
+    const prevEnv = process.env.FORCE_CLOUD_WAL;
+    process.env.FORCE_CLOUD_WAL = "true";
+    try {
+      const skippedUpdateMany = recordWalEntry(
+        "whatsAppConversation",
+        "updateMany",
+        [{ where: { id: "conv-1", unread_count: { gt: 0 } }, data: { unread_count: 0 } }],
+        { count: 0 }
+      );
+      assert.equal(skippedUpdateMany, null);
+
+      const recordedUpdateMany = recordWalEntry(
+        "lead",
+        "updateMany",
+        [{ where: { id: { in: ["l1", "l2"] } }, data: { board_column: "BRAND_PRE_FILTER" } }],
+        { count: 2 }
+      );
+      assert.ok(recordedUpdateMany);
+
+      const g = (globalThis as any).__gocabSqliteSync;
+      if (g?.pendingEntries) {
+        g.pendingEntries = g.pendingEntries.filter((x: WalEntry) => x.id !== recordedUpdateMany!.id);
+      }
+    } finally {
+      if (prevEnv === undefined) delete process.env.FORCE_CLOUD_WAL;
+      else process.env.FORCE_CLOUD_WAL = prevEnv;
+    }
+  });
+
+  test("compactWalEntries merges superseded single-record updates for the same model and id", () => {
+    const entries: WalEntry[] = [
+      {
+        id: "u1",
+        seq: 1,
+        ts: 1000,
+        model: "lead",
+        method: "update",
+        args: [
+          {
+            where: { id: "lead-42" },
+            data: { board_column: "BRAND_PRE_FILTER", brand_status: "No response 1", city: "Casablanca" },
+          },
+        ],
+      },
+      {
+        id: "u2",
+        seq: 2,
+        ts: 2000,
+        model: "lead",
+        method: "update",
+        args: [
+          {
+            where: { id: "lead-42" },
+            data: { board_column: "TRAINING_PIPELINE", brand_status: "Training fixed" },
+          },
+        ],
+      },
+    ];
+
+    const compacted = compactWalEntries(entries);
+    assert.equal(compacted.length, 1);
+    assert.equal(compacted[0].id, "u2");
+    assert.deepEqual(compacted[0].args[0].data, {
+      board_column: "TRAINING_PIPELINE",
+      brand_status: "Training fixed",
+      city: "Casablanca",
+    });
+  });
 });

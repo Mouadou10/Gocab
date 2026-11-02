@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { prisma, ensureDatabaseSynced } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
-import { getCachedLeads, setCachedLeads, invalidateLeadsCache, shouldRunRecallCheck } from "@/lib/leads-cache";
+import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
 import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 
@@ -56,25 +56,6 @@ export async function GET() {
     });
 
     setCachedLeads(enrichedLeads);
-
-    // Auto-transition 'To Recall' in background at most once every 5 minutes to conserve DB row reads
-    if (shouldRunRecallCheck()) {
-      const now = new Date();
-      prisma.lead.updateMany({
-        where: {
-          brand_status: "To Recall",
-          reminder_date: {
-            lte: now,
-          },
-        },
-        data: {
-          board_column: "NEW_LEADS",
-          brand_status: null,
-          reminder_date: null,
-          updated_at: now,
-        },
-      }).catch(() => {});
-    }
 
     return NextResponse.json(
       { leads: enrichedLeads },

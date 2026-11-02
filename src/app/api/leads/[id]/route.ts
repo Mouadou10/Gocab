@@ -216,9 +216,8 @@ export async function PATCH(
       data: updateData,
     });
 
-    // Invalidate leads cache & touch sync state in background so response returns in <50ms
+    // Invalidate local leads memory cache immediately
     invalidateLeadsCache();
-    touchSyncState("leads").catch(() => {});
 
     // ── Activity Log — record what the agent just did ────────────────────────
     const agentName = resolvedHandledBy;
@@ -360,7 +359,7 @@ export async function PATCH(
     }
 
     if (logEntries.length > 0) {
-      logManyLeadActivities(logEntries).catch(() => {});
+      await logManyLeadActivities(logEntries).catch(() => {});
     }
     // ───────────────────────────────────────────────────────────────────────
 
