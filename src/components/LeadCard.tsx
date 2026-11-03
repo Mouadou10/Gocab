@@ -13,6 +13,7 @@
 import React, { useState, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import toast from "react-hot-toast";
 import { generateTrainingInviteURL, generateThankYouURL } from "@/lib/whatsapp";
 import NationalBlacklistBadge from "./NationalBlacklistBadge";
 
@@ -167,10 +168,19 @@ export default function LeadCard({
         if (data.lead && onLeadUpdate) {
           onLeadUpdate(data.lead);
         }
+        toast.success(
+          checked
+            ? `✓ Présence confirmée par appel (${lead.raw_name})`
+            : `Confirmation de présence retirée (${lead.raw_name})`,
+          { duration: 2500 }
+        );
       } else {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || "Impossible de mettre à jour la confirmation de présence");
         setPresenceConfirmed(!checked);
       }
     } catch {
+      toast.error("Erreur de connexion");
       setPresenceConfirmed(!checked);
     } finally {
       setIsUpdatingPresence(false);

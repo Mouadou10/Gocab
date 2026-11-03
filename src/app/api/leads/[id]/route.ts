@@ -530,7 +530,7 @@ export async function PATCH(
       return handleAuthError(error);
     } catch {
       return NextResponse.json(
-        { error: "Failed to update lead" },
+        { error: error instanceof Error ? error.message : "Failed to update lead" },
         { status: 500 }
       );
     }
