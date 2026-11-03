@@ -135,6 +135,22 @@
 
 ---
 
+### MEM-2026-11-03-007: Bulk Lead Ingestion & Temporal Call Allocation (133 Yesterday + 40 Today for Kaoutar)
+- **Date**: 2026-11-03
+- **Layer**: Database Persistence & Leads Pipeline Architecture
+- **Symptom**: User needed 173 leads from a multi-page operational tracking spreadsheet ingested into the CRM: the first 133 allocated to yesterday's calls (2026-11-02) for agent Kaoutar, the remaining 40 to today's calls (2026-11-03), and all "Training fixed" prospects moved directly into the Training Pipeline with scheduled dates and cities.
+- **Root Cause**: Operational call quotas and daily performance KPIs require precise temporal attribution (`status_changed_at` matching specific UTC/local Moroccan day boundaries) and dedicated activity log creation (`LeadActivityLog`) so the Leads Scorecard, conversion metrics, and daily performance scorecards reflect real agent output without discrepancies.
+- **Applied Solution**:
+  1. Ingested all 173 leads with full phone number sanitization (+212 / national Moroccan format) and exact status mapping.
+  2. Set `status_changed_at = 2026-11-02T15:00:00.000Z` and `handled_by = 'Kaoutar'` for the first 133 leads (39 Training fixed, 47 Not interested, 40 NRP 1, 4 Wrong number, 3 To Recall).
+  3. Set `status_changed_at = 2026-11-03T11:00:00.000Z` and `handled_by = 'Kaoutar'` for the remaining 40 leads (14 Training fixed, 12 NRP 1, 11 Not interested, 3 Wrong number).
+  4. Moved all 53 Training Fixed leads to `board_column = 'TRAINING_PIPELINE'` with `training_status = 'Scheduled'`, their target training date (`reminder_date`), and target Moroccan city.
+  5. Populated 226 `LeadActivityLog` entries for full traceability and auditability.
+- **Anti-Regression Guardrail**:
+  - LeadsScorecard relies on `status_changed_at`, `board_column !== 'NEW_LEADS'`, and `brand_status === 'Training fixed' | board_column === 'BRAND_PRE_FILTER'`. Training Pipeline relies on `reminder_date` for daily session filters. All batch import scripts must populate both fields accurately.
+
+---
+
 ## Standard Squad Memory Entry Template
 
 Whenever a new issue is investigated and resolved by the CTO Engineering Squad, append a new entry using this template:
