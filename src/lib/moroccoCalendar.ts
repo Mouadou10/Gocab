@@ -180,3 +180,43 @@ export function getWorkingDaysInWeek(date: Date): {
     holidays: res.holidaysEncountered,
   };
 }
+
+/**
+ * Deterministic helper: Check if a date matches today strictly across all environments & timezones
+ */
+export function isScheduledDateToday(dateVal: any, referenceDate: Date = new Date()): boolean {
+  if (!dateVal) return false;
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return false;
+
+    // 1. Same local calendar day
+    if (
+      d.getFullYear() === referenceDate.getFullYear() &&
+      d.getMonth() === referenceDate.getMonth() &&
+      d.getDate() === referenceDate.getDate()
+    ) {
+      return true;
+    }
+
+    const refIso = referenceDate.toISOString().slice(0, 10);
+    const localRefStr = `${referenceDate.getFullYear()}-${String(referenceDate.getMonth() + 1).padStart(2, "0")}-${String(referenceDate.getDate()).padStart(2, "0")}`;
+
+    // 2. ISO UTC date string matches
+    const dIso = d.toISOString().slice(0, 10);
+    if (dIso === refIso || dIso === localRefStr) return true;
+
+    // 3. Formatted French tag matches (DD/MM/YYYY)
+    const dTag = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const refTag = referenceDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    if (dTag === refTag) return true;
+
+    // 4. Local YYYY-MM-DD matches
+    const localDStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (localDStr === refIso || localDStr === localRefStr) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { getMoroccanWorkingDays } from '@/lib/moroccoCalendar';
+import { getMoroccanWorkingDays, isScheduledDateToday } from '@/lib/moroccoCalendar';
 import { TargetSnapshot, getTargetForDate, getTargetsForRange, parseTargetHistory } from '@/lib/target-history';
 
 interface LeadsScorecardProps {
@@ -85,45 +85,55 @@ export default function LeadsScorecard({
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
-  const isToday = dateFilter === todayStr || dateFilter === todayLocalStr;
+  const isToday =
+    dateFilter === "TODAY" ||
+    dateFilter === todayStr ||
+    dateFilter === todayLocalStr;
   const isYesterday = dateFilter === yesterdayStr;
-  const isAllTime = !dateFilter;
+  const isAllTime = !dateFilter || dateFilter === "ALL";
 
   // Filter called leads by the date they were actually called (status_changed_at)
-  // Dedicated unique counter for the Leads Acquisition Agent
-  const calledLeads = leads.filter(l => {
-    if (l.board_column === 'NEW_LEADS') return false; // Still untouched
-    if (!l.status_changed_at) return false; // No timestamp yet (legacy data)
+  // Unified counter strictly aligned with KanbanBoard metrics
+  const isMatchForFilter = (dateVal: any): boolean => {
+    if (!dateVal) return false;
+    if (isAllTime) return true;
+    if (isToday) return isScheduledDateToday(dateVal);
 
-    // Strictly Leads page workflow: either BRAND_PRE_FILTER statuses or Training fixed
-    const isLeadsWorkflow = l.board_column === 'BRAND_PRE_FILTER' || l.brand_status === 'Training fixed';
-    if (!isLeadsWorkflow) return false;
-
-    if (!dateFilter) return true; // No filter = show all
     try {
-      const d = new Date(l.status_changed_at);
+      const d = new Date(dateVal);
       if (isNaN(d.getTime())) return false;
-      const changedUtc = d.toISOString().split('T')[0];
-      const changedLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      if (isToday) {
-        return (
-          changedUtc === todayStr ||
-          changedUtc === todayLocalStr ||
-          changedLocal === todayStr ||
-          changedLocal === todayLocalStr
-        );
-      }
-      return changedUtc === dateFilter || changedLocal === dateFilter;
+      const dIso = d.toISOString().slice(0, 10);
+      const localDStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dFr = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      return (
+        dIso === dateFilter ||
+        localDStr === dateFilter ||
+        dFr === dateFilter
+      );
     } catch {
       return false;
     }
+  };
+
+  const calledLeads = leads.filter(l => {
+    if (l.board_column === 'NEW_LEADS' && !l.brand_status) return false; // Untouched leads
+    if (!l.status_changed_at) return false; // No timestamp yet (legacy data)
+
+    // Leads page workflow: either BRAND_PRE_FILTER or TRAINING_PIPELINE or Training fixed
+    const isLeadsWorkflow =
+      l.board_column === 'BRAND_PRE_FILTER' ||
+      l.board_column === 'TRAINING_PIPELINE' ||
+      (l.brand_status || '').toLowerCase() === 'training fixed';
+    if (!isLeadsWorkflow) return false;
+
+    return isMatchForFilter(l.status_changed_at);
   });
 
   const totalCalled = calledLeads.length;
 
-  // Training conversions for filtered set (only leads marked "Training fixed" on this date)
+  // Training conversions for filtered set (marked "Training fixed" or in Scheduled training on this date)
   const trainingFixed = calledLeads.filter(
-    l => l.brand_status === 'Training fixed'
+    l => (l.brand_status || '').toLowerCase() === 'training fixed' || l.training_status === 'Scheduled'
   ).length;
 
   const displayDate = isToday
