@@ -119,10 +119,11 @@ export default function LeadsScorecard({
     if (l.board_column === 'NEW_LEADS' && !l.brand_status) return false; // Untouched leads
     if (!l.status_changed_at) return false; // No timestamp yet (legacy data)
 
-    // Leads page workflow: either BRAND_PRE_FILTER or TRAINING_PIPELINE or Training fixed
+    // Leads page workflow: either BRAND_PRE_FILTER or TRAINING_PIPELINE or VEHICLE_ASSIGNMENT or Training fixed
     const isLeadsWorkflow =
       l.board_column === 'BRAND_PRE_FILTER' ||
       l.board_column === 'TRAINING_PIPELINE' ||
+      l.board_column === 'VEHICLE_ASSIGNMENT' ||
       (l.brand_status || '').toLowerCase() === 'training fixed';
     if (!isLeadsWorkflow) return false;
 
@@ -131,9 +132,13 @@ export default function LeadsScorecard({
 
   const totalCalled = calledLeads.length;
 
-  // Training conversions for filtered set (marked "Training fixed" or in Scheduled training on this date)
+  // Training conversions for filtered set (marked "Training fixed", graduated to training, or assigned vehicle on this date)
   const trainingFixed = calledLeads.filter(
-    l => (l.brand_status || '').toLowerCase() === 'training fixed' || l.training_status === 'Scheduled'
+    l =>
+      (l.brand_status || '').toLowerCase() === 'training fixed' ||
+      l.board_column === 'TRAINING_PIPELINE' ||
+      l.board_column === 'VEHICLE_ASSIGNMENT' ||
+      Boolean(l.training_status)
   ).length;
 
   const displayDate = isToday

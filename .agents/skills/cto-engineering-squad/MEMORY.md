@@ -193,6 +193,24 @@
 
 ---
 
+### MEM-2026-11-03-010: Acquisition Counter Stability & Scorecard Metric Shrinkage Fix
+- **Date**: 2026-11-03
+- **Layer**: Frontend UI | Backend API | Database Persistence
+- **Symptom**: User observed the Acquisition scorecard numbers shrinking from 42 calls & 17 fixed down to 41 calls & 15 fixed, whereas Kaoutar's actual operational performance was 48 calls and 18 training fixed.
+- **Root Cause**:
+  1. The original sheet transcription in `import-kaoutar-leads.ts` had only captured 40 rows for today, missing 7 leads (and 3 training fixed).
+  2. In `PATCH /api/leads/[id]/route.ts`, downstream onboarding operations in Formation (e.g., ticking "Appel confirmation présence" or advancing candidates through the training funnel) were mutating `status_changed_at = new Date()`, shifting attribution dates.
+  3. In `LeadsScorecard.tsx` and `KanbanBoard.tsx`, candidates progressing to `Attended`, `Pending`, or `VEHICLE_ASSIGNMENT` were filtered out if their `training_status` was no longer `"Scheduled"`.
+- **Applied Solution**:
+  1. Reconciled database with the full 48 calls and 18 training fixed for 2026-11-03, and 133 calls for 2026-11-02.
+  2. In `PATCH /api/leads/[id]`, protected `status_changed_at` from being modified during downstream formation and vehicle updates.
+  3. In `LeadsScorecard.tsx` and `KanbanBoard.tsx`, expanded counting logic to ensure leads graduating through `TRAINING_PIPELINE` or `VEHICLE_ASSIGNMENT` are permanently credited to the initial acquisition qualification date.
+- **Anti-Regression Guardrail**:
+  - Downstream onboarding updates (`presence_confirmed`, `training_status`, `notes`, `KYC`) must never alter `status_changed_at`.
+  - Acquisition training fixed conversions are cumulative and invariant to subsequent training attendance.
+
+---
+
 ## Standard Squad Memory Entry Template
 
 Whenever a new issue is investigated and resolved by the CTO Engineering Squad, append a new entry using this template:

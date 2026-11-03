@@ -147,12 +147,20 @@ export async function PATCH(
     const effectiveBrandStatus = updateData.brand_status !== undefined ? updateData.brand_status : existingLead.brand_status;
     const effectiveBoardColumn = updateData.board_column !== undefined ? updateData.board_column : existingLead.board_column;
 
-    if (effectiveBrandStatus === "Training fixed" || body.brand_status === "Training fixed") {
+    if (
+      effectiveBrandStatus === "Training fixed" ||
+      body.brand_status === "Training fixed" ||
+      existingLead.board_column === "TRAINING_PIPELINE" ||
+      existingLead.board_column === "VEHICLE_ASSIGNMENT"
+    ) {
       if (effectiveBoardColumn !== "VEHICLE_ASSIGNMENT" && updateData.board_column !== "VEHICLE_ASSIGNMENT") {
         updateData.board_column = "TRAINING_PIPELINE";
       }
       if (!updateData.training_status && !existingLead.training_status) {
         updateData.training_status = "Scheduled";
+      }
+      if (!updateData.brand_status && existingLead.brand_status === "Training fixed") {
+        updateData.brand_status = "Training fixed";
       }
     } else if (
       effectiveBrandStatus &&
@@ -217,27 +225,26 @@ export async function PATCH(
         existingLead.brand_status === "Training fixed" ||
         body.brand_status === "Training fixed");
 
-    // Update status_changed_at (Leads Prospection Call counter) whenever:
-    // 1. The agent explicitly checked the call confirm box (is_recalled / mark_as_called)
-    // 2. Lead moves out of NEW_LEADS into any status
-    // 3. Brand status changes or is updated on the Leads board
-    // 4. Training status changes or is updated on the Training board
-    // 5. Lead column moves
-    // 6. Lead is moved to "Training fixed" or training date is rescheduled
-    // 7. A recall date is scheduled or rescheduled
-    if (body.board_column === "NEW_LEADS" && !isExplicitlyCalled && !body.brand_status) {
+    // Update status_changed_at (Leads Prospection Call counter):
+    // 1. If explicitly supplied in payload, respect it
+    // 2. If moved back to NEW_LEADS without qualification, clear it
+    // 3. If explicit call confirmed (mark_as_called / is_recalled), record new call timestamp
+    // 4. If initially moving out of NEW_LEADS, record qualification timestamp
+    // 5. If qualification brand status changed on Leads board, record qualification timestamp
+    // 6. Downstream operations in Formation/Flotte (training status, presence toggle, notes, KYC)
+    //    MUST PRESERVE existingLead.status_changed_at to protect Acquisition Agent historical counters!
+    const bodyAny = body as any;
+    if (bodyAny.status_changed_at !== undefined) {
+      (updateData as any).status_changed_at = bodyAny.status_changed_at ? new Date(bodyAny.status_changed_at) : null;
+    } else if (body.board_column === "NEW_LEADS" && !isExplicitlyCalled && !body.brand_status) {
       (updateData as any).status_changed_at = null;
-    } else if (
-      isExplicitlyCalled ||
-      isInitialExitFromNewLeads ||
-      isBrandStatusChanged ||
-      isTrainingStatusChanged ||
-      isColumnChanged ||
-      isMovingToTrainingFixed ||
-      isRecallRescheduled ||
-      Boolean(body.brand_status && body.brand_status !== "NEW_LEADS") ||
-      Boolean(body.training_status)
-    ) {
+    } else if (isExplicitlyCalled) {
+      (updateData as any).status_changed_at = new Date();
+    } else if (isInitialExitFromNewLeads || isMovingToTrainingFixed) {
+      (updateData as any).status_changed_at = new Date();
+    } else if (isBrandStatusChanged && existingLead.board_column !== "TRAINING_PIPELINE" && existingLead.board_column !== "VEHICLE_ASSIGNMENT") {
+      (updateData as any).status_changed_at = new Date();
+    } else if (!existingLead.status_changed_at && (body.brand_status || body.board_column)) {
       (updateData as any).status_changed_at = new Date();
     }
 

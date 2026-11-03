@@ -838,21 +838,25 @@ export default function KanbanBoard() {
   const callsDoneToday = leads.filter((l) => {
     if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
     if (!l.status_changed_at) return false;
-    // Strictly Leads page interactions: either BRAND_PRE_FILTER or TRAINING_PIPELINE or Training fixed
+    // Strictly Leads page interactions: either BRAND_PRE_FILTER or TRAINING_PIPELINE or VEHICLE_ASSIGNMENT or Training fixed
     const isLeadsWorkflow =
       l.board_column === "BRAND_PRE_FILTER" ||
       l.board_column === "TRAINING_PIPELINE" ||
+      l.board_column === "VEHICLE_ASSIGNMENT" ||
       (l.brand_status || "").toLowerCase() === "training fixed";
     if (!isLeadsWorkflow) return false;
     return isScheduledDateToday(l.status_changed_at);
   }).length;
 
   const trainingFixedToday = leads.filter((l) => {
+    if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
+    if (!l.status_changed_at) return false;
     const isFixed =
       (l.brand_status || "").toLowerCase() === "training fixed" ||
-      l.training_status === "Scheduled";
+      l.board_column === "TRAINING_PIPELINE" ||
+      l.board_column === "VEHICLE_ASSIGNMENT" ||
+      Boolean(l.training_status);
     if (!isFixed) return false;
-    if (!l.status_changed_at) return false;
     return isScheduledDateToday(l.status_changed_at);
   }).length;
 
