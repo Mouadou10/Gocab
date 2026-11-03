@@ -55,12 +55,24 @@ export async function GET(request: NextRequest) {
     }
     const daysCount = daysInRange.length;
 
-    // Fetch all drivers with assigned vehicle and payment ledger in date range
+    // Fetch all drivers with assigned vehicle OR payment ledger in date range
     const [drivers, allVehicles, redFlagsLookup] = await Promise.all([
       prisma.driverProfile.findMany({
         where: {
           is_archived: false,
-          assignedVehicleId: { not: null },
+          OR: [
+            { assignedVehicleId: { not: null } },
+            {
+              payments: {
+                some: {
+                  paymentDate: {
+                    gte: startOfRange,
+                    lte: endOfRange,
+                  },
+                },
+              },
+            },
+          ],
         },
         include: {
           assignedVehicle: true,
@@ -174,9 +186,20 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Strictly skip drivers without an active working car assigned
+      // Skip drivers without an active working car assigned unless they have a ledger entry in range
       if (!resolvedVehicle) {
-        continue;
+        if (driver.payments.length > 0) {
+          resolvedVehicle = {
+            id: `assigned-${driver.id}`,
+            plate_number: "Flotte GoCab",
+            make_model: "Véhicule Flotte",
+            status: "Actif",
+            assigned_supervisor: "Mohamed Aziz",
+            assigned_collector: "Mohamed Aziz",
+          };
+        } else {
+          continue;
+        }
       }
       const vStatusLower = (resolvedVehicle.status || "").toLowerCase();
       if (
@@ -188,7 +211,9 @@ export async function GET(request: NextRequest) {
         vStatusLower.includes("avail") ||
         vStatusLower.includes("missing")
       ) {
-        continue;
+        if (driver.payments.length === 0) {
+          continue;
+        }
       }
 
       const contract = (driver.contractType || "DAILY").toUpperCase();

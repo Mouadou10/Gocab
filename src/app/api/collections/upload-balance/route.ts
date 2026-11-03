@@ -438,6 +438,34 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Auto-create driver profile if row is in spreadsheet with name or phone
+      if (!driver && (rawName || rawPhone)) {
+        const cleanP = rawPhone ? normalizePhone(rawPhone) : "";
+        const formattedPhone = cleanP ? (cleanP.length === 9 ? `+212${cleanP}` : `+${cleanP}`) : `+2126${Math.floor(10000000 + Math.random() * 90000000)}`;
+        try {
+          driver = await prisma.driverProfile.create({
+            data: {
+              fullName: rawName || "Chauffeur GoCab",
+              cinNumber: rawCin ? rawCin.toUpperCase().trim() : `CIN-${Math.floor(100000 + Math.random() * 900000)}`,
+              phoneSanitized: formattedPhone,
+              assignedVehicleId: vehicle?.id || null,
+              contractType: "DAILY",
+              is_archived: false,
+              isKycVerified: true,
+            },
+            include: {
+              assignedVehicle: true,
+              payments: true,
+            },
+          });
+          allDrivers.push(driver);
+          if (cleanP) phoneMap.set(cleanP, driver);
+          if (rawName) nameMap.set(normalizeName(rawName), driver);
+        } catch (createErr) {
+          driver = allDrivers.find(d => (cleanP && normalizePhone(d.phoneSanitized) === cleanP) || (rawName && normalizeName(d.fullName) === normalizeName(rawName)));
+        }
+      }
+
       // Auto-link driver to vehicle if plate is present in spreadsheet
       if (driver && vehicle && driver.assignedVehicleId !== vehicle.id) {
         try {

@@ -437,11 +437,11 @@ export default function FleetPerformanceView() {
         const isStaleServerSeed =
           !isRangeMode && data.summary?.totalMorningTargetMAD === 67190;
 
-        // Clean up any stale 67190 / 46930 entries from localStorage
+        // Clean up any stale 67190 / 46930 / 68140 / 59790 entries from localStorage
         if (typeof window !== "undefined") {
           try {
             const rawCache = localStorage.getItem(`gocab_collections_fullcache_${endDate}`);
-            if (rawCache && (rawCache.includes("67190") || rawCache.includes("46930"))) {
+            if (rawCache && (rawCache.includes("67190") || rawCache.includes("46930") || rawCache.includes("68140") || rawCache.includes("59790"))) {
               localStorage.removeItem(`gocab_collections_fullcache_${endDate}`);
             }
           } catch (e) {}
