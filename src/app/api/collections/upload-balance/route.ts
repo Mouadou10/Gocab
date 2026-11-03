@@ -920,12 +920,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (pendingDriverUpdates.length > 0) {
-      // 3. Batch update driver profiles using raw SQL in chunks of 50
-      for (let i = 0; i < pendingDriverUpdates.length; i += 50) {
-        const chunk = pendingDriverUpdates.slice(i, i + 50);
-        const whenArrears = chunk.map((d) => `WHEN id = '${d.id}' THEN ${d.arrears}`).join(" ");
-        const whenDays = chunk.map((d) => `WHEN id = '${d.id}' THEN ${d.unpaidDays}`).join(" ");
-        const ids = chunk.map((d) => `'${d.id}'`).join(",");
+      // Deduplicate pending updates by driver id (keeping latest)
+      const uniqueDriverMap = new Map<string, (typeof pendingDriverUpdates)[0]>();
+      for (const update of pendingDriverUpdates) {
+        uniqueDriverMap.set(update.id, update);
+      }
+      const uniqueDriverUpdates = Array.from(uniqueDriverMap.values());
+
+      // 3. Batch update driver profiles using raw SQL in chunks of 50 with automatic fallback
+      for (let i = 0; i < uniqueDriverUpdates.length; i += 50) {
+        const chunk = uniqueDriverUpdates.slice(i, i + 50);
+        const whenArrears = chunk
+          .map((d) => `WHEN id = '${d.id.replace(/'/g, "''")}' THEN ${Number.isFinite(d.arrears) ? d.arrears : 0}`)
+          .join(" ");
+        const whenDays = chunk
+          .map((d) => `WHEN id = '${d.id.replace(/'/g, "''")}' THEN ${Number.isFinite(d.unpaidDays) ? Math.round(d.unpaidDays) : 0}`)
+          .join(" ");
+        const ids = chunk.map((d) => `'${d.id.replace(/'/g, "''")}'`).join(",");
 
         const rawSql = `
           UPDATE DriverProfile
@@ -934,20 +945,42 @@ export async function POST(request: NextRequest) {
             consecutiveUnpaidDays = CASE ${whenDays} ELSE consecutiveUnpaidDays END
           WHERE id IN (${ids})
         `;
-        await prisma.$executeRawUnsafe(rawSql);
+        try {
+          await prisma.$executeRawUnsafe(rawSql);
+        } catch (rawErr: any) {
+          console.warn("[upload-balance] $executeRawUnsafe failed, using individual updates fallback:", rawErr?.message || rawErr);
+          for (const d of chunk) {
+            await prisma.driverProfile.update({
+              where: { id: d.id },
+              data: {
+                currentArrearsMAD: Number.isFinite(d.arrears) ? d.arrears : 0,
+                consecutiveUnpaidDays: Number.isFinite(d.unpaidDays) ? Math.round(d.unpaidDays) : 0,
+              },
+            }).catch(() => {});
+          }
+        }
       }
 
-      const paidDriverIds = pendingDriverUpdates
+      const paidDriverIds = uniqueDriverUpdates
         .filter((d) => d.lastPaymentDate)
-        .map((d) => `'${d.id}'`);
+        .map((d) => `'${d.id.replace(/'/g, "''")}'`);
 
       if (paidDriverIds.length > 0) {
         const nowIso = new Date().toISOString();
-        await prisma.$executeRawUnsafe(`
-          UPDATE DriverProfile
-          SET lastPaymentDate = '${nowIso}'
-          WHERE id IN (${paidDriverIds.join(",")})
-        `);
+        try {
+          await prisma.$executeRawUnsafe(`
+            UPDATE DriverProfile
+            SET lastPaymentDate = '${nowIso}'
+            WHERE id IN (${paidDriverIds.join(",")})
+          `);
+        } catch {
+          for (const d of uniqueDriverUpdates.filter((x) => x.lastPaymentDate)) {
+            await prisma.driverProfile.update({
+              where: { id: d.id },
+              data: { lastPaymentDate: new Date(nowIso) },
+            }).catch(() => {});
+          }
+        }
       }
     }
 

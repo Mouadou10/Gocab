@@ -136,6 +136,13 @@ function resolveFallbackSqlitePath(): string {
 
       if (shouldCopy && fs.existsSync(srcPath)) {
         console.log(`[Database] Copying fresh dev.db (${fs.statSync(srcPath).size} bytes) to ${tmpDbPath} (version: ${currentVersion})`);
+        // Remove stale WAL and SHM files to prevent WAL header salt mismatch / disk image malformed error
+        const walPath = `${tmpDbPath}-wal`;
+        const shmPath = `${tmpDbPath}-shm`;
+        try { if (fs.existsSync(walPath)) fs.unlinkSync(walPath); } catch {}
+        try { if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath); } catch {}
+        try { if (fs.existsSync(tmpDbPath)) fs.unlinkSync(tmpDbPath); } catch {}
+
         fs.copyFileSync(srcPath, tmpDbPath);
         try {
           fs.writeFileSync(versionFile, currentVersion, "utf8");
@@ -256,6 +263,74 @@ export async function flushDatabaseSync(): Promise<void> {
   }
 }
 
+export function isSqliteCorruptError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err?.message || err || "");
+  const code = String(err?.code || (err as any)?.rawCode || "");
+  return (
+    code === "11" ||
+    code === "SQLITE_CORRUPT" ||
+    msg.includes("SQLITE_CORRUPT") ||
+    msg.includes("database disk image is malformed") ||
+    msg.includes("Code: `11`") ||
+    msg.includes("Code: 11")
+  );
+}
+
+export function recoverCorruptDatabase(): PrismaClient {
+  console.warn("[Database] SQLITE_CORRUPT detected! Auto-healing SQLite replica in /tmp...");
+  const tmpDbPath = path.join(os.tmpdir(), "gocab-dev.db");
+  const walPath = `${tmpDbPath}-wal`;
+  const shmPath = `${tmpDbPath}-shm`;
+
+  try { if (fs.existsSync(walPath)) fs.unlinkSync(walPath); } catch {}
+  try { if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath); } catch {}
+  try { if (fs.existsSync(tmpDbPath)) fs.unlinkSync(tmpDbPath); } catch {}
+
+  const candidates = [
+    path.join(process.cwd(), "dev.db"),
+    path.resolve("dev.db"),
+    "/var/task/dev.db",
+    "/var/task/scratch/Gocab/dev.db",
+  ];
+  let srcFound = "";
+  for (const cand of candidates) {
+    try {
+      if (fs.existsSync(cand)) {
+        srcFound = cand;
+        break;
+      }
+    } catch {}
+  }
+
+  if (srcFound) {
+    try {
+      fs.copyFileSync(srcFound, tmpDbPath);
+      console.log(`[Database] Pristine dev.db copied from ${srcFound} to ${tmpDbPath} (${fs.statSync(tmpDbPath).size} bytes)`);
+    } catch (e) {
+      console.error("[Database] Failed to copy pristine dev.db during auto-recovery:", e);
+    }
+  }
+
+  globalForPrisma.fallbackPrisma = undefined;
+  globalForPrisma.fallbackSqlitePath = fs.existsSync(tmpDbPath) ? tmpDbPath : (srcFound || "");
+  return getFallbackClient(true);
+}
+
+async function executeWithCorruptRecovery<T>(fn: (client: PrismaClient) => Promise<T>): Promise<T> {
+  const fbClient = await getSyncedFallbackClient(false);
+  try {
+    return await fn(fbClient);
+  } catch (err: any) {
+    if (isSqliteCorruptError(err)) {
+      console.warn("[Database] Caught SQLITE_CORRUPT during query execution, auto-healing and retrying...", err?.message || err);
+      const healedClient = recoverCorruptDatabase();
+      return await fn(healedClient);
+    }
+    throw err;
+  }
+}
+
 function wrapModelDelegate(modelProp: string | symbol): any {
   const primaryDelegate = (getPrimaryClient() as any)[modelProp];
   if (!primaryDelegate || typeof primaryDelegate !== "object") {
@@ -281,29 +356,7 @@ function wrapModelDelegate(modelProp: string | symbol): any {
 
       return async (...args: any[]) => {
         if (isTursoCurrentlyBlocked()) {
-          const fbClient = await getSyncedFallbackClient(false);
-          if (isWrite && isCloudWalEnabled()) {
-            const preparedArgs = prepareDeterministicWriteArgs(
-              modelName,
-              methodName,
-              args
-            );
-            const res = await (fbClient as any)[modelProp][methodProp](
-              ...preparedArgs
-            );
-            recordWalEntry(modelName, methodName, preparedArgs, res);
-            scheduleSqliteSnapshotPush();
-            return res;
-          }
-          return await (fbClient as any)[modelProp][methodProp](...args);
-        }
-
-        try {
-          return await (getPrimaryClient() as any)[modelProp][methodProp](...args);
-        } catch (err: any) {
-          if (isTursoQuotaOrBlockError(err)) {
-            markTursoBlocked();
-            const fbClient = await getSyncedFallbackClient(false);
+          return await executeWithCorruptRecovery(async (fbClient) => {
             if (isWrite && isCloudWalEnabled()) {
               const preparedArgs = prepareDeterministicWriteArgs(
                 modelName,
@@ -318,6 +371,30 @@ function wrapModelDelegate(modelProp: string | symbol): any {
               return res;
             }
             return await (fbClient as any)[modelProp][methodProp](...args);
+          });
+        }
+
+        try {
+          return await (getPrimaryClient() as any)[modelProp][methodProp](...args);
+        } catch (err: any) {
+          if (isTursoQuotaOrBlockError(err)) {
+            markTursoBlocked();
+            return await executeWithCorruptRecovery(async (fbClient) => {
+              if (isWrite && isCloudWalEnabled()) {
+                const preparedArgs = prepareDeterministicWriteArgs(
+                  modelName,
+                  methodName,
+                  args
+                );
+                const res = await (fbClient as any)[modelProp][methodProp](
+                  ...preparedArgs
+                );
+                recordWalEntry(modelName, methodName, preparedArgs, res);
+                scheduleSqliteSnapshotPush();
+                return res;
+              }
+              return await (fbClient as any)[modelProp][methodProp](...args);
+            });
           }
           throw err;
         }
@@ -334,26 +411,28 @@ function createFailoverPrismaClient(): PrismaClient {
       if (prop === "$transaction") {
         return async (arg: any, options?: any) => {
           if (isTursoCurrentlyBlocked()) {
-            const fb = await getSyncedFallbackClient(false);
-            const res = await fb.$transaction(arg, options);
-            if (isCloudWalEnabled()) {
-              await pushSqliteSnapshotNow().catch(() => {});
-              scheduleSqliteSnapshotPush();
-            }
-            return res;
-          }
-          try {
-            return await getPrimaryClient().$transaction(arg, options);
-          } catch (err: any) {
-            if (isTursoQuotaOrBlockError(err)) {
-              markTursoBlocked();
-              const fb = await getSyncedFallbackClient(false);
+            return await executeWithCorruptRecovery(async (fb) => {
               const res = await fb.$transaction(arg, options);
               if (isCloudWalEnabled()) {
                 await pushSqliteSnapshotNow().catch(() => {});
                 scheduleSqliteSnapshotPush();
               }
               return res;
+            });
+          }
+          try {
+            return await getPrimaryClient().$transaction(arg, options);
+          } catch (err: any) {
+            if (isTursoQuotaOrBlockError(err)) {
+              markTursoBlocked();
+              return await executeWithCorruptRecovery(async (fb) => {
+                const res = await fb.$transaction(arg, options);
+                if (isCloudWalEnabled()) {
+                  await pushSqliteSnapshotNow().catch(() => {});
+                  scheduleSqliteSnapshotPush();
+                }
+                return res;
+              });
             }
             throw err;
           }
@@ -369,26 +448,28 @@ function createFailoverPrismaClient(): PrismaClient {
         const isRawWrite = prop === "$executeRaw" || prop === "$executeRawUnsafe";
         return async (...args: any[]) => {
           if (isTursoCurrentlyBlocked()) {
-            const fb = await getSyncedFallbackClient(false);
-            const res = await (fb as any)[prop](...args);
-            if (isRawWrite && isCloudWalEnabled()) {
-              await pushSqliteSnapshotNow().catch(() => {});
-              scheduleSqliteSnapshotPush();
-            }
-            return res;
-          }
-          try {
-            return await (getPrimaryClient() as any)[prop](...args);
-          } catch (err: any) {
-            if (isTursoQuotaOrBlockError(err)) {
-              markTursoBlocked();
-              const fb = await getSyncedFallbackClient(false);
+            return await executeWithCorruptRecovery(async (fb) => {
               const res = await (fb as any)[prop](...args);
               if (isRawWrite && isCloudWalEnabled()) {
                 await pushSqliteSnapshotNow().catch(() => {});
                 scheduleSqliteSnapshotPush();
               }
               return res;
+            });
+          }
+          try {
+            return await (getPrimaryClient() as any)[prop](...args);
+          } catch (err: any) {
+            if (isTursoQuotaOrBlockError(err)) {
+              markTursoBlocked();
+              return await executeWithCorruptRecovery(async (fb) => {
+                const res = await (fb as any)[prop](...args);
+                if (isRawWrite && isCloudWalEnabled()) {
+                  await pushSqliteSnapshotNow().catch(() => {});
+                  scheduleSqliteSnapshotPush();
+                }
+                return res;
+              });
             }
             throw err;
           }

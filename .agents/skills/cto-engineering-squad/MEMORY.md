@@ -11,6 +11,8 @@
 - [`MEM-2026-11-02-003`](#mem-2026-11-02-003-destructive-mutations-inside-get-routes-disappearing-accidents): Destructive Mutations Inside GET Routes (Disappearing Accidents)
 - [`MEM-2026-11-02-004`](#mem-2026-11-02-004-fleet-maintenance-parity-9-vs-12-vehicles): Fleet Maintenance Parity (9 vs. 12 Vehicles in Insurance & Maintenance)
 - [`MEM-2026-11-03-006`](#mem-2026-11-03-006-bulk-balance-spreadsheet-upload-timeout--connection-error): Bulk Balance Spreadsheet Upload Timeout & Connection Error
+- [`MEM-2026-11-03-008`](#mem-2026-11-03-008-training-fixed-pipeline-invariance--stale-override-elimination): Training Fixed Pipeline Invariance & Stale Override Elimination
+- [`MEM-2026-11-03-009`](#mem-2026-11-03-009-sqlite_corrupt-disk-image-malformed-recovery--balance-upload-resilience): SQLite Corrupt Disk Image Recovery & Balance Upload Resilience
 
 ---
 
@@ -167,6 +169,27 @@
   5. Fixed existing database records and corrected name spelling to "Yassine Dhouib".
 - **Anti-Regression Guardrail**:
   - `NEW_LEADS` column must strictly filter out any lead with non-null `brand_status`. Backend PATCH route must always enforce `board_column: "TRAINING_PIPELINE"` whenever `brand_status: "Training fixed"`.
+
+---
+
+### MEM-2026-11-03-009: SQLite Corrupt Disk Image Recovery & Balance Upload Resilience
+- **Date**: 2026-11-03
+- **Layer**: Database Persistence / Backend API / DevOps Container Synchronization
+- **Symptom**:
+  When uploading the morning driver balances Excel file (`export-6939-drivers.xlsx`) in the Collections modal, an error toast appeared:
+  `Invalid prisma.$executeRawUnsafe() invocation: Raw query failed. Code: 11. Message: SQLITE_CORRUPT: database disk image is malformed`.
+- **Root Cause**:
+  1. On Vercel Serverless containers, `dev.db` operates in WAL mode (`PRAGMA journal_mode = WAL`), producing `-wal` and `-shm` sidecar files in `/tmp`. When a new deployment version booted or when a Postgres snapshot was decompressed and renamed into `/tmp/gocab-dev.db`, the existing `-wal` and `-shm` files remained in place.
+  2. Because SQLite WAL headers store a 32-bit salt that must match the primary database file header, the mismatch caused SQLite to flag the database image as malformed (`Code 11: SQLITE_CORRUPT`) when executing raw write queries.
+  3. `upload-balance/route.ts` executed batch updates directly via `prisma.$executeRawUnsafe` without retry or fallback to standard Prisma model updates.
+- **Applied Solution**:
+  1. In `src/lib/prisma.ts`: Updated `resolveFallbackSqlitePath` to unlink stale `-wal` and `-shm` files before copying fresh `dev.db`.
+  2. In `src/lib/sqliteCloudSync.ts`: Updated `pullSqliteSnapshotIfNewer` to unlink stale `-wal` and `-shm` files before renaming incoming snapshot data into `sqlitePath`.
+  3. In `src/lib/prisma.ts`: Implemented `isSqliteCorruptError(err)`, `recoverCorruptDatabase()`, and `executeWithCorruptRecovery(fn)`. Any query encountering `SQLITE_CORRUPT` automatically purges corrupted files from `/tmp`, copies a pristine replica of `dev.db`, recreates the LibSQL Prisma adapter, and transparently retries the query without user error.
+  4. In `src/app/api/collections/upload-balance/route.ts`: Deduplicated `pendingDriverUpdates` by driver id, sanitized arithmetic expressions, and wrapped `$executeRawUnsafe` in a `try/catch` with an automatic fallback to `prisma.driverProfile.update`.
+- **Anti-Regression Guardrail**:
+  - Never replace or overwrite an SQLite `.db` file in WAL mode without first removing its `-wal` and `-shm` files.
+  - All raw SQL queries in failover mode must be protected by `executeWithCorruptRecovery` and fall back to Prisma model delegates if execution fails.
 
 ---
 

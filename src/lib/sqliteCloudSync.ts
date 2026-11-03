@@ -972,6 +972,10 @@ export async function pullSqliteSnapshotIfNewer(
     if (dataRes.rowCount === 0 || !dataRes.rows[0].data) return false;
 
     const decompressed = zlib.gunzipSync(dataRes.rows[0].data);
+    const walPath = `${sqlitePath}-wal`;
+    const shmPath = `${sqlitePath}-shm`;
+    try { if (fs.existsSync(walPath)) fs.unlinkSync(walPath); } catch {}
+    try { if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath); } catch {}
     const tmpWrite = `${sqlitePath}.sync-${process.pid}-${Date.now()}`;
     fs.writeFileSync(tmpWrite, decompressed);
     fs.renameSync(tmpWrite, sqlitePath);
