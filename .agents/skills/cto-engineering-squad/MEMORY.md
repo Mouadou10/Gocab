@@ -151,6 +151,25 @@
 
 ---
 
+### MEM-2026-11-03-008: Training Fixed Pipeline Invariance & Stale Override Elimination
+- **Date**: 2026-11-03
+- **Layer**: Frontend State & Backend Pipeline Validation
+- **Symptom**: A lead set to "Training fixed" (e.g. Yassine Dhouib) still displayed inside the "New Leads" column (`NEW_LEADS`) on client devices.
+- **Root Cause**:
+  1. **Stale Client Override Collision**: In `KanbanBoard.tsx`, `fetchLeads()` merged local overrides (`gocab_lead_overrides`). When an override had `!override.serverUpdatedMs` or `board_column === 'NEW_LEADS'` from earlier intake, it crushed the authoritative server state (`TRAINING_PIPELINE`), keeping `board_column: "NEW_LEADS"` in memory while rendering "Training fixed" badges.
+  2. **Unconstrained NEW_LEADS Column Filter**: `getLeadsByColumn("NEW_LEADS")` filtered solely on `l.board_column === "NEW_LEADS"`, lacking a guard against leads that already possess a `brand_status` or `training_status`.
+  3. **Backend Pipeline Invariance Gap**: In `PATCH /api/leads/[id]`, if `body.brand_status === "Training fixed"` was transmitted without an explicit `board_column`, the backend did not strictly force `board_column = "TRAINING_PIPELINE"`.
+- **Applied Solution**:
+  1. In `KanbanBoard.tsx`: If server lead has advanced out of `NEW_LEADS` while override still has `NEW_LEADS`, immediately discard the stale override. If an override has `brand_status === "Training fixed"`, guarantee `board_column = "TRAINING_PIPELINE"`.
+  2. Guarded `NEW_LEADS` column rendering with `!l.brand_status && (!l.training_status || l.training_status === "NEW_LEADS")` to mathematically prevent treated leads from appearing in intake.
+  3. In `PATCH /api/leads/[id]`: Enforced pipeline invariance rule where `brand_status === "Training fixed"` strictly forces `board_column = "TRAINING_PIPELINE"` and `training_status = "Scheduled"`.
+  4. In `LeadDrawer.tsx`: Defaulted `reminder_date` to today's date if `trainingDate` was not picked, ensuring scheduled training leads always appear on training calendar chips.
+  5. Fixed existing database records and corrected name spelling to "Yassine Dhouib".
+- **Anti-Regression Guardrail**:
+  - `NEW_LEADS` column must strictly filter out any lead with non-null `brand_status`. Backend PATCH route must always enforce `board_column: "TRAINING_PIPELINE"` whenever `brand_status: "Training fixed"`.
+
+---
+
 ## Standard Squad Memory Entry Template
 
 Whenever a new issue is investigated and resolved by the CTO Engineering Squad, append a new entry using this template:

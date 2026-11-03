@@ -142,6 +142,35 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
+    // Pipeline Stage Invariance Guardrails:
+    // 1. If brand_status is "Training fixed", board_column MUST be TRAINING_PIPELINE (or VEHICLE_ASSIGNMENT)
+    const effectiveBrandStatus = updateData.brand_status !== undefined ? updateData.brand_status : existingLead.brand_status;
+    const effectiveBoardColumn = updateData.board_column !== undefined ? updateData.board_column : existingLead.board_column;
+
+    if (effectiveBrandStatus === "Training fixed" || body.brand_status === "Training fixed") {
+      if (effectiveBoardColumn !== "VEHICLE_ASSIGNMENT" && updateData.board_column !== "VEHICLE_ASSIGNMENT") {
+        updateData.board_column = "TRAINING_PIPELINE";
+      }
+      if (!updateData.training_status && !existingLead.training_status) {
+        updateData.training_status = "Scheduled";
+      }
+    } else if (
+      effectiveBrandStatus &&
+      effectiveBrandStatus !== "NEW_LEADS" &&
+      effectiveBoardColumn === "NEW_LEADS" &&
+      body.board_column === undefined
+    ) {
+      // Any qualification brand status cannot remain in NEW_LEADS
+      updateData.board_column = "BRAND_PRE_FILTER";
+    }
+
+    // 2. If board_column is explicitly set to NEW_LEADS without brand_status, clear status flags
+    if (updateData.board_column === "NEW_LEADS" && body.brand_status === undefined) {
+      updateData.brand_status = null;
+      updateData.training_status = null;
+      updateData.reminder_date = null;
+    }
+
     // Check if phone number is being changed to one that already belongs to another lead
     if (updateData.sanitized_phone && updateData.sanitized_phone !== existingLead.sanitized_phone) {
       const existingWithPhone = await prisma.lead.findFirst({

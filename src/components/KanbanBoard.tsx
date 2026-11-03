@@ -548,18 +548,35 @@ export default function KanbanBoard() {
         const mergedLeads = data.leads.map((serverLead: Lead) => {
           const override = overrides[serverLead.id];
           if (override?.lead && now - override.savedAtClientMs < OVERRIDE_TTL_MS) {
+            // Anti-Ghosting / Anti-Stale-Intake Rules:
+            // 1. If server lead has already moved out of NEW_LEADS, but override still says NEW_LEADS,
+            //    the server is authoritative. Discard the stale NEW_LEADS override!
+            if (serverLead.board_column !== "NEW_LEADS" && override.lead.board_column === "NEW_LEADS") {
+              removeLocalLeadOverride(serverLead.id);
+              return serverLead;
+            }
+
+            // 2. If the lead has brand_status (e.g. Training fixed) or training_status,
+            //    its board_column must NEVER be NEW_LEADS. Force correct board_column!
+            if (
+              (override.lead.brand_status || override.lead.training_status) &&
+              override.lead.board_column === "NEW_LEADS"
+            ) {
+              override.lead.board_column =
+                override.lead.brand_status === "Training fixed"
+                  ? "TRAINING_PIPELINE"
+                  : "BRAND_PRE_FILTER";
+            }
+
             const serverUpdated = serverLead.updated_at ? new Date(serverLead.updated_at).getTime() : 0;
             const overrideMovedOutOfNewLeads =
               Boolean(override.lead.board_column) &&
               override.lead.board_column !== "NEW_LEADS" &&
               serverLead.board_column === "NEW_LEADS";
-            // Retain local override if:
-            // 1. The agent moved this lead out of NEW_LEADS and a stale container still reports NEW_LEADS, OR
-            // 2. The server record hasn't advanced past the override's serverUpdatedMs (comparing server clock to server clock)
+
             if (
               overrideMovedOutOfNewLeads ||
-              !override.serverUpdatedMs ||
-              serverUpdated <= override.serverUpdatedMs
+              (override.serverUpdatedMs > 0 && serverUpdated <= override.serverUpdatedMs)
             ) {
               return { ...serverLead, ...override.lead };
             }
@@ -814,7 +831,12 @@ export default function KanbanBoard() {
   }).length;
 
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
-  const totalNewLeadsInDB = leads.filter((l) => l.board_column === "NEW_LEADS").length;
+  const totalNewLeadsInDB = leads.filter(
+    (l) =>
+      l.board_column === "NEW_LEADS" &&
+      !l.brand_status &&
+      (!l.training_status || l.training_status === "NEW_LEADS")
+  ).length;
 
   // Scheduled counts for training header/filter
   const scheduledLeadsTotal = leads.filter(
@@ -1046,7 +1068,12 @@ export default function KanbanBoard() {
     if (activeTab === "leads") {
       if (column === "NEW_LEADS") {
         const allNewLeads = filteredLeads
-          .filter((l) => l.board_column === "NEW_LEADS")
+          .filter(
+            (l) =>
+              l.board_column === "NEW_LEADS" &&
+              !l.brand_status &&
+              (!l.training_status || l.training_status === "NEW_LEADS")
+          )
           .sort((a, b) => {
             const getTimestamp = (item: any) => {
               try {

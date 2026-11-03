@@ -343,10 +343,9 @@ export default function LeadDrawer({
           payload.training_status = lead.training_status || "Scheduled";
           payload.brand_status = "Training fixed";
 
-          if (trainingDate) {
-            const date = new Date(trainingDate);
-            payload.reminder_date = date.toISOString(); // Use reminder_date to track scheduled training date
-          }
+          const effectiveTrainingDate = trainingDate || getTodayDateStr();
+          const date = new Date(effectiveTrainingDate);
+          payload.reminder_date = isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
         } else if (brandStatus === "To Recall") {
           // Move to To Recall with scheduled recall datetime
           payload.board_column = "BRAND_PRE_FILTER";
