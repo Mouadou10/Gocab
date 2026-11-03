@@ -316,7 +316,18 @@ export default function KanbanBoard() {
     .join("")
     .toUpperCase();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<Lead[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("gocab_leads_cached_board");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeColumnDragId, setActiveColumnDragId] = useState<string | null>(null);
@@ -539,6 +550,14 @@ export default function KanbanBoard() {
       const res = await fetch("/api/leads", { cache: "no-store" });
       if (!res.ok) {
         console.error("Leads API error status:", res.status);
+        if (res.status === 401) {
+          toast.error("Session expirée. Veuillez recharger la page pour vous reconnecter.", { id: "auth-expired" });
+        } else {
+          // Do not wipe out leads! Keep current leads on screen and auto-retry after 2.5s
+          setTimeout(() => {
+            fetchLeads();
+          }, 2500);
+        }
         return;
       }
       const data = await res.json();
@@ -584,9 +603,15 @@ export default function KanbanBoard() {
           return serverLead;
         });
         setLeads(mergedLeads);
+        try {
+          localStorage.setItem("gocab_leads_cached_board", JSON.stringify(mergedLeads));
+        } catch {}
       }
     } catch (err) {
       console.error("Failed to fetch leads:", err);
+      setTimeout(() => {
+        fetchLeads();
+      }, 3000);
     } finally {
       setIsLoading(false);
     }

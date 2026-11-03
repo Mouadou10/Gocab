@@ -93,10 +93,6 @@ function resolveFallbackSqlitePath(): string {
     return explicitOverride;
   }
 
-  if (globalForPrisma.fallbackSqlitePath) {
-    return globalForPrisma.fallbackSqlitePath;
-  }
-
   const candidates = [
     path.join(process.cwd(), "dev.db"),
     path.resolve("dev.db"),
@@ -110,26 +106,58 @@ function resolveFallbackSqlitePath(): string {
       }
     }) || path.join(process.cwd(), "dev.db");
 
-  // On Vercel serverless, /var/task is read-only; copy dev.db once to /tmp/gocab-dev.db
+  // On Vercel serverless, /var/task is read-only; copy dev.db to /tmp/gocab-dev.db
   if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
     try {
       const tmpDbPath = path.join(os.tmpdir(), "gocab-dev.db");
+      const versionFile = path.join(os.tmpdir(), "gocab-dev.version");
+      const currentVersion =
+        process.env.VERCEL_GIT_COMMIT_SHA ||
+        process.env.VERCEL_DEPLOYMENT_ID ||
+        (fs.existsSync(srcPath) ? `${fs.statSync(srcPath).size}-${fs.statSync(srcPath).mtimeMs}` : "v1");
+
+      let recordedVersion = "";
+      try {
+        if (fs.existsSync(versionFile)) {
+          recordedVersion = fs.readFileSync(versionFile, "utf8").trim();
+        }
+      } catch {}
+
+      const isVersionMismatch = !recordedVersion || recordedVersion !== currentVersion;
+      const isSizeMismatch =
+        fs.existsSync(srcPath) &&
+        fs.existsSync(tmpDbPath) &&
+        fs.statSync(srcPath).size !== fs.statSync(tmpDbPath).size;
+
       const shouldCopy =
         !fs.existsSync(tmpDbPath) ||
-        (fs.existsSync(srcPath) &&
-          fs.statSync(srcPath).mtimeMs > fs.statSync(tmpDbPath).mtimeMs);
+        isVersionMismatch ||
+        isSizeMismatch;
+
       if (shouldCopy && fs.existsSync(srcPath)) {
+        console.log(`[Database] Copying fresh dev.db (${fs.statSync(srcPath).size} bytes) to ${tmpDbPath} (version: ${currentVersion})`);
         fs.copyFileSync(srcPath, tmpDbPath);
+        try {
+          fs.writeFileSync(versionFile, currentVersion, "utf8");
+        } catch {}
+        globalForPrisma.fallbackPrisma = undefined;
       }
+
       if (fs.existsSync(tmpDbPath)) {
-        globalForPrisma.fallbackSqlitePath = tmpDbPath;
-        registerActiveSqlitePath(tmpDbPath, () => globalForPrisma.fallbackPrisma);
-        optimizeSqlitePerformance(tmpDbPath);
+        if (globalForPrisma.fallbackSqlitePath !== tmpDbPath) {
+          globalForPrisma.fallbackSqlitePath = tmpDbPath;
+          registerActiveSqlitePath(tmpDbPath, () => globalForPrisma.fallbackPrisma);
+          optimizeSqlitePerformance(tmpDbPath);
+        }
         return tmpDbPath;
       }
     } catch (err) {
       console.warn("Could not copy dev.db to os.tmpdir(), using source directly:", err);
     }
+  }
+
+  if (globalForPrisma.fallbackSqlitePath) {
+    return globalForPrisma.fallbackSqlitePath;
   }
 
   globalForPrisma.fallbackSqlitePath = srcPath;
@@ -204,7 +232,16 @@ function markTursoBlocked(): void {
  */
 export async function ensureDatabaseSynced(force = true): Promise<void> {
   if (!isTursoCurrentlyBlocked()) return;
-  await getSyncedFallbackClient(force);
+  try {
+    await Promise.race([
+      getSyncedFallbackClient(force),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Database sync timeout")), 1500)
+      ),
+    ]);
+  } catch (err: any) {
+    console.warn("[ensureDatabaseSynced] Non-blocking sync timeout/warning:", err?.message || err);
+  }
 }
 
 /**

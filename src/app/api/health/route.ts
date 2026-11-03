@@ -16,10 +16,22 @@ export async function GET() {
   let dbHealthy = false;
   let dbLatencyMs = 0;
   let activeUsersCount = 0;
+  let totalLeadsCount = 0;
+  let todayCalledLeadsCount = 0;
 
   try {
     const dbStart = Date.now();
     activeUsersCount = await prisma.user.count();
+    totalLeadsCount = await prisma.lead.count();
+    const todayStr = new Date().toISOString().split("T")[0];
+    todayCalledLeadsCount = await prisma.lead.count({
+      where: {
+        status_changed_at: {
+          gte: new Date(`${todayStr}T00:00:00.000Z`),
+          lte: new Date(`${todayStr}T23:59:59.999Z`),
+        },
+      },
+    });
     dbLatencyMs = Date.now() - dbStart;
     dbHealthy = true;
   } catch (err: any) {
@@ -45,6 +57,8 @@ export async function GET() {
           healthy: dbHealthy,
           latency_ms: dbLatencyMs,
           user_records: activeUsersCount,
+          lead_records: totalLeadsCount,
+          today_called_leads: todayCalledLeadsCount,
         },
         memory: {
           heap_used_mb: Math.round(memoryUsage.heapUsed / 1024 / 1024),

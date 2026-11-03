@@ -670,7 +670,7 @@ async function resolveOrRecreateWalFileId(token: string): Promise<string | null>
 async function driveFetchWithRetry(
   urlBuilder: (fileId: string) => string,
   init: RequestInit,
-  timeoutMs = 6000
+  timeoutMs = 2500
 ): Promise<Response | null> {
   ensureWalCollections();
   let token = await getCachedDriveAccessToken(false);
@@ -888,7 +888,7 @@ export async function syncCloudWalToClient(
       const mediaRes = await driveFetchWithRetry(
         (id) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
         { method: "GET" },
-        20000
+        2500
       );
       if (!mediaRes || !mediaRes.ok) {
         state.lastCheckedAt = Date.now();

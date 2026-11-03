@@ -24,8 +24,17 @@ export async function GET() {
     if ("error" in authResult) {
       return authResult.error;
     }
-    // Sync cross-container WAL before reading cache so mutations from /api/leads/[id] invalidate immediately
-    await ensureDatabaseSynced();
+    // Sync cross-container WAL before reading cache (non-blocking fallback so GET /api/leads never blocks or fails)
+    try {
+      await Promise.race([
+        ensureDatabaseSynced(false),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("WAL sync timeout")), 1200)
+        ),
+      ]);
+    } catch (syncErr: any) {
+      console.warn("Non-blocking WAL sync skipped on GET /api/leads:", syncErr?.message);
+    }
 
     // Return cached leads if fresh (3s TTL)
     const cached = getCachedLeads();
