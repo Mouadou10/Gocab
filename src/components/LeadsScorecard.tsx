@@ -181,6 +181,9 @@ export default function LeadsScorecard({
   const rawCallProgress = scaledCallsTarget > 0 ? (totalCalled / scaledCallsTarget) * 100 : 0;
   const callProgress = Math.min(rawCallProgress, 100);
 
+  const rawFixedProgress = activeTrainingTarget > 0 ? (trainingFixed / activeTrainingTarget) * 100 : 0;
+  const fixedProgress = Math.min(rawFixedProgress, 100);
+
   const conversionRateNum = totalCalled > 0 ? (trainingFixed / totalCalled) * 100 : 0;
   const conversionRate = conversionRateNum.toFixed(1);
 
@@ -413,51 +416,58 @@ export default function LeadsScorecard({
           </div>
         </div>
 
-        {/* Card 2: Taux de Conversion Formations */}
+        {/* Card 2: Formations Fixées (Volume & Taux de Conversion) */}
         <div className="md:col-span-3 bg-gradient-to-br from-emerald-50/40 via-white to-slate-50/40 rounded-xl p-4 border border-emerald-200/60 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-shadow">
           <div>
             <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-2">
               <span className="flex items-center gap-1.5 text-emerald-900">
                 <span>🎯</span>
-                <span>Taux de Conversion</span>
+                <span>Formations Fixées</span>
               </span>
               <span className={`px-2 py-0.5 rounded-full text-3xs font-extrabold ${
-                conversionRateNum >= activeConversionRateTarget
+                rawFixedProgress >= 100
                   ? "bg-emerald-100 text-emerald-800"
-                  : "bg-blue-100 text-blue-800"
+                  : rawFixedProgress >= 50
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-amber-100 text-amber-800"
               }`}>
-                Obj. {activeConversionRateTarget}%
+                {rawFixedProgress.toFixed(0)}% de l&apos;obj.
               </span>
             </div>
 
             <div className="flex items-baseline gap-2 mb-2.5">
               <span className="text-3xl font-black text-emerald-700 tracking-tight font-mono">
-                {conversionRate}%
+                {trainingFixed}
               </span>
               <span className="text-xs font-semibold text-slate-400">
-                ({trainingFixed} fixées)
+                / {activeTrainingTarget} cible
+              </span>
+              <span className="ml-auto text-3xs font-extrabold text-emerald-800 bg-emerald-100/80 border border-emerald-200/60 px-2 py-0.5 rounded-md">
+                Taux {conversionRate}% (Obj. {activeConversionRateTarget}%)
               </span>
             </div>
 
-            {/* Visual Progress Bar */}
+            {/* Visual Progress Bar proportional to actual volume objective (e.g. 17 / 46 = 37%) */}
             <div className="w-full bg-slate-200/80 rounded-full h-2.5 overflow-hidden p-0.5 shadow-inner">
               <div
                 className={`h-full rounded-full transition-all duration-700 ease-out ${
-                  conversionRateNum >= activeConversionRateTarget
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                    : 'bg-gradient-to-r from-blue-500 to-teal-400'
+                  rawFixedProgress >= 100
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-xs'
+                    : rawFixedProgress >= 50
+                    ? 'bg-gradient-to-r from-blue-500 to-teal-400'
+                    : 'bg-gradient-to-r from-amber-400 to-emerald-500'
                 }`}
                 style={{
-                  width: `${Math.min(100, activeConversionRateTarget > 0 ? (conversionRateNum / activeConversionRateTarget) * 100 : 0)}%`,
+                  width: `${fixedProgress}%`,
                 }}
               />
             </div>
           </div>
 
           <div className="mt-3 pt-2.5 border-t border-emerald-100/60 flex items-center justify-between text-3xs text-slate-500 font-medium">
-            <span>{trainingFixed} sur {totalCalled} leads</span>
-            <span className="font-bold text-emerald-800">
-              Cible : {trainingFixed}/{activeTrainingTarget} fixées
+            <span>{trainingFixed} sur {totalCalled} leads qualifiés</span>
+            <span className={`font-bold ${rawFixedProgress >= 100 ? 'text-emerald-800' : 'text-amber-800'}`}>
+              {rawFixedProgress >= 100 ? '🔥 Objectif atteint' : `${Math.max(0, activeTrainingTarget - trainingFixed)} fixées restantes`}
             </span>
           </div>
         </div>
