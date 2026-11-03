@@ -923,94 +923,51 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Ultra-Fast Bulk Database Writes (< 1.5s total) ───────────────────────
-    if (pendingLedgers.length > 0) {
-      const driverIds = Array.from(new Set(pendingLedgers.map((l) => l.driverId)));
+    // ── Transactional Database Writes (Atomic & Safe Against Duplicates) ───────
+    await prisma.$transaction(async (tx) => {
+      if (pendingLedgers.length > 0) {
+        const driverIds = Array.from(new Set(pendingLedgers.map((l) => l.driverId)));
 
-      // 1. Delete existing ledgers for these drivers on targetDate in 1 query
-      await prisma.paymentLedger.deleteMany({
-        where: {
-          driverId: { in: driverIds },
-          paymentDate: {
-            gte: startOfDay,
-            lte: endOfDay,
+        // 1. Delete existing ledgers for these drivers on targetDate atomically
+        await tx.paymentLedger.deleteMany({
+          where: {
+            driverId: { in: driverIds },
+            paymentDate: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
           },
-        },
-      });
-
-      // 2. Batch insert ledgers in chunks of 50
-      for (let i = 0; i < pendingLedgers.length; i += 50) {
-        const chunk = pendingLedgers.slice(i, i + 50);
-        await prisma.paymentLedger.createMany({
-          data: chunk,
         });
-      }
-    }
 
-    if (pendingDriverUpdates.length > 0) {
-      // Deduplicate pending updates by driver id (keeping latest)
-      const uniqueDriverMap = new Map<string, (typeof pendingDriverUpdates)[0]>();
-      for (const update of pendingDriverUpdates) {
-        uniqueDriverMap.set(update.id, update);
-      }
-      const uniqueDriverUpdates = Array.from(uniqueDriverMap.values());
-
-      // 3. Batch update driver profiles using raw SQL in chunks of 50 with automatic fallback
-      for (let i = 0; i < uniqueDriverUpdates.length; i += 50) {
-        const chunk = uniqueDriverUpdates.slice(i, i + 50);
-        const whenArrears = chunk
-          .map((d) => `WHEN id = '${d.id.replace(/'/g, "''")}' THEN ${Number.isFinite(d.arrears) ? d.arrears : 0}`)
-          .join(" ");
-        const whenDays = chunk
-          .map((d) => `WHEN id = '${d.id.replace(/'/g, "''")}' THEN ${Number.isFinite(d.unpaidDays) ? Math.round(d.unpaidDays) : 0}`)
-          .join(" ");
-        const ids = chunk.map((d) => `'${d.id.replace(/'/g, "''")}'`).join(",");
-
-        const rawSql = `
-          UPDATE DriverProfile
-          SET
-            currentArrearsMAD = CASE ${whenArrears} ELSE currentArrearsMAD END,
-            consecutiveUnpaidDays = CASE ${whenDays} ELSE consecutiveUnpaidDays END
-          WHERE id IN (${ids})
-        `;
-        try {
-          await prisma.$executeRawUnsafe(rawSql);
-        } catch (rawErr: any) {
-          console.warn("[upload-balance] $executeRawUnsafe failed, using individual updates fallback:", rawErr?.message || rawErr);
-          for (const d of chunk) {
-            await prisma.driverProfile.update({
-              where: { id: d.id },
-              data: {
-                currentArrearsMAD: Number.isFinite(d.arrears) ? d.arrears : 0,
-                consecutiveUnpaidDays: Number.isFinite(d.unpaidDays) ? Math.round(d.unpaidDays) : 0,
-              },
-            }).catch(() => {});
-          }
+        // 2. Batch insert ledgers in chunks of 50
+        for (let i = 0; i < pendingLedgers.length; i += 50) {
+          const chunk = pendingLedgers.slice(i, i + 50);
+          await tx.paymentLedger.createMany({
+            data: chunk,
+          });
         }
       }
 
-      const paidDriverIds = uniqueDriverUpdates
-        .filter((d) => d.lastPaymentDate)
-        .map((d) => `'${d.id.replace(/'/g, "''")}'`);
+      if (pendingDriverUpdates.length > 0) {
+        const uniqueDriverMap = new Map<string, (typeof pendingDriverUpdates)[0]>();
+        for (const update of pendingDriverUpdates) {
+          uniqueDriverMap.set(update.id, update);
+        }
+        const uniqueDriverUpdates = Array.from(uniqueDriverMap.values());
 
-      if (paidDriverIds.length > 0) {
-        const nowIso = new Date().toISOString();
-        try {
-          await prisma.$executeRawUnsafe(`
-            UPDATE DriverProfile
-            SET lastPaymentDate = '${nowIso}'
-            WHERE id IN (${paidDriverIds.join(",")})
-          `);
-        } catch {
-          for (const d of uniqueDriverUpdates.filter((x) => x.lastPaymentDate)) {
-            await prisma.driverProfile.update({
-              where: { id: d.id },
-              data: { lastPaymentDate: new Date(nowIso) },
-            }).catch(() => {});
-          }
+        // 3. Update driver profiles atomically within the transaction
+        for (const d of uniqueDriverUpdates) {
+          await tx.driverProfile.update({
+            where: { id: d.id },
+            data: {
+              currentArrearsMAD: Number.isFinite(d.arrears) ? d.arrears : 0,
+              consecutiveUnpaidDays: Number.isFinite(d.unpaidDays) ? Math.round(d.unpaidDays) : 0,
+              ...(d.lastPaymentDate ? { lastPaymentDate: d.lastPaymentDate } : {}),
+            },
+          });
         }
       }
-    }
+    }, { timeout: 30000 });
 
     // Non-blocking cloud flush and sync touch so API response returns instantly
     void flushDatabaseSync().catch(() => {});

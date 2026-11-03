@@ -1,266 +1,87 @@
 /**
- * Prisma Client Singleton (LibSQL / Turso Version with Cloud-Synced SQLite Failover)
+ * Prisma Client Singleton — Single Source of Truth Architecture
  *
- * Uses @prisma/adapter-libsql configured with Turso Cloud database.
- * Automatically fails over to the bundled SQLite replica (dev.db) if Turso Cloud
- * blocks SQL operations (e.g. monthly row-read quota limit) and synchronizes
- * mutations across all Vercel Serverless containers in real time via sqliteCloudSync.
+ * Connects directly to the durable database via @prisma/adapter-libsql:
+ * - Production on Vercel: Connects to hosted database via TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.
+ * - Local Development / CI: Connects directly to local SQLite database (dev.db).
+ *
+ * Eliminates ephemeral /tmp SQLite failover and whole-file cloud synchronization,
+ * preventing race conditions, split-brain state, and SQLite disk image corruption.
  */
 
-import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
-import {
-  isCloudWalEnabled,
-  registerActiveSqlitePath,
-  pullSqliteSnapshotIfNewer,
-  syncCloudWalToClient,
-  prepareDeterministicWriteArgs,
-  recordWalEntry,
-  pushSqliteSnapshotNow,
-  scheduleSqliteSnapshotPush,
-} from "@/lib/sqliteCloudSync";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
-  primaryPrisma: PrismaClient | undefined;
-  fallbackPrisma: PrismaClient | undefined;
-  fallbackSqlitePath: string | undefined;
-  tursoBlockedUntil: number | undefined;
 };
 
-const PRODUCTION_TURSO_URL = "https://gocab-crm-gocab-crm.aws-ap-south-1.turso.io";
-const PRODUCTION_TURSO_TOKEN =
-  "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc3NDc4OTIsImlkIjoiMDFhMDNlMDAtMzcwMS03Y2FhLTkxYmMtOGUzYTNlMjc1YjZhIiwia2lkIjoic0NXSXczME1uSk1Pd0MyYjY0VzB3V0Zuek0tQWUxYm1PcU4tWmdaWUpiNCIsInJpZCI6IjdlMDc3NjY5LTJmMDYtNDRjMy1hNTM5LTJiODM4OWMxN2ViZCJ9.0g0YpznYxzbl2ZPeJh9doMk-GXrzL5GXlo9eUTTB_GkX6JmuYX0yXHPWL6NeWxL_7weQbi4WEY1zAMO7dk_gDQ";
+function resolveDatabaseUrl(): { url: string; isRemote: boolean; authToken?: string } {
+  const envUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
 
-const WRITE_METHODS = new Set([
-  "create",
-  "createMany",
-  "createManyAndReturn",
-  "update",
-  "updateMany",
-  "updateManyAndReturn",
-  "upsert",
-  "delete",
-  "deleteMany",
-]);
-
-function resolveTursoConfig(): { url: string; authToken: string } {
-  const envUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "";
-  const envToken = process.env.TURSO_AUTH_TOKEN || "";
-
-  if (
-    envUrl &&
-    (envUrl.startsWith("libsql://") || envUrl.startsWith("https://")) &&
-    !envUrl.includes("restored") &&
-    !envUrl.includes("mouadou123-3668") &&
-    envToken
-  ) {
+  if (envUrl && (envUrl.startsWith("libsql://") || envUrl.startsWith("https://"))) {
     return {
       url: envUrl.replace("libsql://", "https://").replace(/\/$/, ""),
-      authToken: envToken,
+      isRemote: true,
+      authToken,
     };
   }
 
-  return {
-    url: PRODUCTION_TURSO_URL,
-    authToken: PRODUCTION_TURSO_TOKEN,
-  };
-}
-
-function getPrimaryClient(): PrismaClient {
-  if (globalForPrisma.primaryPrisma) {
-    return globalForPrisma.primaryPrisma;
-  }
-  const { url, authToken } = resolveTursoConfig();
-  const adapter = new PrismaLibSql({ url, authToken });
-  const client = new PrismaClient({ adapter });
-  globalForPrisma.primaryPrisma = client;
-  return client;
-}
-
-function resolveFallbackSqlitePath(): string {
-  const explicitOverride = process.env.GOCAB_SQLITE_OVERRIDE_PATH;
-  if (explicitOverride) {
-    if (globalForPrisma.fallbackSqlitePath !== explicitOverride) {
-      globalForPrisma.fallbackSqlitePath = explicitOverride;
-      globalForPrisma.fallbackPrisma = undefined;
-      registerActiveSqlitePath(explicitOverride, () => globalForPrisma.fallbackPrisma);
-      optimizeSqlitePerformance(explicitOverride);
-    }
-    return explicitOverride;
+  if (envUrl && envUrl.startsWith("file:")) {
+    return {
+      url: envUrl,
+      isRemote: false,
+    };
   }
 
+  // Default to local SQLite dev.db in project root
   const candidates = [
     path.join(process.cwd(), "dev.db"),
     path.resolve("dev.db"),
   ];
-  const srcPath =
-    candidates.find((p) => {
-      try {
-        return fs.existsSync(p);
-      } catch {
-        return false;
-      }
-    }) || path.join(process.cwd(), "dev.db");
-
-  // On Vercel serverless, /var/task is read-only; copy dev.db to /tmp/gocab-dev.db
-  if (process.env.VERCEL || process.cwd().startsWith("/var/task")) {
+  const dbFile = candidates.find((p) => {
     try {
-      const tmpDbPath = path.join(os.tmpdir(), "gocab-dev.db");
-      const versionFile = path.join(os.tmpdir(), "gocab-dev.version");
-      const currentVersion =
-        process.env.VERCEL_GIT_COMMIT_SHA ||
-        process.env.VERCEL_DEPLOYMENT_ID ||
-        (fs.existsSync(srcPath) ? `${fs.statSync(srcPath).size}-${fs.statSync(srcPath).mtimeMs}` : "v1");
-
-      let recordedVersion = "";
-      try {
-        if (fs.existsSync(versionFile)) {
-          recordedVersion = fs.readFileSync(versionFile, "utf8").trim();
-        }
-      } catch {}
-
-      const isVersionMismatch = !recordedVersion || recordedVersion !== currentVersion;
-      const isSizeMismatch =
-        fs.existsSync(srcPath) &&
-        fs.existsSync(tmpDbPath) &&
-        fs.statSync(srcPath).size !== fs.statSync(tmpDbPath).size;
-
-      const shouldCopy =
-        !fs.existsSync(tmpDbPath) ||
-        isVersionMismatch ||
-        isSizeMismatch;
-
-      if (shouldCopy && fs.existsSync(srcPath)) {
-        console.log(`[Database] Copying fresh dev.db (${fs.statSync(srcPath).size} bytes) to ${tmpDbPath} (version: ${currentVersion})`);
-        // Remove stale WAL and SHM files to prevent WAL header salt mismatch / disk image malformed error
-        const walPath = `${tmpDbPath}-wal`;
-        const shmPath = `${tmpDbPath}-shm`;
-        try { if (fs.existsSync(walPath)) fs.unlinkSync(walPath); } catch {}
-        try { if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath); } catch {}
-        try { if (fs.existsSync(tmpDbPath)) fs.unlinkSync(tmpDbPath); } catch {}
-
-        fs.copyFileSync(srcPath, tmpDbPath);
-        try {
-          fs.writeFileSync(versionFile, currentVersion, "utf8");
-        } catch {}
-        globalForPrisma.fallbackPrisma = undefined;
-      }
-
-      if (fs.existsSync(tmpDbPath)) {
-        if (globalForPrisma.fallbackSqlitePath !== tmpDbPath) {
-          globalForPrisma.fallbackSqlitePath = tmpDbPath;
-          registerActiveSqlitePath(tmpDbPath, () => globalForPrisma.fallbackPrisma);
-          optimizeSqlitePerformance(tmpDbPath);
-        }
-        return tmpDbPath;
-      }
-    } catch (err) {
-      console.warn("Could not copy dev.db to os.tmpdir(), using source directly:", err);
+      return fs.existsSync(p);
+    } catch {
+      return false;
     }
-  }
+  }) || path.join(process.cwd(), "dev.db");
 
-  if (globalForPrisma.fallbackSqlitePath) {
-    return globalForPrisma.fallbackSqlitePath;
-  }
-
-  globalForPrisma.fallbackSqlitePath = srcPath;
-  registerActiveSqlitePath(srcPath, () => globalForPrisma.fallbackPrisma);
-  optimizeSqlitePerformance(srcPath);
-  return srcPath;
+  return {
+    url: `file:${dbFile.replace(/\\/g, "/")}`,
+    isRemote: false,
+  };
 }
 
-function optimizeSqlitePerformance(sqlitePath: string): void {
-  try {
-    const { createClient } = require("@libsql/client");
-    const client = createClient({ url: `file:${sqlitePath.replace(/\\/g, "/")}` });
-    client.execute("PRAGMA journal_mode = WAL;").catch(() => {});
-    client.execute("PRAGMA synchronous = NORMAL;").catch(() => {});
-    client.execute("PRAGMA temp_store = MEMORY;").catch(() => {});
-    client.execute("PRAGMA mmap_size = 268435456;").catch(() => {});
-    client.execute("PRAGMA cache_size = -64000;").catch(() => {});
-  } catch {}
+function createPrismaClient(): PrismaClient {
+  const { url, isRemote, authToken } = resolveDatabaseUrl();
+
+  const adapter = new PrismaLibSql({
+    url,
+    ...(isRemote && authToken ? { authToken } : {}),
+  });
+
+  return new PrismaClient({ adapter });
 }
 
-function getFallbackClient(forceRecreate = false): PrismaClient {
-  const sqlitePath = resolveFallbackSqlitePath();
-  if (globalForPrisma.fallbackPrisma && !forceRecreate) {
-    return globalForPrisma.fallbackPrisma;
-  }
-  const url = `file:${sqlitePath.replace(/\\/g, "/")}`;
-  const adapter = new PrismaLibSql({ url });
-  const client = new PrismaClient({ adapter });
-  globalForPrisma.fallbackPrisma = client;
-  registerActiveSqlitePath(sqlitePath, () => globalForPrisma.fallbackPrisma);
-  return client;
-}
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-async function getSyncedFallbackClient(force = false): Promise<PrismaClient> {
-  const sqlitePath = resolveFallbackSqlitePath();
-  if (isCloudWalEnabled()) {
-    const snapshotUpdated = await pullSqliteSnapshotIfNewer(sqlitePath, force);
-    const client = getFallbackClient(snapshotUpdated);
-    await syncCloudWalToClient(client, force);
-    return client;
-  }
-  return getFallbackClient(false);
-}
-
-function isTursoQuotaOrBlockError(err: any): boolean {
-  const msg = String(err?.message || err || "");
-  return (
-    msg.includes("BLOCKED") ||
-    msg.includes("SQL read operations are forbidden") ||
-    msg.includes("reads are blocked") ||
-    msg.includes("upgrade your plan") ||
-    msg.includes("SERVER_ERROR") ||
-    msg.includes("HTTP status 403") ||
-    msg.includes("HTTP status 429")
-  );
-}
-
-function isTursoCurrentlyBlocked(): boolean {
-  if (process.env.USE_SQLITE_FAILOVER === "false") {
-    return false;
-  }
-  return true;
-}
-
-function markTursoBlocked(): void {
-  globalForPrisma.tursoBlockedUntil = Date.now() + 24 * 60 * 60 * 1000;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }
 
 /**
- * Ensures the active SQLite database has replayed any cross-container WAL mutations
- * before checking route-level in-memory caches (e.g. leadsCache / driverCache).
+ * Compatibility helpers (no-ops in durable hosted database architecture)
  */
-export async function ensureDatabaseSynced(force = true): Promise<void> {
-  if (!isTursoCurrentlyBlocked()) return;
-  try {
-    await Promise.race([
-      getSyncedFallbackClient(force),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Database sync timeout")), 1500)
-      ),
-    ]);
-  } catch (err: any) {
-    console.warn("[ensureDatabaseSynced] Non-blocking sync timeout/warning:", err?.message || err);
-  }
+export async function ensureDatabaseSynced(_force?: boolean): Promise<void> {
+  // Durable database architecture maintains single source of truth; no local replay needed.
 }
 
-/**
- * Explicitly flushes any SQLite failover mutations to cross-container cloud storage
- * before serverless endpoints return.
- */
 export async function flushDatabaseSync(): Promise<void> {
-  if (!isTursoCurrentlyBlocked()) return;
-  if (isCloudWalEnabled()) {
-    const sqlitePath = resolveFallbackSqlitePath();
-    await pushSqliteSnapshotNow(sqlitePath);
-  }
+  // Durable database architecture commits directly over connection; no file sync needed.
 }
 
 export function isSqliteCorruptError(err: any): boolean {
@@ -271,229 +92,11 @@ export function isSqliteCorruptError(err: any): boolean {
     code === "11" ||
     code === "SQLITE_CORRUPT" ||
     msg.includes("SQLITE_CORRUPT") ||
-    msg.includes("database disk image is malformed") ||
-    msg.includes("Code: `11`") ||
-    msg.includes("Code: 11")
+    msg.includes("database disk image is malformed")
   );
 }
 
 export function recoverCorruptDatabase(): PrismaClient {
-  console.warn("[Database] SQLITE_CORRUPT detected! Auto-healing SQLite replica in /tmp...");
-  const tmpDbPath = path.join(os.tmpdir(), "gocab-dev.db");
-  const walPath = `${tmpDbPath}-wal`;
-  const shmPath = `${tmpDbPath}-shm`;
-
-  try { if (fs.existsSync(walPath)) fs.unlinkSync(walPath); } catch {}
-  try { if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath); } catch {}
-  try { if (fs.existsSync(tmpDbPath)) fs.unlinkSync(tmpDbPath); } catch {}
-
-  const candidates = [
-    path.join(process.cwd(), "dev.db"),
-    path.resolve("dev.db"),
-    "/var/task/dev.db",
-    "/var/task/scratch/Gocab/dev.db",
-  ];
-  let srcFound = "";
-  for (const cand of candidates) {
-    try {
-      if (fs.existsSync(cand)) {
-        srcFound = cand;
-        break;
-      }
-    } catch {}
-  }
-
-  if (srcFound) {
-    try {
-      fs.copyFileSync(srcFound, tmpDbPath);
-      console.log(`[Database] Pristine dev.db copied from ${srcFound} to ${tmpDbPath} (${fs.statSync(tmpDbPath).size} bytes)`);
-    } catch (e) {
-      console.error("[Database] Failed to copy pristine dev.db during auto-recovery:", e);
-    }
-  }
-
-  globalForPrisma.fallbackPrisma = undefined;
-  globalForPrisma.fallbackSqlitePath = fs.existsSync(tmpDbPath) ? tmpDbPath : (srcFound || "");
-  return getFallbackClient(true);
+  console.warn("[Database] Recovery requested — returning active Prisma singleton");
+  return prisma;
 }
-
-async function executeWithCorruptRecovery<T>(fn: (client: PrismaClient) => Promise<T>): Promise<T> {
-  const fbClient = await getSyncedFallbackClient(false);
-  try {
-    return await fn(fbClient);
-  } catch (err: any) {
-    if (isSqliteCorruptError(err)) {
-      console.warn("[Database] Caught SQLITE_CORRUPT during query execution, auto-healing and retrying...", err?.message || err);
-      const healedClient = recoverCorruptDatabase();
-      return await fn(healedClient);
-    }
-    throw err;
-  }
-}
-
-function wrapModelDelegate(modelProp: string | symbol): any {
-  const primaryDelegate = (getPrimaryClient() as any)[modelProp];
-  if (!primaryDelegate || typeof primaryDelegate !== "object") {
-    return primaryDelegate;
-  }
-
-  const modelName = String(modelProp);
-
-  return new Proxy(primaryDelegate, {
-    get(_target, methodProp) {
-      const activeClient = isTursoCurrentlyBlocked()
-        ? getFallbackClient()
-        : getPrimaryClient();
-      const activeDelegate = (activeClient as any)[modelProp];
-      const val = activeDelegate?.[methodProp];
-
-      if (typeof val !== "function") {
-        return val;
-      }
-
-      const methodName = String(methodProp);
-      const isWrite = WRITE_METHODS.has(methodName);
-
-      return async (...args: any[]) => {
-        if (isTursoCurrentlyBlocked()) {
-          return await executeWithCorruptRecovery(async (fbClient) => {
-            if (isWrite && isCloudWalEnabled()) {
-              const preparedArgs = prepareDeterministicWriteArgs(
-                modelName,
-                methodName,
-                args
-              );
-              const res = await (fbClient as any)[modelProp][methodProp](
-                ...preparedArgs
-              );
-              recordWalEntry(modelName, methodName, preparedArgs, res);
-              scheduleSqliteSnapshotPush();
-              return res;
-            }
-            return await (fbClient as any)[modelProp][methodProp](...args);
-          });
-        }
-
-        try {
-          return await (getPrimaryClient() as any)[modelProp][methodProp](...args);
-        } catch (err: any) {
-          if (isTursoQuotaOrBlockError(err)) {
-            markTursoBlocked();
-            return await executeWithCorruptRecovery(async (fbClient) => {
-              if (isWrite && isCloudWalEnabled()) {
-                const preparedArgs = prepareDeterministicWriteArgs(
-                  modelName,
-                  methodName,
-                  args
-                );
-                const res = await (fbClient as any)[modelProp][methodProp](
-                  ...preparedArgs
-                );
-                recordWalEntry(modelName, methodName, preparedArgs, res);
-                scheduleSqliteSnapshotPush();
-                return res;
-              }
-              return await (fbClient as any)[modelProp][methodProp](...args);
-            });
-          }
-          throw err;
-        }
-      };
-    },
-  });
-}
-
-function createFailoverPrismaClient(): PrismaClient {
-  const primary = getPrimaryClient();
-
-  return new Proxy(primary, {
-    get(_target, prop) {
-      if (prop === "$transaction") {
-        return async (arg: any, options?: any) => {
-          if (isTursoCurrentlyBlocked()) {
-            return await executeWithCorruptRecovery(async (fb) => {
-              const res = await fb.$transaction(arg, options);
-              if (isCloudWalEnabled()) {
-                await pushSqliteSnapshotNow().catch(() => {});
-                scheduleSqliteSnapshotPush();
-              }
-              return res;
-            });
-          }
-          try {
-            return await getPrimaryClient().$transaction(arg, options);
-          } catch (err: any) {
-            if (isTursoQuotaOrBlockError(err)) {
-              markTursoBlocked();
-              return await executeWithCorruptRecovery(async (fb) => {
-                const res = await fb.$transaction(arg, options);
-                if (isCloudWalEnabled()) {
-                  await pushSqliteSnapshotNow().catch(() => {});
-                  scheduleSqliteSnapshotPush();
-                }
-                return res;
-              });
-            }
-            throw err;
-          }
-        };
-      }
-
-      if (
-        prop === "$queryRaw" ||
-        prop === "$executeRaw" ||
-        prop === "$queryRawUnsafe" ||
-        prop === "$executeRawUnsafe"
-      ) {
-        const isRawWrite = prop === "$executeRaw" || prop === "$executeRawUnsafe";
-        return async (...args: any[]) => {
-          if (isTursoCurrentlyBlocked()) {
-            return await executeWithCorruptRecovery(async (fb) => {
-              const res = await (fb as any)[prop](...args);
-              if (isRawWrite && isCloudWalEnabled()) {
-                await pushSqliteSnapshotNow().catch(() => {});
-                scheduleSqliteSnapshotPush();
-              }
-              return res;
-            });
-          }
-          try {
-            return await (getPrimaryClient() as any)[prop](...args);
-          } catch (err: any) {
-            if (isTursoQuotaOrBlockError(err)) {
-              markTursoBlocked();
-              return await executeWithCorruptRecovery(async (fb) => {
-                const res = await (fb as any)[prop](...args);
-                if (isRawWrite && isCloudWalEnabled()) {
-                  await pushSqliteSnapshotNow().catch(() => {});
-                  scheduleSqliteSnapshotPush();
-                }
-                return res;
-              });
-            }
-            throw err;
-          }
-        };
-      }
-
-      const activeClient = isTursoCurrentlyBlocked()
-        ? getFallbackClient()
-        : getPrimaryClient();
-      const val = (activeClient as any)[prop];
-      if (
-        val &&
-        typeof val === "object" &&
-        !Symbol.iterator.toString().includes(String(prop))
-      ) {
-        return wrapModelDelegate(prop);
-      }
-      if (typeof val === "function") {
-        return val.bind(activeClient);
-      }
-      return val;
-    },
-  });
-}
-
-export const prisma = globalForPrisma.prisma ?? createFailoverPrismaClient();
-globalForPrisma.prisma = prisma;

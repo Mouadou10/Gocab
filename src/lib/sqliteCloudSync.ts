@@ -71,35 +71,6 @@ const DEFAULT_WEBHOOK_URL =
 const GOOGLE_SERVICE_ACCOUNT_EMAIL =
   "google-drive@gen-lang-client-0868678110.iam.gserviceaccount.com";
 
-const DEFAULT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
-MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCyIhj5Hz6a1dbD
-LO9EkbR97hoiOH9sRMZf9RNNmwxrVxvU8ApPAw8sBhQxOMlIiLMMViUVfaChVSUt
-uvqbJLyPG6X45aspZNbkghxkcNLMAMkcN0MZ/WDW+On62RJ2LWy5S1NEfAPqhPb2
-Y7ubFHRIwB/IAx6k4709vpTh+NFIciJdnKnjlMjRaVVQ+mGspoSMcGlndthyHg0u
-4mAcFg+HE9G2f6tQnc4kLD96Uag0CQrEeaxhs6P1ZDLIvDUKQGQnvRaLqqXw9Fn5
-Rw8C8pYUvYDaII7xiyLlLgBYegCUU/PEQTQPvf/B82vkkVWGQGOM/SxwFt2GsEXn
-UvGX88PNAgMBAAECggEAUm6L/vCyAGXXad9n4+PHUgU2q8JYWQpkgHBBXAbVkvCv
-DPV9171zLmyruHFuV/YGYT2WEKFfjXkA6O4fXV79MP5a6lihwdiLxxfcurApJEVy
-y29ZSnQh9akfYblFHVH8/6w3XrhC+apJPJC/ds7a1vWtX1nuOuC2qJWCgSWq92ov
-jDqyCgcqg2nH0rojTJbFK8okiPg6iMrNNaj62zrPlgd6M1o09y3zr/JYmcCE2/3T
-QDoXaWtyTViWScCZp+2tSR/72IpHZqXoKzml7U9nK9lKP/7E/dOqRVKBaQpzMPIg
-bh/shAMOGrNCsbe3fw1+gaX/xSBlMN+HhQVbOItKcwKBgQDlgQIDSnWe696Pra6D
-CqjsJFrh1t92oyAYRSCz6QxPPnUy6P6r3JjJeboq1eq5HTAjZifC05kkJOuuX9LF
-btBxORpYTOcGddneTDtAV9IXeNhC71NjVsoywD7Aw/fkcp46Tv4arMVA2OjS4Ywh
-JSOXHoCGPFzK2NnbVQwncRyqYwKBgQDGstOeOPu9aO5Ludwnk0opwlBAi0EYo+SJ
-OrBijXACWIFgzKovFnd3BPXM+cidSAuPvonDIowRvjjMPc29wE46lSYA+PeYiM4b
-2+VvxeU2WJk1AmPiMNLs5yjewU+d8xP8+hos1Ne245gARvbT1L5/VCADG9/4oJZX
-FaF+CumYDwKBgCfpQHVcDIpfkGvCE3gccXXneJqPqHrUMW+nDeHbpFVfkjgRRsCS
-c0uOTK7IVrJsfgOZ7041SAt+FDJV3ayR8dPOz2MNtJtuAT5kWWV+ID4OuOUjA4hh
-/nXG8uLI8aIbwKJ5PD1dUExPrGWH7buR3teX6VfuxWBNR82Zw6xUQlzrAoGBAI3u
-45ccIUbVk5LoOsjSP6HAuc7BKkjNmcwk7iYX3jDuw8w/pjlolQGhu2sl6hXfhtKx
-SnrnTKLH/I54f2TR34+dRr5fGY4N+xyPYT8MX4UImLfy8yJ5udGb9efYsmSjZF3K
-0bPAfi6YONXJ2zrJtyIBF7TgzoYtP/cI7oi4htAlAoGBAJndFmGETkZ8ZfRfsU4j
-mW23Sp0I1BcKnNcoK+kvviL5b4CQ3T6kDhNo5JLl/N8nl4kFtzD7bgYgXSBwCkok
-86pc4C3xS8S9UpcDNaDxfQd2+ZLxUH1gnxhWa1sWd35kQV4ALlboztkmmoJQDP4q
-H8C3qj1PipBONGputALVlcis
------END PRIVATE KEY-----`;
-
 const UNIQUE_FALLBACK_KEYS = [
   "id",
   "key",
@@ -547,7 +518,7 @@ async function getCachedDriveAccessToken(forceRefresh = false): Promise<string |
   const p = (async () => {
     try {
       const privateKey = (
-        process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || DEFAULT_PRIVATE_KEY
+        process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || ""
       ).replace(/\\n/g, "\n");
       const clientEmail =
         process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || GOOGLE_SERVICE_ACCOUNT_EMAIL;

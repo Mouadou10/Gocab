@@ -44,5 +44,7 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 
-# scratch
+# scratch & backups
 scratch/
+backups/
+*.db.bak
