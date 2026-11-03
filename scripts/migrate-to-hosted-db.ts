@@ -149,6 +149,15 @@ async function main() {
     process.stdout.write(`  Migrating ${table} (${totalCount} rows)... `);
     let migratedCount = 0;
 
+    // Reset unique 1-to-1 pointers before reconciling DriverProfile
+    if (table === "DriverProfile") {
+      try {
+        await targetClient.execute(`UPDATE "DriverProfile" SET "assignedVehicleId" = NULL;`);
+      } catch (err: any) {
+        // Table might be empty or not yet created
+      }
+    }
+
     // Fetch all rows from source in batches of 100
     const BATCH_SIZE = 100;
     for (let offset = 0; offset < totalCount; offset += BATCH_SIZE) {
@@ -160,17 +169,22 @@ async function main() {
 
       const columns = rowsRes.columns;
       const placeholders = columns.map(() => "?").join(", ");
-      const insertSql = `INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES (${placeholders});`;
+      const pkCol = table === "Setting" ? "key" : "id";
+      const updateCols = columns.filter((c) => c !== pkCol);
+      const conflictClause =
+        updateCols.length > 0
+          ? `ON CONFLICT("${pkCol}") DO UPDATE SET ${updateCols.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`
+          : `ON CONFLICT("${pkCol}") DO NOTHING`;
+      const insertSql = `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(", ")}) VALUES (${placeholders}) ${conflictClause};`;
 
-      // Execute batch insert into target
-      for (const row of rowsRes.rows) {
-        const values = columns.map((col) => row[col]);
-        await targetClient.execute({
-          sql: insertSql,
-          args: values as any,
-        });
-        migratedCount++;
-      }
+      // Execute batch insert into target using client.batch for 100x performance
+      const batchStatements = rowsRes.rows.map((row) => ({
+        sql: insertSql,
+        args: columns.map((col) => row[col]) as any,
+      }));
+
+      await targetClient.batch(batchStatements, "write");
+      migratedCount += rowsRes.rows.length;
     }
 
     migrationResults[table] = {
