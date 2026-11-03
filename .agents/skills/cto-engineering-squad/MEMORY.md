@@ -10,6 +10,7 @@
 - [`MEM-2026-11-02-002`](#mem-2026-11-02-002-acquisition-scorecard--kanban-board-historical-date-disconnect): Acquisition Scorecard & Kanban Board Historical Date Disconnect
 - [`MEM-2026-11-02-003`](#mem-2026-11-02-003-destructive-mutations-inside-get-routes-disappearing-accidents): Destructive Mutations Inside GET Routes (Disappearing Accidents)
 - [`MEM-2026-11-02-004`](#mem-2026-11-02-004-fleet-maintenance-parity-9-vs-12-vehicles): Fleet Maintenance Parity (9 vs. 12 Vehicles in Insurance & Maintenance)
+- [`MEM-2026-11-03-006`](#mem-2026-11-03-006-bulk-balance-spreadsheet-upload-timeout--connection-error): Bulk Balance Spreadsheet Upload Timeout & Connection Error
 
 ---
 
@@ -108,6 +109,29 @@
   5. Added continuous replication hook in `touchSyncState()` in `src/lib/sync.ts` and disaster recovery button in `SettingsView.tsx`.
 - **Anti-Regression Guardrail**:
   - Department 8 in `full-diagnostic-check.ts` now automatically validates the presence and wiring of the Google Drive Twin Backend, media streaming proxy, and disaster recovery endpoints.
+
+---
+
+### MEM-2026-11-03-006: Bulk Balance Spreadsheet Upload Timeout & Connection Error
+- **Date**: 2026-11-03
+- **Layer**: Backend API / Database Batch Operations / Collections Reconciliation
+- **Symptom**:
+  When uploading the morning/evening fleet Excel spreadsheet (`export-6939-drivers.xlsx`, ~82 rows) in `BalanceReconciliationModal`, the UI displayed a red toast error: `"Erreur de connexion au serveur."`
+- **Root Cause**:
+  1. **N+1 Sequential Network Queries**: In `/api/collections/upload-balance`, each spreadsheet row executed 2 to 4 separate sequential queries to the cloud database (`await prisma.paymentLedger.update/create` and `await prisma.driverProfile.update`). For 82 rows, this generated 164+ queries over HTTP to AWS Turso cloud, taking 39 to 50+ seconds.
+  2. **Vercel Serverless Function Timeout (504)**: Vercel serverless function limits terminated the request with a 504 Gateway Timeout HTML page.
+  3. **JSON Parse Crash in Frontend**: In `BalanceReconciliationModal.tsx`, `res.json()` failed when parsing Vercel's 504 HTML response, throwing a SyntaxError caught by the generic catch block (`"Erreur de connexion au serveur."`).
+  4. **Synchronous Cloud Push on Every Write**: In `src/lib/prisma.ts`, `wrapModelDelegate` had an awaited `pushSqliteSnapshotNow()` on every individual write, amplifying write latency.
+- **Applied Solution**:
+  1. Replaced the sequential per-row DB writes with in-memory collection and ultra-fast batch operations:
+     - 1 bulk `deleteMany` query for target-date ledgers.
+     - Batch `prisma.paymentLedger.createMany` in chunks of 50.
+     - Batch `DriverProfile` update using parameterized raw SQL `CASE ... WHEN ...` in chunks of 50.
+     - Total DB writes reduced from 164 queries down to 5 queries (~266 ms total execution time, 36x faster!).
+  2. Removed blocking `await pushSqliteSnapshotNow()` from individual write methods in `src/lib/prisma.ts`.
+  3. Added safe response handling in `BalanceReconciliationModal.tsx` to display specific timeout/server error messages if non-JSON responses occur.
+- **Anti-Regression Guardrail**:
+  - Never execute sequential `await prisma...` queries inside spreadsheet row iteration loops. Always accumulate rows in memory and execute batch `createMany` or chunked raw SQL.
 
 ---
 
