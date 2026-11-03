@@ -199,7 +199,19 @@ export default function BalanceReconciliationModal({
         body: formData,
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const text = await res.text().catch(() => "");
+        console.error("Non-JSON upload response:", res.status, text);
+        toast.error(
+          res.status === 504 || res.status === 502
+            ? "Le serveur a mis trop de temps à répondre (Délai d'attente dépassé). Veuillez réessayer."
+            : `Erreur serveur (${res.status}). Veuillez réessayer.`
+        );
+        return;
+      }
 
       if (!res.ok) {
         toast.error(data.error || "Erreur lors du traitement du fichier");

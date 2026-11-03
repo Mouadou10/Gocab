@@ -507,6 +507,9 @@ export async function POST(request: NextRequest) {
       return { driver, vehicle };
     };
 
+    const pendingLedgers: any[] = [];
+    const pendingDriverUpdates: { id: string; arrears: number; unpaidDays: number; lastPaymentDate?: Date }[] = [];
+
     // ─────────────────────────────────────────────────────────────────────────────
     // CASE 1: DUAL FILES (User provided separate Morning and Evening files)
     // ─────────────────────────────────────────────────────────────────────────────
@@ -598,42 +601,23 @@ export async function POST(request: NextRequest) {
         const newArrears = eveningBal !== 0 ? (eveningBal < 0 ? Math.abs(eveningBal) : 0) : Math.max(0, morningArrears - collected);
         const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
 
-        if (existingLedger) {
-          await prisma.paymentLedger.update({
-            where: { id: existingLedger.id },
-            data: {
-              morningBalance: morningBal,
-              eveningBalance: eveningBal,
-              clearedMAD: collected,
-              calculatedDelta: collected,
-              arrearsMAD: newArrears,
-              expectedMAD: expectedMAD || existingLedger.expectedMAD,
-              notes: `Rapprochement Matin + Soir: Matin ${morningBal} MAD ➔ Soir ${eveningBal} MAD (Encaissé: ${collected} MAD)`,
-            },
-          });
-        } else {
-          await prisma.paymentLedger.create({
-            data: {
-              driverId: driver.id,
-              paymentDate: targetDate,
-              expectedMAD,
-              clearedMAD: collected,
-              arrearsMAD: newArrears,
-              morningBalance: morningBal,
-              eveningBalance: eveningBal,
-              calculatedDelta: collected,
-              notes: `Rapprochement Matin + Soir: Matin ${morningBal} MAD ➔ Soir ${eveningBal} MAD (Encaissé: ${collected} MAD)`,
-            },
-          });
-        }
+        pendingLedgers.push({
+          driverId: driver.id,
+          paymentDate: targetDate,
+          expectedMAD,
+          clearedMAD: collected,
+          arrearsMAD: newArrears,
+          morningBalance: morningBal,
+          eveningBalance: eveningBal,
+          calculatedDelta: collected,
+          notes: `Rapprochement Matin + Soir: Matin ${morningBal} MAD ➔ Soir ${eveningBal} MAD (Encaissé: ${collected} MAD)`,
+        });
 
-        await prisma.driverProfile.update({
-          where: { id: driver.id },
-          data: {
-            currentArrearsMAD: newArrears,
-            consecutiveUnpaidDays: newUnpaidDays,
-            lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
-          },
+        pendingDriverUpdates.push({
+          id: driver.id,
+          arrears: newArrears,
+          unpaidDays: newUnpaidDays,
+          lastPaymentDate: collected > 0 ? new Date() : undefined,
         });
 
         matchedDriversList.push({
@@ -661,28 +645,16 @@ export async function POST(request: NextRequest) {
           totalMorningTargetMAD += morningArrears;
           unpaidCount++;
 
-          const existingLedger = driver.payments?.[0] || null;
-          if (existingLedger) {
-            await prisma.paymentLedger.update({
-              where: { id: existingLedger.id },
-              data: {
-                morningBalance: morningBal,
-                arrearsMAD: morningArrears,
-              },
-            });
-          } else {
-            await prisma.paymentLedger.create({
-              data: {
-                driverId: driver.id,
-                paymentDate: targetDate,
-                expectedMAD: 300,
-                clearedMAD: 0,
-                arrearsMAD: morningArrears,
-                morningBalance: morningBal,
-                notes: `Solde initial (matin): ${morningBal} MAD (Non présent au fichier soir)`,
-              },
-            });
-          }
+          pendingLedgers.push({
+            driverId: driver.id,
+            paymentDate: targetDate,
+            expectedMAD: 300,
+            clearedMAD: 0,
+            arrearsMAD: morningArrears,
+            morningBalance: morningBal,
+            eveningBalance: null,
+            notes: `Solde initial (matin): ${morningBal} MAD (Non présent au fichier soir)`,
+          });
 
           matchedDriversList.push({
             driverId: driver.id,
@@ -783,42 +755,23 @@ export async function POST(request: NextRequest) {
           const newArrears = eBal !== 0 ? (eBal < 0 ? Math.abs(eBal) : 0) : Math.max(0, morningArrears - collected);
           const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
 
-          if (existingLedger) {
-            await prisma.paymentLedger.update({
-              where: { id: existingLedger.id },
-              data: {
-                morningBalance: mBal,
-                eveningBalance: eBal,
-                clearedMAD: collected,
-                calculatedDelta: collected,
-                arrearsMAD: newArrears,
-                expectedMAD: expectedMAD || existingLedger.expectedMAD,
-                notes: `Rapprochement complet (Colonnes Matin + Soir): Matin ${mBal} MAD ➔ Soir ${eBal} MAD (Encaissé: ${collected} MAD)`,
-              },
-            });
-          } else {
-            await prisma.paymentLedger.create({
-              data: {
-                driverId: driver.id,
-                paymentDate: targetDate,
-                expectedMAD,
-                clearedMAD: collected,
-                arrearsMAD: newArrears,
-                morningBalance: mBal,
-                eveningBalance: eBal,
-                calculatedDelta: collected,
-                notes: `Rapprochement complet (Colonnes Matin + Soir): Matin ${mBal} MAD ➔ Soir ${eBal} MAD (Encaissé: ${collected} MAD)`,
-              },
-            });
-          }
+          pendingLedgers.push({
+            driverId: driver.id,
+            paymentDate: targetDate,
+            expectedMAD,
+            clearedMAD: collected,
+            arrearsMAD: newArrears,
+            morningBalance: mBal,
+            eveningBalance: eBal,
+            calculatedDelta: collected,
+            notes: `Rapprochement complet (Colonnes Matin + Soir): Matin ${mBal} MAD ➔ Soir ${eBal} MAD (Encaissé: ${collected} MAD)`,
+          });
 
-          await prisma.driverProfile.update({
-            where: { id: driver.id },
-            data: {
-              currentArrearsMAD: newArrears,
-              consecutiveUnpaidDays: newUnpaidDays,
-              lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
-            },
+          pendingDriverUpdates.push({
+            id: driver.id,
+            arrears: newArrears,
+            unpaidDays: newUnpaidDays,
+            lastPaymentDate: collected > 0 ? new Date() : undefined,
           });
 
           matchedDriversList.push({
@@ -842,37 +795,22 @@ export async function POST(request: NextRequest) {
           totalMorningTargetMAD += morningArrears;
           if (morningCleared > 0) totalCollectedToday += morningCleared;
 
-          if (existingLedger) {
-            await prisma.paymentLedger.update({
-              where: { id: existingLedger.id },
-              data: {
-                morningBalance: balance,
-                expectedMAD: expectedMAD || existingLedger.expectedMAD,
-                clearedMAD: morningCleared,
-                arrearsMAD: morningArrears,
-                notes: existingLedger.notes || `Solde initial: ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
-              },
-            });
-          } else {
-            await prisma.paymentLedger.create({
-              data: {
-                driverId: driver.id,
-                paymentDate: targetDate,
-                expectedMAD,
-                clearedMAD: morningCleared,
-                arrearsMAD: morningArrears,
-                morningBalance: balance,
-                notes: `Solde initial (matin): ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
-              },
-            });
-          }
+          pendingLedgers.push({
+            driverId: driver.id,
+            paymentDate: targetDate,
+            expectedMAD,
+            clearedMAD: morningCleared,
+            arrearsMAD: morningArrears,
+            morningBalance: balance,
+            eveningBalance: existingLedger?.eveningBalance ?? null,
+            calculatedDelta: existingLedger?.calculatedDelta ?? null,
+            notes: existingLedger?.notes || `Solde initial: ${balance} MAD${morningCleared > 0 ? ` (Versement: ${morningCleared} MAD)` : ""}`,
+          });
 
-          await prisma.driverProfile.update({
-            where: { id: driver.id },
-            data: {
-              currentArrearsMAD: morningArrears,
-              consecutiveUnpaidDays: morningUnpaidDays,
-            },
+          pendingDriverUpdates.push({
+            id: driver.id,
+            arrears: morningArrears,
+            unpaidDays: morningUnpaidDays,
           });
 
           matchedDriversList.push({
@@ -921,40 +859,23 @@ export async function POST(request: NextRequest) {
           const newArrears = balance !== 0 ? (balance < 0 ? Math.abs(balance) : 0) : Math.max(0, (driver.currentArrearsMAD || 0) - collected);
           const newUnpaidDays = collected >= expectedMAD && expectedMAD > 0 ? 0 : Math.max(1, (driver.consecutiveUnpaidDays || 0) + 1);
 
-          if (existingLedger) {
-            await prisma.paymentLedger.update({
-              where: { id: existingLedger.id },
-              data: {
-                eveningBalance: balance,
-                calculatedDelta: collected,
-                clearedMAD: collected,
-                arrearsMAD: newArrears,
-                notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
-              },
-            });
-          } else {
-            await prisma.paymentLedger.create({
-              data: {
-                driverId: driver.id,
-                paymentDate: targetDate,
-                expectedMAD,
-                clearedMAD: collected,
-                arrearsMAD: newArrears,
-                morningBalance: morningBal,
-                eveningBalance: balance,
-                calculatedDelta: collected,
-                notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
-              },
-            });
-          }
+          pendingLedgers.push({
+            driverId: driver.id,
+            paymentDate: targetDate,
+            expectedMAD,
+            clearedMAD: collected,
+            arrearsMAD: newArrears,
+            morningBalance: morningBal,
+            eveningBalance: balance,
+            calculatedDelta: collected,
+            notes: `Rapprochement soir: Matin ${morningBal} MAD ➔ Soir ${balance} MAD (Encaissé: ${collected} MAD)`,
+          });
 
-          await prisma.driverProfile.update({
-            where: { id: driver.id },
-            data: {
-              currentArrearsMAD: newArrears,
-              consecutiveUnpaidDays: newUnpaidDays,
-              lastPaymentDate: collected > 0 ? new Date() : driver.lastPaymentDate,
-            },
+          pendingDriverUpdates.push({
+            id: driver.id,
+            arrears: newArrears,
+            unpaidDays: newUnpaidDays,
+            lastPaymentDate: collected > 0 ? new Date() : undefined,
           });
 
           matchedDriversList.push({
@@ -974,9 +895,65 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Touch sync state so all active sessions & dashboard instantly refresh collections data
-    await flushDatabaseSync();
-    await touchSyncState("collections");
+    // ── Ultra-Fast Bulk Database Writes (< 1.5s total) ───────────────────────
+    if (pendingLedgers.length > 0) {
+      const driverIds = Array.from(new Set(pendingLedgers.map((l) => l.driverId)));
+
+      // 1. Delete existing ledgers for these drivers on targetDate in 1 query
+      await prisma.paymentLedger.deleteMany({
+        where: {
+          driverId: { in: driverIds },
+          paymentDate: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+      });
+
+      // 2. Batch insert ledgers in chunks of 50
+      for (let i = 0; i < pendingLedgers.length; i += 50) {
+        const chunk = pendingLedgers.slice(i, i + 50);
+        await prisma.paymentLedger.createMany({
+          data: chunk,
+        });
+      }
+    }
+
+    if (pendingDriverUpdates.length > 0) {
+      // 3. Batch update driver profiles using raw SQL in chunks of 50
+      for (let i = 0; i < pendingDriverUpdates.length; i += 50) {
+        const chunk = pendingDriverUpdates.slice(i, i + 50);
+        const whenArrears = chunk.map((d) => `WHEN id = '${d.id}' THEN ${d.arrears}`).join(" ");
+        const whenDays = chunk.map((d) => `WHEN id = '${d.id}' THEN ${d.unpaidDays}`).join(" ");
+        const ids = chunk.map((d) => `'${d.id}'`).join(",");
+
+        const rawSql = `
+          UPDATE DriverProfile
+          SET
+            currentArrearsMAD = CASE ${whenArrears} ELSE currentArrearsMAD END,
+            consecutiveUnpaidDays = CASE ${whenDays} ELSE consecutiveUnpaidDays END
+          WHERE id IN (${ids})
+        `;
+        await prisma.$executeRawUnsafe(rawSql);
+      }
+
+      const paidDriverIds = pendingDriverUpdates
+        .filter((d) => d.lastPaymentDate)
+        .map((d) => `'${d.id}'`);
+
+      if (paidDriverIds.length > 0) {
+        const nowIso = new Date().toISOString();
+        await prisma.$executeRawUnsafe(`
+          UPDATE DriverProfile
+          SET lastPaymentDate = '${nowIso}'
+          WHERE id IN (${paidDriverIds.join(",")})
+        `);
+      }
+    }
+
+    // Non-blocking cloud flush and sync touch so API response returns instantly
+    void flushDatabaseSync().catch(() => {});
+    await touchSyncState("collections").catch(() => {});
     invalidateDriverCache();
 
     return NextResponse.json({

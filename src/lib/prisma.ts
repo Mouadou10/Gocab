@@ -255,9 +255,6 @@ function wrapModelDelegate(modelProp: string | symbol): any {
               ...preparedArgs
             );
             recordWalEntry(modelName, methodName, preparedArgs, res);
-            if (isCloudWalEnabled()) {
-              await pushSqliteSnapshotNow().catch(() => {});
-            }
             scheduleSqliteSnapshotPush();
             return res;
           }
@@ -280,9 +277,6 @@ function wrapModelDelegate(modelProp: string | symbol): any {
                 ...preparedArgs
               );
               recordWalEntry(modelName, methodName, preparedArgs, res);
-              if (isCloudWalEnabled()) {
-                await pushSqliteSnapshotNow().catch(() => {});
-              }
               scheduleSqliteSnapshotPush();
               return res;
             }
