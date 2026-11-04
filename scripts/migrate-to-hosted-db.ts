@@ -171,9 +171,12 @@ async function main() {
       const placeholders = columns.map(() => "?").join(", ");
       const pkCol = table === "Setting" ? "key" : "id";
       const updateCols = columns.filter((c) => c !== pkCol);
+      const hasUpdatedAt = columns.includes("updated_at");
       const conflictClause =
         updateCols.length > 0
-          ? `ON CONFLICT("${pkCol}") DO UPDATE SET ${updateCols.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`
+          ? hasUpdatedAt
+            ? `ON CONFLICT("${pkCol}") DO UPDATE SET ${updateCols.map((c) => `"${c}" = excluded."${c}"`).join(", ")} WHERE excluded."updated_at" >= "${table}"."updated_at" OR "${table}"."updated_at" IS NULL`
+            : `ON CONFLICT("${pkCol}") DO UPDATE SET ${updateCols.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`
           : `ON CONFLICT("${pkCol}") DO NOTHING`;
       const insertSql = `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(", ")}) VALUES (${placeholders}) ${conflictClause};`;
 
