@@ -228,6 +228,14 @@ export function resolveLeadStatus(rawStatus?: string): {
   }
 
   if (
+    normalized.includes("hors zone") ||
+    normalized.includes("hor zone") ||
+    normalized.includes("out of zone")
+  ) {
+    return { board_column: "BRAND_PRE_FILTER", brand_status: "Hors zone", training_status: null };
+  }
+
+  if (
     normalized.includes("already a client") ||
     normalized.includes("already client") ||
     normalized.includes("deja client") ||

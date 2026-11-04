@@ -24,6 +24,7 @@ const BRAND_STATUS_OPTIONS = [
   "To Recall",
   "Wrong number",
   "No response 2",
+  "Hors zone",
   "Already a client",
 ] as const;
 

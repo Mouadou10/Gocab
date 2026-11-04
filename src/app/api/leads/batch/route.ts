@@ -27,6 +27,7 @@ function resolveLeadTargetStatus(targetStatus: string, reminderDate?: string | n
       "To Recall",
       "Wrong number",
       "No response 2",
+      "Hors zone",
       "Already a client",
     ].includes(targetStatus)
   ) {
@@ -52,6 +53,7 @@ function resolveLeadTargetStatus(targetStatus: string, reminderDate?: string | n
     "To Recall",
     "Wrong number",
     "No response 2",
+    "Hors zone",
     "Already a client",
   ].includes(targetStatus);
 

@@ -47,6 +47,7 @@ const COLUMN_LABELS: Record<string, string> = {
   "To Recall": "To Recall",
   "Wrong number": "Wrong Number",
   "No response 2": "No Response 2",
+  "Hors zone": "Hors Zone",
   "Already a client": "Already a Client",
 
   // Training Page
@@ -68,6 +69,7 @@ const COLUMN_ACCENTS: Record<string, string> = {
   NEW_LEADS: "from-blue-500 to-blue-600",
   "Training fixed": "from-teal-500 to-emerald-500",
   "Already a client": "from-olive to-green-600",
+  "Hors zone": "from-purple-500 to-indigo-500",
   Scheduled: "from-indigo-500 to-purple-500",
   "Assign vehicle": "from-emerald-500 to-teal-600",
   "Accept offer": "from-emerald-500 to-teal-600",

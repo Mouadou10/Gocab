@@ -139,6 +139,7 @@ const LEADS_COLUMNS = [
   "To Recall",
   "Wrong number",
   "No response 2",
+  "Hors zone",
   "Already a client",
 ] as const;
 
@@ -2511,6 +2512,7 @@ export default function KanbanBoard() {
                     <option value="Not interested">Not interested</option>
                     <option value="No response 1">No response 1</option>
                     <option value="No response 2">No response 2</option>
+                    <option value="Hors zone">Hors zone</option>
                     <option value="Wrong number">Wrong number</option>
                     <option value="Already a client">Already a client</option>
                   </optgroup>

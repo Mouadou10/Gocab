@@ -259,6 +259,13 @@ export default function LeadsScorecard({
       dotColor: 'bg-sky-500',
     },
     {
+      key: 'Hors zone',
+      label: 'Hors Zone',
+      count: statusCounts['Hors zone'] || 0,
+      colorClasses: 'bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100/90 hover:border-indigo-300',
+      dotColor: 'bg-indigo-500',
+    },
+    {
       key: 'Already a client',
       label: 'Déjà Client',
       count: statusCounts['Already a client'] || 0,

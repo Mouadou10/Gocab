@@ -300,6 +300,8 @@ export default function LeadCard({
               className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
                 isTrainingFixed
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : (lead.brand_status || "").toLowerCase() === "hors zone"
+                  ? "bg-purple-100 text-purple-800 border-purple-300 font-bold"
                   : "bg-slate-100 text-slate-700 border-slate-200"
               }`}
             >
