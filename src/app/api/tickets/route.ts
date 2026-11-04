@@ -3,6 +3,7 @@ import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { sendFieldTaskTelegramAlert } from "@/lib/services/telegramService";
 import { requireAuth } from "@/lib/api-auth";
+import { advanceBcCounter } from "@/lib/bc-counter";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import {
   extractFleetSyncFromComments,
@@ -303,6 +304,12 @@ export async function POST(request: Request) {
             parsedBc = parsed.bon_de_commande;
           }
         } catch {}
+      }
+
+      if (parsedBc?.bc_number) {
+        advanceBcCounter(parsedBc.bc_number).catch((err) =>
+          console.warn("Auto-advancing BC counter error on ticket create:", err)
+        );
       }
 
       const costAmount = parsedBc?.total_ttc || (repair_cost !== undefined && repair_cost !== null ? Number(repair_cost) : 0);

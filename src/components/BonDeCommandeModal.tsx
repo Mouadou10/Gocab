@@ -37,9 +37,15 @@ export default function BonDeCommandeModal({
       return initialData.bc_number;
     }
     if (typeof window !== "undefined") {
-      return localStorage.getItem("gocab_next_bc_ref") || "2026/04";
+      const cached = localStorage.getItem("gocab_next_bc_ref");
+      if (cached) {
+        const match = cached.match(/^(\d{4})\/(\d+)$/);
+        if (match && parseInt(match[2], 10) >= 97) {
+          return cached;
+        }
+      }
     }
-    return "2026/04";
+    return "2026/97";
   });
   const [date, setDate] = useState<string>(initialData?.date || getFormattedToday());
   const [supplierName, setSupplierName] = useState<string>(initialData?.supplier_name || "Hard Auto Services");
@@ -427,6 +433,25 @@ export default function BonDeCommandeModal({
 
   const handlePrint = () => {
     const data = getCurrentData();
+
+    // Increment backend counter for sequential references on print as well
+    if (data.bc_number) {
+      fetch("/api/bon-de-commande/next-ref", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usedRef: data.bc_number }),
+      })
+        .then((res) => res.json())
+        .then((resJson) => {
+          if (resJson?.nextRef && typeof window !== "undefined") {
+            localStorage.setItem("gocab_next_bc_ref", resJson.nextRef);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to advance BC ref counter on print:", err);
+        });
+    }
+
     printBonDeCommande(data);
   };
 
