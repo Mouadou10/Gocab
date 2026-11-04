@@ -397,36 +397,35 @@ export default function LeadCard({
                 handleTogglePresence(!presenceConfirmed);
               }
             }}
-            className={`mt-2 flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition-all ${
+            className={`mt-2 flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition-all notranslate ${
               presenceConfirmed
                 ? "bg-emerald-50 border-emerald-300 text-emerald-800 font-medium"
                 : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-emerald-50/50 hover:border-emerald-200"
             }`}
             title="Cocher si le prospect a été appelé pour confirmer sa présence"
+            translate="no"
           >
             <input
               type="checkbox"
               id={`presence-${lead.id}`}
               checked={presenceConfirmed}
-              onChange={(e) => {
-                e.stopPropagation();
-                handleTogglePresence(e.target.checked);
-              }}
+              readOnly
+              tabIndex={-1}
               disabled={isUpdatingPresence}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              className="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer pointer-events-none"
             />
-            <label
-              htmlFor={`presence-${lead.id}`}
-              className="cursor-pointer text-[11px] flex-1 flex items-center justify-between"
-              onClick={(e) => e.stopPropagation()}
+            <div
+              className="text-[11px] flex-1 flex items-center justify-between pointer-events-none"
             >
-              <span>{presenceConfirmed ? "Présence confirmée par appel" : "Appel confirmation présence"}</span>
+              <span key={presenceConfirmed ? "confirmed" : "unconfirmed"}>
+                {presenceConfirmed ? "Présence confirmée par appel" : "Appel confirmation présence"}
+              </span>
               {presenceConfirmed && (
                 <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold">
                   ✓ Confirmé
                 </span>
               )}
-            </label>
+            </div>
           </div>
         )}
       </div>

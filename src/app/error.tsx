@@ -13,7 +13,21 @@ export default function GlobalError({
 
   useEffect(() => {
     console.error("Global Error Caught:", error);
-  }, [error]);
+
+    // Auto-heal DOM reconciliation / translation glitches instantly
+    const msg = error?.message || "";
+    if (
+      msg.includes("removeChild") ||
+      msg.includes("insertBefore") ||
+      msg.includes("not a child of this node")
+    ) {
+      console.warn("DOM mutation mismatch detected in ErrorBoundary. Auto-recovering application state...");
+      const timer = setTimeout(() => {
+        reset();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [error, reset]);
 
   return (
     <div className="flex min-h-screen w-full flex-col items-center justify-center p-4 bg-[#f4f6fb]">
