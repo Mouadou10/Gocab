@@ -358,8 +358,10 @@ export default function FleetView() {
   const totalCount = vehicles.length;
   const isActifStatus = (status: string) =>
     ["Actif", "working", "In service", "in service", "En service", "en service"].includes(status);
+  const isAvailableStatus = (status: string) =>
+    ["Available", "Disponible", "disponible"].includes(status);
   const activeCount = vehicles.filter((v) => isActifStatus(v.status)).length;
-  const availableCount = vehicles.filter((v) => v.status === "Available" || v.status === "disponible").length;
+  const availableCount = vehicles.filter((v) => isAvailableStatus(v.status)).length;
   const inGarageCount = vehicles.filter(
     (v) => v.status === "In garage" || v.status === "maintenance" || v.status === "Accident"
   ).length;
@@ -375,7 +377,7 @@ export default function FleetView() {
   const filteredVehicles = useMemo(() => {
     return vehicles.filter((v) => {
       if (activeQuickTab === "ACTIVE" && !isActifStatus(v.status)) return false;
-      if (activeQuickTab === "AVAILABLE" && v.status !== "Available") return false;
+      if (activeQuickTab === "AVAILABLE" && !isAvailableStatus(v.status)) return false;
       if (
         activeQuickTab === "GARAGE" &&
         v.status !== "In garage" &&
