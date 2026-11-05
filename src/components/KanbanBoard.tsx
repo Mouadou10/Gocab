@@ -56,6 +56,7 @@ import AgentActivityModal from "./AgentActivityModal";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
+import { parseTargetHistory, getTargetForDate } from "@/lib/target-history";
 
 interface Lead {
   id: string;
@@ -280,8 +281,9 @@ export default function KanbanBoard() {
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const [customName, setCustomName] = useState<string | null>(null);
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
-  const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
-  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
+  const [dailyCallsTarget, setDailyCallsTarget] = useState(153);
+  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(46);
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
   const [showCelebrationModal, setShowCelebrationModal] = useState(false);
   const [hasCelebratedToday, setHasCelebratedToday] = useState(false);
 
@@ -650,11 +652,21 @@ export default function KanbanBoard() {
             setRolePermissions(merged);
           } catch (e) {}
         }
+        let currentTargetsObj: any = null;
         if (data.settings.department_weekly_targets) {
           try {
-            const targets = JSON.parse(data.settings.department_weekly_targets);
-            if (targets.target_daily_calls) setDailyCallsTarget(Number(targets.target_daily_calls));
-            if (targets.target_daily_training_fixed) setDailyTrainingTarget(Number(targets.target_daily_training_fixed));
+            currentTargetsObj = JSON.parse(data.settings.department_weekly_targets);
+            if (currentTargetsObj.target_daily_calls) setDailyCallsTarget(Number(currentTargetsObj.target_daily_calls));
+            if (currentTargetsObj.target_daily_training_fixed) setDailyTrainingTarget(Number(currentTargetsObj.target_daily_training_fixed));
+          } catch (e) {}
+        }
+        if (data.settings.department_target_history) {
+          try {
+            const parsedHistory = parseTargetHistory(data.settings.department_target_history);
+            const todayStr = new Date().toISOString().split("T")[0];
+            const dayTarget = getTargetForDate(todayStr, parsedHistory, currentTargetsObj);
+            if (dayTarget?.target_daily_calls) setDailyCallsTarget(Number(dayTarget.target_daily_calls));
+            if (dayTarget?.target_daily_training_fixed) setDailyTrainingTarget(Number(dayTarget.target_daily_training_fixed));
           } catch (e) {}
         }
         if (data.settings.custom_role_labels) {
@@ -663,9 +675,13 @@ export default function KanbanBoard() {
             setRoleLabels((prev) => ({ ...prev, ...parsedLabels }));
           } catch (e) {}
         }
+        setIsSettingsLoaded(true);
+      } else {
+        setIsSettingsLoaded(true);
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
+      setIsSettingsLoaded(true);
     }
   }, []);
 
@@ -872,7 +888,11 @@ export default function KanbanBoard() {
     }).length;
   }, [leads, isScheduledDateToday]);
 
-  const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
+  const isDailyTrainingGoalAchieved = useMemo(() => {
+    if (!isSettingsLoaded) return false;
+    if (!dailyTrainingTarget || dailyTrainingTarget <= 0) return false;
+    return trainingFixedToday >= dailyTrainingTarget;
+  }, [isSettingsLoaded, dailyTrainingTarget, trainingFixedToday]);
   const totalNewLeadsInDB = useMemo(() => {
     return leads.filter(
       (l) =>
@@ -901,8 +921,11 @@ export default function KanbanBoard() {
     if (isLeadAcquisition && isDailyTrainingGoalAchieved && !hasCelebratedToday && leads.length > 0) {
       setShowCelebrationModal(true);
       setHasCelebratedToday(true);
+    } else if (!isDailyTrainingGoalAchieved && showCelebrationModal) {
+      // Guard: If goal is not achieved (e.g. 32 < 46), close the celebration modal immediately
+      setShowCelebrationModal(false);
     }
-  }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length, activeTab, userRole]);
+  }, [isDailyTrainingGoalAchieved, hasCelebratedToday, leads.length, activeTab, userRole, showCelebrationModal]);
 
   /** Check if a lead matches the search query by name or flexible phone formatting */
   const doesLeadMatchSearch = useCallback((l: Lead, cleanQuery: string): boolean => {

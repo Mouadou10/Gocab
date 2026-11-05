@@ -33,8 +33,8 @@ function LeadsScorecardComponent({
     onDateChange?.(newVal);
   };
 
-  const [dailyCallsTarget, setDailyCallsTarget] = useState(34);
-  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(7);
+  const [dailyCallsTarget, setDailyCallsTarget] = useState(153);
+  const [dailyTrainingTarget, setDailyTrainingTarget] = useState(46);
   const [targetConversionRate, setTargetConversionRate] = useState(20);
   const [targetHistory, setTargetHistory] = useState<TargetSnapshot[]>([]);
   const [currentTargets, setCurrentTargets] = useState<any>(null);
