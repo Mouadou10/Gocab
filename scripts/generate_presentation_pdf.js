@@ -297,8 +297,8 @@ const htmlContent = `<!DOCTYPE html>
         <h2>Month-over-Month (MoM) Operational Evolution</h2>
         <p>Complete multi-dimensional tracking of every operational, financial, and engagement KPI from June to October 2026.</p>
       </div>
-      <div class="neu-pill-soft" style="padding: 8px 16px; font-size: 11.5px;">
-        * Note: August sheet replicates July data in partner export
+      <div class="neu-pill-soft" style="padding: 7px 16px; font-size: 11px;">
+        * InFleet tracks 78 active drivers (plate, phone &amp; license). inDrive plate sync detects 68 (61 with &gt;0 rides). August replicates July.
       </div>
     </div>
 
@@ -318,22 +318,31 @@ const htmlContent = `<!DOCTYPE html>
         </thead>
         <tbody class="font-mono">
           <tr>
-            <td style="font-family: 'Plus Jakarta Sans'; font-weight: 600;">Active inDrive Drivers (Rides &gt; 0)</td>
+            <td style="font-family: 'Plus Jakarta Sans'; font-weight: 600;">Active inDrive Drivers (InFleet Ground Truth)</td>
             <td style="text-align: center;">38</td>
             <td style="text-align: center;">67</td>
             <td style="text-align: center; color: #8A99A8;">67</td>
             <td style="text-align: center; font-weight: 700;">66</td>
-            <td style="text-align: center;" class="highlight-cell">61</td>
-            <td style="text-align: right; color: #C2410C; font-weight: 700;">-7.6%</td>
+            <td style="text-align: center;" class="highlight-cell">78 (68*)</td>
+            <td style="text-align: right; color: #1B8454; font-weight: 700;">+18.2% (Record)</td>
           </tr>
           <tr>
-            <td style="font-family: 'Plus Jakarta Sans'; font-weight: 600;">Total Registered Cars on inDrive</td>
-            <td style="text-align: center;">40</td>
-            <td style="text-align: center;">68</td>
-            <td style="text-align: center; color: #8A99A8;">68</td>
-            <td style="text-align: center;">66</td>
-            <td style="text-align: center;" class="highlight-cell">63</td>
-            <td style="text-align: right; color: #C2410C;">-4.5%</td>
+            <td style="font-family: 'Plus Jakarta Sans'; font-weight: 600;">Active Operational Cars (on Road)</td>
+            <td style="text-align: center;">~38</td>
+            <td style="text-align: center;">~70</td>
+            <td style="text-align: center; color: #8A99A8;">~75</td>
+            <td style="text-align: center;">~78</td>
+            <td style="text-align: center;" class="highlight-cell">84</td>
+            <td style="text-align: right; color: #0B464E; font-weight: 700;">+7.7%</td>
+          </tr>
+          <tr style="background: rgba(11, 70, 78, 0.04);">
+            <td style="font-family: 'Plus Jakarta Sans'; font-weight: 700; color: #0B464E;">Active Fleet Operational Utilization</td>
+            <td style="text-align: center;">100.0%</td>
+            <td style="text-align: center;">95.7%</td>
+            <td style="text-align: center; color: #8A99A8;">89.3%</td>
+            <td style="text-align: center;">84.6%</td>
+            <td style="text-align: center; font-weight: 800;" class="highlight-cell">92.9%*</td>
+            <td style="text-align: right; color: #1B8454; font-weight: 800;">+8.3 pts</td>
           </tr>
           <tr>
             <td style="font-family: 'Plus Jakarta Sans'; font-weight: 600;">Total Completed Rides</td>
@@ -428,151 +437,177 @@ const htmlContent = `<!DOCTYPE html>
 
 
   <!-- =============================================================== -->
-  <!-- SLIDE 3: ACTIVE INDRIVE DRIVERS VS FLEET EXPANSION -->
+  <!-- SLIDE 3: ACTIVE INDRIVE DRIVERS VS ACTIVE FLEET PENETRATION -->
   <!-- =============================================================== -->
   <section class="slide">
     <div class="slide-header">
       <div class="slide-title-group">
-        <div class="slide-badge-top">FLEET PENETRATION & ASSET ALLOCATION</div>
-        <h2>Active inDrive Drivers vs. GoCab Total Fleet Growth</h2>
-        <p>Analyzing how platform concentration evolved as GoCab expanded its overall vehicle fleet from 40 to 103 cars.</p>
+        <div class="slide-badge-top">OPERATIONAL PENETRATION &amp; TELEMETRY AUDIT</div>
+        <h2>Active inDrive Drivers vs. GoCab Active Fleet Growth</h2>
+        <p>Analyzing platform concentration against operational active cars (84 on-road vehicles) &amp; auditing inDrive's data sync discrepancy.</p>
       </div>
-      <span class="neu-pill-teal" style="padding: 7px 16px; font-size: 12px;">+157% Total Fleet Scale</span>
+      <span class="neu-pill-teal" style="padding: 7px 18px; font-size: 12px; font-weight: 700;">92.9% Active Operational Penetration (InFleet)</span>
     </div>
 
-    <div class="grid-2" style="flex: 1; align-items: stretch;">
-      <!-- Left Card: Evolution of Penetration -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
+    <div class="grid-2" style="flex: 1; align-items: stretch; gap: 0.3in;">
+      <!-- Left Card: Evolution of Penetration (Active Cars) -->
+      <div class="neu-card" style="padding: 22px 26px; display: flex; flex-direction: column; justify-content: space-between;">
         <div>
-          <h3 style="font-size: 18px; font-weight: 800; color: #0B464E; margin-bottom: 6px;">inDrive Deployment vs Overall Fleet Scale</h3>
-          <p class="text-muted" style="font-size: 13px; margin-bottom: 22px;">Percentage of total GoCab fleet actively dedicated to inDrive operations.</p>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">inDrive Deployment vs Active Cars on Road</h3>
+            <span class="neu-badge-teal" style="font-size: 10px;">OPERATIONAL FOCUS</span>
+          </div>
+          <p class="text-muted" style="font-size: 12.5px; margin-bottom: 16px;">Comparing active inDrive drivers strictly against operational revenue-generating cars (excluding park &amp; garage).</p>
 
-          <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 13px;">
             <!-- June -->
             <div>
-              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px;">
                 <span>June 2026</span>
-                <span class="font-mono text-teal">38 Active / ~40 Fleet · 95.0% Concentration</span>
+                <span class="font-mono text-teal">38 Active / ~38 Active Cars · 100.0% Deployment</span>
               </div>
-              <div class="neu-inset-sm" style="height: 14px; padding: 2px; overflow: hidden;">
-                <div style="width: 95%; height: 100%; background: #0B464E; border-radius: 8px;"></div>
+              <div class="neu-inset-sm" style="height: 12px; padding: 2px; overflow: hidden;">
+                <div style="width: 100%; height: 100%; background: #0B464E; border-radius: 6px;"></div>
               </div>
             </div>
 
             <!-- July -->
             <div>
-              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px;">
                 <span>July 2026</span>
-                <span class="font-mono text-teal">67 Active / ~75 Fleet · 89.3% Concentration</span>
+                <span class="font-mono text-teal">67 Active / ~70 Active Cars · 95.7% Deployment</span>
               </div>
-              <div class="neu-inset-sm" style="height: 14px; padding: 2px; overflow: hidden;">
-                <div style="width: 89.3%; height: 100%; background: #0B464E; border-radius: 8px;"></div>
+              <div class="neu-inset-sm" style="height: 12px; padding: 2px; overflow: hidden;">
+                <div style="width: 95.7%; height: 100%; background: #0B464E; border-radius: 6px;"></div>
               </div>
             </div>
 
             <!-- August -->
             <div>
-              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px;">
                 <span>August 2026</span>
-                <span class="font-mono text-teal">67 Active / ~85 Fleet · 78.8% Concentration</span>
+                <span class="font-mono text-teal">67 Active / ~75 Active Cars · 89.3% Deployment</span>
               </div>
-              <div class="neu-inset-sm" style="height: 14px; padding: 2px; overflow: hidden;">
-                <div style="width: 78.8%; height: 100%; background: #0B464E; border-radius: 8px;"></div>
+              <div class="neu-inset-sm" style="height: 12px; padding: 2px; overflow: hidden;">
+                <div style="width: 89.3%; height: 100%; background: #0B464E; border-radius: 6px;"></div>
               </div>
             </div>
 
             <!-- September -->
             <div>
-              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px;">
                 <span>September 2026</span>
-                <span class="font-mono text-teal">66 Active / ~95 Fleet · 69.5% Concentration</span>
+                <span class="font-mono text-teal">66 Active / ~78 Active Cars · 84.6% Deployment</span>
               </div>
-              <div class="neu-inset-sm" style="height: 14px; padding: 2px; overflow: hidden;">
-                <div style="width: 69.5%; height: 100%; background: #0B464E; border-radius: 8px;"></div>
+              <div class="neu-inset-sm" style="height: 12px; padding: 2px; overflow: hidden;">
+                <div style="width: 84.6%; height: 100%; background: #0B464E; border-radius: 6px;"></div>
               </div>
             </div>
 
-            <!-- October -->
+            <!-- October (InFleet Ground Reality) -->
             <div>
-              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px;">
-                <span style="color: #0B464E; font-weight: 800;">October 2026 (Current)</span>
-                <span class="font-mono" style="color: #0B464E; font-weight: 800;">61 Active / 103 Fleet · 59.2% Platform Share</span>
+              <div style="display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 800; margin-bottom: 4px;">
+                <span style="color: #1B8454;">October 2026 · InFleet Live Ground Truth</span>
+                <span class="font-mono" style="color: #1B8454;">78 Active / 84 Active Cars · 92.9% Utilization</span>
               </div>
-              <div class="neu-inset-sm" style="height: 16px; padding: 2px; overflow: hidden; border: 1px solid rgba(11, 70, 78, 0.4);">
-                <div style="width: 59.2%; height: 100%; background: #1B8454; border-radius: 8px;"></div>
+              <div class="neu-inset-sm" style="height: 15px; padding: 2px; overflow: hidden; border: 1.5px solid rgba(27, 132, 84, 0.5);">
+                <div style="width: 92.9%; height: 100%; background: #1B8454; border-radius: 6px;"></div>
+              </div>
+            </div>
+
+            <!-- October (inDrive Plate-Sync) -->
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; color: #D97724; margin-bottom: 3px;">
+                <span>October 2026 · inDrive Plate-Sync Only</span>
+                <span class="font-mono">68 Detected / 84 Active Cars · 81.0% (Under-Reported)</span>
+              </div>
+              <div class="neu-inset-sm" style="height: 10px; padding: 1.5px; overflow: hidden;">
+                <div style="width: 81.0%; height: 100%; background: #D97724; border-radius: 5px;"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="neu-inset" style="padding: 14px 18px; margin-top: 14px; font-size: 12.5px; line-height: 1.45; color: #324454;">
-          <strong style="color: #0B464E;">Key Insight:</strong> GoCab started with an almost 1-to-1 correlation with inDrive (95%). As the fleet crossed 100 vehicles, GoCab matured into a multi-channel operator with drivers balancing private clients and multi-app shifts, while maintaining a reliable 61–67 car dedicated core on inDrive.
+        <div class="neu-inset" style="padding: 12px 16px; margin-top: 12px; font-size: 11.5px; line-height: 1.45; color: #243444;">
+          <strong style="color: #0B464E;">Core Fleet Takeaway:</strong> Measuring against total assets (103) creates an artificial dilution by counting 19 offline vehicles (maintenance, hub reserve, impound). Comparing against GoCab's <strong>84 active operational cars</strong> reveals that inDrive captures a massive <strong>92.9% of active road capacity (78 drivers)</strong>.
         </div>
       </div>
 
-      <!-- Right Card: Current Fleet Status Breakdown from CRM -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
+      <!-- Right Card: InFleet Multi-Identifier Telemetry vs inDrive Plate-Sync Limitation -->
+      <div class="neu-card" style="padding: 22px 26px; display: flex; flex-direction: column; justify-content: space-between;">
         <div>
-          <h3 style="font-size: 18px; font-weight: 800; color: #0B464E; margin-bottom: 6px;">GoCab Live CRM Fleet Breakdown (103 Vehicles)</h3>
-          <p class="text-muted" style="font-size: 13px; margin-bottom: 18px;">Real-time asset allocation across operational states.</p>
+          <h3 style="font-size: 17px; font-weight: 800; color: #0B464E; margin-bottom: 4px;">InFleet Telemetry vs. inDrive Sync Limitation</h3>
+          <p class="text-muted" style="font-size: 12.5px; margin-bottom: 12px;">Auditing why inDrive partner export detects only 68 out of 78 active drivers.</p>
 
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div class="neu-inset" style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <span style="font-weight: 800; font-size: 14px; color: #0B464E;">Actif / Assigned Drivers</span>
-                <span class="text-muted" style="display: block; font-size: 11.5px;">Actively generating weekly rental income</span>
-              </div>
-              <div style="text-align: right;">
-                <span class="font-mono" style="font-size: 22px; font-weight: 800; color: #1B8454;">88</span>
-                <span style="font-size: 11.5px; font-weight: 700; color: #526373; display: block;">85.4% of fleet</span>
-              </div>
+          <!-- InFleet Box -->
+          <div class="neu-inset" style="padding: 11px 15px; margin-bottom: 10px; border-left: 4px solid #1B8454;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+              <span style="font-weight: 800; font-size: 13px; color: #0B464E;">InFleet Multi-Vector Telemetry (GoCab Truth)</span>
+              <span class="neu-badge-green" style="font-size: 11px;">78 Active Drivers</span>
             </div>
-
-            <div class="neu-inset" style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <span style="font-weight: 800; font-size: 14px; color: #0B464E;">Available at Park (Hub Casablanca)</span>
-                <span class="text-muted" style="display: block; font-size: 11.5px;">Inspected & ready for immediate lease onboarding</span>
-              </div>
-              <div style="text-align: right;">
-                <span class="font-mono" style="font-size: 22px; font-weight: 800; color: #0B464E;">3</span>
-                <span style="font-size: 11.5px; font-weight: 700; color: #526373; display: block;">2.9% of fleet</span>
-              </div>
+            <p style="font-size: 11px; color: #425262; margin-bottom: 4px; line-height: 1.4;">
+              Tracks drivers dynamically across <strong>3 synchronized identifiers</strong>:
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; font-size: 10.5px; font-weight: 700; color: #0B464E;">
+              <div style="background: rgba(255,255,255,0.7); padding: 4px 6px; border-radius: 6px; text-align: center;">① License Plate</div>
+              <div style="background: rgba(255,255,255,0.7); padding: 4px 6px; border-radius: 6px; text-align: center;">② Mobile Phone</div>
+              <div style="background: rgba(255,255,255,0.7); padding: 4px 6px; border-radius: 6px; text-align: center;">③ Driver's License</div>
             </div>
+            <span style="font-size: 10.5px; color: #1B8454; font-weight: 700; margin-top: 4px; display: block;">
+              ✓ 100% attribution across vehicle swaps, renewals, and temporary registration.
+            </span>
+          </div>
 
-            <div class="neu-inset" style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <span style="font-weight: 800; font-size: 14px; color: #0B464E;">In Garage / Scheduled Maintenance</span>
-                <span class="text-muted" style="display: block; font-size: 11.5px;">Undergoing vidange, bodywork, or mechanical repair</span>
-              </div>
-              <div style="text-align: right;">
-                <span class="font-mono" style="font-size: 22px; font-weight: 800; color: #D97724;">8</span>
-                <span style="font-size: 11.5px; font-weight: 700; color: #526373; display: block;">7.8% of fleet</span>
-              </div>
+          <!-- inDrive Limitation Box -->
+          <div class="neu-inset" style="padding: 11px 15px; margin-bottom: 10px; border-left: 4px solid #D97724;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+              <span style="font-weight: 800; font-size: 13px; color: #0B464E;">inDrive Partner Data Sync (Platform Issue)</span>
+              <span class="neu-badge-amber" style="font-size: 11px;">68 Detected (-10 Gap)</span>
             </div>
+            <p style="font-size: 11px; color: #425262; margin-bottom: 4px; line-height: 1.4;">
+              inDrive's partner matching algorithm is constrained to <strong>registered plate only</strong>:
+            </p>
+            <span style="font-size: 10.5px; color: #9A3412; font-weight: 600; display: block; line-height: 1.35;">
+              ⚠ Drivers enrolled by phone or license before plate association are missed.<br/>
+              ⚠ Causes a <strong>10-driver blind spot (-12.8% undercount)</strong> in official inDrive export.
+            </span>
+          </div>
 
-            <div class="neu-inset" style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <span style="font-weight: 800; font-size: 14px; color: #0B464E;">Police Immobilization / Fourrière</span>
-                <span class="text-muted" style="display: block; font-size: 11.5px;">Pending document clearance or administrative pickup</span>
+          <!-- Fleet Allocation Breakdown Pills -->
+          <div class="neu-inset" style="padding: 9px 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 800; color: #0B464E; margin-bottom: 5px;">
+              <span>GoCab Total Fleet Breakdown</span>
+              <span class="font-mono">103 Total Assets</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.8fr 1.2fr 1.2fr 1.5fr; gap: 6px; font-size: 10.5px; text-align: center;">
+              <div style="background: rgba(27, 132, 84, 0.15); color: #1B8454; padding: 5px 4px; border-radius: 7px; font-weight: 800;">
+                84 Active Cars (Road)
               </div>
-              <div style="text-align: right;">
-                <span class="font-mono" style="font-size: 22px; font-weight: 800; color: #DC2626;">4</span>
-                <span style="font-size: 11.5px; font-weight: 700; color: #526373; display: block;">3.9% of fleet</span>
+              <div style="background: rgba(11, 70, 78, 0.1); color: #0B464E; padding: 5px 4px; border-radius: 7px; font-weight: 700;">
+                3 Hub Park
+              </div>
+              <div style="background: rgba(217, 119, 36, 0.12); color: #D97724; padding: 5px 4px; border-radius: 7px; font-weight: 700;">
+                8 Garage
+              </div>
+              <div style="background: rgba(220, 38, 38, 0.1); color: #DC2626; padding: 5px 4px; border-radius: 7px; font-weight: 700;">
+                8 Fourrière / Prep
               </div>
             </div>
           </div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid rgba(200, 186, 170, 0.4); font-size: 12.5px;">
-          <span>Active inDrive Utilization Rate:</span>
-          <span class="font-mono" style="font-weight: 800; color: #0B464E; font-size: 14px;">61 inDrive / 88 Assigned = 69.3% Active Platform Rate</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(200, 186, 170, 0.4); font-size: 12px;">
+          <span style="color: #526373; font-weight: 600;">Real Operational Platform Utilization:</span>
+          <span class="font-mono" style="font-weight: 800; color: #1B8454; font-size: 13.5px;">78 InFleet / 84 Active Cars = 92.9%</span>
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Asset Management & Fleet Allocation</span>
+      <span>GoCab Asset Management &amp; Telemetry Integration</span>
       <span>Slide 3 / 8</span>
+    </div>
+  </section>
     </div>
   </section>
 
@@ -1017,13 +1052,13 @@ const htmlContent = `<!DOCTYPE html>
         <div>
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">1</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Activate the 27 Non-inDrive Assigned Cars</h3>
+            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Mobilize the Remaining 6 Active Road Cars</h3>
           </div>
           <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            Out of 88 assigned vehicles, only 61 generated volume on inDrive. The remaining 27 cars operate solely via private rentals, street hail, or other apps.
+            InFleet records 78 active inDrive drivers out of 84 active operational vehicles (92.9% road utilization). Only 6 active vehicles operate outside inDrive on private rentals or offline bookings.
           </p>
           <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Expected Impact:</strong> Enforcing inDrive installation and a minimum 30-ride monthly threshold on these 27 vehicles unlocks an additional <strong>+$8,000 to $12,000 USD</strong> in monthly fleet GMV (+35% expansion).
+            <strong>Immediate Opportunity:</strong> Equipping these remaining 6 active cars with inDrive accounts unlocks an additional <strong>+$2,500 to $3,200 USD</strong> in monthly fleet volume, achieving 100% operational deployment.
           </div>
         </div>
         <span class="neu-badge-teal" style="align-self: flex-start; margin-top: 10px;">Priority: HIGH · Fleet Ops</span>
@@ -1068,16 +1103,16 @@ const htmlContent = `<!DOCTYPE html>
         <div>
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">4</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Automate inDrive Data Sync into CRM</h3>
+            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Reconcile inDrive Plate Sync with Multi-Vector IDs</h3>
           </div>
           <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            Replace manual spreadsheet exports with an automated pipeline syncing inDrive partner metrics directly into the GoCab CRM vehicle and driver drawers.
+            inDrive's partner portal matches drivers strictly by registered vehicle license plate, missing 10 active drivers (68 detected vs 78 in InFleet) enrolled by phone number or driver's license.
           </p>
           <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Risk Prevention:</strong> Early detection of drivers falling below 3 hours/day allows immediate field intervention before payment arrears accumulate.
+            <strong>Engineering Bridge:</strong> Provide inDrive Partner Operations with an automated export from InFleet mapping license plates, mobile phone numbers, and driver licenses to ensure 100% partner tier credit.
           </div>
         </div>
-        <span class="neu-badge-amber" style="align-self: flex-start; margin-top: 10px;">Priority: MEDIUM · Tech / Engineering</span>
+        <span class="neu-badge-amber" style="align-self: flex-start; margin-top: 10px;">Priority: HIGH · Tech &amp; Partnerships</span>
       </div>
     </div>
 
