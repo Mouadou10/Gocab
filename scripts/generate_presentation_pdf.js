@@ -281,8 +281,8 @@ const htmlContent = `<!DOCTYPE html>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Car Rental & Fleet Operations LLC · Casablanca, Morocco</span>
-      <span>Confidential Executive Deck · Slide 1 / 8</span>
+      <span>GoCab Car Rental &amp; Fleet Operations LLC · Casablanca, Morocco</span>
+      <span>Confidential Executive Deck · Slide 1 / 7</span>
     </div>
   </section>
 
@@ -431,7 +431,7 @@ const htmlContent = `<!DOCTYPE html>
 
     <div class="slide-footer">
       <span>GoCab Partner Intelligence · Single Source of Truth Reconciled</span>
-      <span>Slide 2 / 8</span>
+      <span>Slide 2 / 7</span>
     </div>
   </section>
 
@@ -605,9 +605,7 @@ const htmlContent = `<!DOCTYPE html>
 
     <div class="slide-footer">
       <span>GoCab Asset Management &amp; Telemetry Integration</span>
-      <span>Slide 3 / 8</span>
-    </div>
-  </section>
+      <span>Slide 3 / 7</span>
     </div>
   </section>
 
@@ -673,8 +671,8 @@ const htmlContent = `<!DOCTYPE html>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Operations & Driver Workforce Productivity</span>
-      <span>Slide 4 / 8</span>
+      <span>GoCab Operations &amp; Driver Workforce Productivity</span>
+      <span>Slide 4 / 7</span>
     </div>
   </section>
 
@@ -791,7 +789,7 @@ const htmlContent = `<!DOCTYPE html>
 
     <div class="slide-footer">
       <span>GoCab Partner Quality Metrics · inDrive Maroc</span>
-      <span>Slide 5 / 8</span>
+      <span>Slide 5 / 7</span>
     </div>
   </section>
 
@@ -873,8 +871,8 @@ const htmlContent = `<!DOCTYPE html>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Financial Unit Economics & Driver Yield</span>
-      <span>Slide 6 / 8</span>
+      <span>GoCab Financial Unit Economics &amp; Driver Yield</span>
+      <span>Slide 6 / 7</span>
     </div>
   </section>
 
@@ -1027,98 +1025,8 @@ const htmlContent = `<!DOCTYPE html>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Driver Performance & Cohort Intelligence</span>
-      <span>Slide 7 / 8</span>
-    </div>
-  </section>
-
-
-  <!-- =============================================================== -->
-  <!-- SLIDE 8: STRATEGIC RECOMMENDATIONS & ACTION PLAN -->
-  <!-- =============================================================== -->
-  <section class="slide">
-    <div class="slide-header">
-      <div class="slide-title-group">
-        <div class="slide-badge-top">STRATEGIC ROADMAP & NEXT STEPS</div>
-        <h2>Recommendations for GoCab Executive Leadership</h2>
-        <p>Four actionable initiatives to optimize fleet revenue, platform leverage, and driver retention.</p>
-      </div>
-      <div class="neu-pill-teal" style="padding: 7px 18px; font-size: 12px;">Q4 2026 Operations Plan</div>
-    </div>
-
-    <div class="grid-2" style="flex: 1; align-items: stretch; gap: 0.3in;">
-      <!-- Action 1 -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">1</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Mobilize the Remaining 6 Active Road Cars</h3>
-          </div>
-          <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            InFleet records 78 active inDrive drivers out of 84 active operational vehicles (92.9% road utilization). Only 6 active vehicles operate outside inDrive on private rentals or offline bookings.
-          </p>
-          <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Immediate Opportunity:</strong> Equipping these remaining 6 active cars with inDrive accounts unlocks an additional <strong>+$2,500 to $3,200 USD</strong> in monthly fleet volume, achieving 100% operational deployment.
-          </div>
-        </div>
-        <span class="neu-badge-teal" style="align-self: flex-start; margin-top: 10px;">Priority: HIGH · Fleet Ops</span>
-      </div>
-
-      <!-- Action 2 -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">2</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Incentivize the Casual Tier (&lt;50 rides)</h3>
-          </div>
-          <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            21 drivers completed fewer than 50 rides in October. Moving this cohort from casual status into the 100-ride bracket represents the lowest-cost growth lever.
-          </p>
-          <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Incentive Scheme:</strong> Introduce a 150 MAD CRM weekly lease credit for any driver completing 25+ inDrive rides per week, ensuring higher car utilization and reduced lease arrears.
-          </div>
-        </div>
-        <span class="neu-badge-green" style="align-self: flex-start; margin-top: 10px;">Priority: MEDIUM · CRM Retention</span>
-      </div>
-
-      <!-- Action 3 -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">3</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Commercial Commission Rebate Negotiation</h3>
-          </div>
-          <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            GoCab delivered an exceptional 80.3% Delivery Rate (DR%) and 6,200+ monthly rides, making it one of inDrive's premier fleet partners in Morocco.
-          </p>
-          <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Negotiation Target:</strong> Leverage this track record with inDrive's Regional Partnership Team to secure a 2.0% fleet rebate or priority dispatch status for GoCab vehicle IDs.
-          </div>
-        </div>
-        <span class="neu-badge-teal" style="align-self: flex-start; margin-top: 10px;">Priority: HIGH · Commercial / BizDev</span>
-      </div>
-
-      <!-- Action 4 -->
-      <div class="neu-card" style="padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="width: 34px; height: 34px; border-radius: 10px; background: #0B464E; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">4</div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #0B464E;">Reconcile inDrive Plate Sync with Multi-Vector IDs</h3>
-          </div>
-          <p class="text-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 14px;">
-            inDrive's partner portal matches drivers strictly by registered vehicle license plate, missing 10 active drivers (68 detected vs 78 in InFleet) enrolled by phone number or driver's license.
-          </p>
-          <div class="neu-inset" style="padding: 12px 16px; font-size: 12px; color: #243444; line-height: 1.45;">
-            <strong>Engineering Bridge:</strong> Provide inDrive Partner Operations with an automated export from InFleet mapping license plates, mobile phone numbers, and driver licenses to ensure 100% partner tier credit.
-          </div>
-        </div>
-        <span class="neu-badge-amber" style="align-self: flex-start; margin-top: 10px;">Priority: HIGH · Tech &amp; Partnerships</span>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <span>GoCab Strategic Action Plan · Approved for Executive Review</span>
-      <span>Slide 8 / 8</span>
+      <span>GoCab Driver Performance &amp; Cohort Intelligence</span>
+      <span>Slide 7 / 7</span>
     </div>
   </section>
 
