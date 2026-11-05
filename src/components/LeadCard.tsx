@@ -126,7 +126,7 @@ interface LeadCardProps {
   onToggleSelect?: () => void;
 }
 
-export default function LeadCard({
+function LeadCardComponent({
   lead,
   onClick,
   onLeadUpdate,
@@ -212,9 +212,16 @@ export default function LeadCard({
     <div
       ref={setNodeRef}
       style={style}
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest("input, label, a, button, [data-drag-handle]")) {
+          return;
+        }
+        onClick();
+      }}
       className={`
-        group bg-white rounded-2xl shadow-xs border transition-all duration-200
-        hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer relative overflow-hidden
+        group bg-white rounded-2xl shadow-xs border transition-[border-color,box-shadow] duration-100 ease-out
+        hover:shadow-md hover:border-slate-400 cursor-pointer relative overflow-hidden select-none
         ${
           isSelected
             ? "border-blue-400 bg-blue-50/25 ring-2 ring-blue-500 shadow-sm"
@@ -249,6 +256,7 @@ export default function LeadCard({
         <div
           {...attributes}
           {...listeners}
+          data-drag-handle="true"
           className="flex items-center justify-center p-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -262,8 +270,8 @@ export default function LeadCard({
         </div>
       </div>
 
-      {/* Card Content — clickable to open modal */}
-      <div onClick={onClick} className="px-3.5 pb-2.5 pt-0.5 space-y-1.5">
+      {/* Card Content */}
+      <div className="px-3.5 pb-2.5 pt-0.5 space-y-1.5">
         {/* Name + Phone */}
         <div>
           <div className="flex items-center gap-1.5 justify-between">
@@ -492,3 +500,26 @@ export default function LeadCard({
     </div>
   );
 }
+
+export default React.memo(LeadCardComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.lead.id === nextProps.lead.id &&
+    prevProps.lead.raw_name === nextProps.lead.raw_name &&
+    prevProps.lead.sanitized_phone === nextProps.lead.sanitized_phone &&
+    prevProps.lead.brand_status === nextProps.lead.brand_status &&
+    prevProps.lead.training_status === nextProps.lead.training_status &&
+    prevProps.lead.board_column === nextProps.lead.board_column &&
+    prevProps.lead.reminder_date === nextProps.lead.reminder_date &&
+    prevProps.lead.presence_confirmed === nextProps.lead.presence_confirmed &&
+    prevProps.lead.city === nextProps.lead.city &&
+    prevProps.lead.handled_by === nextProps.lead.handled_by &&
+    prevProps.lead.has_cin === nextProps.lead.has_cin &&
+    prevProps.lead.has_permis === nextProps.lead.has_permis &&
+    prevProps.lead.has_fiche_anthropometrique === nextProps.lead.has_fiche_anthropometrique &&
+    prevProps.lead.has_confirmation_adresse === nextProps.lead.has_confirmation_adresse &&
+    prevProps.onClick === nextProps.onClick &&
+    prevProps.onLeadUpdate === nextProps.onLeadUpdate &&
+    prevProps.onToggleSelect === nextProps.onToggleSelect
+  );
+});

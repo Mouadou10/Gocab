@@ -836,54 +836,64 @@ export default function KanbanBoard() {
     }).length;
   }, [leads]);
 
-  const callsDoneToday = leads.filter((l) => {
-    if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
-    if (!l.status_changed_at) return false;
-    // Strictly Leads page interactions: either BRAND_PRE_FILTER or TRAINING_PIPELINE or VEHICLE_ASSIGNMENT or Training fixed
-    const isLeadsWorkflow =
-      l.board_column === "BRAND_PRE_FILTER" ||
-      l.board_column === "TRAINING_PIPELINE" ||
-      l.board_column === "VEHICLE_ASSIGNMENT" ||
-      (l.brand_status || "").toLowerCase() === "training fixed";
-    if (!isLeadsWorkflow) return false;
-    return isScheduledDateToday(l.status_changed_at);
-  }).length;
+  const callsDoneToday = useMemo(() => {
+    return leads.filter((l) => {
+      if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
+      if (!l.status_changed_at) return false;
+      // Strictly Leads page interactions: either BRAND_PRE_FILTER or TRAINING_PIPELINE or VEHICLE_ASSIGNMENT or Training fixed
+      const isLeadsWorkflow =
+        l.board_column === "BRAND_PRE_FILTER" ||
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        (l.brand_status || "").toLowerCase() === "training fixed";
+      if (!isLeadsWorkflow) return false;
+      return isScheduledDateToday(l.status_changed_at);
+    }).length;
+  }, [leads, isScheduledDateToday]);
 
-  const trainingFixedToday = leads.filter((l) => {
-    if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
-    if (!l.status_changed_at) return false;
-    const isFixed =
-      (l.brand_status || "").toLowerCase() === "training fixed" ||
-      l.board_column === "TRAINING_PIPELINE" ||
-      l.board_column === "VEHICLE_ASSIGNMENT" ||
-      Boolean(l.training_status);
-    if (!isFixed) return false;
-    return isScheduledDateToday(l.status_changed_at);
-  }).length;
+  const trainingFixedToday = useMemo(() => {
+    return leads.filter((l) => {
+      if (l.board_column === "NEW_LEADS" && !l.brand_status) return false;
+      if (!l.status_changed_at) return false;
+      const isFixed =
+        (l.brand_status || "").toLowerCase() === "training fixed" ||
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        Boolean(l.training_status);
+      if (!isFixed) return false;
+      return isScheduledDateToday(l.status_changed_at);
+    }).length;
+  }, [leads, isScheduledDateToday]);
 
-  const ayoubCallsDoneToday = leads.filter((l) => {
-    if (!l.presence_confirmed_at) return false;
-    return isScheduledDateToday(l.presence_confirmed_at);
-  }).length;
+  const ayoubCallsDoneToday = useMemo(() => {
+    return leads.filter((l) => {
+      if (!l.presence_confirmed_at) return false;
+      return isScheduledDateToday(l.presence_confirmed_at);
+    }).length;
+  }, [leads, isScheduledDateToday]);
 
   const isDailyTrainingGoalAchieved = trainingFixedToday >= dailyTrainingTarget;
-  const totalNewLeadsInDB = leads.filter(
-    (l) =>
-      l.board_column === "NEW_LEADS" &&
-      !l.brand_status &&
-      (!l.training_status || l.training_status === "NEW_LEADS")
-  ).length;
+  const totalNewLeadsInDB = useMemo(() => {
+    return leads.filter(
+      (l) =>
+        l.board_column === "NEW_LEADS" &&
+        !l.brand_status &&
+        (!l.training_status || l.training_status === "NEW_LEADS")
+    ).length;
+  }, [leads]);
 
   // Scheduled counts for training header/filter
-  const scheduledLeadsTotal = leads.filter(
-    (l) =>
-      (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
-      (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
-  );
-  const allScheduledCount = scheduledLeadsTotal.length;
-  const todayScheduledCount = scheduledLeadsTotal.filter((l) =>
-    isScheduledDateToday(l.reminder_date)
-  ).length;
+  const scheduledCounts = useMemo(() => {
+    const scheduled = leads.filter(
+      (l) =>
+        (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
+        (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
+    );
+    const today = scheduled.filter((l) => isScheduledDateToday(l.reminder_date)).length;
+    return { all: scheduled.length, today };
+  }, [leads, isScheduledDateToday]);
+  const allScheduledCount = scheduledCounts.all;
+  const todayScheduledCount = scheduledCounts.today;
 
   // Trigger celebration modal once when training goal is reached — ONLY for Lead Acquisition
   useEffect(() => {
@@ -961,7 +971,7 @@ export default function KanbanBoard() {
   }, [leads, searchQuery, doesLeadMatchSearch]);
 
   /** Group leads dynamically based on their specific status/column. */
-  function getLeadsByColumn(column: string): Lead[] {
+  const getLeadsByColumn = useCallback((column: string): Lead[] => {
     let filteredLeads = leads;
 
     const cleanQuery = searchQuery.trim().toLowerCase();
@@ -1206,33 +1216,59 @@ export default function KanbanBoard() {
         return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
       });
     }
-  }
+  }, [
+    leads,
+    searchQuery,
+    filterCity,
+    filterHasNote,
+    activeTab,
+    leadsDateFilter,
+    trainingDateFilter,
+    dailyCallsTarget,
+    callsDoneToday,
+    isDailyTrainingGoalAchieved,
+    activeDragId,
+    doesLeadMatchSearch,
+    isScheduledDateToday,
+    matchesDate,
+    isLeadTrainingDateMatch,
+  ]);
 
-  /** Handle clicking on a card — open sliding detail drawer. */
-  function handleCardClick(lead: Lead) {
+  /** Precompute memoized column leads map — avoids re-filtering all leads on every card click / hover */
+  const columnLeadsMap = useMemo(() => {
+    const map: Record<string, Lead[]> = {};
+    const cols = activeTab === "leads" ? leadsColumns : trainingColumns;
+    for (const col of cols) {
+      map[col] = getLeadsByColumn(col);
+    }
+    return map;
+  }, [activeTab, leadsColumns, trainingColumns, getLeadsByColumn]);
+
+  /** Handle clicking on a card — open sliding detail drawer immediately (0ms delay). */
+  const handleCardClick = useCallback((lead: Lead) => {
     setSelectedLead(lead as any);
-  }
+  }, []);
 
   /** After drawer update, update the lead in state and notify live sessions. */
-  function handleLeadUpdate(updatedLead: Lead) {
+  const handleLeadUpdate = useCallback((updatedLead: Lead) => {
     saveLocalLeadOverride(updatedLead, updatedLead.updated_at || null);
     setLeads((prev) =>
       prev.map((l) => (l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
     );
     setSelectedLead((prev) => (prev?.id === updatedLead.id ? { ...prev, ...updatedLead } : prev));
     notifyMutation("leads");
-  }
+  }, [notifyMutation]);
 
   /** After drawer deletion, remove the lead from state and notify live sessions. */
-  function handleLeadDelete(deletedLeadId: string) {
+  const handleLeadDelete = useCallback((deletedLeadId: string) => {
     removeLocalLeadOverride(deletedLeadId);
     setLeads((prev) => prev.filter((l) => l.id !== deletedLeadId));
     setSelectedLead(null);
     notifyMutation("leads");
-  }
+  }, [notifyMutation]);
 
   /** Bring selected status column to 2nd position (right after NEW_LEADS) */
-  function handleBringColumnToSecond(columnKey: string) {
+  const handleBringColumnToSecond = useCallback((columnKey: string) => {
     if (activeTab === "leads") {
       setLeadsColumns((prev) => {
         const withoutTarget = prev.filter((c) => c !== columnKey && c !== "NEW_LEADS");
@@ -1249,7 +1285,7 @@ export default function KanbanBoard() {
         return prev;
       });
     }
-  }
+  }, [activeTab]);
 
   // ─── Drag & Drop Handlers ───────────────────────────────
 
@@ -1738,17 +1774,22 @@ export default function KanbanBoard() {
   const activeColumns = activeTab === "leads" ? leadsColumns : trainingColumns;
 
   // Tab count indicators
-  const leadsCount = leads.filter(
-    (l) =>
-      l.board_column === "NEW_LEADS" ||
-      l.board_column === "BRAND_PRE_FILTER" ||
-      l.board_column === "TRAINING_PIPELINE" ||
-      l.board_column === "VEHICLE_ASSIGNMENT" ||
-      (l.brand_status || "").toLowerCase() === "training fixed"
-  ).length;
-  const trainingCount = leads.filter(
-    (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
-  ).length;
+  const leadsCount = useMemo(() => {
+    return leads.filter(
+      (l) =>
+        l.board_column === "NEW_LEADS" ||
+        l.board_column === "BRAND_PRE_FILTER" ||
+        l.board_column === "TRAINING_PIPELINE" ||
+        l.board_column === "VEHICLE_ASSIGNMENT" ||
+        (l.brand_status || "").toLowerCase() === "training fixed"
+    ).length;
+  }, [leads]);
+
+  const trainingCount = useMemo(() => {
+    return leads.filter(
+      (l) => l.board_column === "TRAINING_PIPELINE" || l.board_column === "VEHICLE_ASSIGNMENT"
+    ).length;
+  }, [leads]);
 
   if (isLoading) {
     return (
@@ -2427,7 +2468,7 @@ export default function KanbanBoard() {
                     <KanbanColumn
                       key={col}
                       columnId={col}
-                      leads={getLeadsByColumn(col)}
+                      leads={columnLeadsMap[col] || []}
                       onCardClick={handleCardClick}
                       onLeadUpdate={handleLeadUpdate}
                       selectedLeadIds={selectedLeadIds}

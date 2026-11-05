@@ -98,7 +98,7 @@ interface KanbanColumnProps {
   onToggleSelectColumn?: (columnLeadIds: string[]) => void;
 }
 
-export default function KanbanColumn({
+function KanbanColumnComponent({
   columnId,
   leads = [],
   onCardClick,
@@ -361,3 +361,5 @@ export default function KanbanColumn({
     </div>
   );
 }
+
+export default React.memo(KanbanColumnComponent);

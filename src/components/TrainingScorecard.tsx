@@ -18,7 +18,7 @@ interface TrainingScorecardProps {
   onDateChange?: (date: string) => void;
 }
 
-export default function TrainingScorecard({
+function TrainingScorecardComponent({
   leads,
   onSelectStatus,
   selectedDate,
@@ -815,3 +815,5 @@ export default function TrainingScorecard({
       </div>
   );
 }
+
+export default React.memo(TrainingScorecardComponent);

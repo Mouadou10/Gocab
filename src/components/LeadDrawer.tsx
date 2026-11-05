@@ -222,10 +222,10 @@ export default function LeadDrawer({
     }
   }, [trainingStatus]);
 
-  // Trigger slide-in animation on mount
+  // Trigger immediate slide-in animation on mount (0ms artificial delay)
   useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 50);
-    return () => clearTimeout(timer);
+    const id = requestAnimationFrame(() => setIsVisible(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   // ── Activity Log ──────────────────────────────────────────────────────────
@@ -245,8 +245,10 @@ export default function LeadDrawer({
   }, [lead.id]);
 
   useEffect(() => {
-    fetchActivityLog();
-  }, [fetchActivityLog]);
+    if (showActivityLog) {
+      fetchActivityLog();
+    }
+  }, [showActivityLog, fetchActivityLog]);
 
   const handleAddActivityLog = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -555,14 +557,14 @@ export default function LeadDrawer({
       {/* Backdrop */}
       <div
         onClick={handleClose}
-        className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
       />
 
       {/* Drawer Panel */}
       <div
-        className={`relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10 transition-transform duration-300 ease-out transform ${
+        className={`relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10 transition-transform duration-200 ease-out transform ${
           isVisible ? "translate-x-0" : "translate-x-full"
         }`}
       >

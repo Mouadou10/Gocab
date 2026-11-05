@@ -11,7 +11,7 @@ interface LeadsScorecardProps {
   onDateChange?: (date: string) => void;
 }
 
-export default function LeadsScorecard({
+function LeadsScorecardComponent({
   leads,
   onSelectStatus,
   selectedDate,
@@ -537,3 +537,5 @@ export default function LeadsScorecard({
     </section>
   );
 }
+
+export default React.memo(LeadsScorecardComponent);
