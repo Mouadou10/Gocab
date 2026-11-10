@@ -45,8 +45,12 @@ import {
   AccidentDocument,
   DOCUMENT_CATEGORIES,
   TIMELINE_STEPS,
+  TimelineStepDef,
   InsuranceDossierInfo,
   InsuranceNoteItem,
+  normalizeTimelineStep,
+  getTimelineStepDef,
+  getTimelineStepIndex,
 } from "./AccidentCard";
 
 interface InsuranceVehicleDetailProps {
@@ -223,9 +227,61 @@ export default function InsuranceVehicleDetail({
   const daysInStatus = calculateDays(claim.step_updated_at || claim.created_at);
   const totalDays = calculateDays(claim.created_at);
 
-  const currentStepIndex = TIMELINE_STEPS.findIndex((s) => s.id === claim.timeline_step);
-  const currentStepDef = TIMELINE_STEPS[currentStepIndex] || TIMELINE_STEPS[0];
-  const isCompleted = claim.timeline_step === "VEHICLE_BACK";
+  const currentStepIndex = getTimelineStepIndex(claim.timeline_step);
+  const currentStepDef = getTimelineStepDef(claim.timeline_step);
+  const isCompleted = normalizeTimelineStep(claim.timeline_step) === "VEHICLE_BACK";
+
+  // Step validation state
+  const [validationNote, setValidationNote] = useState("");
+  const [validationAuthor, setValidationAuthor] = useState(session?.user?.name || "");
+  const [isValidatingStep, setIsValidatingStep] = useState(false);
+
+  // Validate step and advance
+  const handleValidateStep = async (stepDefToValidate = currentStepDef, targetNextStepId?: string) => {
+    if (isValidatingStep) return;
+    const targetIdx = TIMELINE_STEPS.findIndex((s) => s.id === stepDefToValidate.id);
+    const nextStep = targetNextStepId
+      ? TIMELINE_STEPS.find((s) => s.id === targetNextStepId) || TIMELINE_STEPS[Math.min(targetIdx + 1, TIMELINE_STEPS.length - 1)]
+      : TIMELINE_STEPS[Math.min(targetIdx + 1, TIMELINE_STEPS.length - 1)];
+
+    setIsValidatingStep(true);
+    const toastId = toast.loading(`Validation de l'étape ${stepDefToValidate.shortLabel}...`);
+
+    try {
+      const author = validationAuthor.trim() || session?.user?.name || session?.user?.email || "Agent";
+      const res = await fetch(`/api/accidents/${claim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "VALIDATE_TIMELINE_STEP",
+          step_id: stepDefToValidate.id,
+          next_step_id: nextStep.id,
+          author,
+          intervenant: stepDefToValidate.intervenant,
+          comment: validationNote.trim(),
+        }),
+      });
+
+      toast.dismiss(toastId);
+      if (res.ok) {
+        toast.success(
+          `✓ Étape "${stepDefToValidate.shortLabel}" validée ! Passage à "${nextStep.shortLabel}".`,
+          { duration: 4000 }
+        );
+        setValidationNote("");
+        notifyMutation("tickets");
+        notifyMutation("all");
+        onUpdate();
+      } else {
+        toast.error("Échec de la validation de l'étape");
+      }
+    } catch {
+      toast.dismiss(toastId);
+      toast.error("Erreur réseau");
+    } finally {
+      setIsValidatingStep(false);
+    }
+  };
 
   // Days color badge
   const getDaysBadge = (days: number) => {
@@ -947,9 +1003,9 @@ export default function InsuranceVehicleDetail({
           }`}
         >
           <Clock className="w-4 h-4 text-blue-600" />
-          <span>🚗 Statuts & Étapes Garage</span>
+          <span>⏱️ Chronologie & 8 Étapes Intervenants</span>
           <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded-full">
-            {currentStepIndex + 1}/6
+            {currentStepIndex + 1}/8
           </span>
         </button>
 
@@ -1037,6 +1093,61 @@ export default function InsuranceVehicleDetail({
                   {isSavingDossier ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <BookmarkCheck className="w-4 h-4" />}
                   <span>Enregistrer Dossier Assureur</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Quick 8-Step Timeline Status Strip */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-2xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>⏱️ Avancement Sinistre :</span>
+                  <strong className="text-navy">Étape #{currentStepDef.stepNum} — {currentStepDef.label}</strong>
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-3xs font-black px-2 py-0.5 rounded-full border ${currentStepDef.intervenantColor}`}>
+                    {currentStepDef.intervenantBadge}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab("status")}
+                    className="text-3xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                  >
+                    Voir timeline complète →
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                {TIMELINE_STEPS.map((s, idx) => {
+                  const isCurrent = s.id === normalizeTimelineStep(claim.timeline_step);
+                  const isPast = idx < currentStepIndex || (idx === TIMELINE_STEPS.length - 1 && isCompleted);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setActiveSubTab("status")}
+                      className={`p-1.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-between min-h-[3.8rem] ${
+                        isCurrent
+                          ? "bg-navy text-white border-navy ring-2 ring-navy/20 shadow-xs"
+                          : isPast
+                          ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                          : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+                      }`}
+                      title={`${s.stepNum}. ${s.label} (${s.intervenant})`}
+                    >
+                      <div className="flex items-center justify-between w-full px-1">
+                        <span className="text-2xs">{s.icon}</span>
+                        <span className="text-[9px] font-black opacity-80">#{s.stepNum}</span>
+                      </div>
+                      <div className="text-[10px] font-bold leading-tight mt-0.5 truncate w-full text-center">
+                        {s.shortLabel.replace(/^\d+\.\s*/, "")}
+                      </div>
+                      <div className="text-[8px] font-medium opacity-70 truncate w-full">
+                        {s.intervenant.split(" ")[0]}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1368,21 +1479,30 @@ export default function InsuranceVehicleDetail({
         )}
 
         {/* ==================================================================== */}
-        {/* TAB 2: 🚗 STATUTS & ÉTAPES GARAGE (CHRONOLOGIE COMPLETE)             */}
+        {/* TAB 2: ⏱️ TIMELINE & 8 ÉTAPES PAR INTERVENANT                         */}
         {/* ==================================================================== */}
         {activeSubTab === "status" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Current status summary banner */}
-            <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="p-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/90 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-                  <span className="text-lg">{currentStepDef.icon}</span>
+                <div className="w-12 h-12 rounded-2xl bg-navy text-white flex items-center justify-center shrink-0 shadow-sm text-xl border border-navy-light">
+                  <span>{currentStepDef.icon}</span>
                 </div>
                 <div>
-                  <div className="text-2xs font-bold text-blue-700 uppercase">Étape Active</div>
-                  <h4 className="text-base font-black text-navy">{currentStepDef.label}</h4>
-                  <div className="text-xs text-gray-600 mt-0.5">
-                    Enregistré depuis <strong>{daysInStatus} jour{daysInStatus > 1 ? "s" : ""}</strong> dans cette étape.
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-3xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
+                      Étape {currentStepDef.stepNum} sur {TIMELINE_STEPS.length}
+                    </span>
+                    <span className={`text-3xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${currentStepDef.intervenantColor}`}>
+                      {currentStepDef.intervenantBadge}
+                    </span>
+                  </div>
+                  <h4 className="text-base sm:text-lg font-black text-navy mt-0.5">{currentStepDef.label}</h4>
+                  <div className="text-xs text-gray-600 flex items-center gap-2 flex-wrap mt-0.5">
+                    <span>⏱️ Immobilisé depuis <strong>{daysInStatus} jour{daysInStatus > 1 ? "s" : ""}</strong> dans ce statut</span>
+                    <span>·</span>
+                    <span>Arrêt total dossier : <strong>{totalDays}j</strong></span>
                   </div>
                 </div>
               </div>
@@ -1409,77 +1529,281 @@ export default function InsuranceVehicleDetail({
               </div>
             </div>
 
-            {/* Visual 6-Step Stepper */}
-            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
-              <h5 className="text-xs font-black text-navy uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
-                <span className="flex items-center gap-2">
-                  <span>Avancement du Véhicule au Garage</span>
-                  <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-2xs font-bold font-mono">
-                    🏬 Garage : {garageName || "Emergence"}
-                  </span>
-                </span>
-                <span className="text-2xs font-normal text-gray-400">Cliquez sur une étape pour changer</span>
-              </h5>
+            {/* Global Timeline Stepper Header */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                <div>
+                  <h5 className="text-xs sm:text-sm font-black text-navy uppercase tracking-wider flex items-center gap-2 flex-wrap">
+                    <span>⏱️ Chronologie du Sinistre (8 Étapes par Intervenant)</span>
+                    <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 text-2xs font-bold font-mono">
+                      🏬 Garage : {garageName || "Emergence"}
+                    </span>
+                  </h5>
+                  <p className="text-2xs text-gray-500 mt-0.5">
+                    Chaque intervenant valide l&apos;avancement de son étape dédiée. Cliquez sur une étape pour consulter ou changer.
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    <div className="text-2xs font-bold text-gray-500">Progression globale</div>
+                    <div className="text-xs font-black text-navy">
+                      {isCompleted ? "100%" : `${Math.round(((currentStepIndex) / (TIMELINE_STEPS.length - 1)) * 100)}%`} ({currentStepIndex + 1}/8)
+                    </div>
+                  </div>
+                  <div className="w-20 sm:w-28 bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-blue-600 to-emerald-500 h-full transition-all duration-500"
+                      style={{
+                        width: isCompleted ? "100%" : `${Math.round(((currentStepIndex) / (TIMELINE_STEPS.length - 1)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 8-Step Interactive Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {TIMELINE_STEPS.map((s, idx) => {
-                  const isCurrent = s.id === claim.timeline_step;
-                  const isPast = idx < currentStepIndex;
+                  const isCurrent = s.id === normalizeTimelineStep(claim.timeline_step);
+                  const isPast = idx < currentStepIndex || (idx === TIMELINE_STEPS.length - 1 && isCompleted);
+                  const isPending = !isCurrent && !isPast;
+
+                  // Extract validation metadata
+                  const stepValidations = (dossierMeta as any)?.step_validations || {};
+                  const validation = stepValidations[s.id];
+
+                  // Fallback check in comments
+                  const matchingComment = commentsList.find(
+                    (c: any) =>
+                      c.validated_step === s.id ||
+                      (c.type === "STEP_VALIDATION" && c.timeline_step === s.id) ||
+                      (c.comment && (c.comment.includes(`Étape #${s.stepNum}`) || c.comment.includes(s.shortLabel)))
+                  );
+
+                  const validatedDate = validation?.validated_at || matchingComment?.created_at;
+                  const validatedBy = validation?.validated_by || matchingComment?.author;
+                  const validationNoteText = validation?.note || matchingComment?.comment;
 
                   return (
-                    <button
+                    <div
                       key={s.id}
-                      type="button"
-                      disabled={isUpdating}
                       onClick={() => handleStepClick(s.id)}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between min-h-[5.5rem] ${
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
                         isCurrent
-                          ? "bg-navy text-white border-navy shadow-md ring-2 ring-navy/20"
+                          ? "bg-gradient-to-b from-navy to-navy-light text-white border-navy shadow-lg ring-2 ring-navy/30 scale-[1.02]"
                           : isPast
-                          ? "bg-emerald-50 text-emerald-950 border-emerald-200 hover:bg-emerald-100"
-                          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                          ? "bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:bg-emerald-100/70 hover:border-emerald-300"
+                          : "bg-gray-50/80 text-gray-700 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
                       }`}
                     >
-                      <div className="flex items-center justify-between w-full mb-1">
-                        <span className="text-base">{s.icon}</span>
-                        <span className={`text-3xs font-extrabold px-1.5 py-0.5 rounded ${
-                          isCurrent ? "bg-white/20 text-white" : isPast ? "bg-emerald-200/80 text-emerald-900" : "bg-gray-200 text-gray-600"
-                        }`}>
+                      {/* Top Header: Step Number & Intervenant */}
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        <span
+                          className={`text-3xs font-black px-2 py-0.5 rounded-md border ${
+                            isCurrent
+                              ? "bg-white/20 text-white border-white/30"
+                              : s.intervenantColor
+                          }`}
+                        >
+                          {s.intervenantBadge}
+                        </span>
+
+                        <span
+                          className={`text-3xs font-black px-1.5 py-0.5 rounded-full font-mono ${
+                            isCurrent
+                              ? "bg-amber-400 text-navy font-black"
+                              : isPast
+                              ? "bg-emerald-200 text-emerald-900"
+                              : "bg-gray-200 text-gray-600"
+                          }`}
+                        >
                           #{s.stepNum}
                         </span>
                       </div>
-                      <div>
-                        <div className="text-xs font-bold leading-tight">{s.shortLabel}</div>
-                        <div className={`text-3xs mt-0.5 truncate ${isCurrent ? "text-white/80" : "text-gray-400"}`}>
-                          {s.label}
+
+                      {/* Middle: Icon + Title + Task Description */}
+                      <div className="space-y-1 mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-lg">{s.icon}</span>
+                          <span className={`text-xs font-black leading-tight ${isCurrent ? "text-white" : "text-navy"}`}>
+                            {s.shortLabel}
+                          </span>
                         </div>
+                        <p
+                          className={`text-2xs leading-relaxed line-clamp-2 ${
+                            isCurrent ? "text-white/80" : "text-gray-500"
+                          }`}
+                          title={s.description}
+                        >
+                          {s.description}
+                        </p>
                       </div>
-                    </button>
+
+                      {/* Bottom Status / Validation info */}
+                      <div className="pt-2 border-t border-current/10">
+                        {isPast ? (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1 text-2xs font-extrabold text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Validé</span>
+                              {validatedDate && (
+                                <span className="text-3xs text-emerald-800 font-normal ml-auto">
+                                  {new Date(validatedDate).toLocaleDateString("fr-FR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                            {validatedBy && (
+                              <div className="text-3xs text-emerald-800/80 truncate">
+                                Par : <strong>{validatedBy}</strong>
+                              </div>
+                            )}
+                            {validationNoteText && (
+                              <div
+                                className="text-3xs text-emerald-900/70 truncate italic"
+                                title={validationNoteText}
+                              >
+                                &ldquo;{validationNoteText}&rdquo;
+                              </div>
+                            )}
+                          </div>
+                        ) : isCurrent ? (
+                          <div className="flex items-center justify-between text-2xs font-black text-amber-300">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                              <span>EN COURS</span>
+                            </span>
+                            <span className="text-3xs text-white/70">Action Requise</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-2xs text-gray-400">
+                            <Clock className="w-3 h-3 text-gray-300 shrink-0" />
+                            <span>En attente</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
 
-              {/* Advance with comment */}
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
-                <input
-                  type="text"
-                  placeholder="Note optionnelle pour ce changement d'étape..."
-                  value={generalCommentText}
-                  onChange={(e) => setGeneralCommentText(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:outline-none"
-                />
+              {/* ──────────────────────────────────────────────────────── */}
+              {/* ACTION / VALIDATION CARD FOR CURRENT STEP                */}
+              {/* ──────────────────────────────────────────────────────── */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 border-2 border-navy/20 shadow-xs space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-200/80 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-navy text-white flex items-center justify-center shrink-0 text-lg shadow-sm">
+                      {currentStepDef.icon}
+                    </div>
+                    <div>
+                      <div className="text-2xs font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Action Requise · Étape #{currentStepDef.stepNum}</span>
+                        <span className={`px-2 py-0.2 rounded-full border text-3xs ${currentStepDef.intervenantColor}`}>
+                          {currentStepDef.intervenantBadge}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-black text-navy">{currentStepDef.label}</h4>
+                    </div>
+                  </div>
 
-                {currentStepIndex < TIMELINE_STEPS.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleStepClick(TIMELINE_STEPS[currentStepIndex + 1].id)}
-                    disabled={isUpdating}
-                    className="px-4 py-2 bg-navy hover:bg-navy-light text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <span>Passer à {TIMELINE_STEPS[currentStepIndex + 1].shortLabel}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                  <div className="text-xs text-gray-600 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-2xs">
+                    Intervenant responsable : <strong>{currentStepDef.intervenant}</strong>
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-700 bg-white/80 p-3 rounded-xl border border-blue-100">
+                  <span className="font-bold text-navy">Instructions pour validation : </span>
+                  {currentStepDef.description}
+                </div>
+
+                {/* Validation Form */}
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-2xs font-bold text-gray-700 mb-1">
+                        Note / Référence de validation pour cette étape
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={`ex: ${
+                          currentStepDef.stepNum === 1
+                            ? "Photos et constat joint au dossier"
+                            : currentStepDef.stepNum === 2
+                            ? "Ordre de mission envoyé à Sanlam ref 2026-X"
+                            : currentStepDef.stepNum === 3
+                            ? "Devis initial 12,400 MAD déposé par le garage"
+                            : currentStepDef.stepNum === 4
+                            ? "Accord d'expertise validé sans réserve"
+                            : currentStepDef.stepNum === 5
+                            ? "Pièces reçues, carrosserie en cours"
+                            : currentStepDef.stepNum === 6
+                            ? "Accord de prise en charge (PEC) final reçu"
+                            : currentStepDef.stepNum === 7
+                            ? "Véhicule réparé et lavé, prêt pour sortie"
+                            : "Véhicule réceptionné et remis en service actif"
+                        }`}
+                        value={validationNote}
+                        onChange={(e) => setValidationNote(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-bold text-gray-700 mb-1">
+                        Validé par (Nom ou Intervenant)
+                      </label>
+                      <input
+                        type="text"
+                        value={validationAuthor}
+                        placeholder="Votre nom ou entité"
+                        onChange={(e) => setValidationAuthor(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                    {/* Reopen or Fast Jump Dropdown */}
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <span className="text-2xs font-bold text-gray-500 whitespace-nowrap">Changer vers :</span>
+                      <select
+                        value={claim.timeline_step}
+                        onChange={(e) => handleStepClick(e.target.value)}
+                        disabled={isUpdating || isValidatingStep}
+                        className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-800 cursor-pointer shadow-2xs w-full sm:w-auto"
+                      >
+                        {TIMELINE_STEPS.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            #{s.stepNum} {s.shortLabel} ({s.intervenant})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Primary Step Validation Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleValidateStep()}
+                      disabled={isValidatingStep || isUpdating}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isValidatingStep ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-100" />
+                      )}
+                      <span>
+                        {currentStepIndex >= TIMELINE_STEPS.length - 1
+                          ? "✅ Valider la remise en circulation (Clôturer Sinistre)"
+                          : `✅ Valider l'étape #${currentStepDef.stepNum} (${currentStepDef.shortLabel}) & Passer à l'étape suivante ->`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 

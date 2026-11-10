@@ -100,6 +100,16 @@ export const DOCUMENT_CATEGORIES = [
   { id: "AUTRE", label: "Autre Document", icon: "📁", badgeColor: "bg-gray-100 text-gray-700 border-gray-200" },
 ] as const;
 
+export interface StepValidationItem {
+  step_id: string;
+  step_num: number;
+  label: string;
+  intervenant: string;
+  validated_at: string;
+  validated_by: string;
+  note?: string;
+}
+
 export interface AccidentClaim {
   id: string;
   vehicle_id: string;
@@ -110,7 +120,7 @@ export interface AccidentClaim {
   driver_red_flag_reason?: string | null;
   severity: "HARD" | "SOFT" | null;
   fault: "DRIVER" | "THIRD_PARTY" | null;
-  timeline_step: "NEW_ACCIDENT" | "CAR_IN_GARAGE" | "STARTING_REPAIR" | "INSURANCE_DOCS" | "READY_FOR_PICKUP" | "VEHICLE_BACK";
+  timeline_step: string;
   step_updated_at: string;
   created_at: string;
   comments?: string | null;
@@ -137,56 +147,137 @@ export interface AccidentClaim {
   } | null;
 }
 
-export const TIMELINE_STEPS = [
+export interface TimelineStepDef {
+  id: string;
+  stepNum: number;
+  shortLabel: string;
+  label: string;
+  intervenant: string;
+  intervenantBadge: string;
+  intervenantColor: string;
+  description: string;
+  icon: string;
+  badgeColor: string;
+}
+
+export const TIMELINE_STEPS: TimelineStepDef[] = [
   {
     id: "NEW_ACCIDENT",
     stepNum: 1,
-    shortLabel: "Déclaré",
-    label: "Nouveau Sinistre",
-    icon: "🚨",
-    badgeColor: "bg-red-50 text-red-700 border-red-200",
-  },
-  {
-    id: "CAR_IN_GARAGE",
-    stepNum: 2,
-    shortLabel: "Garage",
-    label: "Entrée Garage",
-    icon: "🏬",
+    shortLabel: "1. Déclaration & Docs",
+    label: "Création Sinistre & Documents",
+    intervenant: "GoCab",
+    intervenantBadge: "🏢 GoCab (Nous)",
+    intervenantColor: "bg-blue-100 text-blue-900 border-blue-200",
+    description: "Création du sinistre, ajout des photos du constat et documents de base par nous (GoCab).",
+    icon: "📋",
     badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
   },
   {
-    id: "STARTING_REPAIR",
+    id: "INSURANCE_MISSION",
+    stepNum: 2,
+    shortLabel: "2. Mission Garage",
+    label: "Ordre de Mission Assurance",
+    intervenant: "Assurance",
+    intervenantBadge: "🛡️ Assurance",
+    intervenantColor: "bg-emerald-100 text-emerald-900 border-emerald-200",
+    description: "Création et envoi de l'ordre de mission par la compagnie d'assurance pour le garage.",
+    icon: "🛡️",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  {
+    id: "GARAGE_DEVIS",
     stepNum: 3,
-    shortLabel: "Réparation",
-    label: "Travaux en Cours",
-    icon: "🔧",
+    shortLabel: "3. Photos & Devis",
+    label: "Dépôt Photos & Devis Garage",
+    intervenant: "Garage",
+    intervenantBadge: "🏬 Garage",
+    intervenantColor: "bg-amber-100 text-amber-900 border-amber-200",
+    description: "Réception au garage, prise des photos d'expertise et dépôt du devis de réparation chiffré.",
+    icon: "📸",
     badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
   },
   {
-    id: "INSURANCE_DOCS",
+    id: "EXPERT_VALIDATION",
     stepNum: 4,
-    shortLabel: "Assurance",
-    label: "Expertise & Papiers",
-    icon: "📄",
+    shortLabel: "4. Accord Devis",
+    label: "Validation Devis par l'Expert",
+    intervenant: "Expert",
+    intervenantBadge: "🔍 Expert",
+    intervenantColor: "bg-purple-100 text-purple-900 border-purple-200",
+    description: "Visite contradictoire et accord formel de l'expert sur le devis des réparations.",
+    icon: "✍️",
     badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
   },
   {
-    id: "READY_FOR_PICKUP",
+    id: "STARTING_REPAIR",
     stepNum: 5,
-    shortLabel: "Prêt",
-    label: "Prêt Récupération",
-    icon: "⏳",
-    badgeColor: "bg-yellow-50 text-yellow-800 border-yellow-200",
+    shortLabel: "5. Début Travaux",
+    label: "Démarrage des Réparations",
+    intervenant: "Garage",
+    intervenantBadge: "🏬 Garage",
+    intervenantColor: "bg-orange-100 text-orange-900 border-orange-200",
+    description: "Lancement effectif des réparations carrosserie, tôlerie et mécanique par le garage.",
+    icon: "🔧",
+    badgeColor: "bg-orange-50 text-orange-700 border-orange-200",
+  },
+  {
+    id: "WAITING_PRISE_EN_CHARGE",
+    stepNum: 6,
+    shortLabel: "6. Accord PEC Final",
+    label: "Attente PEC Finale Assurance",
+    intervenant: "Assurance / Garage",
+    intervenantBadge: "🛡️ Assurance / Garage",
+    intervenantColor: "bg-teal-100 text-teal-900 border-teal-200",
+    description: "Le garage attend la confirmation et l'accord de prise en charge (PEC) final de l'assurance.",
+    icon: "📑",
+    badgeColor: "bg-teal-50 text-teal-700 border-teal-200",
+  },
+  {
+    id: "READY_FOR_PICKUP",
+    stepNum: 7,
+    shortLabel: "7. Véhicule Prêt",
+    label: "Véhicule Prêt au Garage",
+    intervenant: "Garage",
+    intervenantBadge: "🏬 Garage",
+    intervenantColor: "bg-cyan-100 text-cyan-900 border-cyan-200",
+    description: "Réparations achevées, contrôle qualité réalisé et véhicule prêt pour restitution.",
+    icon: "🚗",
+    badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200",
   },
   {
     id: "VEHICLE_BACK",
-    stepNum: 6,
-    shortLabel: "Rétabli",
-    label: "Véhicule Rétabli",
+    stepNum: 8,
+    shortLabel: "8. Véhicule Récupéré",
+    label: "Véhicule Récupéré & Rétabli",
+    intervenant: "GoCab / Terrain",
+    intervenantBadge: "🏢 GoCab (Terrain)",
+    intervenantColor: "bg-green-100 text-green-900 border-green-200",
+    description: "Véhicule récupéré du garage par GoCab, contrôlé et remis en circulation active.",
     icon: "✅",
     badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
-] as const;
+];
+
+export function normalizeTimelineStep(step: string | null | undefined): string {
+  if (!step) return "NEW_ACCIDENT";
+  if (step === "CAR_IN_GARAGE") return "GARAGE_DEVIS";
+  if (step === "INSURANCE_DOCS") return "INSURANCE_MISSION";
+  if (step === "START_REPAIR") return "STARTING_REPAIR";
+  if (step === "WAITING_FINAL_PEC") return "WAITING_PRISE_EN_CHARGE";
+  return step;
+}
+
+export function getTimelineStepDef(stepId: string | null | undefined): TimelineStepDef {
+  const normalized = normalizeTimelineStep(stepId);
+  return TIMELINE_STEPS.find((s) => s.id === normalized) || TIMELINE_STEPS[0];
+}
+
+export function getTimelineStepIndex(stepId: string | null | undefined): number {
+  const normalized = normalizeTimelineStep(stepId);
+  const idx = TIMELINE_STEPS.findIndex((s) => s.id === normalized);
+  return idx >= 0 ? idx : 0;
+}
 
 /**
  * Moroccan License Plate formatter
@@ -332,9 +423,9 @@ export default function AccidentCard({
   const daysInStatus = calculateDays(claim.step_updated_at);
   const totalDays = calculateDays(claim.created_at);
 
-  const currentStepIndex = TIMELINE_STEPS.findIndex((s) => s.id === claim.timeline_step);
-  const currentStepDef = TIMELINE_STEPS[currentStepIndex] || TIMELINE_STEPS[0];
-  const isCompleted = claim.timeline_step === "VEHICLE_BACK";
+  const currentStepIndex = getTimelineStepIndex(claim.timeline_step);
+  const currentStepDef = getTimelineStepDef(claim.timeline_step);
+  const isCompleted = normalizeTimelineStep(claim.timeline_step) === "VEHICLE_BACK";
 
   // Calculate driver history of faults if driver is loaded
   const driverAtFaultCount =
@@ -1196,6 +1287,9 @@ export default function AccidentCard({
                         }`}
                       >
                         {step.shortLabel}
+                      </div>
+                      <div className="text-[9px] text-gray-500 font-medium whitespace-nowrap truncate max-w-[80px]">
+                        {step.intervenant}
                       </div>
                     </div>
                   </button>

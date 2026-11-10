@@ -4,7 +4,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
-import { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
+import {
+  AccidentClaim,
+  TIMELINE_STEPS,
+  normalizeTimelineStep,
+  getTimelineStepDef,
+} from "./AccidentCard";
 import InsuranceVehicleDetail from "./InsuranceVehicleDetail";
 import RepairReminderModal from "./RepairReminderModal";
 import RepairReminderCard, { RepairReminderItem } from "./RepairReminderCard";
@@ -212,15 +217,18 @@ export default function InsuranceView() {
   }, [fetchClaims, fetchReminders, fetchVehicles, isExternalInsurance]);
 
   // Separate active claims and completed (Vehicle Back) claims
-  const activeClaims = claims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
-  const historyClaims = claims.filter((c) => c.timeline_step === "VEHICLE_BACK");
+  const activeClaims = claims.filter((c) => normalizeTimelineStep(c.timeline_step) !== "VEHICLE_BACK");
+  const historyClaims = claims.filter((c) => normalizeTimelineStep(c.timeline_step) === "VEHICLE_BACK");
 
   // KPI Calculations
   const totalActive = activeClaims.length;
   const hardCount = activeClaims.filter((c) => c.severity === "HARD").length;
   const softCount = activeClaims.filter((c) => c.severity === "SOFT").length;
-  const insuranceDocsCount = activeClaims.filter((c) => c.timeline_step === "INSURANCE_DOCS").length;
-  const readyForPickupCount = activeClaims.filter((c) => c.timeline_step === "READY_FOR_PICKUP").length;
+  const insuranceDocsCount = activeClaims.filter((c) => {
+    const s = normalizeTimelineStep(c.timeline_step);
+    return s === "INSURANCE_MISSION" || s === "WAITING_PRISE_EN_CHARGE" || s === "INSURANCE_DOCS";
+  }).length;
+  const readyForPickupCount = activeClaims.filter((c) => normalizeTimelineStep(c.timeline_step) === "READY_FOR_PICKUP").length;
 
   const totalDowntimeDays = activeClaims.reduce((sum, c) => {
     const diffTime = Math.abs(new Date().getTime() - new Date(c.created_at).getTime());
@@ -807,7 +815,7 @@ export default function InsuranceView() {
                       ? "bg-amber-50 text-amber-800 border-amber-200"
                       : "bg-red-50 text-red-800 border-red-300 font-black";
 
-                  const stepDef = TIMELINE_STEPS.find((s) => s.id === claim.timeline_step) || TIMELINE_STEPS[0];
+                  const stepDef = getTimelineStepDef(claim.timeline_step);
 
                   return (
                     <button
@@ -831,8 +839,11 @@ export default function InsuranceView() {
                             <span>{claim.vehicle?.plate_number}</span>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                            <span className="text-3xs font-semibold text-gray-500 truncate">
-                              {stepDef.label}
+                            <span className="text-3xs font-bold text-navy truncate">
+                              {stepDef.shortLabel}
+                            </span>
+                            <span className="text-[9px] font-semibold text-gray-500 bg-gray-100 px-1 py-0.2 rounded">
+                              {stepDef.intervenant}
                             </span>
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.2 rounded border border-amber-200">
                               <span>🏬</span> {garageName}

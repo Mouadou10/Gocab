@@ -291,6 +291,151 @@ export async function PATCH(req: Request, context: any) {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // ACTION: VALIDATE TIMELINE STEP (8-STEP INTERVENANT WORKFLOW)
+    // ─────────────────────────────────────────────────────────────
+    if (body.action === "VALIDATE_TIMELINE_STEP") {
+      const stepId = body.step_id || currentClaim.timeline_step;
+      const nextStepId = body.next_step_id || stepId;
+      const author = body.author || resolvedUser?.name || "Agent";
+      const intervenant = body.intervenant || "Intervenant";
+      const commentNote = body.comment?.trim() || "";
+
+      let existingComments: any[] = [];
+      try {
+        existingComments = currentClaim.comments ? JSON.parse(currentClaim.comments) : [];
+        if (!Array.isArray(existingComments)) existingComments = [];
+      } catch {
+        existingComments = [];
+      }
+
+      // Update or create INSURANCE_DOSSIER_META with step_validations
+      let dossierIndex = existingComments.findIndex((c: any) => c.id === "INSURANCE_DOSSIER_META");
+      if (dossierIndex === -1) {
+        existingComments.push({
+          id: "INSURANCE_DOSSIER_META",
+          type: "INSURANCE_INFO",
+          timeline_step: currentClaim.timeline_step,
+          insurance_notes: [],
+          step_validations: {},
+          updated_at: new Date().toISOString(),
+        });
+        dossierIndex = existingComments.length - 1;
+      }
+
+      const currentDossier = existingComments[dossierIndex];
+      const validations = currentDossier.step_validations || {};
+      validations[stepId] = {
+        step_id: stepId,
+        validated_at: new Date().toISOString(),
+        validated_by: author,
+        intervenant: intervenant,
+        note: commentNote || undefined,
+      };
+      currentDossier.step_validations = validations;
+      currentDossier.updated_at = new Date().toISOString();
+      currentDossier.updated_by = author;
+      existingComments[dossierIndex] = currentDossier;
+
+      // Add a distinct validation entry in the comments history
+      const validationComment = {
+        id: crypto.randomUUID(),
+        type: "STEP_VALIDATION",
+        timeline_step: nextStepId || stepId,
+        validated_step: stepId,
+        author: author,
+        intervenant: intervenant,
+        comment: `✅ Étape validée par ${author} (${intervenant})${commentNote ? ` : "${commentNote}"` : "."}`,
+        created_at: new Date().toISOString(),
+      };
+      existingComments.unshift(validationComment);
+
+      const targetStep = nextStepId;
+      const updateData: any = {
+        timeline_step: targetStep,
+        step_updated_at: new Date(),
+        comments: JSON.stringify(existingComments),
+      };
+
+      const updatedClaim = await prisma.accidentClaim.update({
+        where: { id },
+        data: updateData,
+        include: {
+          vehicle: true,
+          driver: {
+            include: {
+              accidentClaims: true,
+            },
+          },
+        },
+      });
+
+      // If targetStep is READY_FOR_PICKUP, trigger field task & telegram alert
+      if (targetStep === "READY_FOR_PICKUP") {
+        const plateNumber = updatedClaim.vehicle?.plate_number || "Inconnu";
+        const totalDays = Math.floor(
+          Math.abs(Date.now() - new Date(updatedClaim.created_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const existingTask = await prisma.fieldTask.findFirst({
+          where: { linked_ticket_id: updatedClaim.id, task_type: "GARAGE_PICKUP", status: { not: "COMPLETED" } },
+        });
+        if (!existingTask) {
+          await prisma.fieldTask.create({
+            data: {
+              task_type: "GARAGE_PICKUP",
+              vehicle_id: updatedClaim.vehicle_id,
+              plate_number: plateNumber,
+              driver_name: updatedClaim.driver_name,
+              driver_phone: updatedClaim.driver_phone,
+              description: `Reprise au garage du véhicule réparé (Dossier Sinistre)`,
+              linked_ticket_id: updatedClaim.id,
+              status: "PENDING",
+              priority: "Urgent",
+            },
+          });
+        }
+        await sendCarReadyTelegramAlert({
+          plate_number: plateNumber,
+          make_model: updatedClaim.vehicle?.make_model,
+          driver_name: updatedClaim.driver_name,
+          driver_phone: updatedClaim.driver_phone,
+          downtime_days: totalDays,
+          assigned_to: existingTask?.assigned_to || null,
+          triggered_by: author,
+          notes: commentNote || "Véhicule réparé au garage. Prêt pour récupération et convoyage en flotte.",
+        }).catch((err) => console.error("Auto Telegram car ready alert error:", err));
+      }
+
+      // If targetStep is VEHICLE_BACK, restore vehicle to active and resolve tickets
+      if (targetStep === "VEHICLE_BACK") {
+        const vehicle = await prisma.vehicle.findUnique({ where: { id: updatedClaim.vehicle_id } });
+        if (vehicle && (vehicle.status === "Accident" || vehicle.status === "In garage")) {
+          const hasDriver = !!vehicle.assigned_driver_name;
+          await prisma.vehicle.update({
+            where: { id: updatedClaim.vehicle_id },
+            data: { status: hasDriver ? "Actif" : "Available" },
+          });
+        }
+        await prisma.maintenanceTicket.updateMany({
+          where: { vehicle_id: updatedClaim.vehicle_id, status: { not: "RESOLVED" } },
+          data: { status: "RESOLVED", resolved_at: new Date(), field_status: "COMPLETED" },
+        }).catch(() => {});
+        await prisma.fieldTask.updateMany({
+          where: {
+            OR: [
+              { linked_ticket_id: updatedClaim.id },
+              { vehicle_id: updatedClaim.vehicle_id, task_type: "GARAGE_PICKUP" },
+            ],
+            status: { not: "COMPLETED" },
+          },
+          data: { status: "COMPLETED", completed_at: new Date() },
+        }).catch(() => {});
+      }
+
+      await touchSyncState("tickets");
+      return NextResponse.json({ success: true, claim: updatedClaim });
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // ACTION: DIRECT DISPATCH OF FIELD TASK & TELEGRAM MISSION
     // ─────────────────────────────────────────────────────────────
     if (body.action === "DISPATCH_TELEGRAM_MISSION") {
@@ -321,12 +466,17 @@ export async function PATCH(req: Request, context: any) {
       // Send rich Telegram alert to Field Supervisor group
       if (body.send_telegram !== false) {
         const stepLabels: Record<string, string> = {
-          NEW_ACCIDENT: "1. Déclaré",
-          CAR_IN_GARAGE: "2. Entrée Garage",
-          STARTING_REPAIR: "3. Travaux en Cours",
-          INSURANCE_DOCS: "4. Expertise & Papiers",
-          READY_FOR_PICKUP: "5. Prêt Récupération",
-          VEHICLE_BACK: "6. Rétabli",
+          NEW_ACCIDENT: "1. Déclaration & Docs (GoCab)",
+          INSURANCE_MISSION: "2. Mission Garage (Assurance)",
+          GARAGE_DEVIS: "3. Photos & Devis (Garage)",
+          EXPERT_VALIDATION: "4. Accord Devis (Expert)",
+          STARTING_REPAIR: "5. Début Travaux (Garage)",
+          WAITING_PRISE_EN_CHARGE: "6. Accord PEC Final (Assurance)",
+          READY_FOR_PICKUP: "7. Véhicule Prêt (Garage)",
+          VEHICLE_BACK: "8. Véhicule Récupéré (GoCab)",
+          // Legacy mappings
+          CAR_IN_GARAGE: "3. Photos & Devis (Garage)",
+          INSURANCE_DOCS: "2. Mission Garage (Assurance)",
         };
 
         await sendInsuranceMissionTelegramAlert({
