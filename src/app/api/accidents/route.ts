@@ -11,46 +11,9 @@ export async function GET() {
   try {
     await requireAuth().catch(() => null);
     await ensureDatabaseSynced(false);
-    const MAINTENANCE_STATUSES = [
-      "Accident",
-      "accident",
-      "Accidenté",
-      "In garage",
-      "in garage",
-      "Maintenance",
-      "maintenance",
-    ];
 
-    // Pre-fetch open maintenance & repair tickets to identify vehicles actively in repair
-    const openMaintenanceTickets = await prisma.maintenanceTicket.findMany({
-      where: {
-        ticket_type: { in: ["Accident", "Repair", "Entretien"] },
-        status: { in: ["OPEN", "IN_PROGRESS"] },
-      },
-      select: { vehicle_id: true, plate_number: true },
-    });
-    const ticketVehicleIds = openMaintenanceTickets.map((t) => t.vehicle_id).filter(Boolean);
-    const ticketPlates = openMaintenanceTickets.map((t) => t.plate_number).filter(Boolean);
-
-    // 1. Fetch all non-archived vehicles currently in maintenance or with open accident/repair ticket
-    const maintenanceVehicles = await prisma.vehicle.findMany({
-      where: {
-        is_archived: false,
-        OR: [
-          { status: { in: MAINTENANCE_STATUSES } },
-          { id: { in: ticketVehicleIds } },
-          { plate_number: { in: ticketPlates } },
-        ],
-      },
-      include: {
-        driverProfile: true,
-      },
-    });
-
-    const maintenanceVehicleIds = new Set(maintenanceVehicles.map((v) => v.id));
-
-    // 2. Fetch all existing claims
-    let allClaims = await prisma.accidentClaim.findMany({
+    // Fetch all existing claims
+    const allClaims = await prisma.accidentClaim.findMany({
       include: {
         vehicle: true,
         driver: {
@@ -62,172 +25,8 @@ export async function GET() {
       orderBy: { created_at: "desc" },
     });
 
-    // Group claims by vehicle_id
-    const claimsByVehicleId = new Map<string, typeof allClaims>();
-    for (const c of allClaims) {
-      if (c.vehicle_id) {
-        const list = claimsByVehicleId.get(c.vehicle_id) || [];
-        list.push(c);
-        claimsByVehicleId.set(c.vehicle_id, list);
-      }
-    }
-
-    let hasMutated = false;
-
-    // 3. For any vehicle in maintenance status or with open accident/repair ticket:
-    for (const v of maintenanceVehicles) {
-      // Ensure vehicle status aligns with "In garage" if it was still "Actif" or "Available"
-      if (!MAINTENANCE_STATUSES.includes(v.status)) {
-        await prisma.vehicle
-          .update({
-            where: { id: v.id },
-            data: { status: "In garage" },
-          })
-          .catch(() => {});
-        v.status = "In garage";
-        hasMutated = true;
-      }
-
-      const vClaims = claimsByVehicleId.get(v.id) || [];
-      const activeClaim = vClaims.find((c) => c.timeline_step !== "VEHICLE_BACK");
-
-      if (activeClaim) {
-        // Vehicle already has an active claim in "Dossiers En Cours".
-        // Respect the agent's current stage and data — DO NOT overwrite or delete!
-      } else if (vClaims.length > 0) {
-        // Vehicle is in maintenance, but its previous claims were closed in VEHICLE_BACK.
-        // Reopen the latest primary claim to CAR_IN_GARAGE so it appears in "Dossiers En Cours".
-        const sortedClaims = [...vClaims].sort((a, b) => {
-          let aComments = 0;
-          let bComments = 0;
-          try { aComments = a.comments ? JSON.parse(a.comments).length : 0; } catch {}
-          try { bComments = b.comments ? JSON.parse(b.comments).length : 0; } catch {}
-          return bComments - aComments;
-        });
-        const primaryClaim = sortedClaims[0];
-
-        const claimDate = v.total_downtime_days && v.total_downtime_days > 0
-          ? new Date(Date.now() - v.total_downtime_days * 24 * 60 * 60 * 1000)
-          : primaryClaim.created_at;
-
-        await prisma.accidentClaim.update({
-          where: { id: primaryClaim.id },
-          data: {
-            timeline_step: "CAR_IN_GARAGE",
-            step_updated_at: claimDate,
-            driver_name: v.assigned_driver_name || v.driverProfile?.fullName || primaryClaim.driver_name,
-            driver_phone: v.assigned_driver_phone || v.driverProfile?.phoneSanitized || primaryClaim.driver_phone,
-          },
-        });
-        hasMutated = true;
-      } else {
-        // Vehicle in maintenance with no claim at all -> create one in CAR_IN_GARAGE
-        const claimDate = v.total_downtime_days && v.total_downtime_days > 0
-          ? new Date(Date.now() - v.total_downtime_days * 24 * 60 * 60 * 1000)
-          : new Date();
-
-        await prisma.accidentClaim.create({
-          data: {
-            vehicle_id: v.id,
-            driver_id: v.driverProfile?.id || null,
-            driver_name: v.assigned_driver_name || v.driverProfile?.fullName || null,
-            driver_phone: v.assigned_driver_phone || v.driverProfile?.phoneSanitized || null,
-            severity: "HARD",
-            fault: null,
-            timeline_step: "CAR_IN_GARAGE",
-            step_updated_at: claimDate,
-            created_at: claimDate,
-            comments: JSON.stringify([
-              {
-                id: "INSURANCE_DOSSIER_META",
-                type: "INSURANCE_INFO",
-                timeline_step: "INSURANCE_DOCS",
-                claim_number: "",
-                insurance_company: "Sanlam",
-                garage_name: "Emergence",
-                policy_number: v.insurance_policy_number || "",
-                claim_status: "DECLARED",
-                declaration_date: claimDate.toISOString().split("T")[0],
-                expert_name: "",
-                expert_phone: "",
-                expertise_date: "",
-                estimated_amount: 0,
-                covered_amount: 0,
-                franchise_amount: 0,
-                payout_status: "PENDING",
-                notes: [],
-                updated_at: claimDate.toISOString(),
-                updated_by: "Système",
-              },
-              {
-                id: crypto.randomUUID(),
-                timeline_step: "CAR_IN_GARAGE",
-                comment: "Dossier maintenance synchronisé automatiquement depuis la flotte. Compagnie: Sanlam · Garage: Emergence",
-                author: "Système",
-                created_at: claimDate.toISOString(),
-              },
-            ]),
-          },
-        });
-        hasMutated = true;
-      }
-
-      // Ensure open MaintenanceTicket exists
-      const existingTicket = await prisma.maintenanceTicket.findFirst({
-        where: {
-          vehicle_id: v.id,
-          status: { in: ["OPEN", "IN_PROGRESS"] },
-        },
-      });
-
-      if (!existingTicket) {
-        await prisma.maintenanceTicket.create({
-          data: {
-            vehicle_id: v.id,
-            plate_number: v.plate_number,
-            driver_name: v.assigned_driver_name || v.driverProfile?.fullName || null,
-            driver_phone: v.assigned_driver_phone || v.driverProfile?.phoneSanitized || null,
-            ticket_type: v.status === "Accident" ? "Accident" : "Entretien",
-            priority: (v.total_downtime_days || 0) >= 7 ? "Critical" : "Urgent",
-            status: "OPEN",
-            description: `🔧 Véhicule en maintenance / garage. Prise en charge mécanique & assurance requise.`,
-            sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-          },
-        }).catch(() => null);
-      }
-    }
-
-    // 4. For any active claim whose vehicle is not yet in maintenance status:
-    // Ensure the vehicle's status is synchronized to "In garage" so it remains in "Dossiers En Cours"
-    for (const c of allClaims) {
-      if (c.timeline_step !== "VEHICLE_BACK" && c.vehicle && !maintenanceVehicleIds.has(c.vehicle_id)) {
-        await prisma.vehicle
-          .update({
-            where: { id: c.vehicle_id },
-            data: { status: "In garage" },
-          })
-          .catch(() => {});
-        maintenanceVehicleIds.add(c.vehicle_id);
-      }
-    }
-
-    // 5. Reload final claims safely (strictly non-destructive)
-    const finalClaims = hasMutated
-      ? await prisma.accidentClaim.findMany({
-          include: {
-            vehicle: true,
-            driver: {
-              include: {
-                accidentClaims: true,
-              },
-            },
-          },
-          orderBy: { created_at: "desc" },
-        })
-      : allClaims;
-
     // Attach active or latest FieldTask for each claim
-    const claimIds = finalClaims.map((c) => c.id);
+    const claimIds = allClaims.map((c) => c.id);
     const fieldTasks = await prisma.fieldTask.findMany({
       where: {
         linked_ticket_id: { in: claimIds },
@@ -244,7 +43,7 @@ export async function GET() {
 
     const redFlagsLookup = await getActiveRedFlagsLookup();
 
-    const claimsWithTasks = finalClaims.map((claim) => {
+    const claimsWithTasks = allClaims.map((claim) => {
       const flagCheck = redFlagsLookup.checkDriver({
         id: claim.driver_id || claim.driver?.id,
         name: claim.driver_name || claim.driver?.fullName,
