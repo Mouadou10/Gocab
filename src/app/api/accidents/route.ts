@@ -9,30 +9,33 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await requireAuth().catch(() => null);
-    await ensureDatabaseSynced(false);
-
-    // Fetch all existing claims
-    const allClaims = await prisma.accidentClaim.findMany({
-      include: {
-        vehicle: true,
-        driver: {
-          include: {
-            accidentClaims: true,
+    // Parallelize all queries concurrently for ultra-fast response
+    const [allClaims, fieldTasks, redFlagsLookup] = await Promise.all([
+      prisma.accidentClaim.findMany({
+        include: {
+          vehicle: true,
+          driver: {
+            select: {
+              id: true,
+              fullName: true,
+              phoneSanitized: true,
+              cinNumber: true,
+              isRedFlagged: true,
+              redFlagReason: true,
+            },
           },
         },
-      },
-      orderBy: { created_at: "desc" },
-    });
-
-    // Attach active or latest FieldTask for each claim
-    const claimIds = allClaims.map((c) => c.id);
-    const fieldTasks = await prisma.fieldTask.findMany({
-      where: {
-        linked_ticket_id: { in: claimIds },
-      },
-      orderBy: { created_at: "desc" },
-    });
+        orderBy: { created_at: "desc" },
+      }),
+      prisma.fieldTask.findMany({
+        where: {
+          linked_ticket_id: { not: null },
+        },
+        orderBy: { created_at: "desc" },
+        take: 200,
+      }),
+      getActiveRedFlagsLookup(),
+    ]);
 
     const fieldTasksByClaimId = new Map<string, (typeof fieldTasks)[0]>();
     for (const ft of fieldTasks) {
@@ -40,8 +43,6 @@ export async function GET() {
         fieldTasksByClaimId.set(ft.linked_ticket_id, ft);
       }
     }
-
-    const redFlagsLookup = await getActiveRedFlagsLookup();
 
     const claimsWithTasks = allClaims.map((claim) => {
       const flagCheck = redFlagsLookup.checkDriver({
@@ -59,7 +60,14 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ success: true, claims: claimsWithTasks });
+    return NextResponse.json(
+      { success: true, claims: claimsWithTasks },
+      {
+        headers: {
+          "Cache-Control": "private, no-cache, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error fetching accident claims:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

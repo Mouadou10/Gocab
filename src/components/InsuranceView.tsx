@@ -37,29 +37,49 @@ interface VehicleItem {
   driver_red_flag_reason?: string | null;
 }
 
+// Module-level in-memory cache for instant 0ms tab switching & SWR pattern
+let globalCachedClaims: AccidentClaim[] | null = null;
+let globalCachedReminders: RepairReminderItem[] | null = null;
+let globalCachedVehicles: VehicleItem[] | null = null;
+let globalCachedRemindersSummary = {
+  total: 0,
+  pending: 0,
+  due_today: 0,
+  overdue: 0,
+  due_or_overdue: 0,
+  in_repair: 0,
+  completed: 0,
+};
+
 export default function InsuranceView() {
-  const [claims, setClaims] = useState<AccidentClaim[]>([]);
+  const [claims, setClaims] = useState<AccidentClaim[]>(() => {
+    if (globalCachedClaims && globalCachedClaims.length > 0) return globalCachedClaims;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("gocab_cached_claims");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            globalCachedClaims = parsed;
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return [];
+  });
+
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const fetchSeqRef = useRef(0);
 
-  const { notifyMutation } = useLiveSync("tickets", () => {
-    fetchClaims();
-    fetchReminders();
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return !globalCachedClaims || globalCachedClaims.length === 0;
   });
 
-  const [reminders, setReminders] = useState<RepairReminderItem[]>([]);
-  const [remindersSummary, setRemindersSummary] = useState({
-    total: 0,
-    pending: 0,
-    due_today: 0,
-    overdue: 0,
-    due_or_overdue: 0,
-    in_repair: 0,
-    completed: 0,
-  });
+  const [reminders, setReminders] = useState<RepairReminderItem[]>(() => globalCachedReminders || []);
+  const [remindersSummary, setRemindersSummary] = useState(() => globalCachedRemindersSummary);
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
   const [filterReminderStatus, setFilterReminderStatus] = useState<"ALL" | "DUE" | "PENDING" | "IN_REPAIR" | "COMPLETED">("ALL");
-  const [isLoading, setIsLoading] = useState(true);
 
   // Tabs: "master-detail" (main insurance & claims view) vs "reminders" (repair reminders list)
   const [viewMode, setViewMode] = useState<"master-detail" | "reminders">("master-detail");
@@ -76,7 +96,7 @@ export default function InsuranceView() {
   const [newVehicleId, setNewVehicleId] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleItem[]>(() => globalCachedVehicles || []);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const getFleetManagerDisplayName = (v?: {
@@ -104,14 +124,21 @@ export default function InsuranceView() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchClaims = useCallback(async () => {
+  const fetchClaims = useCallback(async (isSilentArg: boolean | React.SyntheticEvent = false) => {
+    const isSilent = typeof isSilentArg === "boolean" ? isSilentArg : false;
     const seq = ++fetchSeqRef.current;
-    setIsLoading(true);
+    if (!isSilent && (!globalCachedClaims || globalCachedClaims.length === 0)) {
+      setIsLoading(true);
+    }
     try {
       const res = await fetch("/api/accidents", { cache: "no-store" });
       const data = await res.json();
-      if (seq === fetchSeqRef.current && data.success) {
-        setClaims(data.claims || []);
+      if (seq === fetchSeqRef.current && data.success && Array.isArray(data.claims)) {
+        globalCachedClaims = data.claims;
+        setClaims(data.claims);
+        try {
+          localStorage.setItem("gocab_cached_claims", JSON.stringify(data.claims));
+        } catch {}
       }
     } catch (err) {
       console.error("Failed to fetch claims:", err);
@@ -126,9 +153,11 @@ export default function InsuranceView() {
     try {
       const res = await fetch("/api/insurance/repair-reminders", { cache: "no-store" });
       const data = await res.json();
-      if (data.success) {
-        setReminders(data.reminders || []);
+      if (data.success && Array.isArray(data.reminders)) {
+        globalCachedReminders = data.reminders;
+        setReminders(data.reminders);
         if (data.summary) {
+          globalCachedRemindersSummary = data.summary;
           setRemindersSummary(data.summary);
         }
       }
@@ -138,19 +167,38 @@ export default function InsuranceView() {
   }, []);
 
   const fetchVehicles = useCallback(async () => {
+    if (globalCachedVehicles && globalCachedVehicles.length > 0) {
+      setVehicles(globalCachedVehicles);
+      return;
+    }
     try {
       const res = await fetch("/api/vehicles", { cache: "no-store" });
       const data = await res.json();
-      setVehicles(data.vehicles || []);
+      if (data.vehicles) {
+        globalCachedVehicles = data.vehicles;
+        setVehicles(data.vehicles);
+      }
     } catch (err) {
       console.error("Failed to fetch vehicles for accident reporting", err);
     }
   }, []);
 
-  useEffect(() => {
-    fetchClaims();
+  // Stabilized LiveSync listener
+  const handleLiveSync = useCallback(() => {
+    fetchClaims(true);
     fetchReminders();
-    fetchVehicles();
+  }, [fetchClaims, fetchReminders]);
+
+  const { notifyMutation } = useLiveSync("tickets", handleLiveSync);
+
+  useEffect(() => {
+    fetchClaims(Boolean(globalCachedClaims && globalCachedClaims.length > 0));
+    fetchReminders();
+    // Defer vehicles fetch slightly so claims take top network priority
+    const timer = setTimeout(() => {
+      fetchVehicles();
+    }, 150);
+    return () => clearTimeout(timer);
   }, [fetchClaims, fetchReminders, fetchVehicles]);
 
   // Separate active claims and completed (Vehicle Back) claims
