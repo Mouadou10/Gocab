@@ -279,7 +279,7 @@ export default function WhatsAppDirectModal({
                 </span>
                 {selected360Template.headerFormat === "LOCATION" && (
                   <span className="text-[11px] text-emerald-800 font-semibold">
-                    · 📍 Carte GPS Maârif incluse
+                    · 📍 Carte GPS {selected360Template.name.toLowerCase() === "rabat" ? "Rabat (حي المحيط)" : "Maârif (Casablanca)"} incluse
                   </span>
                 )}
                 <span className="text-[11px] text-emerald-700">

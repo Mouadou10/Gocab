@@ -912,10 +912,13 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
   };
 
   // Ensure the CRM chat log displays the real 360dialog template content delivered to the recipient
+  const isRabatTpl = (matchedTemplate?.name || effectiveTemplateName || "").toLowerCase() === "rabat";
+  const targetLocation = isRabatTpl ? GOCAB_RABAT_LOCATION : GOCAB_HQ_LOCATION;
+
   const finalLoggedText =
     matchedTemplate && (matchedTemplate.bodyParamCount ?? 0) === 0
       ? matchedTemplate.headerFormat === "LOCATION"
-        ? `📍 ${GOCAB_HQ_LOCATION.name} (${GOCAB_HQ_LOCATION.address})\n\n${matchedTemplate.template}`
+        ? `📍 ${targetLocation.name} (${targetLocation.address})\n\n${matchedTemplate.template}`
         : matchedTemplate.template
       : opts.text;
 

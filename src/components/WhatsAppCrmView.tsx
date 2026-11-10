@@ -42,6 +42,7 @@ import {
   APPROVED_360_TEMPLATES,
   Approved360TemplateDef,
   GOCAB_HQ_LOCATION,
+  GOCAB_RABAT_LOCATION,
   getApproved360Template,
   detectApproved360Template,
   formatTemplateForWhatsAppWeb,
@@ -434,9 +435,12 @@ export default function WhatsAppCrmView() {
       }
     }
 
+    const isRabatTpl = Boolean(matched360Tpl && matched360Tpl.name.toLowerCase() === "rabat");
+    const targetLoc = isRabatTpl ? GOCAB_RABAT_LOCATION : GOCAB_HQ_LOCATION;
+
     const displayOptimisticText = matched360Tpl
       ? matched360Tpl.headerFormat === "LOCATION"
-        ? `📍 ${GOCAB_HQ_LOCATION.name} (${GOCAB_HQ_LOCATION.address})\n\n${matched360Tpl.template}`
+        ? `📍 ${targetLoc.name} (${targetLoc.address})\n\n${matched360Tpl.template}`
         : matched360Tpl.template
       : messageText || (uploadedMediaUrl ? "📷 Photo" : "");
 
@@ -1628,7 +1632,7 @@ export default function WhatsAppCrmView() {
                     </span>
                     {selected360Template.headerFormat === "LOCATION" && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white text-emerald-800 border border-emerald-200 text-[10px] font-bold">
-                        📍 En-tête Carte GPS Maârif inclus
+                        📍 En-tête Carte GPS {selected360Template.name.toLowerCase() === "rabat" ? "Rabat (حي المحيط)" : "Maârif (Casablanca)"} inclus
                       </span>
                     )}
                     {selected360Template.buttonLabel && (
