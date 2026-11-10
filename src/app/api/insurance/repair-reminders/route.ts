@@ -16,6 +16,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth().catch(() => null);
+    if (session?.user?.role === "ASSURANCE") {
+      return NextResponse.json(
+        { success: false, error: "Accès refusé: Les agents assurance externes n'ont pas accès aux rappels réparations.", reminders: [], summary: { total: 0, pending: 0, due_today: 0, overdue: 0, due_or_overdue: 0, in_repair: 0, completed: 0 } },
+        { status: 403 }
+      );
+    }
     const { searchParams } = new URL(request.url);
     const statusParam = searchParams.get("status"); // ALL, PENDING, DUE, IN_REPAIR, COMPLETED
     const vehicleIdParam = searchParams.get("vehicle_id");
@@ -200,6 +207,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
+    if (session?.user?.role === "ASSURANCE") {
+      return NextResponse.json(
+        { success: false, error: "Accès refusé: Les agents assurance externes n'ont pas accès aux rappels réparations." },
+        { status: 403 }
+      );
+    }
     const body = await request.json();
 
     const {

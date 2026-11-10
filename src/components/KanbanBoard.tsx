@@ -91,6 +91,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
   FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  ASSURANCE:             ["insurance"],
   OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
   ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
@@ -102,6 +103,7 @@ const DEFAULT_ROLE_LABELS: Record<string, string> = {
   FLEET_PERF_MANAGER:    "Fleet Performance",
   FIELD_SUPERVISOR:      "Field Supervisor",
   FINANCE_OFFICER:       "Finance Officer",
+  ASSURANCE:             "Agent Assurance",
   OPS_MANAGER:           "Ops Manager",
   ADMIN:                 "Admin",
 };
@@ -113,6 +115,7 @@ const ROLE_COLORS: Record<string, string> = {
   FLEET_PERF_MANAGER:    "bg-amber-100 text-amber-700",
   FIELD_SUPERVISOR:      "bg-green-100 text-green-700",
   FINANCE_OFFICER:       "bg-purple-100 text-purple-700",
+  ASSURANCE:             "bg-teal-100 text-teal-800",
   OPS_MANAGER:           "bg-navy/10 text-navy",
   ADMIN:                 "bg-red-100 text-red-700",
 };
@@ -127,6 +130,7 @@ const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
   FLEET_PERF_MANAGER:    "fleet",
   FIELD_SUPERVISOR:      "field",
   FINANCE_OFFICER:       "performance",
+  ASSURANCE:             "insurance",
   OPS_MANAGER:           "dashboard",
   ADMIN:                 "dashboard",
 };
@@ -259,21 +263,28 @@ export default function KanbanBoard() {
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(DEFAULT_ROLE_LABELS);
 
   const userRoleTabs = rolePermissions[userRole] || DEFAULT_ROLE_PERMISSIONS[userRole] || DEFAULT_ROLE_PERMISSIONS.ADMIN || [];
-  let allowedTabs = userRoleTabs.includes("drivers") ? userRoleTabs : [...userRoleTabs, "drivers"];
-  if (!allowedTabs.includes("kpi-dashboard")) {
-    allowedTabs = ["dashboard", "kpi-dashboard", ...allowedTabs.filter((t) => t !== "dashboard")];
-  }
-  if ((userRole === "ADMIN" || userRole === "OPS_MANAGER") && !allowedTabs.includes("whatsapp")) {
-    allowedTabs = [...allowedTabs, "whatsapp"];
-  }
-  if (!allowedTabs.includes("vehicle-ops")) {
-    allowedTabs = [...allowedTabs, "vehicle-ops"];
-  }
-  if (!allowedTabs.includes("flagged-drivers")) {
-    allowedTabs = [...allowedTabs, "flagged-drivers"];
-  }
-  if (!allowedTabs.includes("field-missions")) {
-    allowedTabs = [...allowedTabs, "field-missions"];
+  let allowedTabs: TabType[] = userRoleTabs;
+
+  if (userRole === "ASSURANCE") {
+    // External Insurance Agent: strictly limited to the Assurance page only
+    allowedTabs = ["insurance"];
+  } else {
+    allowedTabs = allowedTabs.includes("drivers") ? allowedTabs : [...allowedTabs, "drivers"];
+    if (!allowedTabs.includes("kpi-dashboard")) {
+      allowedTabs = ["dashboard", "kpi-dashboard", ...allowedTabs.filter((t) => t !== "dashboard")];
+    }
+    if ((userRole === "ADMIN" || userRole === "OPS_MANAGER") && !allowedTabs.includes("whatsapp")) {
+      allowedTabs = [...allowedTabs, "whatsapp"];
+    }
+    if (!allowedTabs.includes("vehicle-ops")) {
+      allowedTabs = [...allowedTabs, "vehicle-ops"];
+    }
+    if (!allowedTabs.includes("flagged-drivers")) {
+      allowedTabs = [...allowedTabs, "flagged-drivers"];
+    }
+    if (!allowedTabs.includes("field-missions")) {
+      allowedTabs = [...allowedTabs, "field-missions"];
+    }
   }
 
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
@@ -415,6 +426,7 @@ export default function KanbanBoard() {
 
   // Tab switcher that saves state for page refreshes
   const handleSelectTab = (tab: TabType) => {
+    if (!allowedTabs.includes(tab)) return;
     setActiveTab(tab);
     if (tab === "training") {
       fetchSettings();

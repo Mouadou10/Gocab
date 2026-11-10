@@ -43,6 +43,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
   FLEET_PERF_MANAGER: ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "insurance", "whatsapp"],
   FIELD_SUPERVISOR: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER: ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
+  ASSURANCE: ["insurance"],
   OPS_MANAGER: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
   ADMIN: ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
@@ -54,6 +55,7 @@ const DEFAULT_ROLE_LABELS: Record<string, string> = {
   FLEET_PERF_MANAGER: "Fleet Performance Manager",
   FIELD_SUPERVISOR: "Field Supervisor",
   FINANCE_OFFICER: "Finance Officer",
+  ASSURANCE: "Agent Assurance (Externe)",
   OPS_MANAGER: "Operations Manager",
   ADMIN: "Administrator",
 };

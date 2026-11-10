@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
 import { AccidentClaim, TIMELINE_STEPS } from "./AccidentCard";
@@ -52,6 +53,10 @@ let globalCachedRemindersSummary = {
 };
 
 export default function InsuranceView() {
+  const { data: session } = useSession() || {};
+  const userRole = session?.user?.role || "";
+  const isExternalInsurance = userRole === "ASSURANCE";
+
   const [claims, setClaims] = useState<AccidentClaim[]>(() => {
     if (globalCachedClaims && globalCachedClaims.length > 0) return globalCachedClaims;
     if (typeof window !== "undefined") {
@@ -150,6 +155,7 @@ export default function InsuranceView() {
   }, []);
 
   const fetchReminders = useCallback(async () => {
+    if (isExternalInsurance) return;
     try {
       const res = await fetch("/api/insurance/repair-reminders", { cache: "no-store" });
       const data = await res.json();
@@ -164,7 +170,7 @@ export default function InsuranceView() {
     } catch (err) {
       console.error("Failed to fetch repair reminders:", err);
     }
-  }, []);
+  }, [isExternalInsurance]);
 
   const fetchVehicles = useCallback(async () => {
     if (globalCachedVehicles && globalCachedVehicles.length > 0) {
@@ -186,20 +192,24 @@ export default function InsuranceView() {
   // Stabilized LiveSync listener
   const handleLiveSync = useCallback(() => {
     fetchClaims(true);
-    fetchReminders();
-  }, [fetchClaims, fetchReminders]);
+    if (!isExternalInsurance) {
+      fetchReminders();
+    }
+  }, [fetchClaims, fetchReminders, isExternalInsurance]);
 
   const { notifyMutation } = useLiveSync("tickets", handleLiveSync);
 
   useEffect(() => {
     fetchClaims(Boolean(globalCachedClaims && globalCachedClaims.length > 0));
-    fetchReminders();
+    if (!isExternalInsurance) {
+      fetchReminders();
+    }
     // Defer vehicles fetch slightly so claims take top network priority
     const timer = setTimeout(() => {
       fetchVehicles();
     }, 150);
     return () => clearTimeout(timer);
-  }, [fetchClaims, fetchReminders, fetchVehicles]);
+  }, [fetchClaims, fetchReminders, fetchVehicles, isExternalInsurance]);
 
   // Separate active claims and completed (Vehicle Back) claims
   const activeClaims = claims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
@@ -352,23 +362,25 @@ export default function InsuranceView() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setViewMode(viewMode === "reminders" ? "master-detail" : "reminders")}
-            className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
-              viewMode === "reminders"
-                ? "bg-amber-600 text-white ring-2 ring-amber-400"
-                : remindersSummary.due_or_overdue > 0
-                ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 animate-pulse"
-                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5 text-amber-600" />
-            <span>Rappels Réparations</span>
-            <span className="text-3xs font-mono font-black px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900">
-              {remindersSummary.due_or_overdue > 0 ? `⚠️ ${remindersSummary.due_or_overdue} dû(s)` : reminders.length}
-            </span>
-          </button>
+          {!isExternalInsurance && (
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === "reminders" ? "master-detail" : "reminders")}
+              className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+                viewMode === "reminders"
+                  ? "bg-amber-600 text-white ring-2 ring-amber-400"
+                  : remindersSummary.due_or_overdue > 0
+                  ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 animate-pulse"
+                  : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-amber-600" />
+              <span>Rappels Réparations</span>
+              <span className="text-3xs font-mono font-black px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900">
+                {remindersSummary.due_or_overdue > 0 ? `⚠️ ${remindersSummary.due_or_overdue} dû(s)` : reminders.length}
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -596,9 +608,9 @@ export default function InsuranceView() {
       )}
 
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 2. REPAIR REMINDERS VIEW MODE (IF TOGGLED)                             */}
+      {/* 2. REPAIR REMINDERS VIEW MODE (IF TOGGLED - HIDDEN FOR ASSURANCE ROLE) */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {viewMode === "reminders" ? (
+      {!isExternalInsurance && viewMode === "reminders" ? (
         <div className="space-y-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-xs animate-fadeIn">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div className="flex items-center gap-2">
@@ -765,7 +777,8 @@ export default function InsuranceView() {
               ) : (
                 filteredLeftClaims.map((claim) => {
                   const isSelected = claim.id === selectedClaim?.id;
-                  const daysInStatus = calculateDaysInStatus(claim.step_updated_at || claim.created_at);
+                  // Exact requirement: days counting starts from the first day vehicle appeared on Assurance page
+                  const daysSinceFirstAppeared = calculateDaysInStatus(claim.created_at);
 
                   // Extract garage name, insurance & GoCab Fleet sync status from claim comments
                   let garageName = "Emergence";
@@ -786,11 +799,11 @@ export default function InsuranceView() {
                   } catch {}
                   const managerShort = fleetManagerName.includes("Mehdi") ? "Mehdi" : "Aziz";
 
-                  // Color based on days in status
+                  // Color based on days since vehicle first appeared on Assurance page
                   const daysColor =
-                    daysInStatus <= 3
+                    daysSinceFirstAppeared <= 3
                       ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : daysInStatus <= 7
+                      : daysSinceFirstAppeared <= 7
                       ? "bg-amber-50 text-amber-800 border-amber-200"
                       : "bg-red-50 text-red-800 border-red-300 font-black";
 
@@ -855,14 +868,14 @@ export default function InsuranceView() {
                         </div>
                       </div>
 
-                      {/* Right: EXACT REQUIREMENT — NUMBER OF DAYS FOR VEHICLE WITHIN THIS STATUS */}
+                      {/* Right: Days since vehicle first appeared on Assurance page */}
                       <div className="shrink-0 flex items-center gap-2 text-right">
                         <div
                           className={`px-2.5 py-1 rounded-xl border text-2xs font-extrabold shadow-2xs flex items-center gap-1 ${daysColor}`}
-                          title={`${daysInStatus} jours passés dans l'étape "${stepDef.label}"`}
+                          title={`Présent sur la page Assurance depuis ${daysSinceFirstAppeared} jour(s) (entré le ${new Date(claim.created_at).toLocaleDateString("fr-FR")})`}
                         >
                           <Clock className="w-3 h-3 shrink-0" />
-                          <span>{daysInStatus} jour{daysInStatus > 1 ? "s" : ""}</span>
+                          <span>{daysSinceFirstAppeared} jour{daysSinceFirstAppeared > 1 ? "s" : ""}</span>
                         </div>
 
                         <ChevronRight
@@ -913,13 +926,15 @@ export default function InsuranceView() {
         </div>
       )}
 
-      {/* Repair Reminder Modal */}
-      <RepairReminderModal
-        isOpen={isReminderModalOpen}
-        onClose={() => setIsReminderModalOpen(false)}
-        onSuccess={fetchReminders}
-        vehicles={vehicles}
-      />
+      {/* Repair Reminder Modal (Hidden for external assurance agent) */}
+      {!isExternalInsurance && (
+        <RepairReminderModal
+          isOpen={isReminderModalOpen}
+          onClose={() => setIsReminderModalOpen(false)}
+          onSuccess={fetchReminders}
+          vehicles={vehicles}
+        />
+      )}
     </div>
   );
 }

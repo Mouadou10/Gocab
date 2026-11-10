@@ -9,7 +9,8 @@ export type AllowedRole =
   | "ONBOARDING_SPECIALIST"
   | "FLEET_PERF_MANAGER"
   | "FIELD_SUPERVISOR"
-  | "FINANCE_OFFICER";
+  | "FINANCE_OFFICER"
+  | "ASSURANCE";
 
 export interface AuthenticatedUser {
   id: string;

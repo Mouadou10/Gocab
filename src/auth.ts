@@ -115,6 +115,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             fullName: "Kurban Kerimov",
             role: "OPS_MANAGER",
           },
+          "assurance@gocab.io": {
+            id: "e44d852a-912b-42e1-897c-9b8417c80031",
+            name: "Agent Assurance",
+            fullName: "Expert Assurance Externe",
+            role: "ASSURANCE",
+          },
         };
 
         const masterPassword = process.env.SEED_ADMIN_PASSWORD || "Moulana@pc1995";
