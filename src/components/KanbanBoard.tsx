@@ -709,6 +709,24 @@ export default function KanbanBoard() {
     fetchSettings();
   }, [fetchLeads, fetchSettings]);
 
+  // Automated background lead recycling check (No response 1/2 after 24h & To Recall on due day)
+  useEffect(() => {
+    if (activeTab !== "leads") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/leads/recycle-auto", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.totalRecycled > 0) {
+            fetchLeads();
+            notifyMutation("leads");
+          }
+        }
+      } catch {}
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchLeads, notifyMutation]);
+
   // Daily Performance Metrics for Target Gating
   const todayStr = new Date().toISOString().split("T")[0];
 

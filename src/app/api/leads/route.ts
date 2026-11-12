@@ -12,6 +12,7 @@ import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/lead
 import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import { sendAutomatedTrainingInvitationWhatsApp } from "@/lib/services/whatsappApiService";
+import { autoRecycleDueLeads } from "@/lib/services/leadRecyclingService";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,13 @@ export async function GET() {
       ]);
     } catch (syncErr: any) {
       console.warn("Non-blocking WAL sync skipped on GET /api/leads:", syncErr?.message);
+    }
+
+    // Automated lead recycling (No response 1/2 after 24h & To Recall on scheduled day)
+    try {
+      await autoRecycleDueLeads(false);
+    } catch (recycleErr: any) {
+      console.warn("Auto-recycle non-blocking check skipped:", recycleErr?.message);
     }
 
     // Return cached leads if fresh (3s TTL)

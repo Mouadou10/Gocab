@@ -736,6 +736,12 @@ export default function LeadDrawer({
                     </option>
                   ))}
                 </select>
+                {(brandStatus === "No response 1" || brandStatus === "No response 2") && (
+                  <p className="mt-1.5 text-2xs text-amber-700 bg-amber-50 border border-amber-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium">
+                    <span>⏱️</span>
+                    <span>Ce prospect retournera automatiquement dans <strong>New Leads</strong> après 24 heures.</span>
+                  </p>
+                )}
               </div>
 
               {/* Display current training status if lead progressed into training */}
@@ -932,7 +938,7 @@ export default function LeadDrawer({
                   </div>
 
                   <p className="text-2xs text-amber-800/80 leading-tight">
-                    ℹ️ <strong>Règle automatique :</strong> Si l&apos;heure est fixée, le prospect retournera en haut de la colonne <strong>New Leads</strong> dès que l&apos;heure arrive. Si seule la date est fixée, il restera dans &quot;To Recall&quot; et retournera dans &quot;New Leads&quot; à minuit.
+                    ℹ️ <strong>Règle automatique :</strong> Ce prospect retournera automatiquement dans la colonne <strong>New Leads</strong> le jour prévu pour le rappel.
                   </p>
                 </div>
               )}
