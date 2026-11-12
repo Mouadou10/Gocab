@@ -764,6 +764,38 @@ export default function LeadDrawer({
                     min={getTodayDateStr()}
                     className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/40 focus:border-navy"
                   />
+
+                  {/* Quick City Selector for Training Center */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-2xs font-bold text-gray-500 uppercase tracking-wide">Ville :</span>
+                    <button
+                      type="button"
+                      onClick={() => setCity("Casablanca")}
+                      className={`px-2.5 py-1 rounded-lg text-2xs font-bold transition-all cursor-pointer ${
+                        city === "Casablanca"
+                          ? "bg-navy text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Casablanca
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCity("Rabat")}
+                      className={`px-2.5 py-1 rounded-lg text-2xs font-bold transition-all cursor-pointer ${
+                        city === "Rabat"
+                          ? "bg-emerald-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Rabat
+                    </button>
+                    {city && city !== "Casablanca" && city !== "Rabat" && (
+                      <span className="px-2.5 py-1 rounded-lg text-2xs font-bold bg-navy text-white">
+                        {city}
+                      </span>
+                    )}
+                  </div>
                   {trainingDate ? (
                     <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-950">
                       <div className="flex items-center gap-2">

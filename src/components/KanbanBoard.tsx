@@ -818,10 +818,14 @@ export default function KanbanBoard() {
     [matchesDate]
   );
 
-  // Distinct training dates for quick chips
+  // Distinct training dates for quick chips (scoped to current city filter)
   const availableTrainingDates = useMemo(() => {
     const countsByDate = new Map<string, number>();
-    leads.forEach((l) => {
+    const scopedLeads = filterCity
+      ? leads.filter((l) => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()))
+      : leads;
+
+    scopedLeads.forEach((l) => {
       const isTrainingFixed =
         l.board_column === "TRAINING_PIPELINE" ||
         l.board_column === "VEHICLE_ASSIGNMENT" ||
@@ -852,17 +856,20 @@ export default function KanbanBoard() {
           return { date, label: date, count };
         }
       });
-  }, [leads]);
+  }, [leads, filterCity]);
 
   const totalTrainingFixedCount = useMemo(() => {
-    return leads.filter((l) => {
+    const scopedLeads = filterCity
+      ? leads.filter((l) => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()))
+      : leads;
+    return scopedLeads.filter((l) => {
       return (
         l.board_column === "TRAINING_PIPELINE" ||
         l.board_column === "VEHICLE_ASSIGNMENT" ||
         (l.brand_status || "").toLowerCase() === "training fixed"
       );
     }).length;
-  }, [leads]);
+  }, [leads, filterCity]);
 
   const callsDoneToday = useMemo(() => {
     return leads.filter((l) => {
@@ -914,16 +921,19 @@ export default function KanbanBoard() {
     ).length;
   }, [leads]);
 
-  // Scheduled counts for training header/filter
+  // Scheduled counts for training header/filter (scoped to current city filter)
   const scheduledCounts = useMemo(() => {
-    const scheduled = leads.filter(
+    const scopedLeads = filterCity
+      ? leads.filter((l) => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()))
+      : leads;
+    const scheduled = scopedLeads.filter(
       (l) =>
         (l.board_column === "TRAINING_PIPELINE" || (l.brand_status || "").toLowerCase() === "training fixed") &&
         (!l.training_status || (l.training_status || "").toLowerCase() === "scheduled")
     );
     const today = scheduled.filter((l) => isScheduledDateToday(l.reminder_date)).length;
     return { all: scheduled.length, today };
-  }, [leads, isScheduledDateToday]);
+  }, [leads, filterCity, isScheduledDateToday]);
   const allScheduledCount = scheduledCounts.all;
   const todayScheduledCount = scheduledCounts.today;
 
@@ -1190,7 +1200,7 @@ export default function KanbanBoard() {
             (l.brand_status || "").toLowerCase() === "training fixed";
           if (!isMatch) return false;
           if (isSearching || l.id === activeDragId) return true;
-          return isLeadMatchingLeadsDateFilter(l, leadsDateFilter);
+          return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
         });
       }
 
@@ -2481,6 +2491,7 @@ export default function KanbanBoard() {
             {activeTab === "leads" && (
               <LeadsScorecard
                 leads={leads}
+                cityFilter={filterCity}
                 onSelectStatus={handleBringColumnToSecond}
                 selectedDate={leadsDateFilter}
                 onDateChange={handleLeadsDateChange}

@@ -9,6 +9,7 @@ interface LeadsScorecardProps {
   onSelectStatus?: (status: string) => void;
   selectedDate?: string;
   onDateChange?: (date: string) => void;
+  cityFilter?: string;
 }
 
 function LeadsScorecardComponent({
@@ -16,6 +17,7 @@ function LeadsScorecardComponent({
   onSelectStatus,
   selectedDate,
   onDateChange,
+  cityFilter,
 }: LeadsScorecardProps) {
   const [internalDateFilter, setInternalDateFilter] = useState<string>(() => {
     if (selectedDate !== undefined) return selectedDate;
@@ -118,6 +120,11 @@ function LeadsScorecardComponent({
   const calledLeads = leads.filter(l => {
     if (l.board_column === 'NEW_LEADS' && !l.brand_status) return false; // Untouched leads
     if (!l.status_changed_at) return false; // No timestamp yet (legacy data)
+
+    // Respect active city filter if provided
+    if (cityFilter && (!l.city || !l.city.toLowerCase().includes(cityFilter.toLowerCase()))) {
+      return false;
+    }
 
     // Leads page workflow: either BRAND_PRE_FILTER or TRAINING_PIPELINE or VEHICLE_ASSIGNMENT or Training fixed
     const isLeadsWorkflow =
@@ -293,9 +300,18 @@ function LeadsScorecardComponent({
               {isToday ? "En direct" : "Archive"}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+          <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
             <span>Compteur Prospection (Agent Acquisition) —</span>
             <span className="font-semibold text-slate-800 capitalize">{displayDate}</span>
+            {cityFilter && (
+              <>
+                <span className="text-slate-300">•</span>
+                <span className="font-bold text-navy bg-navy/10 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                  <span>📍</span>
+                  <span>{cityFilter}</span>
+                </span>
+              </>
+            )}
             <span className="text-slate-300">•</span>
             <span>{totalCalled} appels / qualifications</span>
           </p>
