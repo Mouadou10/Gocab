@@ -11,6 +11,7 @@ import { touchSyncState } from "@/lib/sync";
 import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
 import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
+import { sendAutomatedTrainingInvitationWhatsApp } from "@/lib/services/whatsappApiService";
 
 export const dynamic = "force-dynamic";
 
@@ -202,6 +203,27 @@ export async function POST(request: Request) {
         status_changed_at: (brand_status || training_status || board_column !== "NEW_LEADS") ? new Date() : null,
       },
     });
+
+    // If lead created with Training fixed / Scheduled with a date, dispatch automated WhatsApp invite
+    if (
+      (lead.brand_status === "Training fixed" ||
+        lead.board_column === "TRAINING_PIPELINE" ||
+        lead.training_status === "Scheduled") &&
+      lead.reminder_date
+    ) {
+      void sendAutomatedTrainingInvitationWhatsApp(
+        {
+          id: lead.id,
+          raw_name: lead.raw_name,
+          sanitized_phone: lead.sanitized_phone,
+          city: lead.city,
+          reminder_date: lead.reminder_date,
+        },
+        lead.handled_by || "GoCab Formation"
+      ).catch((err) => {
+        console.error("sendAutomatedTrainingInvitationWhatsApp background warning:", err);
+      });
+    }
 
     // Invalidate leads cache and touch sync state so all open sessions refresh immediately
     invalidateLeadsCache();

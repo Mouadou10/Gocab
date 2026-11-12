@@ -9,6 +9,7 @@ import {
   GOCAB_RABAT_LOCATION,
   detectApproved360Template,
   resolve360TemplateByDate,
+  isRabatOrKenitraCity,
 } from "@/lib/whatsapp";
 
 export {
@@ -18,6 +19,7 @@ export {
   APPROVED_360_TEMPLATES,
   GOCAB_HQ_LOCATION,
   GOCAB_RABAT_LOCATION,
+  isRabatOrKenitraCity,
 };
 
 export const getDbConv = () =>
@@ -1156,7 +1158,15 @@ export async function sendAutomatedTrainingInvitationWhatsApp(
     }
 
     const { templates: liveTemplates } = await fetchLive360Templates();
-    const resolvedTpl = resolve360TemplateByDate(lead.reminder_date, liveTemplates, lead.city);
+    const effectiveCity =
+      lead.city ||
+      (isRabatOrKenitraCity((lead as any).campaign_source)
+        ? "Kenitra"
+        : isRabatOrKenitraCity((lead as any).notes)
+        ? "Kenitra"
+        : null);
+
+    const resolvedTpl = resolve360TemplateByDate(lead.reminder_date, liveTemplates, effectiveCity);
 
     const res = await sendOutboundWhatsAppMessage({
       phoneNumber: cleanPhone,
@@ -1168,7 +1178,9 @@ export async function sendAutomatedTrainingInvitationWhatsApp(
 
     if (lead.id) {
       const formattedDate = new Date(lead.reminder_date).toLocaleDateString("fr-FR");
-      const cityLabel = lead.city || "Casablanca";
+      const cityLabel = isRabatOrKenitraCity(effectiveCity)
+        ? `${lead.city || "Kenitra"} (Session Rabat)`
+        : lead.city || "Casablanca";
       await prisma.leadActivityLog
         .create({
           data: {

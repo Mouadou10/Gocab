@@ -15,7 +15,7 @@ import toast from "react-hot-toast";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import NationalBlacklistBadge from "./NationalBlacklistBadge";
 import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
-import { formatDisplayPhone } from "@/lib/whatsapp";
+import { formatDisplayPhone, isRabatOrKenitraCity } from "@/lib/whatsapp";
 
 const BRAND_STATUS_OPTIONS = [
   "Not interested",
@@ -766,7 +766,7 @@ export default function LeadDrawer({
                   />
 
                   {/* Quick City Selector for Training Center */}
-                  <div className="flex items-center gap-1.5 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     <span className="text-2xs font-bold text-gray-500 uppercase tracking-wide">Ville :</span>
                     <button
                       type="button"
@@ -790,7 +790,19 @@ export default function LeadDrawer({
                     >
                       Rabat
                     </button>
-                    {city && city !== "Casablanca" && city !== "Rabat" && (
+                    <button
+                      type="button"
+                      onClick={() => setCity("Kenitra")}
+                      className={`px-2.5 py-1 rounded-lg text-2xs font-bold transition-all cursor-pointer ${
+                        city === "Kenitra"
+                          ? "bg-emerald-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                      title="Les candidats de Kénitra sont formés au Hub de Rabat (modèle Rabat 15h30)"
+                    >
+                      Kénitra (Hub Rabat)
+                    </button>
+                    {city && city !== "Casablanca" && city !== "Rabat" && city !== "Kenitra" && (
                       <span className="px-2.5 py-1 rounded-lg text-2xs font-bold bg-navy text-white">
                         {city}
                       </span>
@@ -803,8 +815,13 @@ export default function LeadDrawer({
                         <div>
                           <div className="font-bold">Convocation WhatsApp Automatique via API 360dialog</div>
                           <div className="text-[11px] text-emerald-700">
-                            Modèle sélectionné : <strong>{city && /rabat|kenitra/i.test(city) ? "rabat (Session 15h30 Rabat)" : new Date(trainingDate).getDay() === 5 ? "vendredi (Session 11h00)" : "formation (Session 15h00 Maârif)"}</strong>
+                            Modèle sélectionné : <strong>{isRabatOrKenitraCity(city) ? "rabat (Session 15h30 Rabat)" : new Date(trainingDate).getDay() === 5 ? "vendredi (Session 11h00)" : "formation (Session 15h00 Maârif)"}</strong>
                           </div>
+                          {isRabatOrKenitraCity(city) && (
+                            <div className="text-[10px] text-emerald-800 font-semibold mt-0.5">
+                              📍 Centre Rabat (حي المحيط) inclus avec carte GPS pour {city || "Rabat / Kénitra"}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold text-[10px]">

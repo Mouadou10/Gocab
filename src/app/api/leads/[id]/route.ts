@@ -497,9 +497,15 @@ export async function PATCH(
       updatedLead.board_column === "TRAINING_PIPELINE" ||
       updatedLead.training_status === "Scheduled";
 
+    const isCityChanged = Boolean(
+      body.city !== undefined &&
+      (body.city || "").trim().toLowerCase() !== (existingLead.city || "").trim().toLowerCase()
+    );
+
     const isNewlyTrainingFixedOrDateChanged =
       isMovingToTrainingFixed ||
       (isTrainingFixedNow && isReminderChanged) ||
+      (isTrainingFixedNow && isCityChanged) ||
       (isTrainingFixedNow && !existingLead.reminder_date && Boolean(updatedLead.reminder_date));
 
     if (isTrainingFixedNow && updatedLead.reminder_date && isNewlyTrainingFixedOrDateChanged) {
@@ -508,6 +514,8 @@ export async function PATCH(
         raw_name: updatedLead.raw_name,
         sanitized_phone: updatedLead.sanitized_phone,
         city: updatedLead.city,
+        campaign_source: updatedLead.campaign_source,
+        notes: updatedLead.notes,
         reminder_date: updatedLead.reminder_date,
       };
       const agent = resolvedHandledBy || "GoCab Formation";

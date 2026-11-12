@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { useLanguage } from "@/context/LanguageContext";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import NationalBlacklistAlertBanner from "./NationalBlacklistAlertBanner";
+import { isRabatOrKenitraCity } from "@/lib/whatsapp";
 
 const MOROCCAN_CITIES = [
   "Casablanca",
@@ -409,6 +410,11 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
                   />
                   <p className="text-3xs text-purple-700 mt-1">
                     Le prospect apparaîtra dans la colonne &quot;Scheduled&quot; à la date de formation indiquée.
+                    {isRabatOrKenitraCity(city) && (
+                      <span className="block text-emerald-700 font-bold mt-0.5">
+                        ⚡ Convocation auto : Modèle rabat (Session 15h30 Rabat / Kénitra)
+                      </span>
+                    )}
                   </p>
                 </div>
               )}
@@ -463,6 +469,9 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
                     onChange={(e) => setTrainingDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-blue-300 rounded-xl text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-navy/30 outline-none"
                   />
+                  <p className="text-3xs text-emerald-700 font-semibold mt-1">
+                    ⚡ Modèle WhatsApp 360dialog auto : <strong>{isRabatOrKenitraCity(city) ? "rabat (Session 15h30 Rabat / Kénitra)" : "formation (Session 15h00 Maârif)"}</strong>
+                  </p>
                 </div>
               )}
 

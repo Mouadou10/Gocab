@@ -134,14 +134,28 @@ export function getApproved360Template(
 }
 
 /**
- * Automatically resolves whether to use "rabat", "vendredi" or "formation" based on city and training date
+ * Checks if a city string refers to Rabat, Kenitra, or their metropolitan satellite zones.
+ * Candidates in Kenitra and surrounding areas are trained at GoCab's Rabat training hub (حي المحيط).
+ */
+export function isRabatOrKenitraCity(city?: string | null): boolean {
+  if (!city) return false;
+  const clean = city.trim().toLowerCase();
+  return (
+    /rabat|k[eé]nitra|qnitra|knitra|sal[eé]|t[eé]mara|skhirat/i.test(clean) ||
+    /الرباط|رباط|القنيطرة|قنيطرة|سلا|تمارة|الصخيرات/.test(clean)
+  );
+}
+
+/**
+ * Automatically resolves whether to use "rabat", "vendredi" or "formation" based on city and training date.
+ * Kenitra candidates automatically receive the Rabat invitation template (Session 15h30 Rabat).
  */
 export function resolve360TemplateByDate(
   trainingDate?: string | Date | null,
   availableTemplates: Approved360TemplateDef[] = APPROVED_360_TEMPLATES,
   city?: string | null
 ): Approved360TemplateDef {
-  if (city && /rabat|kenitra/i.test(city)) {
+  if (isRabatOrKenitraCity(city)) {
     return getApproved360Template("rabat", availableTemplates);
   }
   if (!trainingDate) return getApproved360Template("formation", availableTemplates);
@@ -553,8 +567,17 @@ export function generateTrainingInviteURL(
   phone: string,
   name: string,
   date: Date,
-  template?: string
+  template?: string,
+  city?: string | null
 ): string {
+  const isRabatOrKenitra = isRabatOrKenitraCity(city);
+  const cleanPhone = normalizeWhatsAppPhone(phone);
+
+  if (isRabatOrKenitra && !template) {
+    const rabatTpl = getApproved360Template("rabat");
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(rabatTpl.template)}`;
+  }
+
   const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
   const isFriday = dayOfWeek === 5;
   const sessionLabel = isFriday ? "11:00 صباحاً" : "3:00 مساءً";
@@ -571,9 +594,8 @@ export function generateTrainingInviteURL(
     .replace(/\{name\}|\{\{name\}\}/g, name)
     .replace(/\{date\}|\{\{date\}\}/g, formattedDate)
     .replace(/\{time\}|\{\{time\}\}/g, sessionLabel)
-    .replace(/\{city\}|\{\{city\}\}/g, "Casablanca");
+    .replace(/\{city\}|\{\{city\}\}/g, city || "Casablanca");
 
-  const cleanPhone = normalizeWhatsAppPhone(phone);
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
 

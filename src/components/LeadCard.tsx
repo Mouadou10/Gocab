@@ -448,7 +448,9 @@ function LeadCardComponent({
               href={generateTrainingInviteURL(
                 lead.sanitized_phone,
                 lead.raw_name,
-                lead.reminder_date ? new Date(lead.reminder_date) : new Date()
+                lead.reminder_date ? new Date(lead.reminder_date) : new Date(),
+                undefined,
+                lead.city
               )}
               target="_blank"
               rel="noopener noreferrer"
