@@ -255,6 +255,8 @@ export default function FleetPerformanceView() {
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "RED" | "RED_FLAGS" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
+  const [sortField, setSortField] = useState<"name" | "solde" | "expected" | "cleared" | "unpaid">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Local inputs state for editing cleared amounts
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
@@ -568,12 +570,17 @@ export default function FleetPerformanceView() {
                       const dPhone = String(d.phoneSanitized || d.phone || "").replace(/\D/g, "").slice(-9);
                       const dPlate = String(d.vehicle?.plate_number || d.plateNumber || "").replace(/[^A-Z0-9]/g, "").toUpperCase();
                       const match = snapById.get(d.id) || (dPhone ? snapByPhone.get(dPhone) : null) || (dPlate ? snapByPlate.get(dPlate) : null);
-                      if (match && match.collectedAmount > 0) {
+                      if (match) {
+                        const newMorning = match.morningBalance !== undefined ? match.morningBalance : d.morningBalance;
+                        const newEvening = match.eveningBalance !== undefined ? match.eveningBalance : d.eveningBalance;
+                        const newCleared = match.collectedAmount > 0 ? match.collectedAmount : (d.clearedTodayMAD || 0);
                         return {
                           ...d,
-                          clearedTodayMAD: match.collectedAmount,
-                          eveningBalance: match.eveningBalance,
-                          isPaidToday: match.status === "PAID" || match.collectedAmount >= (d.expectedTodayMAD || 300),
+                          clearedTodayMAD: newCleared,
+                          morningBalance: newMorning,
+                          eveningBalance: newEvening,
+                          excelBalance: newEvening ?? newMorning ?? match.balance,
+                          isPaidToday: match.status === "PAID" || newCleared >= (d.expectedTodayMAD || 300),
                         };
                       }
                       return d;
@@ -850,6 +857,42 @@ export default function FleetPerformanceView() {
 
     return true;
   });
+
+  // Sorted driver list based on user table header clicks
+  const sortedDrivers = useMemo(() => {
+    return [...filteredDrivers].sort((a, b) => {
+      if (sortField === "solde") {
+        const balA = a.eveningBalance ?? a.morningBalance ?? a.excelBalance;
+        const balB = b.eveningBalance ?? b.morningBalance ?? b.excelBalance;
+        const hasA = balA !== null && balA !== undefined;
+        const hasB = balB !== null && balB !== undefined;
+        if (!hasA && !hasB) return 0;
+        if (!hasA) return 1;
+        if (!hasB) return -1;
+        return sortDirection === "asc"
+          ? (balA as number) - (balB as number)
+          : (balB as number) - (balA as number);
+      }
+      if (sortField === "expected") {
+        return sortDirection === "asc"
+          ? (a.expectedTodayMAD || 0) - (b.expectedTodayMAD || 0)
+          : (b.expectedTodayMAD || 0) - (a.expectedTodayMAD || 0);
+      }
+      if (sortField === "cleared") {
+        return sortDirection === "asc"
+          ? (a.clearedTodayMAD || 0) - (b.clearedTodayMAD || 0)
+          : (b.clearedTodayMAD || 0) - (a.clearedTodayMAD || 0);
+      }
+      if (sortField === "unpaid") {
+        return sortDirection === "asc"
+          ? (a.consecutiveUnpaidDays || 0) - (b.consecutiveUnpaidDays || 0)
+          : (b.consecutiveUnpaidDays || 0) - (a.consecutiveUnpaidDays || 0);
+      }
+      const nameA = (a.fullName || "").toLowerCase();
+      const nameB = (b.fullName || "").toLowerCase();
+      return sortDirection === "asc" ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+    });
+  }, [filteredDrivers, sortField, sortDirection]);
 
   const isAzizSelected = selectedManager.toLowerCase().includes("aziz");
   const isMehdiSelected = selectedManager.toLowerCase().includes("mehdi");
@@ -1989,28 +2032,124 @@ export default function FleetPerformanceView() {
           <table className="w-full text-left text-xs text-gray-600">
             <thead className="bg-gray-50/90 uppercase text-2xs tracking-wider text-gray-500 border-b border-gray-100 font-bold">
               <tr>
-                <th className="py-4 px-6">Chauffeur & Contact</th>
+                <th
+                  onClick={() => {
+                    if (sortField === "name") {
+                      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField("name");
+                      setSortDirection("asc");
+                    }
+                  }}
+                  className="py-4 px-6 cursor-pointer select-none hover:bg-gray-100 transition-colors group"
+                  title="Cliquer pour trier par Nom de chauffeur"
+                >
+                  <div className="inline-flex items-center gap-1">
+                    <span>Chauffeur & Contact</span>
+                    {sortField === "name" ? (
+                      <span className="text-navy font-black text-xs">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    ) : (
+                      <span className="text-gray-300 group-hover:text-gray-500 text-2xs">↕</span>
+                    )}
+                  </div>
+                </th>
                 <th className="py-4 px-4">Véhicule</th>
-                <th className="py-4 px-4 text-center">
-                  {isRangeMode ? `Attendu Période (${daysCount}j)` : "Attendu Aujourd'hui"}
+                <th
+                  onClick={() => {
+                    if (sortField === "expected") {
+                      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField("expected");
+                      setSortDirection("desc");
+                    }
+                  }}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors group"
+                  title="Cliquer pour trier par Montant Attendu"
+                >
+                  <div className="inline-flex items-center gap-1 justify-center">
+                    <span>{isRangeMode ? `Attendu Période (${daysCount}j)` : "Attendu Aujourd'hui"}</span>
+                    {sortField === "expected" ? (
+                      <span className="text-navy font-black text-xs">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    ) : (
+                      <span className="text-gray-300 group-hover:text-gray-500 text-2xs">↕</span>
+                    )}
+                  </div>
                 </th>
-                <th className="py-4 px-4 text-center">
-                  {isRangeMode ? "Total Encaissé Période (MAD)" : "Montant Encaissé (MAD)"}
+                <th
+                  onClick={() => {
+                    if (sortField === "cleared") {
+                      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField("cleared");
+                      setSortDirection("desc");
+                    }
+                  }}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors group"
+                  title="Cliquer pour trier par Montant Encaissé"
+                >
+                  <div className="inline-flex items-center gap-1 justify-center">
+                    <span>{isRangeMode ? "Total Encaissé Période (MAD)" : "Montant Encaissé (MAD)"}</span>
+                    {sortField === "cleared" ? (
+                      <span className="text-navy font-black text-xs">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    ) : (
+                      <span className="text-gray-300 group-hover:text-gray-500 text-2xs">↕</span>
+                    )}
+                  </div>
                 </th>
-                <th className="py-4 px-4 text-center">Jours Sans Versement</th>
-                <th className="py-4 px-4 text-right">Solde & Impayés (MAD)</th>
+                <th
+                  onClick={() => {
+                    if (sortField === "unpaid") {
+                      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField("unpaid");
+                      setSortDirection("desc");
+                    }
+                  }}
+                  className="py-4 px-4 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors group"
+                  title="Cliquer pour trier par Jours Sans Versement"
+                >
+                  <div className="inline-flex items-center gap-1 justify-center">
+                    <span>Jours Sans Versement</span>
+                    {sortField === "unpaid" ? (
+                      <span className="text-navy font-black text-xs">{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    ) : (
+                      <span className="text-gray-300 group-hover:text-gray-500 text-2xs">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => {
+                    if (sortField === "solde") {
+                      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField("solde");
+                      setSortDirection("asc");
+                    }
+                  }}
+                  className="py-4 px-4 text-right cursor-pointer select-none hover:bg-gray-100 transition-colors group"
+                  title="Cliquer pour trier par Solde du fichier importé (par défaut: dettes les plus élevées)"
+                >
+                  <div className="inline-flex items-center gap-1 justify-end">
+                    <span>Solde & Impayés (MAD)</span>
+                    {sortField === "solde" ? (
+                      <span className="text-navy font-black text-xs">{sortDirection === "asc" ? "▼" : "▲"}</span>
+                    ) : (
+                      <span className="text-gray-300 group-hover:text-gray-500 text-2xs">↕</span>
+                    )}
+                  </div>
+                </th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredDrivers.length === 0 ? (
+              {sortedDrivers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-gray-400">
                     Aucun chauffeur trouvé pour ces critères.
                   </td>
                 </tr>
               ) : (
-                filteredDrivers.map((driver) => {
+                sortedDrivers.map((driver) => {
                   const isRed = driver.isCriticalRed;
                   const isSaving = savingDriverId === driver.id;
                   const currentInputValue =
@@ -2294,20 +2433,27 @@ export default function FleetPerformanceView() {
                             );
                           }
 
+                          if (hasExcel && excelBal === 0) {
+                            return (
+                              <div className="space-y-0.5">
+                                <p className="font-mono font-black text-sm text-emerald-600">
+                                  0 MAD
+                                </p>
+                                <span className="text-3xs text-emerald-600 font-medium block">
+                                  ✓ Solde à jour (Fichier)
+                                </span>
+                              </div>
+                            );
+                          }
+
                           return (
                             <div className="space-y-0.5">
-                              <p className={`font-mono font-black text-sm ${driver.currentArrearsMAD > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                                {driver.currentArrearsMAD > 0 ? `-MAD ${driver.currentArrearsMAD.toLocaleString()}` : "0 MAD"}
+                              <p className="font-mono font-bold text-xs text-gray-400">
+                                -
                               </p>
-                              {driver.currentArrearsMAD > 0 ? (
-                                <span className="text-3xs text-red-500 font-semibold block">
-                                  +{driver.currentArrearsMAD} DH d'arriérés
-                                </span>
-                              ) : (
-                                <span className="text-3xs text-emerald-600 font-medium block">
-                                  ✓ Solde à jour
-                                </span>
-                              )}
+                              <span className="text-3xs text-gray-400 font-normal block">
+                                Non présent dans le fichier
+                              </span>
                             </div>
                           );
                         })()}

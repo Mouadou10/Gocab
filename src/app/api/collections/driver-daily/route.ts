@@ -274,7 +274,7 @@ export async function GET(request: NextRequest) {
       const rawExcelBalance =
         latestPayment?.eveningBalance !== null && latestPayment?.eveningBalance !== undefined
           ? latestPayment.eveningBalance
-          : (hasMorningCsv && latestPayment?.morningBalance !== null && latestPayment?.morningBalance !== undefined)
+          : latestPayment?.morningBalance !== null && latestPayment?.morningBalance !== undefined
           ? latestPayment.morningBalance
           : null;
 
@@ -386,7 +386,7 @@ export async function GET(request: NextRequest) {
         expectedTodayMAD,
         clearedTodayMAD,
         isPaidToday,
-        morningBalance: firstPayment?.morningBalance ?? null,
+        morningBalance: (latestPayment?.morningBalance ?? firstPayment?.morningBalance) ?? null,
         eveningBalance: latestPayment?.eveningBalance ?? null,
         calculatedDelta: driver.payments.length > 1 ? totalDelta : (firstPayment?.calculatedDelta ?? null),
         paymentNote: latestPayment?.notes || null,
