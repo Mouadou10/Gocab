@@ -27,6 +27,8 @@ model Lead {
   has_permis                 Boolean   @default(false)
   presence_confirmed         Boolean   @default(false) // Agent called and confirmed presence
   presence_confirmed_at      DateTime? // Timestamp when presence was confirmed by phone
+  whatsapp_invite_sent       Boolean   @default(false) // Automated training invite sent via WhatsApp Cloud API
+  whatsapp_invite_sent_at    DateTime? // Timestamp when WhatsApp invite was sent
   status_changed_at          DateTime? // Set when lead moves out of NEW_LEADS
   handled_by                 String?   // Agent name / email who handled or updated this lead
   is_archived                Boolean   @default(false)

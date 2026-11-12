@@ -1138,6 +1138,8 @@ export async function sendAutomatedTrainingInvitationWhatsApp(
     sanitized_phone: string;
     city?: string | null;
     reminder_date?: Date | string | null;
+    campaign_source?: string;
+    notes?: string | null;
   },
   senderName = "GoCab Formation"
 ): Promise<{

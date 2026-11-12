@@ -87,6 +87,8 @@ interface Lead {
   notes?: string | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  whatsapp_invite_sent?: boolean;
+  whatsapp_invite_sent_at?: string | null;
   national_blacklist_match?: any | null;
 }
 

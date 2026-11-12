@@ -41,6 +41,9 @@ interface Lead {
   presence_confirmed_at?: string | null;
   handled_by?: string | null;
   national_blacklist_match?: any | null;
+  notes?: string | null;
+  whatsapp_invite_sent?: boolean;
+  whatsapp_invite_sent_at?: string | null;
 }
 
 const getTrainingStatusBadge = (status: string | null, boardColumn?: string) => {
@@ -149,10 +152,62 @@ function LeadCardComponent({
 
   const [presenceConfirmed, setPresenceConfirmed] = useState(Boolean(lead.presence_confirmed));
   const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [inviteSentLocally, setInviteSentLocally] = useState(false);
 
   useEffect(() => {
     setPresenceConfirmed(Boolean(lead.presence_confirmed));
   }, [lead.presence_confirmed]);
+
+  const isInviteSent = Boolean(
+    lead.whatsapp_invite_sent ||
+    lead.notes?.includes("[INVITE_SENT]") ||
+    inviteSentLocally
+  );
+
+  async function handleDirectSendInvite(e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isSendingInvite) return;
+
+    setIsSendingInvite(true);
+    const toastId = toast.loading(`Envoi de la convocation WhatsApp à ${lead.raw_name}...`);
+
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/send-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        setInviteSentLocally(true);
+        if (data.lead && onLeadUpdate) {
+          onLeadUpdate(data.lead);
+        } else if (onLeadUpdate) {
+          onLeadUpdate({
+            ...lead,
+            whatsapp_invite_sent: true,
+            notes: data.lead?.notes || (lead.notes ? `${lead.notes}\n[INVITE_SENT]` : "[INVITE_SENT]"),
+          });
+        }
+        toast.success(
+          `✓ Convocation WhatsApp transmise à ${lead.raw_name} (${data.templateName || "360dialog"}) !`,
+          { id: toastId, duration: 4000 }
+        );
+      } else {
+        toast.error(
+          data.error || "Impossible d'envoyer la convocation WhatsApp via l'API",
+          { id: toastId, duration: 4500 }
+        );
+      }
+    } catch {
+      toast.error("Erreur réseau lors de l'envoi de la convocation WhatsApp", { id: toastId });
+    } finally {
+      setIsSendingInvite(false);
+    }
+  }
 
   async function handleTogglePresence(checked: boolean) {
     setPresenceConfirmed(checked);
@@ -395,6 +450,14 @@ function LeadCardComponent({
           </p>
         )}
 
+        {/* WhatsApp Convocation Sent Checkmark Badge */}
+        {isInviteSent && (
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md w-fit shadow-2xs">
+            <span className="text-emerald-600 font-extrabold text-xs">✓</span>
+            <span>Convocation envoyée</span>
+          </div>
+        )}
+
         {/* Call to Confirm Presence Checkbox */}
         {(lead.board_column === "TRAINING_PIPELINE" ||
           lead.training_status === "Scheduled" ||
@@ -444,34 +507,43 @@ function LeadCardComponent({
       {(isTrainingFixed || isAccepted) && (
         <div className="px-4 pb-3 pt-1 border-t border-gray-50">
           {isTrainingFixed && !isAccepted && (
-            <a
-              href={generateTrainingInviteURL(
-                lead.sanitized_phone,
-                lead.raw_name,
-                lead.reminder_date ? new Date(lead.reminder_date) : new Date(),
-                undefined,
-                lead.city
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                e.stopPropagation();
-                fetch(`/api/leads/${lead.id}/activity`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "WHATSAPP_OPENED",
-                    detail: `Invitation formation WhatsApp envoyée à ${lead.raw_name}`,
-                  }),
-                }).catch(() => {});
-              }}
-              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+            <button
+              type="button"
+              disabled={isSendingInvite}
+              onClick={handleDirectSendInvite}
+              title={
+                isInviteSent
+                  ? "Convocation WhatsApp officielle déjà transmise via l'API 360dialog. Cliquez pour renvoyer."
+                  : "Envoyer directement la convocation WhatsApp via l'API 360dialog (sans ouvrir de nouvelle fenêtre)"
+              }
+              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                isInviteSent
+                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-xs"
+              } disabled:opacity-60`}
             >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-              Send Invite
-            </a>
+              {isSendingInvite ? (
+                <>
+                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span>Envoi API...</span>
+                </>
+              ) : isInviteSent ? (
+                <>
+                  <span className="text-emerald-600 font-extrabold text-xs">✓</span>
+                  <span>Convocation envoyée</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                  <span>Send Invite</span>
+                </>
+              )}
+            </button>
           )}
           {isAccepted && (
             <a
@@ -514,6 +586,8 @@ export default React.memo(LeadCardComponent, (prevProps, nextProps) => {
     prevProps.lead.board_column === nextProps.lead.board_column &&
     prevProps.lead.reminder_date === nextProps.lead.reminder_date &&
     prevProps.lead.presence_confirmed === nextProps.lead.presence_confirmed &&
+    prevProps.lead.whatsapp_invite_sent === nextProps.lead.whatsapp_invite_sent &&
+    prevProps.lead.notes === nextProps.lead.notes &&
     prevProps.lead.city === nextProps.lead.city &&
     prevProps.lead.handled_by === nextProps.lead.handled_by &&
     prevProps.lead.has_cin === nextProps.lead.has_cin &&

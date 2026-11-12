@@ -55,6 +55,8 @@ export const LeadUpdateSchema = z.object({
   is_recalled: z.boolean().optional(),
   mark_as_called: z.boolean().optional(),
   presence_confirmed: z.boolean().optional(),
+  whatsapp_invite_sent: z.boolean().optional(),
+  whatsapp_invite_sent_at: z.string().or(z.date()).optional().nullable(),
 });
 
 export const VehicleCreateSchema = z.object({

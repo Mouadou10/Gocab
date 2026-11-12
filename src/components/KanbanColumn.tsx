@@ -35,6 +35,9 @@ interface Lead {
   created_at: string;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  whatsapp_invite_sent?: boolean;
+  whatsapp_invite_sent_at?: string | null;
+  notes?: string | null;
 }
 
 /** Maps DB enum & statuses to user-friendly column titles. */

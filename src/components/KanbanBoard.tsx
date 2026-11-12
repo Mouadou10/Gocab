@@ -81,6 +81,9 @@ interface Lead {
   status_changed_at?: string | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
+  whatsapp_invite_sent?: boolean;
+  whatsapp_invite_sent_at?: string | null;
+  notes?: string | null;
 }
 
 // Default Role → tabs fallback

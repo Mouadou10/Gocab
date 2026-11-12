@@ -50,6 +50,8 @@ export async function PATCH(
       has_permis?: boolean;
       presence_confirmed?: boolean;
       presence_confirmed_at?: Date | null;
+      whatsapp_invite_sent?: boolean;
+      whatsapp_invite_sent_at?: Date | null;
       notes?: string | null;
       handled_by?: string | null;
     } = {};
@@ -116,6 +118,10 @@ export async function PATCH(
     if (body.presence_confirmed !== undefined) {
       updateData.presence_confirmed = Boolean(body.presence_confirmed);
       updateData.presence_confirmed_at = body.presence_confirmed ? new Date() : null;
+    }
+    if (body.whatsapp_invite_sent !== undefined) {
+      updateData.whatsapp_invite_sent = Boolean(body.whatsapp_invite_sent);
+      updateData.whatsapp_invite_sent_at = body.whatsapp_invite_sent ? new Date() : null;
     }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
@@ -525,6 +531,17 @@ export async function PATCH(
         console.error("sendAutomatedTrainingInvitationWhatsApp background warning:", err);
       });
       whatsappAutoResult = { success: true, queued: true };
+
+      // Mark invite sent flag in DB
+      try {
+        await prisma.lead.update({
+          where: { id: updatedLead.id },
+          data: {
+            whatsapp_invite_sent: true,
+            whatsapp_invite_sent_at: new Date(),
+          },
+        });
+      } catch {}
     }
 
     // Invalidate memory cache and trigger live sync & cloud replica flush
@@ -532,9 +549,16 @@ export async function PATCH(
     await touchSyncState("leads").catch(() => {});
 
     const leadNationalMatch = matchNationalBlacklist(updatedLead.raw_name);
+    const isInviteSent = Boolean(
+      (updatedLead as any).whatsapp_invite_sent ||
+      updatedLead.notes?.includes("[INVITE_SENT]") ||
+      Boolean(whatsappAutoResult?.success)
+    );
+
     return NextResponse.json({
       lead: {
         ...updatedLead,
+        whatsapp_invite_sent: isInviteSent,
         national_blacklist_match: leadNationalMatch.isBlacklisted ? leadNationalMatch : null,
       },
       whatsappSent: whatsappAutoResult,

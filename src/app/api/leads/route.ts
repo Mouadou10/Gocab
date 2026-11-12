@@ -59,8 +59,10 @@ export async function GET() {
 
     const enrichedLeads = leads.map((lead) => {
       const nationalMatch = matchNationalBlacklist(lead.raw_name);
+      const isInviteSent = Boolean((lead as any).whatsapp_invite_sent || lead.notes?.includes("[INVITE_SENT]"));
       return {
         ...lead,
+        whatsapp_invite_sent: isInviteSent,
         national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
       };
     });
