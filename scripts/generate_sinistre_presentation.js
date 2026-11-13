@@ -1,16 +1,17 @@
 /**
  * Presentation Generator — GoCab Morocco Sinistre, Assurance & Garage Lifecycle
  *
- * Generates an executive & technical presentation deck in PDF format (16:9 widescreen)
- * for the engineering & product team, explaining field operations in Morocco and
- * the CRM technical implementation, with embedded real CRM screenshots.
+ * Redesigned to match the high-end editorial aesthetic of the reference design
+ * (dark/light contrast split layouts, geometric color blocking, radial hub diagram,
+ * donut chart infographic, dual-tone typography, horizontal accent bands) while strictly
+ * respecting the GoCab brand color chart (Navy #35588F, Deep Navy #162447, Olive #5D6B2D,
+ * and warm glowing Amber-Gold #F59E0B / #E5A93C).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Paths to media assets
 const userUploadsDir = 'C:\\Users\\Dell\\.gemini\\antigravity\\brain\\4a835044-d1db-4c36-a40a-a23ba766abfb\\.user_uploaded';
 const logoPath = path.join(process.cwd(), 'public', 'gocab-official-logo.png');
 
@@ -33,6 +34,8 @@ const screenshotDossierBase64 = getBase64Image(path.join(userUploadsDir, 'media_
 const screenshotTimelineBase64 = getBase64Image(path.join(userUploadsDir, 'media_1794316219672_23b563e1.png'));
 const screenshotHeaderBase64 = getBase64Image(path.join(userUploadsDir, 'media_1794311817530_ad6c6284.png'));
 const screenshotWhatsAppBase64 = getBase64Image(path.join(userUploadsDir, 'media_1794332771334_85d2b177.jpg'));
+const screenshotBrandStatusBase64 = getBase64Image(path.join(userUploadsDir, 'media_1794584013282_98b195f3.jpg'));
+const screenshotRappelsBase64 = getBase64Image(path.join(userUploadsDir, 'media_1794312794728_3545072e.png'));
 
 console.log('Loaded media assets:', {
   logo: Boolean(logoBase64),
@@ -40,6 +43,8 @@ console.log('Loaded media assets:', {
   timeline: Boolean(screenshotTimelineBase64),
   header: Boolean(screenshotHeaderBase64),
   whatsapp: Boolean(screenshotWhatsAppBase64),
+  brandStatus: Boolean(screenshotBrandStatusBase64),
+  rappels: Boolean(screenshotRappelsBase64),
 });
 
 const htmlContent = `<!DOCTYPE html>
@@ -62,1168 +67,1493 @@ const htmlContent = `<!DOCTYPE html>
     }
 
     body {
-      background-color: #0E1621;
-      color: #E2E8F0;
+      background-color: #0B0F17;
+      color: #F8FAFC;
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ─── 16:9 Widescreen Presentation Slide Base ─── */
     .slide {
       width: 16in;
       height: 9in;
       page-break-after: always;
       position: relative;
       overflow: hidden;
-      background: #0B141E;
-      padding: 0.55in 0.75in;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      padding: 0.5in 0.75in 0.5in 0.75in;
     }
 
-    /* Gradient backgrounds for specific slide types */
-    .slide-cover {
-      background: radial-gradient(circle at 80% 20%, rgba(13, 148, 136, 0.22) 0%, rgba(11, 20, 30, 0.98) 70%),
-                  radial-gradient(circle at 15% 85%, rgba(37, 99, 235, 0.18) 0%, rgba(11, 20, 30, 0.98) 60%),
-                  #080E16;
+    /* ─── GoCab Signature Color Palette & Themes ─── */
+    :root {
+      --gc-navy: #35588F;
+      --gc-navy-deep: #162447;
+      --gc-navy-dark: #0F172A;
+      --gc-olive: #5D6B2D;
+      --gc-olive-light: #708A28;
+      --gc-olive-glow: #8FA838;
+      --gc-gold: #F59E0B;
+      --gc-gold-warm: #E5A93C;
+      --gc-slate-dark: #0B0F17;
+      --gc-slate-card: #121824;
+      --gc-light-bg: #F8FAFC;
+      --gc-light-card: #FFFFFF;
+      --gc-border-dark: rgba(255, 255, 255, 0.08);
+      --gc-border-light: rgba(15, 23, 42, 0.08);
     }
 
-    .slide-tech {
-      background: radial-gradient(circle at 90% 90%, rgba(59, 130, 246, 0.12) 0%, rgba(11, 20, 30, 1) 75%),
-                  #0B141E;
+    .bg-dark {
+      background: #0B0F17;
+      color: #F8FAFC;
     }
 
-    .slide-ops {
-      background: radial-gradient(circle at 10% 10%, rgba(245, 158, 11, 0.12) 0%, rgba(11, 20, 30, 1) 75%),
-                  #0B141E;
+    .bg-light {
+      background: #F8FAFC;
+      color: #0F172A;
     }
 
-    /* Cards & Containers */
-    .card {
-      background: rgba(18, 29, 43, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 18px 22px;
-      backdrop-filter: blur(12px);
+    .bg-brand-vibrant {
+      background: linear-gradient(135deg, #162447 0%, #1F3B6E 55%, #35588F 100%);
+      color: #FFFFFF;
     }
 
-    .card-accent {
-      background: rgba(22, 38, 56, 0.9);
-      border: 1px solid rgba(13, 148, 136, 0.3);
-      border-radius: 16px;
-      padding: 18px 22px;
+    .bg-olive-vibrant {
+      background: linear-gradient(135deg, #2D3A16 0%, #435420 50%, #5D6B2D 100%);
+      color: #FFFFFF;
     }
 
-    .card-warning {
-      background: rgba(45, 30, 16, 0.85);
-      border: 1px solid rgba(245, 158, 11, 0.35);
-      border-radius: 16px;
-      padding: 18px 22px;
+    /* ─── Horizontal Accent Band (Inspiration Hallmark) ─── */
+    .accent-bar {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 10px;
+      background: linear-gradient(90deg, #35588F 0%, #5D6B2D 50%, #F59E0B 100%);
+      box-shadow: 0 -2px 14px rgba(245, 158, 11, 0.35);
+      z-index: 20;
     }
 
-    .card-code {
-      background: #080D14;
-      border: 1px solid #1E293B;
-      border-radius: 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11.5px;
-      color: #93C5FD;
-      padding: 16px;
-      line-height: 1.55;
+    .accent-bar-top {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 6px;
+      background: linear-gradient(90deg, #F59E0B 0%, #5D6B2D 50%, #35588F 100%);
+      z-index: 20;
     }
 
-    /* Header & Footer */
+    /* ─── Slide Header Component ─── */
     .slide-header {
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      padding-bottom: 0.25in;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 12px;
-      margin-bottom: 14px;
+      position: relative;
+      z-index: 10;
     }
 
-    .slide-header-left {
+    .slide-header.light-mode {
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    }
+
+    .header-left {
       display: flex;
       align-items: center;
       gap: 16px;
     }
 
-    .slide-category-badge {
-      display: inline-flex;
+    .header-logo {
+      height: 38px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+    }
+
+    .header-title-block {
+      display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 9999px;
+      gap: 12px;
+    }
+
+    .header-brand {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #F8FAFC;
+    }
+
+    .light-mode .header-brand {
+      color: #0F172A;
+    }
+
+    .header-sep {
+      color: rgba(255, 255, 255, 0.25);
+      font-weight: 300;
+    }
+
+    .light-mode .header-sep {
+      color: rgba(15, 23, 42, 0.25);
+    }
+
+    .header-pill {
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 9999px;
+      background: rgba(53, 88, 143, 0.2);
+      border: 1px solid rgba(53, 88, 143, 0.45);
+      color: #93C5FD;
+    }
+
+    .light-mode .header-pill {
+      background: rgba(53, 88, 143, 0.08);
+      border: 1px solid rgba(53, 88, 143, 0.25);
+      color: #1E3A8A;
+    }
+
+    .slide-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #94A3B8;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .light-mode .slide-number {
+      color: #64748B;
+      background: rgba(15, 23, 42, 0.04);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+    }
+
+    /* ─── High Contrast Two-Tone Titles ─── */
+    .title-hero {
+      font-size: 44px;
+      font-weight: 900;
+      line-height: 1.12;
+      letter-spacing: -0.025em;
       text-transform: uppercase;
     }
 
-    .badge-teal {
-      background: rgba(13, 148, 136, 0.2);
-      color: #2DD4BF;
-      border: 1px solid rgba(45, 212, 191, 0.35);
-    }
-
-    .badge-amber {
-      background: rgba(245, 158, 11, 0.2);
-      color: #FBBF24;
-      border: 1px solid rgba(251, 191, 36, 0.35);
-    }
-
-    .badge-blue {
-      background: rgba(59, 130, 246, 0.2);
-      color: #93C5FD;
-      border: 1px solid rgba(147, 197, 253, 0.35);
-    }
-
-    .badge-purple {
-      background: rgba(168, 85, 247, 0.2);
-      color: #D8B4FE;
-      border: 1px solid rgba(216, 180, 254, 0.35);
-    }
-
-    .slide-title {
-      font-size: 26px;
-      font-weight: 800;
-      color: #F8FAFC;
+    .title-section {
+      font-size: 36px;
+      font-weight: 900;
+      line-height: 1.15;
       letter-spacing: -0.02em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
     }
 
-    .slide-subtitle {
-      font-size: 13px;
+    .highlight-gold {
+      color: #F59E0B;
+      text-shadow: 0 0 24px rgba(245, 158, 11, 0.3);
+    }
+
+    .highlight-navy {
+      color: #60A5FA;
+    }
+
+    .highlight-olive {
+      color: #8FA838;
+      text-shadow: 0 0 20px rgba(143, 168, 56, 0.3);
+    }
+
+    .light-mode .highlight-navy {
+      color: #35588F;
+    }
+
+    .light-mode .highlight-olive {
+      color: #5D6B2D;
+    }
+
+    .light-mode .highlight-gold {
+      color: #D97706;
+    }
+
+    .subtitle-lead {
+      font-size: 17px;
+      font-weight: 500;
+      line-height: 1.55;
       color: #94A3B8;
-      margin-top: 2px;
+      max-width: 680px;
     }
 
+    .light-mode .subtitle-lead {
+      color: #475569;
+    }
+
+    /* ─── Slide Footer Component ─── */
     .slide-footer {
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      padding-top: 0.2in;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
-      padding-top: 10px;
-      margin-top: 12px;
+      position: relative;
+      z-index: 10;
       font-size: 11px;
       color: #64748B;
       font-weight: 500;
     }
 
-    /* Grid Layouts */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
-
-    .grid-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 16px;
-    }
-
-    .grid-4 {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-    }
-
-    .grid-60-40 {
-      display: grid;
-      grid-template-columns: 1.25fr 0.85fr;
-      gap: 20px;
-    }
-
-    .grid-50-50 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
-
-    /* Typography Utilities */
-    h3 {
-      font-size: 16px;
-      font-weight: 700;
-      color: #F1F5F9;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    p, li {
-      font-size: 13px;
-      line-height: 1.55;
-      color: #CBD5E1;
-    }
-
-    ul {
-      list-style-position: inside;
-      margin-left: 2px;
-    }
-
-    li {
-      margin-bottom: 5px;
-    }
-
-    strong {
-      color: #FFFFFF;
-      font-weight: 700;
-    }
-
-    .mono {
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* Stat Pill */
-    .stat-box {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      padding: 12px 14px;
-      text-align: center;
-    }
-
-    .stat-val {
-      font-size: 24px;
-      font-weight: 800;
-      color: #38BDF8;
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .stat-val-amber {
-      color: #F59E0B;
-    }
-
-    .stat-val-emerald {
-      color: #10B981;
-    }
-
-    .stat-val-rose {
-      color: #F43F5E;
-    }
-
-    .stat-label {
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 700;
+    .light-mode .slide-footer {
+      border-top: 1px solid rgba(15, 23, 42, 0.08);
       color: #94A3B8;
-      letter-spacing: 0.05em;
-      margin-top: 2px;
     }
 
-    /* Screenshots Frame */
-    .screenshot-frame {
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
-      background: #000;
+    /* ─── Glass & Card Containers ─── */
+    .card-dark {
+      background: #121824;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .card-light {
+      background: #FFFFFF;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+    }
+
+    .card-glow-gold {
+      background: #141A29;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 12px 35px rgba(245, 158, 11, 0.12);
+    }
+
+    .card-glow-navy {
+      background: #121929;
+      border: 1px solid rgba(53, 88, 143, 0.45);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 12px 35px rgba(53, 88, 143, 0.2);
+    }
+
+    /* ─── Circular Badges & Stat Nodes (Inspiration Signature) ─── */
+    .stat-circle {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
       display: flex;
       flex-direction: column;
-    }
-
-    .screenshot-bar {
-      background: #1E293B;
-      padding: 6px 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    .dot-red { background: #EF4444; }
-    .dot-yellow { background: #F59E0B; }
-    .dot-green { background: #10B981; }
-
-    .screenshot-img {
-      width: 100%;
-      height: auto;
-      display: block;
-      object-fit: cover;
-    }
-
-    .step-pill {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 12px;
-      background: rgba(30, 41, 59, 0.7);
-      border-radius: 10px;
-      border-left: 3px solid #38BDF8;
-      font-size: 12px;
-    }
-
-    .step-num {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #0284C7;
-      color: #fff;
-      display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+
+    .circle-gold {
+      background: linear-gradient(135deg, #F59E0B, #D97706);
+      color: #0F172A;
+    }
+
+    .circle-navy {
+      background: linear-gradient(135deg, #35588F, #1E3A8A);
+      color: #FFFFFF;
+    }
+
+    .circle-olive {
+      background: linear-gradient(135deg, #708A28, #5D6B2D);
+      color: #FFFFFF;
+    }
+
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
-      flex-shrink: 0;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      letter-spacing: 0.04em;
+    }
+
+    .pill-gold {
+      background: rgba(245, 158, 11, 0.15);
+      color: #F59E0B;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .pill-navy {
+      background: rgba(53, 88, 143, 0.18);
+      color: #93C5FD;
+      border: 1px solid rgba(53, 88, 143, 0.35);
+    }
+
+    .pill-olive {
+      background: rgba(93, 107, 45, 0.2);
+      color: #BEF264;
+      border: 1px solid rgba(93, 107, 45, 0.4);
+    }
+
+    /* ─── Radial Hub Diagram Styles (Slide 5 Inspiration) ─── */
+    .hub-container {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hub-center {
+      position: absolute;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #162447 0%, #35588F 100%);
+      border: 4px solid #F59E0B;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 40px rgba(245, 158, 11, 0.35);
+      z-index: 5;
+      text-align: center;
+      padding: 12px;
+    }
+
+    .hub-node {
+      position: absolute;
+      width: 250px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: #121824;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      z-index: 4;
+      transition: all 0.3s ease;
+    }
+
+    .hub-node-tl { top: 20px; left: 80px; }
+    .hub-node-tr { top: 20px; right: 80px; }
+    .hub-node-bl { bottom: 20px; left: 80px; }
+    .hub-node-br { bottom: 20px; right: 80px; }
+
+    /* ─── Donut Chart (Slide 6 Inspiration) ─── */
+    .donut-chart-box {
+      width: 240px;
+      height: 240px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .donut-center-stat {
+      position: absolute;
+      text-align: center;
+    }
+
+    /* ─── Image Frame Treatments ─── */
+    .screenshot-frame {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+      background: #0B0F17;
+      display: block;
+      width: 100%;
+      object-fit: cover;
+    }
+
+    .screenshot-frame-light {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
+      background: #FFFFFF;
+      display: block;
+      width: 100%;
+      object-fit: cover;
+    }
+
+    /* Grid Layout Helpers */
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 36px;
+      align-items: center;
+      width: 100%;
+      flex: 1;
+    }
+
+    .grid-3col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 24px;
+      align-items: stretch;
+      width: 100%;
+      flex: 1;
+    }
+
+    .grid-2x3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 18px;
+      width: 100%;
+      flex: 1;
     }
   </style>
 </head>
 <body>
 
-  <!-- ============================================================== -->
-  <!-- SLIDE 1: COVER & EXECUTIVE SUMMARY -->
-  <!-- ============================================================== -->
-  <section class="slide slide-cover">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-      ${logoBase64 ? `<img src="${logoBase64}" style="height: 48px; object-fit: contain;" alt="GoCab">` : `<div style="font-size: 28px; font-weight: 900; color: #38BDF8;">GoCab</div>`}
-      <div style="text-align: right;">
-        <span class="slide-category-badge badge-teal">Executive &amp; Technical Presentation</span>
-        <div style="font-size: 12px; color: #64748B; margin-top: 4px;">Écosystème Flotte &amp; Opérations Maroc (Casablanca / Rabat)</div>
+  <!-- ========================================================
+       SLIDE 01: HERO COVER (Inspired by Slide 1 in Design Grid)
+       Dark Matte + Glowing Ambient Light + Two-Tone Title
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">INGÉNIERIE & OPÉRATIONS</span>
+        </div>
+      </div>
+      <div class="slide-number">SLIDE 01 / 10</div>
+    </div>
+
+    <div class="grid-2col" style="padding-top: 15px; padding-bottom: 15px;">
+      <!-- Left Column: Typography & Badges -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: inline-flex; align-items: center; gap: 8px;">
+          <span class="pill-badge pill-gold">● WORKFLOW TECHNIQUE V2.4</span>
+          <span class="pill-badge pill-navy">PORTAIL SINISTRES & FLOTTE</span>
+        </div>
+
+        <h1 class="title-hero">
+          CYCLE DE VIE<br>
+          <span class="highlight-gold">SINISTRE & ASSURANCE</span><br>
+          <span class="highlight-olive">& TRAVAUX GARAGE</span>
+        </h1>
+
+        <p class="subtitle-lead">
+          Guide exhaustif d'architecture logicielle et de réalité terrain au Maroc :
+          de la déclaration sur la route par le chauffeur jusqu'à la restitution du véhicule
+          par le garage conventionné et la réactivation de la télématique.
+        </p>
+
+        <div style="display: flex; align-items: center; gap: 20px; margin-top: 10px;">
+          <div class="stat-circle circle-gold">
+            <span style="font-size: 24px; line-height: 1;">8</span>
+            <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;">Étapes</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 13px; font-weight: 700; color: #F8FAFC;">Écosystème Connecté GoCab</span>
+            <span style="font-size: 11px; color: #94A3B8;">Chauffeurs • Assureurs (Sanlam) • Experts • Garages (Émergence)</span>
+            <span style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #F59E0B;">Next.js 14 • Turso SQLite • 360dialog WhatsApp API</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Visual Preview Card -->
+      <div style="position: relative;">
+        <div style="position: absolute; -top: 20px; -right: 20px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(245, 158, 11, 0.15), transparent 70%); border-radius: 50%; z-index: 1;"></div>
+        <div class="card-glow-gold" style="position: relative; z-index: 2; padding: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444; display: inline-block;"></span>
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #F59E0B; display: inline-block;"></span>
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; display: inline-block;"></span>
+              <span style="font-size: 11px; font-weight: 700; color: #CBD5E1; margin-left: 6px;">CRM Live — Dossier Sinistre Actif</span>
+            </div>
+            <span class="pill-badge pill-gold">WW028110 • Dacia Logan</span>
+          </div>
+          ${screenshotDossierBase64 ? `<img src="${screenshotDossierBase64}" class="screenshot-frame" style="height: 310px; object-position: top center;" alt="Dossier CRM">` : ''}
+          <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: #94A3B8;">
+            <span>Gestionnaire : <strong>Mehdi Elyattouti</strong></span>
+            <span>Carrosserie : <strong>Garage Émergence</strong></span>
+            <span>Compagnie : <strong>Sanlam Maroc</strong></span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div style="margin-top: -30px;">
-      <div style="display: inline-block; padding: 4px 14px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 9999px; font-size: 12px; font-weight: 700; color: #38BDF8; margin-bottom: 14px;">
-        ENGINEERING &amp; FIELD OPS MASTER ARCHITECTURE
+    <div class="slide-footer">
+      <span>GOCAB TECHNOLOGIES MOROCCO — DOCUMENT TECHNIQUE & OPÉRATIONNEL CONFIDENTIEL</span>
+      <span class="font-mono">ENV: PRODUCTION • HORODATAGE: 2026-11-13</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 02: PROBLEM & FIELD CHALLENGE (Inspired by Slide 2)
+       High-Contrast Split Panel: Dark Challenge + Vibrant Stat
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">RÉALITÉS DU TERRAIN</span>
+        </div>
       </div>
-      <h1 style="font-size: 46px; font-weight: 900; line-height: 1.15; letter-spacing: -0.03em; color: #FFFFFF; max-width: 13in;">
-        Cycle de Vie Complet d'un Sinistre Flotte : <br>
-        <span style="background: linear-gradient(90deg, #38BDF8, #2DD4BF); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-          Du Choc Terrain au Garage, à l'Expertise &amp; au Rétablissement CRM
+      <div class="slide-number">SLIDE 02 / 10</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 32px; align-items: stretch; flex: 1; padding: 15px 0;">
+      <!-- Left Panel: Problem Statement & Bullets -->
+      <div class="card-dark" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <span class="pill-badge pill-gold" style="margin-bottom: 12px;">DÉFI OPÉRATIONNEL #1</span>
+          <h2 class="title-section">
+            POURQUOI L'IMMOBILISATION DU VÉHICULE EST LE <span class="highlight-gold">COÛT MAJEUR</span> AU MAROC
+          </h2>
+          <p style="font-size: 14px; color: #94A3B8; line-height: 1.6; margin-bottom: 24px;">
+            Dans le modèle de location-gérance et VTC/Taxi au Maroc, chaque jour d'arrêt au garage génère
+            une perte nette de revenus pour le chauffeur et pour la flotte GoCab.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; border-left: 4px solid #F59E0B;">
+            <div style="font-size: 20px;">⏱️</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #F8FAFC;">Lenteur d'Instruction d'Expertise</div>
+              <div style="font-size: 12px; color: #94A3B8; line-height: 1.4;">
+                Délai moyen initial de 8 à 14 jours entre le sinistre et la visite contradictoire de l'expert mandaté par Sanlam.
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; border-left: 4px solid #60A5FA;">
+            <div style="font-size: 20px;">📦</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #F8FAFC;">Goulot d'Étranglement sur les Pièces Détachées</div>
+              <div style="font-size: 12px; color: #94A3B8; line-height: 1.4;">
+                Les carrosseries marocaines attendent souvent les pièces d'origine Dacia/Renault, gelant les travaux sans visibilité.
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; border-left: 4px solid #8FA838;">
+            <div style="font-size: 20px;">📉</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #F8FAFC;">Perte Sèche Journalière de 350 à 450 MAD</div>
+              <div style="font-size: 12px; color: #94A3B8; line-height: 1.4;">
+                Immobilisation = perte de redevance journalière + risque de départ du chauffeur vers des flottes concurrentes.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Vibrant Color-Block Stat Banner (Inspiration Signature) -->
+      <div class="card-glow-navy" style="background: linear-gradient(145deg, #162447 0%, #1E3A8A 50%, #35588F 100%); display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
+        <div style="position: absolute; right: -40px; bottom: -40px; width: 220px; height: 220px; background: radial-gradient(circle, rgba(245, 158, 11, 0.25), transparent 70%); border-radius: 50%;"></div>
+
+        <div>
+          <span class="pill-badge" style="background: rgba(255, 255, 255, 0.15); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.3);">OBJECTIF CRM GOCAB</span>
+          <div style="margin-top: 20px;">
+            <div style="font-size: 56px; font-weight: 900; line-height: 1; color: #FFFFFF; letter-spacing: -0.03em;">
+              46 j <span style="font-size: 24px; color: #F59E0B;">➔</span> 14 j
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #F59E0B; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em;">
+              Réduction du Temps Moyen d'Arrêt
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 2;">
+          <div style="padding: 12px 16px; background: rgba(0, 0, 0, 0.25); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="font-size: 11px; text-transform: uppercase; color: #93C5FD; font-weight: 700;">Flotte sous Surveillance</div>
+            <div style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">Casablanca & Rabat</div>
+          </div>
+
+          <div style="padding: 12px 16px; background: rgba(0, 0, 0, 0.25); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="font-size: 11px; text-transform: uppercase; color: #93C5FD; font-weight: 700;">Partenaire Carrosserie Actuel</div>
+            <div style="font-size: 20px; font-weight: 800; color: #F59E0B; margin-top: 2px;">Garage Émergence</div>
+          </div>
+
+          <div style="padding: 12px 16px; background: rgba(0, 0, 0, 0.25); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="font-size: 11px; text-transform: uppercase; color: #93C5FD; font-weight: 700;">Superviseurs Opérations Dédiés</div>
+            <div style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-top: 2px;">Mehdi Elyattouti & Mohamed Aziz</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>ANALYSE DES PERFORMANCES FLOTTE MAROC — OBJECTIF OPÉRATIONNEL CRM</span>
+      <span class="font-mono">KPI: DOWNTIME REDUCTION • TARGET -69%</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 03: PHASE 1 — FIELD REALITY & CHAUFFEUR (Slide 3)
+       Dark Interior Aesthetic + Glowing Accent Ribbon
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">PHASE 1 : ACCIDENT & TERRAIN</span>
+        </div>
+      </div>
+      <div class="slide-number">SLIDE 03 / 10</div>
+    </div>
+
+    <div class="grid-2col" style="padding: 15px 0;">
+      <!-- Left: Moroccan Field Procedure -->
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div>
+          <span class="pill-badge pill-olive">PROTOCOLE CHAUFFEUR GOCAB</span>
+          <h2 class="title-section" style="margin-top: 8px;">
+            LE CONSTAT AMIABLE & <span class="highlight-olive">SÉCURISATION DU VÉHICULE</span>
+          </h2>
+          <p style="font-size: 14px; color: #94A3B8; line-height: 1.55;">
+            Dès la collision, le chauffeur doit respecter scrupuleusement la réglementation marocaine
+            et les directives de la flotte sous peine de déchéance de garantie assurance.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="card-dark" style="padding: 14px 18px; border-left: 3px solid #8FA838;">
+            <div style="font-size: 13px; font-weight: 700; color: #BEF264;">1. Constat Amiable Bilingue (Arabe / Français)</div>
+            <div style="font-size: 12px; color: #94A3B8; margin-top: 3px;">
+              Remplissage contradictoire sur place avec la partie adverse (croquis précis, cases cochées, immatriculations, signature).
+            </div>
+          </div>
+
+          <div class="card-dark" style="padding: 14px 18px; border-left: 3px solid #F59E0B;">
+            <div style="font-size: 13px; font-weight: 700; color: #F59E0B;">2. Alerte WhatsApp Instantanée à la Flotte</div>
+            <div style="font-size: 12px; color: #94A3B8; margin-top: 3px;">
+              Envoi direct des 4 photos du véhicule + photo du constat au superviseur de permanence (Hamza / Ayoub Rassid).
+            </div>
+          </div>
+
+          <div class="card-dark" style="padding: 14px 18px; border-left: 3px solid #60A5FA;">
+            <div style="font-size: 13px; font-weight: 700; color: #93C5FD;">3. Dépannage & Remorquage Agréé</div>
+            <div style="font-size: 12px; color: #94A3B8; margin-top: 3px;">
+              Si non roulant, transport direct vers <strong>Garage Émergence</strong> (Casablanca) ou hub agréé Rabat.
+            </div>
+          </div>
+
+          <div class="card-dark" style="padding: 14px 18px; border-left: 3px solid #EF4444;">
+            <div style="font-size: 13px; font-weight: 700; color: #FCA5A5;">4. Délai Légal Strict de Déclaration : 5 Jours Ouvrés</div>
+            <div style="font-size: 12px; color: #94A3B8; margin-top: 3px;">
+              Dépôt physique du constat original auprès de la compagnie d'assurance Sanlam.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: CRM System Intake -->
+      <div class="card-glow-navy" style="display: flex; flex-direction: column; gap: 16px; padding: 22px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #93C5FD; letter-spacing: 0.05em;">
+            IMPLÉMENTATION LOGICIELLE CRM
+          </span>
+          <span class="pill-badge pill-gold">POST /api/accidents</span>
+        </div>
+
+        <div style="background: #0B0F17; border-radius: 12px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #CBD5E1; line-height: 1.6; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <span style="color: #60A5FA;">model</span> <span style="color: #F59E0B;">AccidentReport</span> {<br>
+          &nbsp;&nbsp;id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;@id @default(uuid())<br>
+          &nbsp;&nbsp;vehicle_plate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// ex: "WW028110"</span><br>
+          &nbsp;&nbsp;driver_name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// "CHETOUI MOHAMED HASSAN"</span><br>
+          &nbsp;&nbsp;city&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// Casablanca | Rabat</span><br>
+          &nbsp;&nbsp;insurance_company&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// "Sanlam"</span><br>
+          &nbsp;&nbsp;assigned_garage&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// "Emergence"</span><br>
+          &nbsp;&nbsp;garage_status&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// "NEW_ACCIDENT"</span><br>
+          &nbsp;&nbsp;days_in_status&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #93C5FD;">Int</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@default(0)<br>
+          }
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <div style="flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.04); border-radius: 10px;">
+            <div style="font-size: 10px; color: #94A3B8; text-transform: uppercase;">Alerte WhatsApp Manager</div>
+            <div style="font-size: 13px; font-weight: 700; color: #F59E0B; margin-top: 2px;">Automatisée 16:11</div>
+          </div>
+          <div style="flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.04); border-radius: 10px;">
+            <div style="font-size: 10px; color: #94A3B8; text-transform: uppercase;">Compteur d'Arrêt</div>
+            <div style="font-size: 13px; font-weight: 700; color: #BEF264; margin-top: 2px;">Démarrage Jour J</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>PROCÉDURE DÉCLARATIVE MAROC — INTÉGRATION BASE DE DONNÉES PRISMA</span>
+      <span class="font-mono">API: POST /API/ACCIDENTS • EVENT: ACCIDENT_REGISTERED</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 04: PHASE 2 — DOCUMENT INTAKE (Slide 4 Light Grid)
+       Crisp Studio Light + 2x3 Document Cards + Upload UI
+       ======================================================== -->
+  <div class="slide bg-light">
+    <div class="accent-bar-top"></div>
+    <div class="slide-header light-mode">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">PHASE 2 : PIÈCES & DOCUMENTS</span>
+        </div>
+      </div>
+      <div class="slide-number">SLIDE 04 / 10</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px; flex: 1; padding: 15px 0;">
+      <div>
+        <span class="pill-badge pill-navy" style="margin-bottom: 8px;">AUDIT & CONFORMITÉ DU DOSSIER</span>
+        <h2 class="title-section" style="color: #0F172A; margin-bottom: 4px;">
+          LES 6 DOCUMENTS OBLIGATOIRES <span class="highlight-navy">POUR DÉBLOQUER L'EXPERTISE</span>
+        </h2>
+        <p class="subtitle-lead">
+          L'assureur Sanlam et l'expert refusent tout chiffrage si le dossier documentaire n'est pas exhaustif à 100%.
+        </p>
+      </div>
+
+      <!-- 2x3 Grid of Required Moroccan Documents -->
+      <div class="grid-2x3">
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #35588F;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">📋</span>
+            <span class="pill-badge pill-navy">OBLIGATOIRE</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Constat Amiable Recto/Verso</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Copie haute résolution avec signature des 2 conducteurs et croquis de l'accident.
+          </div>
+        </div>
+
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #5D6B2D;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">🚗</span>
+            <span class="pill-badge pill-olive">CARTE GRISE</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Carte Grise GoCab Rent</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Vérification de la validité du certificat d'immatriculation et du propriétaire légal.
+          </div>
+        </div>
+
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #F59E0B;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">🪪</span>
+            <span class="pill-badge pill-gold">CHAUFFEUR</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Permis de Conduire Marocain</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Catégorie B valide du chauffeur déclaré au contrat de location (ex: Chetoui M.).
+          </div>
+        </div>
+
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #35588F;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">📸</span>
+            <span class="pill-badge pill-navy">4 ANGLES</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Photos Dégâts & Véhicule</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Face avant, arrière, côtés, gros plan sur le point d'impact et immatriculation lisible.
+          </div>
+        </div>
+
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #5D6B2D;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">🏢</span>
+            <span class="pill-badge pill-olive">CONTRAT</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Police d'Assurance Sanlam</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Attestation d'assurance en cours de validité (ex: POL-984210-2026).
+          </div>
+        </div>
+
+        <div class="card-light" style="padding: 16px; border-left: 4px solid #F59E0B;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 18px;">📄</span>
+            <span class="pill-badge pill-gold">DEVIS</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Devis Émergence & PEC</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px; line-height: 1.4;">
+            Chiffrage carrossier + lettre de prise en charge avec franchise stipulée.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>STOCKAGE SÉCURISÉ CLOUDINARY CDN AVEC LIENS EXPIRABLES CHIFFRÉS</span>
+      <span class="font-mono">INTEGRITY: 6/6 VERIFIED • STORAGE: CLOUDINARY ASSETS</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 05: PHASE 3 — TRIPARTITE HUB DIAGRAM (Inspiration)
+       Central Glowing Hub + 4 Satellite Nodes with Connecting Lines
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">ÉCOSYSTÈME TRIPARTITE</span>
+        </div>
+      </div>
+      <div class="slide-number">SLIDE 05 / 10</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; flex: 1; align-items: center; justify-content: center;">
+      <div style="text-align: center; margin-bottom: 10px;">
+        <span class="pill-badge pill-gold" style="margin-bottom: 6px;">ARCHITECTURE RELATIONNELLE</span>
+        <h2 class="title-section" style="font-size: 30px; margin-bottom: 4px;">
+          LE NŒUD DE SYNCHRONISATION <span class="highlight-gold">GOCAB CRM</span>
+        </h2>
+        <p style="font-size: 13px; color: #94A3B8;">
+          4 intervenants interconnectés en temps réel avec des droits d'accès granulaires stricts.
+        </p>
+      </div>
+
+      <!-- Radial Infographic Hub (Slide 5 Style in Design Inspiration) -->
+      <div class="hub-container">
+        <!-- SVG Connecting Lines -->
+        <svg style="position: absolute; width: 100%; height: 100%; z-index: 1;" viewBox="0 0 1000 480">
+          <line x1="500" y1="240" x2="250" y2="90" stroke="#35588F" stroke-width="3" stroke-dasharray="6 6" />
+          <line x1="500" y1="240" x2="750" y2="90" stroke="#F59E0B" stroke-width="3" stroke-dasharray="6 6" />
+          <line x1="500" y1="240" x2="250" y2="390" stroke="#5D6B2D" stroke-width="3" stroke-dasharray="6 6" />
+          <line x1="500" y1="240" x2="750" y2="390" stroke="#60A5FA" stroke-width="3" stroke-dasharray="6 6" />
+        </svg>
+
+        <!-- Center Node: GoCab Core -->
+        <div class="hub-center">
+          ${logoBase64 ? `<img src="${logoBase64}" style="height: 34px; margin-bottom: 4px;" alt="GoCab">` : ''}
+          <div style="font-size: 14px; font-weight: 900; color: #FFFFFF;">GOCAB CRM</div>
+          <div style="font-size: 9px; color: #F59E0B; font-weight: 700; text-transform: uppercase;">Moteur LiveSync</div>
+        </div>
+
+        <!-- Node 1: GoCab Operations (Top-Left) -->
+        <div class="hub-node hub-node-tl" style="border-left: 4px solid #35588F;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; font-weight: 800; color: #60A5FA;">1. GESTIONNAIRE FLOTTE</span>
+            <span style="font-size: 16px;">👤</span>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: #FFFFFF; margin-top: 4px;">Mehdi Elyattouti / M. Aziz</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 3px;">
+            Déclaration initiale, validation du dossier, contact chauffeur et clic de confirmation « Créé sur Fleet ».
+          </div>
+        </div>
+
+        <!-- Node 2: Assurance Company (Top-Right) -->
+        <div class="hub-node hub-node-tr" style="border-left: 4px solid #F59E0B;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; font-weight: 800; color: #F59E0B;">2. ASSURANCE COMPAGNIE</span>
+            <span style="font-size: 16px;">🛡️</span>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: #FFFFFF; margin-top: 4px;">Sanlam / AtlantaSanad</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 3px;">
+            Attribution du N° de sinistre officiel, mandat de mission à l'expert et accord de Prise en Charge (PEC).
+          </div>
+        </div>
+
+        <!-- Node 3: Expert Cabinet (Bottom-Left) -->
+        <div class="hub-node hub-node-bl" style="border-left: 4px solid #5D6B2D;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; font-weight: 800; color: #BEF264;">3. CABINET D'EXPERTISE</span>
+            <span style="font-size: 16px;">🔍</span>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: #FFFFFF; margin-top: 4px;">Expert Indépendant Agréé</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 3px;">
+            Visite physique au garage, chiffrage des heures de tôlerie/peinture et validation du devis pièces.
+          </div>
+        </div>
+
+        <!-- Node 4: Repair Body Shop (Bottom-Right) -->
+        <div class="hub-node hub-node-br" style="border-left: 4px solid #60A5FA;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; font-weight: 800; color: #93C5FD;">4. CARROSSERIE CONVENTIONNÉE</span>
+            <span style="font-size: 16px;">🔧</span>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: #FFFFFF; margin-top: 4px;">Garage Émergence (Casablanca)</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 3px;">
+            Réception du véhicule, mise à jour de la timeline 8 étapes, exécution des réparations et bon de sortie.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>TOPOLOGIE DE COMMUNICATION MULTI-INTERVENANTS — TEMPS RÉEL PRISMA + WEBSOCKETS</span>
+      <span class="font-mono">PROTOCOL: REST / WEBSOCKET • AUTH: RBAC SCOPED TOKEN</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 06: PHASE 4 — 8-STEP TIMELINE & DONUT (Slide 6 Style)
+       Bold Saturated Color-Block + Donut Chart + Real Timeline UI
+       ======================================================== -->
+  <div class="slide bg-brand-vibrant">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill" style="background: rgba(255, 255, 255, 0.2); color: #FFFFFF; border-color: rgba(255, 255, 255, 0.4);">
+            CHRONOLOGIE EN 8 ÉTAPES
+          </span>
+        </div>
+      </div>
+      <div class="slide-number" style="background: rgba(255, 255, 255, 0.1); color: #FFFFFF; border-color: rgba(255, 255, 255, 0.2);">
+        SLIDE 06 / 10
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 32px; align-items: center; flex: 1; padding: 15px 0;">
+      <!-- Left: Donut Chart Distribution of Downtime (Slide 6 in Reference) -->
+      <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <span class="pill-badge" style="background: rgba(245, 158, 11, 0.25); color: #F59E0B; border: 1px solid #F59E0B; margin-bottom: 8px;">
+          RÉPARTITION DU TEMPS EN GARAGE
         </span>
-      </h1>
-      <p style="font-size: 16px; color: #94A3B8; margin-top: 14px; max-width: 11.5in; line-height: 1.6;">
-        Guide de référence exhaustif pour l'équipe technique expliquant les réalités opérationnelles du marché marocain (chauffeurs, constats amiables, cabinets d'expertise, garages agréés comme Emergence, assureurs comme Sanlam) et leur traduction intégrale dans le CRM GoCab.
-      </p>
-    </div>
+        <h3 style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin-bottom: 16px;">
+          OÙ PASSENT LES JOURS D'ARRÊT ?
+        </h3>
 
-    <div class="grid-4" style="margin-top: 10px;">
-      <div class="stat-box">
-        <div class="stat-val">8 Étapes</div>
-        <div class="stat-label">Cycle Garage Canonique</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val stat-val-emerald">&lt; 24h</div>
-        <div class="stat-label">Déclaration &amp; Ordre Mission</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val stat-val-amber">100% Digital</div>
-        <div class="stat-label">Constats, Devis &amp; PEC</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val stat-val-rose">13 Véhicules</div>
-        <div class="stat-label">Encours Maintenance / Sinistres</div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <span>GoCab ERP — Document d'Architecture Fonctionnelle &amp; Technique</span>
-      <span>Novembre 2026 • Confidential Tech Team Documentation</span>
-      <span>Slide 1 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 2: MOROCCAN OPERATIONAL REALITIES & STAKEHOLDERS -->
-  <!-- ============================================================== -->
-  <section class="slide slide-ops">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-amber">Contexte Opérationnel Maroc</span>
-        <div>
-          <div class="slide-title">Les Réalités du Terrain Marocain &amp; les 6 Intervenants Clés</div>
-          <div class="slide-subtitle">Comment un accident se gère concrètement entre Casablanca, Rabat et les acteurs institutionnels</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">OPS-REALITY-MA</div>
-    </div>
-
-    <div class="grid-3" style="flex: 1; align-items: stretch;">
-      <!-- Col 1: Chauffeur & Terrain -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #38BDF8;"><span>🚗</span> 1. Chauffeur &amp; Constat Amiable</h3>
-          <p style="margin-bottom: 10px;">
-            Le chauffeur GoCab en circulation (ex: Dacia Logan 2025) a l'obligation légale et contractuelle d'établir un <strong>Constat Amiable</strong> avec le tiers et de préserver les éléments de preuve immédiats.
-          </p>
-          <div class="step-pill" style="margin-bottom: 8px;">
-            <div class="step-num">A</div>
-            <div><strong>Urgence &amp; Sécurité :</strong> Appel d'assistance ou superviseur terrain GoCab immédiat.</div>
-          </div>
-          <div class="step-pill">
-            <div class="step-num">B</div>
-            <div><strong>Constat &amp; Photos :</strong> Remplissage recto/verso, signature, photos 4 côtés + plaques.</div>
+        <!-- Donut Chart SVG -->
+        <div class="donut-chart-box">
+          <svg width="220" height="220" viewBox="0 0 42 42">
+            <circle class="donut-hole" cx="21" cy="21" r="15.91549430918954" fill="transparent"></circle>
+            <circle class="donut-ring" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="rgba(255,255,255,0.15)" stroke-width="5"></circle>
+            <!-- 25% Expertise (Amber) -->
+            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#F59E0B" stroke-width="5" stroke-dasharray="25 75" stroke-dashoffset="25"></circle>
+            <!-- 35% Pièces détachées (Navy Deep) -->
+            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#60A5FA" stroke-width="5" stroke-dasharray="35 65" stroke-dashoffset="0"></circle>
+            <!-- 25% Tôlerie & Peinture (Olive) -->
+            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#8FA838" stroke-width="5" stroke-dasharray="25 75" stroke-dashoffset="65"></circle>
+            <!-- 15% Prise en Charge Finale (Red/Purple) -->
+            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#EC4899" stroke-width="5" stroke-dasharray="15 85" stroke-dashoffset="40"></circle>
+          </svg>
+          <div class="donut-center-stat">
+            <div style="font-size: 28px; font-weight: 900; color: #FFFFFF;">100%</div>
+            <div style="font-size: 9px; text-transform: uppercase; color: #CBD5E1; font-weight: 700;">Traçabilité</div>
           </div>
         </div>
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; font-size: 11.5px; color: #94A3B8;">
-          📌 <em>Délai légal marocain :</em> Déclaration sous <strong>5 jours ouvrés</strong> auprès de la compagnie.
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 14px; text-align: left; font-size: 11px;">
+          <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #F59E0B; display: inline-block;"></span> <span>25% Visite Expert</span></div>
+          <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #60A5FA; display: inline-block;"></span> <span>35% Attente Pièces</span></div>
+          <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8FA838; display: inline-block;"></span> <span>25% Tôlerie/Peinture</span></div>
+          <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #EC4899; display: inline-block;"></span> <span>15% Accord PEC Final</span></div>
         </div>
       </div>
 
-      <!-- Col 2: Superviseurs & Flotte -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #F59E0B;"><span>🏢</span> 2. Superviseur Terrain &amp; Fleet Manager</h3>
-          <p style="margin-bottom: 10px;">
-            L'équipe GoCab Maroc (Superviseurs Terrain <strong>Hamza &amp; Ayoub Rassid</strong>, Gestionnaires de Flotte <strong>Mehdi Elyattouti &amp; Mohamed Aziz</strong>) intervient pour sécuriser l'actif.
-          </p>
-          <div class="step-pill" style="margin-bottom: 8px;">
-            <div class="step-num">1</div>
-            <div><strong>Dépannage &amp; Remorquage :</strong> Acheminement du véhicule vers le garage partenaire.</div>
+      <!-- Right: Real CRM 8-Step Interactive Timeline Component -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 18px; padding: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 13px; font-weight: 800; color: #FFFFFF; text-transform: uppercase;">
+              COMPOSANT CRM : AVANCEMENT DU VÉHICULE AU GARAGE
+            </span>
+            <span class="pill-badge pill-gold">8 ÉTAPES LINÉAIRES</span>
           </div>
-          <div class="step-pill">
-            <div class="step-num">2</div>
-            <div><strong>Alerte WhatsApp Auto :</strong> Déclenchement automatique vers le gestionnaire assigné (Mehdi).</div>
-          </div>
-        </div>
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; font-size: 11.5px; color: #94A3B8;">
-          ⚡ <em>Enjeu Business :</em> Chaque jour d'immobilisation représente une perte sèche de redevance journalière.
-        </div>
-      </div>
 
-      <!-- Col 3: Assurance, Expert & Garage -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #10B981;"><span>🛡️</span> 3. Compagnie, Expert &amp; Garage</h3>
-          <p style="margin-bottom: 10px;">
-            L'écosystème externe marocain repose sur la triangulation tripartite : <strong>Assureur (Sanlam/AtlantaSanad)</strong>, <strong>Expert Judiciaire</strong>, et <strong>Garage Conventionné (Emergence)</strong>.
-          </p>
-          <div class="step-pill" style="margin-bottom: 8px;">
-            <div class="step-num">I</div>
-            <div><strong>Ordre de Mission :</strong> L'assureur mandate formellement le garage et l'expert.</div>
-          </div>
-          <div class="step-pill">
-            <div class="step-num">II</div>
-            <div><strong>Expertise Contradictoire :</strong> Accord de devis chiffré et prise en charge finale (PEC).</div>
-          </div>
-        </div>
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; font-size: 11.5px; color: #94A3B8;">
-          🔒 <em>Portail Assureur :</em> Rôle dédié <code class="mono">ASSURANCE</code> créé dans le CRM pour le courtier/agent externe.
-        </div>
-      </div>
-    </div>
+          ${screenshotTimelineBase64 ? `<img src="${screenshotTimelineBase64}" class="screenshot-frame" style="height: auto; max-height: 140px;" alt="Timeline Garage">` : ''}
 
-    <div class="slide-footer">
-      <span>Partie 1 : Fondamentaux du Marché Marocain</span>
-      <span>Intervenants : Chauffeur • Superviseur • Fleet Manager • Assureur • Expert • Garage</span>
-      <span>Slide 2 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 3: PHASE 1 — CREATION & DOCUMENT INGESTION -->
-  <!-- ============================================================== -->
-  <section class="slide">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-blue">Phase 1 : Saisie &amp; Ingestion</span>
-        <div>
-          <div class="slide-title">Déclaration du Sinistre &amp; Ingestion Numérique des Pièces</div>
-          <div class="slide-subtitle">Captation terrain des pièces juridiques obligatoires et stockage numérique sécurisé</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">API: POST /api/accidents</div>
-    </div>
-
-    <div class="grid-60-40" style="flex: 1; align-items: stretch;">
-      <!-- Left: Workflow & Explanations -->
-      <div style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="card" style="flex: 1; margin-bottom: 12px;">
-          <h3><span>📋</span> Procédure de Déclaration dans le CRM</h3>
-          <p style="margin-bottom: 12px;">
-            Lorsqu'un accident est signalé, le collaborateur clique sur <strong>&quot;Déclarer un Accident&quot;</strong>. Le CRM vérifie automatiquement l'immatriculation, résout le chauffeur actif et pré-remplit les informations.
-          </p>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-            <div style="background: rgba(30, 41, 59, 0.7); padding: 10px; border-radius: 10px;">
-              <div style="font-size: 11px; color: #94A3B8; text-transform: uppercase; font-weight: 700;">Gravité Sinistre</div>
-              <div style="font-size: 13px; font-weight: 700; color: #EF4444; margin-top: 2px;">🔴 LOURDE (Immobilisation)</div>
-              <div style="font-size: 13px; font-weight: 700; color: #F59E0B; margin-top: 2px;">🟡 LÉGÈRE (Roulant / Cosmétique)</div>
+          <div style="margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
+            <div style="padding: 8px 12px; background: rgba(255, 255, 255, 0.08); border-radius: 8px;">
+              <strong style="color: #F59E0B;">#1-2 : GoCab & Assureur</strong><br>
+              <span style="color: #E2E8F0;">Déclaration + Ordre de mission garage.</span>
             </div>
-            <div style="background: rgba(30, 41, 59, 0.7); padding: 10px; border-radius: 10px;">
-              <div style="font-size: 11px; color: #94A3B8; text-transform: uppercase; font-weight: 700;">Responsabilité Fautive</div>
-              <div style="font-size: 13px; font-weight: 700; color: #38BDF8; margin-top: 2px;">👤 DRIVER (Chauffeur GoCab)</div>
-              <div style="font-size: 13px; font-weight: 700; color: #10B981; margin-top: 2px;">🚗 THIRD_PARTY (Tiers)</div>
+            <div style="padding: 8px 12px; background: rgba(255, 255, 255, 0.08); border-radius: 8px;">
+              <strong style="color: #60A5FA;">#3-4 : Garage & Expert</strong><br>
+              <span style="color: #E2E8F0;">Dépôt photos/devis + validation chiffrage.</span>
+            </div>
+            <div style="padding: 8px 12px; background: rgba(255, 255, 255, 0.08); border-radius: 8px;">
+              <strong style="color: #BEF264;">#5-6 : Carrosserie Émergence</strong><br>
+              <span style="color: #E2E8F0;">Démarrage des travaux + attente PEC final.</span>
+            </div>
+            <div style="padding: 8px 12px; background: rgba(255, 255, 255, 0.08); border-radius: 8px;">
+              <strong style="color: #F472B6;">#7-8 : Restitution & Flotte</strong><br>
+              <span style="color: #E2E8F0;">Véhicule prêt + réactivation chauffeur.</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
 
-          <h3 style="margin-top: 10px;"><span>📁</span> Typologie des Documents Ingestés (Base64 / Blob)</h3>
-          <ul style="font-size: 12.5px;">
-            <li><strong>CONSTAT (Constat Amiable) :</strong> Scan du document papier signé par les 2 conducteurs.</li>
-            <li><strong>PHOTOS (Impact &amp; Dégâts) :</strong> Photos haute résolution de la carrosserie, du compteur et du châssis.</li>
-            <li><strong>PERMIS &amp; CARTE GRISE :</strong> Vérification de validité juridique pour la prise en charge Sanlam.</li>
-            <li><strong>DEVIS INITIAL :</strong> Chiffrage préliminaire des pièces et de la main d'œuvre tôlerie.</li>
-          </ul>
+    <div class="slide-footer" style="border-color: rgba(255, 255, 255, 0.2); color: rgba(255, 255, 255, 0.7);">
+      <span>MACHINE À ÉTATS FINIS — VALIDATION PAR INTERVENANT MANDATÉ</span>
+      <span class="font-mono">STATE-MACHINE: 8 STRICT STEPS • AUDIT LOG: ON-CHANGE</span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       SLIDE 07: REAL CRM CASE STUDY — WW028110 (Slide 7 Style)
+       3-Panel Split Layout: Identity + Screenshot + Automations
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
+    <div class="slide-header">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">CAS RÉEL EN PRODUCTION</span>
+        </div>
+      </div>
+      <div class="slide-number">SLIDE 07 / 10</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 0.8fr 1.4fr 0.8fr; gap: 20px; align-items: stretch; flex: 1; padding: 15px 0;">
+      <!-- Panel 1: Vehicle & Driver Identity -->
+      <div class="card-dark" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <span class="pill-badge pill-gold" style="margin-bottom: 10px;">VÉHICULE EN ARRÊT</span>
+          <div style="font-size: 32px; font-weight: 900; color: #FFFFFF; letter-spacing: -0.02em;">WW028110</div>
+          <div style="font-size: 14px; font-weight: 700; color: #F59E0B; margin-top: 2px;">DACIA LOGAN (2025)</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">📍 Casablanca • Flotte Taxi/VTC</div>
         </div>
 
-        <div class="card-code">
-          <span style="color: #64748B;">// Payload modèle de création d'un sinistre</span><br>
-          <span style="color: #F472B6;">POST</span> /api/accidents<br>
-          {<br>
-          &nbsp;&nbsp;<span style="color: #38BDF8;">"vehicle_id"</span>: <span style="color: #A7F3D0;">"WW028110"</span>, <span style="color: #38BDF8;">"driver_name"</span>: <span style="color: #A7F3D0;">"CHETOUI MOHAMED HASSAN"</span>,<br>
-          &nbsp;&nbsp;<span style="color: #38BDF8;">"severity"</span>: <span style="color: #FCD34D;">"HARD"</span>, <span style="color: #38BDF8;">"fault"</span>: <span style="color: #FCD34D;">"DRIVER"</span>, <span style="color: #38BDF8;">"garage_name"</span>: <span style="color: #A7F3D0;">"Emergence"</span><br>
-          }
+        <div style="padding: 14px; background: rgba(255, 255, 255, 0.04); border-radius: 12px; border-left: 3px solid #60A5FA;">
+          <div style="font-size: 10px; text-transform: uppercase; color: #94A3B8;">Chauffeur Titulaire</div>
+          <div style="font-size: 14px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">CHETOUI MOHAMED HASSAN</div>
+          <div style="font-size: 11px; color: #93C5FD; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">+212 612 514 285</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
+            <span style="color: #94A3B8;">Compagnie :</span>
+            <strong style="color: #FFFFFF;">Sanlam Maroc</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
+            <span style="color: #94A3B8;">Carrosserie :</span>
+            <strong style="color: #F59E0B;">Garage Émergence</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #94A3B8;">Statut CRM :</span>
+            <strong style="color: #BEF264;">Nouveau Sinistre</strong>
+          </div>
         </div>
       </div>
 
-      <!-- Right: Actual Screenshot -->
-      <div style="display: flex; flex-direction: column;">
-        <div class="screenshot-frame" style="flex: 1;">
-          <div class="screenshot-bar">
-            <span class="dot dot-red"></span>
-            <span class="dot dot-yellow"></span>
-            <span class="dot dot-green"></span>
-            <span style="font-size: 11px; color: #94A3B8; margin-left: 8px; font-family: monospace;">CRM GoCab — Vue Sinistres en Cours (Recherche &amp; Compteurs)</span>
-          </div>
-          ${screenshotHeaderBase64 ? `<img src="${screenshotHeaderBase64}" class="screenshot-img" style="height: 100%; object-fit: contain; background: #0B141E;" alt="CRM Header">` : `<div style="padding: 40px; text-align: center; color: #64748B;">[Capture CRM Sinistres]</div>`}
+      <!-- Panel 2: Real Full Screen CRM Dossier (Center Hero) -->
+      <div class="card-glow-gold" style="padding: 12px; display: flex; flex-direction: column; justify-content: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px;">
+          <span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase;">
+            DOSSIER GOCAB CRM : WW028110
+          </span>
+          <span style="font-size: 10px; color: #94A3B8;">Capture Authentique de Production</span>
         </div>
-        <div style="font-size: 11.5px; color: #94A3B8; text-align: center; margin-top: 6px;">
-          Capture réelle : Suivi des véhicules accidentés, statut En cours (13) et arrêt moyen.
+        ${screenshotDossierBase64 ? `<img src="${screenshotDossierBase64}" class="screenshot-frame" style="height: 380px; object-position: top center;" alt="Dossier Réel">` : ''}
+      </div>
+
+      <!-- Panel 3: Actionable Automations & Fleet Trigger -->
+      <div class="card-dark" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <span class="pill-badge pill-navy" style="margin-bottom: 10px;">SYNCHRONISATION FLOTTE</span>
+          <h4 style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Bannière Gestionnaire Mehdi Elyattouti</h4>
+          <p style="font-size: 11px; color: #94A3B8; margin-top: 6px; line-height: 1.4;">
+            Le CRM alerte automatiquement le gestionnaire de flotte sur WhatsApp (16:11) jusqu'à ce que le sinistre soit créé sur GoCab Fleet.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="padding: 10px 14px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; color: #10B981; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <span>✓</span> <span>Bouton « Créé sur GoCab Fleet »</span>
+          </div>
+          <div style="padding: 10px 14px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; color: #F59E0B; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <span>🔄</span> <span>Relancer WhatsApp</span>
+          </div>
+          <div style="padding: 10px 14px; background: rgba(53, 88, 143, 0.2); border: 1px solid rgba(53, 88, 143, 0.45); border-radius: 10px; color: #93C5FD; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <span>💾</span> <span>Enregistrer Dossier Assureur</span>
+          </div>
+        </div>
+
+        <div style="font-size: 10px; color: #64748B; line-height: 1.4;">
+          * Évite les doublons administratifs et assure le suivi comptable de la franchise.
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
-      <span>Phase 1 : Ingestion des Données</span>
-      <span>Contrôles : Immatriculation unique, Permis actif, Catégorisation documents</span>
-      <span>Slide 3 / 10</span>
+      <span>DONNÉES FLOTTE GOCAB MAROC — IDENTIFIANT UNIQUE IMMATRICULATION WW028110</span>
+      <span class="font-mono">RECORD_ID: WW028110 • FLEET_MANAGER: MEHDI_ELYATTOUTI</span>
     </div>
-  </section>
+  </div>
 
-  <!-- ============================================================== -->
-  <!-- SLIDE 4: PHASE 2 — FLEET MANAGER WHATSAPP AUTOMATION -->
-  <!-- ============================================================== -->
-  <section class="slide">
+
+  <!-- ========================================================
+       SLIDE 08: ASSURANCE PORTAL & RBAC SECURITY (Slide 8 Style)
+       Editorial Split Layout: Light Access View + Dark Security
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
     <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-teal">Phase 2 : Handshake Flotte</span>
-        <div>
-          <div class="slide-title">Automatisation WhatsApp &amp; Synchronisation GoCab Fleet</div>
-          <div class="slide-subtitle">Alerte temps réel des gestionnaires de flotte et lien de confirmation direct à 1 clic</div>
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">SÉCURITÉ & ACCÈS TIERS (RBAC)</span>
         </div>
       </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">360DIALOG CLOUD API</div>
+      <div class="slide-number">SLIDE 08 / 10</div>
     </div>
 
-    <div class="grid-60-40" style="flex: 1; align-items: stretch;">
-      <!-- Left: Visual Dossier with Banner -->
-      <div style="display: flex; flex-direction: column;">
-        <div class="screenshot-frame" style="flex: 1;">
-          <div class="screenshot-bar">
-            <span class="dot dot-red"></span>
-            <span class="dot dot-yellow"></span>
-            <span class="dot dot-green"></span>
-            <span style="font-size: 11px; color: #94A3B8; margin-left: 8px; font-family: monospace;">Dossier WW028110 — Alerte Gestionnaire &amp; Confirmation</span>
+    <div class="grid-2col" style="padding: 15px 0;">
+      <!-- Left: Scoped External Access (Light Contrast Card) -->
+      <div class="card-light" style="padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="pill-badge pill-olive">RÔLE SÉCURISÉ : ASSURANCE</span>
+            <span style="font-size: 11px; font-weight: 700; color: #0F172A;">PORTAIL PARTAGÉ</span>
           </div>
-          ${screenshotDossierBase64 ? `<img src="${screenshotDossierBase64}" class="screenshot-img" style="height: 100%; object-fit: cover; object-position: top;" alt="Dossier WW028110">` : `<div style="padding: 40px; text-align: center; color: #64748B;">[Capture Dossier WW028110]</div>`}
-        </div>
-        <div style="font-size: 11.5px; color: #94A3B8; text-align: center; margin-top: 6px;">
-          Capture réelle : Bandeau d'attente GoCab Fleet avec notification WhatsApp à Mehdi Elyattouti.
-        </div>
-      </div>
 
-      <!-- Right: Technical Details -->
-      <div style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="card-accent" style="margin-bottom: 12px;">
-          <h3 style="color: #2DD4BF;"><span>⚡</span> Déclenchement de l'Alerte WhatsApp</h3>
-          <p style="margin-bottom: 10px;">
-            Dès l'enregistrement du sinistre, le CRM identifie le gestionnaire de flotte compétent :
-          </p>
-          <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; font-size: 12px; margin-bottom: 8px;">
-            👤 <strong>Mehdi Elyattouti :</strong> Gestionnaire Flotte Principal<br>
-            👤 <strong>Mohamed Aziz :</strong> Gestionnaire Flotte Associé
-          </div>
-          <p style="font-size: 12px; color: #94A3B8;">
-            Un message WhatsApp haute priorité est expédié via l'API 360dialog avec immatriculation, nom du chauffeur, sévérité et <strong>lien de confirmation 1-clic sécurisé par token HMAC</strong>.
+          <h3 style="font-size: 24px; font-weight: 900; color: #0F172A; line-height: 1.25;">
+            ACCÈS RESTREINT POUR L'AGENT D'ASSURANCE SANLAM
+          </h3>
+
+          <p style="font-size: 13px; color: #475569; margin-top: 8px; line-height: 1.5;">
+            L'assureur externe et le cabinet d'expertise ont un accès direct au CRM pour renseigner le statut
+            du sinistre, mais avec un cloisonnement étanche des données financières.
           </p>
         </div>
 
-        <div class="card">
-          <h3><span>🔗</span> Cycle de Confirmation &amp; Résilience</h3>
-          <ul style="font-size: 12px;">
-            <li><strong>Bouton &quot;Créé sur GoCab Fleet&quot; :</strong> Permet au gestionnaire de valider manuellement ou via le lien reçu sur mobile.</li>
-            <li><strong>Bouton &quot;Relancer WhatsApp&quot; :</strong> En cas de délai, permet à l'équipe opérationnelle de renvoyer une notification sans quitter l'écran.</li>
-            <li><strong>Statut Horodaté :</strong> Enregistre l'auteur et l'heure précise de prise en compte dans l'audit log.</li>
+        <div style="margin: 18px 0; padding: 14px; background: #F8FAFC; border-radius: 12px; border: 1px dashed #CBD5E1;">
+          <div style="font-size: 12px; font-weight: 800; color: #0F172A; margin-bottom: 6px;">🔒 Masquage Strict des Éléments Confidentiels :</div>
+          <ul style="font-size: 12px; color: #64748B; padding-left: 20px; line-height: 1.6;">
+            <li><strong>Bouton Rappels Réparations</strong> complètement masqué (${screenshotRappelsBase64 ? `<img src="${screenshotRappelsBase64}" style="height: 16px; vertical-align: middle;" alt="Rappels">` : '4 dû(s)'}).</li>
+            <li>Aucun accès aux soldes d'impayés chauffeurs ni au bilan financier de la flotte.</li>
+            <li>Aucun accès aux modules Acquisition, Leads, ou Direction Générale.</li>
           </ul>
         </div>
 
-        <div class="card-code">
-          <span style="color: #64748B;">// Endpoint de confirmation externe Fleet</span><br>
-          <span style="color: #F472B6;">POST</span> /api/accidents/confirm-fleet<br>
-          { <span style="color: #38BDF8;">"claimId"</span>: <span style="color: #A7F3D0;">"uuid..."</span>, <span style="color: #38BDF8;">"source"</span>: <span style="color: #FCD34D;">"WHATSAPP_BUTTON"</span> }
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 10px;">
+          <span>Compteur jours d'arrêt : <strong>Dès l'apparition sur la page</strong></span>
+          <span class="pill-badge pill-gold">0 j Arrêt Moyen</span>
         </div>
       </div>
-    </div>
 
-    <div class="slide-footer">
-      <span>Phase 2 : Collaboration Terrain-Flotte</span>
-      <span>Intégration : Meta WhatsApp Cloud API • Token sécurisé • Audit Trail</span>
-      <span>Slide 4 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 5: PHASE 3 — THE 8-STEP GARAGE & REPAIR LIFECYCLE -->
-  <!-- ============================================================== -->
-  <section class="slide">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-purple">Phase 3 : Cycle Garage</span>
+      <!-- Right: Technical Enforcement & Code Matrix -->
+      <div class="card-glow-navy" style="display: flex; flex-direction: column; justify-content: space-between; padding: 24px;">
         <div>
-          <div class="slide-title">La Frise Canonique des 8 Étapes Garage &amp; Intervenants</div>
-          <div class="slide-subtitle">Suivi pas-à-pas de la réparation, validation d'étape et traçabilité des responsabilités</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">TIMELINE_STEPS (1 à 8)</div>
-    </div>
-
-    <!-- Timeline Component Screenshot -->
-    <div style="margin-bottom: 14px;">
-      <div class="screenshot-frame">
-        <div class="screenshot-bar">
-          <span class="dot dot-red"></span>
-          <span class="dot dot-yellow"></span>
-          <span class="dot dot-green"></span>
-          <span style="font-size: 11px; color: #94A3B8; margin-left: 8px; font-family: monospace;">Composant Interactif : Avancement du Véhicule au Garage (Garage Emergence)</span>
-        </div>
-        ${screenshotTimelineBase64 ? `<img src="${screenshotTimelineBase64}" class="screenshot-img" style="max-height: 140px; object-fit: contain; background: #0B141E;" alt="Timeline Steps">` : `<div style="padding: 20px; text-align: center; color: #64748B;">[Capture Timeline]</div>`}
-      </div>
-    </div>
-
-    <!-- 8 Steps Detailed Grid -->
-    <div class="grid-4" style="flex: 1;">
-      <!-- Step 1 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-blue" style="font-size: 10px; padding: 2px 8px;">#1 GoCab</span>
-          <span style="font-size: 16px;">📋</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Déclaré &amp; Constat</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Création du sinistre, photos d'accident et constat amiable déposés.</p>
-      </div>
-
-      <!-- Step 2 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-teal" style="font-size: 10px; padding: 2px 8px;">#2 Assurance</span>
-          <span style="font-size: 16px;">🛡️</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Ordre de Mission</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">La compagnie (Sanlam) mandate formellement le garage de réparation.</p>
-      </div>
-
-      <!-- Step 3 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-amber" style="font-size: 10px; padding: 2px 8px;">#3 Garage</span>
-          <span style="font-size: 16px;">📸</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Photos &amp; Devis</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Entrée au garage, photos contradictoires et dépôt du devis chiffré.</p>
-      </div>
-
-      <!-- Step 4 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-purple" style="font-size: 10px; padding: 2px 8px;">#4 Expert</span>
-          <span style="font-size: 16px;">🔍</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Accord Expert</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Visite du cabinet d'expertise et accord chiffré sur le devis validé.</p>
-      </div>
-
-      <!-- Step 5 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-amber" style="font-size: 10px; padding: 2px 8px;">#5 Garage</span>
-          <span style="font-size: 16px;">🔧</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Début Travaux</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Démarrage tôlerie, pièces de rechange et remise en état carrosserie.</p>
-      </div>
-
-      <!-- Step 6 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-teal" style="font-size: 10px; padding: 2px 8px;">#6 Assur/Gar</span>
-          <span style="font-size: 16px;">📑</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Attente PEC Finale</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Le garage attend la confirmation finale de Prise En Charge (PEC).</p>
-      </div>
-
-      <!-- Step 7 -->
-      <div class="card" style="padding: 12px 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge badge-teal" style="font-size: 10px; padding: 2px 8px;">#7 Garage</span>
-          <span style="font-size: 16px;">🚗</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #F1F5F9;">Véhicule Prêt</div>
-        <p style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Réparation terminée, nettoyage et contrôle qualité validé au garage.</p>
-      </div>
-
-      <!-- Step 8 -->
-      <div class="card" style="padding: 12px 14px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(6, 78, 59, 0.25);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-          <span class="slide-category-badge" style="background: #059669; color: #fff; font-size: 10px; padding: 2px 8px;">#8 GoCab</span>
-          <span style="font-size: 16px;">✅</span>
-        </div>
-        <div style="font-size: 13px; font-weight: 700; color: #A7F3D0;">Véhicule Récupéré</div>
-        <p style="font-size: 11px; color: #CBD5E1; margin-top: 4px;">Restitution terrain, sortie de maintenance et remise en service actif.</p>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <span>Phase 3 : Exécution Garage</span>
-      <span>Mécanisme : Validation progressive avec note optionnelle et enregistrement de l'auteur</span>
-      <span>Slide 5 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 6: PHASE 4 — ESPACE ASSURANCE & EXPERT (RBAC) -->
-  <!-- ============================================================== -->
-  <section class="slide">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-teal">Phase 4 : Espace Partagé Assureur</span>
-        <div>
-          <div class="slide-title">Portail Sécurisé Compagnie d'Assurance &amp; Rôle Dédié</div>
-          <div class="slide-subtitle">Rôle ASSURANCE restreint, chiffrage d'expertise et chronomètre d'immobilisation</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">ROLE: ASSURANCE (RBAC)</div>
-    </div>
-
-    <div class="grid-50-50" style="flex: 1; align-items: stretch;">
-      <!-- Left: Functional Architecture & RBAC -->
-      <div style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="card" style="margin-bottom: 12px;">
-          <h3 style="color: #2DD4BF;"><span>🛡️</span> Rôle Dédié &quot;ASSURANCE&quot; (Sécurité &amp; Confidentialité)</h3>
-          <p style="margin-bottom: 10px;">
-            Pour permettre à l'agent d'assurance externe (Sanlam / Courtier) de collaborer sans compromettre les données confidentielles de la flotte GoCab :
-          </p>
-          <ul style="font-size: 12.5px;">
-            <li><strong>Accès Isolé :</strong> Accès <em>uniquement</em> à la page <strong>Assurance &amp; Gestion des Sinistres</strong>.</li>
-            <li><strong>Masquage Strict :</strong> Pas d'accès aux Rappels Réparations, ni aux dettes chauffeurs, ni aux colonnes de trésorerie interne.</li>
-            <li><strong>Chronomètre Arrêt Sinistre :</strong> Le compteur de jours démarre <strong>dès la première apparition sur la page Assurance</strong> (pas la date globale d'achat véhicule).</li>
-          </ul>
-        </div>
-
-        <div class="card-accent">
-          <h3><span>💰</span> Chiffrage Financier &amp; Règlements (MAD)</h3>
-          <div class="grid-3" style="margin-top: 8px;">
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 8px;">
-              <div style="font-size: 10px; color: #94A3B8; font-weight: 700;">MONTANT ESTIMÉ</div>
-              <div style="font-size: 15px; font-weight: 800; color: #38BDF8; font-family: monospace;">Devis Garage</div>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 8px;">
-              <div style="font-size: 10px; color: #94A3B8; font-weight: 700;">ACCORD PEC</div>
-              <div style="font-size: 15px; font-weight: 800; color: #10B981; font-family: monospace;">Pris en charge</div>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 8px;">
-              <div style="font-size: 10px; color: #94A3B8; font-weight: 700;">FRANCHISE</div>
-              <div style="font-size: 15px; font-weight: 800; color: #F59E0B; font-family: monospace;">Charge Flotte</div>
-            </div>
-          </div>
-          <p style="font-size: 11.5px; color: #CBD5E1; margin-top: 8px;">
-            Suivi des statuts de règlement assureur : <span class="mono" style="color: #93C5FD;">En attente • Accord partiel • Quittance signée • Remboursé</span>.
+          <span class="pill-badge pill-gold" style="margin-bottom: 12px;">IMPLÉMENTATION AUTHENTIFICATION</span>
+          <h3 style="font-size: 22px; font-weight: 800; color: #FFFFFF;">
+            CONTRÔLE D'ACCÈS RBAC AU NIVEAU DE L'API
+          </h3>
+          <p style="font-size: 13px; color: #94A3B8; margin-top: 6px; line-height: 1.5;">
+            Sécurisation côté serveur dans les Route Handlers Next.js et middleware de session.
           </p>
         </div>
-      </div>
 
-      <!-- Right: Form Structure -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3><span>📝</span> Formulaire d'Identification du Dossier Assureur</h3>
-          <p style="margin-bottom: 12px; font-size: 12px; color: #94A3B8;">
-            Synchronisation bidirectionnelle des références contractuelles :
-          </p>
-          <div style="background: #080D14; border: 1px solid #1E293B; border-radius: 10px; padding: 12px; font-family: monospace; font-size: 11.5px; line-height: 1.6; color: #93C5FD;">
-            • N° Sinistre Assureur : <span style="color: #FCD34D;">SIN-2026-CAS-0849</span><br>
-            • Compagnie d'Assurance : <span style="color: #FCD34D;">Sanlam Maroc</span><br>
-            • Garage Conventionné : <span style="color: #FCD34D;">Emergence (Casablanca)</span><br>
-            • N° Police / Contrat : <span style="color: #FCD34D;">POL-984210-2026</span><br>
-            • Statut Avancement : <span style="color: #34D399;">1. Déclaration enregistrée</span><br>
-            • Date Déclaration : <span style="color: #FCD34D;">11/09/2026</span><br>
-            • Cabinet d'Expertise : <span style="color: #FCD34D;">Cabinet Expert Auto Casa</span><br>
-            • Téléphone Expert : <span style="color: #FCD34D;">+212 522 XX XX XX</span>
-          </div>
-        </div>
-
-        <div style="background: rgba(13, 148, 136, 0.15); border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 10px; padding: 10px; font-size: 12px; color: #2DD4BF;">
-          💡 <strong>Protection des données sensibles :</strong> Les inspecteurs ou experts externes ne voient que les documents de catégorie CONSTAT, DEVIS et EXPERTISE.
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <span>Phase 4 : Espace Assurance &amp; Sécurité</span>
-      <span>Contrôle d'accès : Permissions Role-Based • Session NextAuth • Chiffrement</span>
-      <span>Slide 6 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 7: PHASE 5 — FIELD RESTITUTION & FLEET RETURN -->
-  <!-- ============================================================== -->
-  <section class="slide slide-ops">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-emerald">Phase 5 : Clôture &amp; Restitution</span>
-        <div>
-          <div class="slide-title">Récupération Terrain, Contrôle Qualité &amp; Remise en Service</div>
-          <div class="slide-subtitle">Validation technique post-réparation, bascule automatique du statut et reprise de la rentabilité</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">LIFECYCLE CLOSE</div>
-    </div>
-
-    <div class="grid-3" style="flex: 1; align-items: stretch;">
-      <!-- Col 1: Contrôle Terrain -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #38BDF8;"><span>🔍</span> 1. Audit Terrain &amp; Essai Routier</h3>
-          <p style="margin-bottom: 10px;">
-            Le Superviseur Terrain (Hamza / Ayoub) se rend physiquement au garage (ex: Emergence) pour valider l'état du véhicule :
-          </p>
-          <ul style="font-size: 12px;">
-            <li>Contrôle visuel tôlerie &amp; concordance teinte peinture.</li>
-            <li>Alignement géométrie du train avant et suspension.</li>
-            <li>Contrôle des organes de sécurité (freinage, feux, airbags).</li>
-            <li>Essai dynamique sur voie rapide avant signature du bon de sortie.</li>
-          </ul>
-        </div>
-        <div class="step-pill">
-          <div class="step-num">✓</div>
-          <div><strong>Zéro défaut toléré :</strong> Véhicule VTC garanti conforme aux standards inDrive.</div>
-        </div>
-      </div>
-
-      <!-- Col 2: Clôture Administrative -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #F59E0B;"><span>🧾</span> 2. Facturation &amp; Quittance</h3>
-          <p style="margin-bottom: 10px;">
-            Clôture des engagements financiers et décharge des responsabilités :
-          </p>
-          <ul style="font-size: 12px;">
-            <li>Réception de la facture acquittée du garage Emergence.</li>
-            <li>Téléversement dans le CRM en catégorie <code class="mono">FACTURE</code>.</li>
-            <li>Règlement de la franchise si responsabilité engagée (<code class="mono">DRIVER</code>).</li>
-            <li>Clôture de la quittance d'indemnité Sanlam.</li>
-          </ul>
-        </div>
-        <div class="step-pill">
-          <div class="step-num">MAD</div>
-          <div><strong>Bilan Financier Dossier :</strong> Rapprochement bancaire et imputation comptable.</div>
-        </div>
-      </div>
-
-      <!-- Col 3: Bascule Flotte CRM -->
-      <div class="card-accent" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #10B981;"><span>🚗</span> 3. Réactivation Flotte &amp; Chauffeur</h3>
-          <p style="margin-bottom: 10px;">
-            Lors du passage à l'étape <strong>#8 (Véhicule Récupéré &amp; Rétabli)</strong> :
-          </p>
-          <ul style="font-size: 12px;">
-            <li>Le statut du véhicule bascule de <span style="color: #F59E0B; font-weight: 700;">Maintenance</span> ➔ <span style="color: #10B981; font-weight: 700;">In Service</span> / <span style="color: #38BDF8; font-weight: 700;">Available</span>.</li>
-            <li>Sortie des compteurs d'immobilisation de la flotte.</li>
-            <li>Réassignation immédiate au chauffeur titulaire ou réattribution.</li>
-            <li>Reprise de la facturation journalière sans temps mort.</li>
-          </ul>
-        </div>
-        <div style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); padding: 10px; border-radius: 10px; font-size: 12px; color: #A7F3D0; font-weight: 600;">
-          🎉 <strong>Objectif Atteint :</strong> Restitution rapide minimisant le nombre total de jours d'arrêt.
-        </div>
-      </div>
-    </div>
-
-    <div class="slide-footer">
-      <span>Phase 5 : Rétablissement Opérationnel</span>
-      <span>Transition : Maintenance ➔ Disponible • Rapprochement Trésorerie • Clôture Sinistre</span>
-      <span>Slide 7 / 10</span>
-    </div>
-  </section>
-
-  <!-- ============================================================== -->
-  <!-- SLIDE 8: TECH ARCHITECTURE — DATABASE MODELS -->
-  <!-- ============================================================== -->
-  <section class="slide slide-tech">
-    <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-blue">Architecture Technique</span>
-        <div>
-          <div class="slide-title">Modélisation des Données &amp; Schéma Prisma ORM</div>
-          <div class="slide-subtitle">Structure relationnelle, métadonnées JSON extensibles et typage strict TypeScript</div>
-        </div>
-      </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">PRISMA / LIBSQL SCHEMA</div>
-    </div>
-
-    <div class="grid-50-50" style="flex: 1; align-items: stretch;">
-      <!-- Left: Prisma Schema Model -->
-      <div class="card-code" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <span style="color: #64748B;">/// Schéma de données principal d'un sinistre</span><br>
-          <span style="color: #F472B6;">model</span> <span style="color: #FCD34D;">AccidentClaim</span> {<br>
-          &nbsp;&nbsp;id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;@id @default(uuid())<br>
-          &nbsp;&nbsp;vehicle_id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String</span><br>
-          &nbsp;&nbsp;driver_id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span><br>
-          &nbsp;&nbsp;driver_name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span><br>
-          &nbsp;&nbsp;driver_phone&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span><br>
-          &nbsp;&nbsp;severity&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span>&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// HARD (Lourde) | SOFT (Légère)</span><br>
-          &nbsp;&nbsp;fault&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span>&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// DRIVER | THIRD_PARTY</span><br>
-          &nbsp;&nbsp;timeline_step&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String</span>&nbsp;&nbsp;&nbsp;&nbsp;@default("NEW_ACCIDENT")<br>
-          &nbsp;&nbsp;step_updated_at&nbsp;<span style="color: #38BDF8;">DateTime</span>&nbsp;&nbsp;@default(now())<br>
-          &nbsp;&nbsp;comments&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span>&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// JSON: InsuranceDossierInfo &amp; Notes</span><br>
-          &nbsp;&nbsp;documents&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">String?</span>&nbsp;&nbsp;&nbsp;<span style="color: #64748B;">// JSON: Array&lt;AccidentDocument&gt;</span><br>
-          &nbsp;&nbsp;created_at&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">DateTime</span>&nbsp;&nbsp;@default(now())<br>
-          &nbsp;&nbsp;updated_at&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #38BDF8;">DateTime</span>&nbsp;&nbsp;@updatedAt<br>
+        <div style="background: #0B0F17; border-radius: 12px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #CBD5E1; line-height: 1.6; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <span style="color: #60A5FA;">// Role-Based Authorization Enforcement</span><br>
+          <span style="color: #F59E0B;">const</span> session = <span style="color: #60A5FA;">await</span> getServerSession(authOptions);<br>
           <br>
-          &nbsp;&nbsp;vehicle&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #FCD34D;">Vehicle</span>&nbsp;&nbsp;&nbsp;@relation(fields: [vehicle_id], references: [id])<br>
-          &nbsp;&nbsp;driver&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #FCD34D;">DriverProfile?</span> @relation(...)<br>
+          <span style="color: #60A5FA;">if</span> (session?.user?.role === <span style="color: #BEF264;">"ASSURANCE"</span>) {<br>
+          &nbsp;&nbsp;<span style="color: #64748B;">// Restrict query to Sinistres only</span><br>
+          &nbsp;&nbsp;<span style="color: #64748B;">// Omit internal notes, debts, repair reminders</span><br>
+          &nbsp;&nbsp;<span style="color: #F59E0B;">return</span> NextResponse.json({<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;accidents: filteredAccidents,<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;permissions: { hideReminders: <span style="color: #BEF264;">true</span> }<br>
+          &nbsp;&nbsp;});<br>
           }
         </div>
-        <div style="color: #64748B; font-size: 10.5px; border-top: 1px solid #1E293B; padding-top: 8px;">
-          Persistance durable sur LibSQL/Turso avec réplication SQLite locale instantanée.
-        </div>
-      </div>
 
-      <!-- Right: Sub-structures & TypeScript Interfaces -->
-      <div style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="card" style="margin-bottom: 12px;">
-          <h3 style="color: #38BDF8;"><span>🧱</span> Structures JSON Extensibles</h3>
-          <p style="font-size: 12px; margin-bottom: 8px;">
-            Pour préserver une flexibilité maximale face aux exigences évolutives des compagnies d'assurance sans migration SQL lourde :
-          </p>
-          <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; font-size: 12px;">
-            <strong>InsuranceDossierInfo :</strong> N° sinistre, police, nom expert, montant devis, franchise, statut paiement, et état notification WhatsApp du gestionnaire.<br><br>
-            <strong>AccidentDocument :</strong> Métadonnées complètes du fichier (nom, taille, mimeType, catégorie CONSTAT/DEVIS/PHOTOS, date et auteur de téléversement).<br><br>
-            <strong>StepValidationItem :</strong> Historique complet des horodatages et signatures de chaque étape validée.
+        <div style="display: flex; gap: 12px; font-size: 11px;">
+          <div style="flex: 1; padding: 10px; background: rgba(255, 255, 255, 0.04); border-radius: 8px;">
+            <div style="color: #94A3B8;">Session Token</div>
+            <div style="color: #FFFFFF; font-weight: 700; margin-top: 2px;">JWT Chiffré HS256</div>
           </div>
-        </div>
-
-        <div class="card">
-          <h3 style="color: #10B981;"><span>🔒</span> Intégrité &amp; Cohérence des Données</h3>
-          <ul style="font-size: 12px;">
-            <li>Validation stricte des payloads via schémas <strong>Zod</strong>.</li>
-            <li>Normalisation automatique des étapes rétrocompatibles (<code class="mono">CAR_IN_GARAGE</code> ➔ <code class="mono">GARAGE_DEVIS</code>).</li>
-            <li>Indexation sur <code class="mono">vehicle_id</code>, <code class="mono">timeline_step</code> et <code class="mono">created_at</code> pour des requêtes en &lt; 15ms.</li>
-          </ul>
+          <div style="flex: 1; padding: 10px; background: rgba(255, 255, 255, 0.04); border-radius: 8px;">
+            <div style="color: #94A3B8;">Audit Trail</div>
+            <div style="color: #F59E0B; font-weight: 700; margin-top: 2px;">Traçabilité par IP/Agent</div>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
-      <span>Architecture Technique : Persistance</span>
-      <span>Base : Turso Cloud (LibSQL) / Local SQLite dev.db • Prisma 7.9.1 • Zod Validation</span>
-      <span>Slide 8 / 10</span>
+      <span>ARCHITECTURE SÉCURISÉE MULTI-TENANT — ISOLATION DES DONNÉES SENSIBLES</span>
+      <span class="font-mono">SECURITY: RBAC RESTRICTED • ENDPOINT: /API/ACCIDENTS?ROLE=ASSURANCE</span>
     </div>
-  </section>
+  </div>
 
-  <!-- ============================================================== -->
-  <!-- SLIDE 9: TECH ARCHITECTURE — API ROUTES & LIVESYNC -->
-  <!-- ============================================================== -->
-  <section class="slide slide-tech">
+
+  <!-- ========================================================
+       SLIDE 09: WHATSAPP CLOUD API & LIVE SYNC (Slide 9 Style)
+       Modern Layout with Floating Circular Metric Badges
+       ======================================================== -->
+  <div class="slide bg-dark">
+    <div class="accent-bar"></div>
     <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-blue">Architecture Technique</span>
-        <div>
-          <div class="slide-title">API Routes, LiveSync &amp; Synchronisation Temps Réel</div>
-          <div class="slide-subtitle">Endpoints serverless Next.js 16, mise en cache SWR et diffusion temps réel multi-utilisateurs</div>
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">COMMUNICATION AUTOMATISÉE</span>
         </div>
       </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">API ROUTING &amp; REALTIME</div>
+      <div class="slide-number">SLIDE 09 / 10</div>
     </div>
 
-    <div class="grid-50-50" style="flex: 1; align-items: stretch;">
-      <!-- Left: API Routes Specs -->
-      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-          <h3 style="color: #38BDF8;"><span>⚡</span> Cartographie des Endpoints API</h3>
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; font-size: 11.5px;">
-              <span class="mono" style="color: #34D399; font-weight: 700;">GET</span> <span class="mono">/api/accidents</span><br>
-              <span style="color: #94A3B8;">Récupération de tous les sinistres avec cache SWR et enrichissement véhicule.</span>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; font-size: 11.5px;">
-              <span class="mono" style="color: #60A5FA; font-weight: 700;">POST</span> <span class="mono">/api/accidents</span><br>
-              <span style="color: #94A3B8;">Création d'un sinistre, téléversement de documents et alerte WhatsApp auto.</span>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; font-size: 11.5px;">
-              <span class="mono" style="color: #FBBF24; font-weight: 700;">PATCH</span> <span class="mono">/api/accidents/[id]</span><br>
-              <span style="color: #94A3B8;">Avancement d'étape garage (#1 à #8), mise à jour dossier assurance, ajout de notes.</span>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; font-size: 11.5px;">
-              <span class="mono" style="color: #A78BFA; font-weight: 700;">POST</span> <span class="mono">/api/accidents/confirm-fleet</span><br>
-              <span style="color: #94A3B8;">Prise en charge directe par le gestionnaire de flotte depuis son mobile.</span>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; font-size: 11.5px;">
-              <span class="mono" style="color: #F43F5E; font-weight: 700;">GET</span> <span class="mono">/api/insurance/repair-reminders</span><br>
-              <span style="color: #94A3B8;">Calcul automatique des délais d'immobilisation et rappels de relance garage/expert.</span>
-            </div>
+    <div class="grid-2col" style="padding: 15px 0;">
+      <!-- Left: WhatsApp Real Interface Screenshot -->
+      <div class="card-glow-navy" style="padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">💬</span>
+            <span style="font-size: 12px; font-weight: 800; color: #FFFFFF;">WHATSAPP CRM INTEGRATION</span>
           </div>
+          <span class="pill-badge pill-olive">API 360DIALOG VÉRIFIÉE</span>
         </div>
 
-        <div style="font-size: 11.5px; color: #94A3B8; margin-top: 10px;">
-          🛡️ Toutes les routes sont protégées par <code class="mono">requireAuth()</code> avec contrôle RBAC strict.
+        ${screenshotWhatsAppBase64 ? `<img src="${screenshotWhatsAppBase64}" class="screenshot-frame" style="height: 330px; object-position: top center;" alt="WhatsApp CRM">` : ''}
+
+        <div style="margin-top: 10px; font-size: 11px; color: #94A3B8; display: flex; justify-content: space-between;">
+          <span>Ligne WhatsApp officielle : <strong>+212 6 62 14 51 09</strong></span>
+          <span style="color: #BEF264;">● Bot Actif • Session Live</span>
         </div>
       </div>
 
-      <!-- Right: LiveSync & Performance -->
-      <div style="display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="card-accent" style="margin-bottom: 12px;">
-          <h3 style="color: #2DD4BF;"><span>🔄</span> Moteur LiveSync Temps Réel</h3>
-          <p style="font-size: 12.5px; margin-bottom: 10px;">
-            Lorsqu'un collaborateur met à jour un dossier ou qu'un expert valide un devis :
+      <!-- Right: Floating Circular Metric Badges & Capabilities -->
+      <div style="display: flex; flex-direction: column; justify-content: space-between; gap: 16px;">
+        <div>
+          <span class="pill-badge pill-gold" style="margin-bottom: 8px;">MÉTROLOGIE & DISPONIBILITÉ</span>
+          <h3 class="title-section" style="font-size: 28px;">
+            ALERTE INSTANTANÉE & <span class="highlight-gold">SYNCHRONISATION EN DIRECT</span>
+          </h3>
+          <p style="font-size: 13px; color: #94A3B8; line-height: 1.5;">
+            L'ensemble des intervenants (gestionnaires, experts, carrossiers) est notifié en continu
+            sans quitter le CRM grâce aux webhooks Meta Cloud API.
           </p>
-          <div class="step-pill" style="margin-bottom: 8px;">
-            <div class="step-num">1</div>
-            <div><strong>touchSyncState(&quot;claims&quot;) :</strong> Incrémente l'horodatage de mutation sur le backend.</div>
+        </div>
+
+        <!-- Metric Badges Row (Inspired by Slide 9 in Reference) -->
+        <div style="display: flex; gap: 20px; align-items: center;">
+          <div class="stat-circle circle-gold">
+            <span style="font-size: 22px; font-weight: 900;">0s</span>
+            <span style="font-size: 9px; text-transform: uppercase;">Latence</span>
           </div>
-          <div class="step-pill" style="margin-bottom: 8px;">
-            <div class="step-num">2</div>
-            <div><strong>broadcastMutation(&quot;claims&quot;) :</strong> Diffuse l'événement via canal BroadcastChannel / SSE.</div>
+          <div class="stat-circle circle-navy">
+            <span style="font-size: 20px; font-weight: 900;">100%</span>
+            <span style="font-size: 9px; text-transform: uppercase;">Délivré</span>
           </div>
-          <div class="step-pill">
-            <div class="step-num">3</div>
-            <div><strong>Optimistic UI :</strong> L'interface se met à jour en <strong>0 ms</strong> sans attendre le retour réseau.</div>
+          <div class="stat-circle circle-olive">
+            <span style="font-size: 20px; font-weight: 900;">24/7</span>
+            <span style="font-size: 9px; text-transform: uppercase;">Webhooks</span>
           </div>
         </div>
 
-        <div class="card">
-          <h3 style="color: #F59E0B;"><span>⚡</span> Cache SWR &amp; Zéro Latence</h3>
-          <p style="font-size: 12px;">
-            Le composant <code class="mono">InsuranceView</code> maintient un cache mémoire de module (<code class="mono">globalCachedClaims</code>) et un stockage local (<code class="mono">localStorage</code>). Le changement d'onglet entre Flotte, Leads et Assurance est instantané.
-          </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="card-dark" style="padding: 12px 16px; border-left: 3px solid #F59E0B;">
+            <div style="font-size: 12px; font-weight: 700; color: #FFFFFF;">Templates Validés Meta Business</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">
+              Modèles officiels d'invitation et convocation géolocalisée (Rabat, Casablanca, Kénitra).
+            </div>
+          </div>
+
+          <div class="card-dark" style="padding: 12px 16px; border-left: 3px solid #60A5FA;">
+            <div style="font-size: 12px; font-weight: 700; color: #FFFFFF;">LiveSync BroadcastChannel</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">
+              Mise à jour instantanée des écrans de tous les agents connectés lors d'une modification de statut.
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="slide-footer">
-      <span>Architecture Technique : Communication</span>
-      <span>Stack : Next.js App Router • BroadcastChannel • Optimistic Updates • SWR Pattern</span>
-      <span>Slide 9 / 10</span>
+      <span>INTÉGRATION CLOUD API META — GESTION DE LA FENÊTRE DE MESSAGERIE 24H</span>
+      <span class="font-mono">PROVIDER: 360DIALOG • WEBHOOK: /API/WHATSAPP/WEBHOOK</span>
     </div>
-  </section>
+  </div>
 
-  <!-- ============================================================== -->
-  <!-- SLIDE 10: ROADMAP, SLAS & OPERATIONAL METRICS -->
-  <!-- ============================================================== -->
-  <section class="slide slide-cover">
+
+  <!-- ========================================================
+       SLIDE 10: FULL TECHNICAL ARCHITECTURE & ROADMAP (Slide 10)
+       High-Impact Atmospheric Closing Slide + Stack Specs
+       ======================================================== -->
+  <div class="slide bg-dark" style="background: radial-gradient(circle at 80% 20%, rgba(53, 88, 143, 0.25), rgba(11, 15, 23, 1) 70%);">
+    <div class="accent-bar"></div>
     <div class="slide-header">
-      <div class="slide-header-left">
-        <span class="slide-category-badge badge-teal">Roadmap &amp; Métriques</span>
-        <div>
-          <div class="slide-title">Indicateurs de Performance (KPIs) &amp; Roadmap Technique</div>
-          <div class="slide-subtitle">Objectifs de réduction de l'immobilisation flotte et évolutions produit 2026/2027</div>
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" alt="GoCab">` : ''}
+        <div class="header-title-block">
+          <span class="header-brand">GOCAB MOROCCO</span>
+          <span class="header-sep">/</span>
+          <span class="header-pill">ARCHITECTURE TECHNIQUE GLOBALE</span>
         </div>
       </div>
-      <div class="mono" style="font-size: 11px; color: #64748B;">ROADMAP 2026+</div>
+      <div class="slide-number">SLIDE 10 / 10</div>
     </div>
 
-    <!-- KPIs Target Cards -->
-    <div class="grid-4" style="margin-bottom: 16px;">
-      <div class="card" style="text-align: center; border-top: 3px solid #38BDF8;">
-        <div style="font-size: 11px; color: #94A3B8; font-weight: 700;">CONSTAT ➔ MISSION</div>
-        <div style="font-size: 26px; font-weight: 800; color: #38BDF8; font-family: monospace; margin: 4px 0;">&lt; 24h</div>
-        <div style="font-size: 11px; color: #64748B;">Objectif SLA Assureur</div>
-      </div>
-      <div class="card" style="text-align: center; border-top: 3px solid #F59E0B;">
-        <div style="font-size: 11px; color: #94A3B8; font-weight: 700;">DEVIS ➔ ACCORD EXPERT</div>
-        <div style="font-size: 26px; font-weight: 800; color: #F59E0B; font-family: monospace; margin: 4px 0;">&lt; 48h</div>
-        <div style="font-size: 11px; color: #64748B;">Visite &amp; Chiffrage</div>
-      </div>
-      <div class="card" style="text-align: center; border-top: 3px solid #10B981;">
-        <div style="font-size: 11px; color: #94A3B8; font-weight: 700;">DURÉE MOYENNE ARRÊT</div>
-        <div style="font-size: 26px; font-weight: 800; color: #10B981; font-family: monospace; margin: 4px 0;">18 Jours</div>
-        <div style="font-size: 11px; color: #64748B;">Cible (Actuel : 46j)</div>
-      </div>
-      <div class="card" style="text-align: center; border-top: 3px solid #A855F7;">
-        <div style="font-size: 11px; color: #94A3B8; font-weight: 700;">TAUX DE PRISE EN CHARGE</div>
-        <div style="font-size: 26px; font-weight: 800; color: #A855F7; font-family: monospace; margin: 4px 0;">94%</div>
-        <div style="font-size: 11px; color: #64748B;">Recouvrement Sanlam</div>
-      </div>
-    </div>
+    <div class="grid-2col" style="padding: 15px 0;">
+      <!-- Left: Technology Stack -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <span class="pill-badge pill-gold" style="margin-bottom: 8px;">STACK TECHNIQUE PRODUCTION</span>
+          <h2 class="title-section" style="font-size: 32px;">
+            ARCHITECTURE SYSTÈME & <span class="highlight-gold">FLUX DE DONNÉES</span>
+          </h2>
+          <p style="font-size: 13px; color: #94A3B8; line-height: 1.5;">
+            Conçue pour garantir une haute disponibilité, une latence sous les 100ms et une conformité RGPD/CNDP marocaine.
+          </p>
+        </div>
 
-    <!-- Roadmap 3 Columns -->
-    <div class="grid-3" style="flex: 1; align-items: stretch;">
-      <div class="card">
-        <h3 style="color: #38BDF8;"><span>📱</span> 1. PWA Superviseur Offline</h3>
-        <p style="font-size: 12px; margin-bottom: 8px;">
-          Application mobile Progressive Web App permettant aux superviseurs (Hamza/Ayoub) d'enregistrer les constats et photos même en zone blanche sans 4G, avec synchronisation automatique dès retour réseau.
-        </p>
-        <span class="slide-category-badge badge-blue" style="font-size: 10px;">Q1 2027 • Mobile</span>
-      </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="card-dark" style="padding: 14px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #60A5FA; font-weight: 700;">Frontend & SSR</div>
+            <div style="font-size: 15px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">Next.js 14 App Router</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 4px;">React 19 Server Components & TailwindCSS.</div>
+          </div>
 
-      <div class="card">
-        <h3 style="color: #F59E0B;"><span>🤖</span> 2. OCR Intelligent du Constat</h3>
-        <p style="font-size: 12px; margin-bottom: 8px;">
-          Reconnaissance optique de caractères (IA vision) sur le constat amiable papier manuscrit marocain (bilingue arabe/français) pour pré-remplir automatiquement les croix de responsabilité et les coordonnées du tiers.
-        </p>
-        <span class="slide-category-badge badge-amber" style="font-size: 10px;">Q2 2027 • AI Engine</span>
+          <div class="card-dark" style="padding: 14px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #F59E0B; font-weight: 700;">Base de Données</div>
+            <div style="font-size: 15px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">Turso SQLite Cloud</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Réplication Edge avec failover local dev.db.</div>
+          </div>
+
+          <div class="card-dark" style="padding: 14px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #8FA838; font-weight: 700;">ORM & Migrations</div>
+            <div style="font-size: 15px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">Prisma 7.9 LibSQL</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Schéma strict, transactions atomiques.</div>
+          </div>
+
+          <div class="card-dark" style="padding: 14px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #EC4899; font-weight: 700;">CDN & Médias</div>
+            <div style="font-size: 15px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">Cloudinary CDN</div>
+            <div style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Compression à la volée des constats et photos.</div>
+          </div>
+        </div>
       </div>
 
-      <div class="card">
-        <h3 style="color: #10B981;"><span>🔌</span> 3. Connecteur Direct Assureur</h3>
-        <p style="font-size: 12px; margin-bottom: 8px;">
-          Intégration d'API directe B2B avec les systèmes d'information des assureurs (Sanlam / Wafa Assurance) pour émettre l'ordre de mission et recevoir la validation d'expertise sans saisie manuelle.
-        </p>
-        <span class="slide-category-badge badge-teal" style="font-size: 10px;">Q3 2027 • API Partner</span>
+      <!-- Right: Roadmap & SLAs -->
+      <div class="card-glow-gold" style="display: flex; flex-direction: column; justify-content: space-between; padding: 24px;">
+        <div>
+          <span class="pill-badge pill-gold" style="margin-bottom: 10px;">ENGAGEMENTS DE SERVICE (SLA)</span>
+          <h3 style="font-size: 22px; font-weight: 900; color: #FFFFFF;">
+            OBJECTIFS INGÉNIERIE & LIVRABLES SQUAD
+          </h3>
+          <p style="font-size: 13px; color: #CBD5E1; margin-top: 6px; line-height: 1.5;">
+            Le système transforme la gestion des sinistres d'un goulot d'étranglement administratif
+            en un avantage concurrentiel automatisé pour GoCab.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin: 16px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 10px;">
+            <span style="font-size: 12px; color: #FFFFFF; font-weight: 600;">Délai moyen de transmission à l'expert</span>
+            <strong style="font-size: 14px; color: #F59E0B;">&lt; 24 Heures</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 10px;">
+            <span style="font-size: 12px; color: #FFFFFF; font-weight: 600;">Traçabilité documentaire complète</span>
+            <strong style="font-size: 14px; color: #BEF264;">100% Digitalisée</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 10px;">
+            <span style="font-size: 12px; color: #FFFFFF; font-weight: 600;">Temps de réponse WhatsApp</span>
+            <strong style="font-size: 14px; color: #93C5FD;">Instantané (API)</strong>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 11px; color: #94A3B8;">
+            Signé : <strong>Équipe Technique & Produit GoCab</strong>
+          </div>
+          <span class="pill-badge pill-gold">PRÊT POUR DÉPLOIEMENT</span>
+        </div>
       </div>
     </div>
 
     <div class="slide-footer">
-      <span>GoCab Maroc — Excellence Opérationnelle &amp; Ingénierie Flotte</span>
-      <span>Présentation Technique Réalisée pour l'Équipe Tech GoCab • 10 / 10</span>
-      <span>Fin de Présentation</span>
+      <span>GOCAB PLATFORM ENGINEERING — DÉPLOIEMENT CONTINU PRODUCTION VERCEL</span>
+      <span class="font-mono">STATUS: DEPLOYED • REVISION: 2026.11.V2</span>
     </div>
-  </section>
+  </div>
 
 </body>
 </html>
 `;
 
-// Destination paths
-const artifactDir = 'C:\\Users\\Dell\\.gemini\\antigravity\\brain\\4a835044-d1db-4c36-a40a-a23ba766abfb';
-const tempHtmlPath = path.join(process.env.TEMP || 'C:\\Windows\\Temp', 'gocab_sinistre_presentation.html');
-const tempPdfPath = path.join(process.env.TEMP || 'C:\\Windows\\Temp', 'gocab_sinistre_presentation.pdf');
+// Output file paths
+const tempHtmlPath = path.join(process.env.TEMP || 'C:\\Users\\Dell\\AppData\\Local\\Temp', 'gocab_sinistre_presentation.html');
+const tempPdfPath = path.join(process.env.TEMP || 'C:\\Users\\Dell\\AppData\\Local\\Temp', 'gocab_sinistre_presentation.pdf');
 
-const destArtifactPdf = path.join(artifactDir, 'GoCab_Workflow_Sinistre_Assurance_Garage.pdf');
-const destArtifactHtml = path.join(artifactDir, 'GoCab_Workflow_Sinistre_Assurance_Garage.html');
-const destWorkspacePdf = path.join(process.cwd(), 'GoCab_Workflow_Sinistre_Assurance_Garage.pdf');
-const destWorkspaceHtml = path.join(process.cwd(), 'GoCab_Workflow_Sinistre_Assurance_Garage.html');
+const artifactPdfPath = 'C:\\Users\\Dell\\.gemini\\antigravity\\brain\\4a835044-d1db-4c36-a40a-a23ba766abfb\\GoCab_Workflow_Sinistre_Assurance_Garage.pdf';
+const artifactHtmlPath = 'C:\\Users\\Dell\\.gemini\\antigravity\\brain\\4a835044-d1db-4c36-a40a-a23ba766abfb\\GoCab_Workflow_Sinistre_Assurance_Garage.html';
 
-fs.writeFileSync(tempHtmlPath, htmlContent, 'utf8');
+const workspacePdfPath = path.join(process.cwd(), 'GoCab_Workflow_Sinistre_Assurance_Garage.pdf');
+const workspaceHtmlPath = path.join(process.cwd(), 'GoCab_Workflow_Sinistre_Assurance_Garage.html');
+
+fs.writeFileSync(tempHtmlPath, htmlContent, 'utf-8');
 console.log('Wrote presentation HTML to:', tempHtmlPath);
 
+// Chrome executable path on Windows
 const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const cmd = `"${chromePath}" --headless=new --disable-gpu --no-pdf-header-footer --print-to-pdf="${tempPdfPath}" "${tempHtmlPath}"`;
+
+if (!fs.existsSync(chromePath)) {
+  console.error('Chrome executable not found at:', chromePath);
+  process.exit(1);
+}
 
 console.log('Running Chrome Headless PDF export...');
-execSync(cmd, { stdio: 'inherit' });
+const cmd = `"${chromePath}" --headless=new --disable-gpu --no-pdf-header-footer --print-to-pdf="${tempPdfPath}" "${tempHtmlPath}"`;
 
-if (fs.existsSync(tempPdfPath)) {
-  const stat = fs.statSync(tempPdfPath);
-  console.log(`✅ Successfully generated presentation PDF! (${stat.size} bytes)`);
+try {
+  execSync(cmd, { stdio: 'inherit' });
+  const pdfBytes = fs.readFileSync(tempPdfPath);
+  console.log(`✅ Successfully generated presentation PDF! (${pdfBytes.length} bytes)`);
 
-  fs.copyFileSync(tempPdfPath, destArtifactPdf);
-  fs.copyFileSync(tempHtmlPath, destArtifactHtml);
-  fs.copyFileSync(tempPdfPath, destWorkspacePdf);
-  fs.copyFileSync(tempHtmlPath, destWorkspaceHtml);
+  // Copy to artifacts and workspace
+  fs.writeFileSync(artifactPdfPath, pdfBytes);
+  fs.writeFileSync(artifactHtmlPath, htmlContent, 'utf-8');
+  fs.writeFileSync(workspacePdfPath, pdfBytes);
+  fs.writeFileSync(workspaceHtmlPath, htmlContent, 'utf-8');
 
-  console.log('📁 Saved to Artifact PDF:', destArtifactPdf);
-  console.log('📁 Saved to Artifact HTML:', destArtifactHtml);
-  console.log('📁 Saved to Workspace PDF:', destWorkspacePdf);
-  console.log('📁 Saved to Workspace HTML:', destWorkspaceHtml);
-} else {
-  throw new Error('PDF file was not created');
+  console.log('📁 Saved to Artifact PDF:', artifactPdfPath);
+  console.log('📁 Saved to Artifact HTML:', artifactHtmlPath);
+  console.log('📁 Saved to Workspace PDF:', workspacePdfPath);
+  console.log('📁 Saved to Workspace HTML:', workspaceHtmlPath);
+} catch (err) {
+  console.error('Error generating PDF with Chrome:', err);
+  process.exit(1);
 }
