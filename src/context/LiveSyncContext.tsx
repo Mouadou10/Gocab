@@ -8,7 +8,8 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { RefreshCw, Sparkles, CheckCircle2 } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { RefreshCw, Sparkles, CheckCircle2, X } from "lucide-react";
 
 export type SyncEntity = "leads" | "tickets" | "settings" | "collections" | "all";
 
@@ -28,9 +29,18 @@ const ACTIVE_POLL_INTERVAL_MS = 8000; // 8s when tab is active (with BroadcastCh
 const BACKGROUND_POLL_INTERVAL_MS = 30000; // 30s when backgrounded
 
 export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isExcludedPage = Boolean(
+    pathname?.startsWith("/zakaria") ||
+    pathname?.startsWith("/partenaire") ||
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/field-missions")
+  );
+
   const [isOnline, setIsOnline] = useState(true);
   const [appUpdateAvailable, setAppUpdateAvailable] = useState(false);
   const [updateCountdown, setUpdateCountdown] = useState<number | null>(null);
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
   // Initial client version — captured once at component mount from env vars
   // This is compared against server version on each poll to detect new deployments.
@@ -245,13 +255,16 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
 
       // ─── Passive deployment detection: new app build rolled out ───
       // On first poll: seed clientVersionRef with the server version.
-      // On subsequent polls: if the version changed, show the update banner.
-      if (data.version) {
+      // On subsequent polls: if the version changed, show the update banner (unless excluded page).
+      if (data.version && !isExcludedPage) {
         if (!clientVersionRef.current) {
           // Seed initial version from server (env var may be empty in some deploys)
           clientVersionRef.current = data.version;
-        } else if (clientVersionRef.current !== data.version) {
-          // New deployment detected — show 5s countdown banner
+        } else if (
+          clientVersionRef.current !== data.version &&
+          dismissedVersion !== data.version
+        ) {
+          // New deployment detected
           setAppUpdateAvailable(true);
           if (broadcastChannelRef.current) {
             try {
@@ -395,7 +408,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {/* Sleek Floating New Deployment Update Toast Banner */}
-      {appUpdateAvailable && (
+      {appUpdateAvailable && !isExcludedPage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] flex items-center gap-3 px-5 py-3.5 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-emerald-500/40 animate-in fade-in slide-in-from-top duration-300">
           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400">
             <Sparkles className="w-4 h-4 animate-spin" />
@@ -405,11 +418,7 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
               Nouvelle mise à jour GoCab déployée !
             </span>
             <span className="text-xs text-slate-300">
-              Actualisation automatique dans{" "}
-              <span className="font-bold text-emerald-400 font-mono">
-                {updateCountdown ?? 5}s
-              </span>
-              ...
+              Cliquez pour charger les dernières améliorations.
             </span>
           </div>
           <button
@@ -417,7 +426,19 @@ export function LiveSyncProvider({ children }: { children: React.ReactNode }) {
             className="ml-3 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-semibold rounded-xl transition shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Actualiser maintenant
+            Actualiser
+          </button>
+          <button
+            onClick={() => {
+              setAppUpdateAvailable(false);
+              if (clientVersionRef.current) {
+                setDismissedVersion(clientVersionRef.current);
+              }
+            }}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            title="Fermer"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
