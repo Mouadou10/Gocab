@@ -222,7 +222,7 @@ export default function PartnerPortalPage() {
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6F0] text-[#151E19] flex justify-center selection:bg-[#0E382B] selection:text-white pb-28 font-sans antialiased">
+    <div className="min-h-screen bg-[#F4F6F0] text-[#151E19] flex justify-center selection:bg-[#0E382B] selection:text-white pb-36 font-sans antialiased">
       <Toaster position="top-center" reverseOrder={false} />
 
       {/* Main Mobile/Tablet Frame Container */}
