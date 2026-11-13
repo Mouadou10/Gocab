@@ -81,7 +81,7 @@ interface ConversationItem {
   id: string;
   phoneNumber: string;
   contactName: string;
-  contactType: "DRIVER" | "LEAD" | "TEAM" | "UNKNOWN";
+  contactType: "DRIVER" | "LEAD" | "TEAM" | "PARTNER" | "UNKNOWN";
   workflowState?: string;
   routedDepartment?: "FLEET_SUPPORT" | "LEAD_ACQUISITION" | null;
   matchedPlate?: string | null;
@@ -1075,6 +1075,11 @@ export default function WhatsAppCrmView() {
                       {conv.contactType === "TEAM" && (
                         <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 border border-purple-200 text-[9px] font-extrabold rounded-md flex items-center gap-0.5">
                           👥 Équipe GoCab
+                        </span>
+                      )}
+                      {conv.contactType === "PARTNER" && (
+                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[9px] font-extrabold rounded-md flex items-center gap-0.5">
+                          🤝 Apporteur Tiers
                         </span>
                       )}
                       {conv.unreadCount > 0 && (

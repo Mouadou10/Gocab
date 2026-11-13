@@ -236,6 +236,8 @@ export async function GET(request: NextRequest) {
         ? null
         : driver
         ? "FLEET_SUPPORT"
+        : conv.contact_type === "PARTNER"
+        ? "LEAD_ACQUISITION"
         : lead
         ? "LEAD_ACQUISITION"
         : conv.routed_department || null;
@@ -243,6 +245,8 @@ export async function GET(request: NextRequest) {
         ? "NONE"
         : driver
         ? "ROUTED_DRIVER_SUPPORT"
+        : conv.contact_type === "PARTNER"
+        ? "ROUTED_LEAD_ACQUISITION"
         : lead
         ? "ROUTED_LEAD_ACQUISITION"
         : conv.workflow_state || "NONE";
@@ -327,6 +331,7 @@ export async function GET(request: NextRequest) {
         c.routedDepartment === "LEAD_ACQUISITION" ||
         c.workflowState === "ROUTED_LEAD_ACQUISITION" ||
         c.contactType === "LEAD" ||
+        c.contactType === "PARTNER" ||
         c.lead !== null
       );
 
