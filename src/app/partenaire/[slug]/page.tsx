@@ -6,25 +6,37 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 import {
-  Users,
+  Wallet,
+  Plus,
+  Send,
+  RefreshCw,
+  MoreHorizontal,
+  TrendingUp,
+  Search,
+  Bell,
+  Eye,
+  EyeOff,
+  Car,
+  Coins,
   CheckCircle2,
   Clock,
-  Coins,
-  Send,
-  Phone,
   MapPin,
-  Calendar,
+  Phone,
   Sparkles,
-  RefreshCw,
-  Search,
-  Car,
-  ChevronDown,
-  ExternalLink,
+  ChevronRight,
   MessageCircle,
-  HelpCircle,
+  BarChart3,
+  PieChart,
+  Users,
+  ArrowUpRight,
+  Share2,
+  X,
+  Check,
   ShieldCheck,
-  TrendingUp,
-  FileCheck2,
+  Calendar,
+  AlertCircle,
+  ArrowRight,
+  Filter,
 } from "lucide-react";
 import { PartnerSummary, PartnerLeadEvaluation } from "@/lib/services/partnerCommissionService";
 
@@ -50,14 +62,25 @@ export default function PartnerPortalPage() {
   const slug = (params?.slug as string) || "zakaria";
   const partnerDisplayName = slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase();
 
+  // Navigation state (Fintech App Tabs)
+  const [activeTab, setActiveTab] = useState<"HOME" | "ANALYTICS" | "ALL_LEADS">("HOME");
+
+  // Data state
   const [data, setData] = useState<PartnerSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterTab, setFilterTab] = useState<"ALL" | "VALIDATED" | "PENDING" | "LOST">("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showBalance, setShowBalance] = useState(true);
 
-  // New Lead Form State
+  // Filters & Search
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "VALIDATED" | "PENDING" | "LOST">("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCity, setSelectedCity] = useState<string>("ALL");
+
+  // Lead modal / drawer
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<PartnerLeadEvaluation | null>(null);
+
+  // Form state
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [driverCity, setDriverCity] = useState("Casablanca");
@@ -66,28 +89,30 @@ export default function PartnerPortalPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch partner data
-  const fetchData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setRefreshing(true);
-    try {
-      const res = await fetch(`/api/partners/${encodeURIComponent(slug)}`, {
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Erreur de chargement");
-      setData(json);
-    } catch (err: any) {
-      if (!isSilent) {
-        toast.error(err.message || "Impossible de charger les données");
+  const fetchData = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setRefreshing(true);
+      try {
+        const res = await fetch(`/api/partners/${encodeURIComponent(slug)}`, {
+          cache: "no-store",
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erreur de chargement");
+        setData(json);
+      } catch (err: any) {
+        if (!isSilent) {
+          toast.error(err.message || "Impossible de charger les données");
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [slug]);
+    },
+    [slug]
+  );
 
   useEffect(() => {
     fetchData();
-    // Auto refresh every 20s for real-time tracking
     const interval = setInterval(() => {
       fetchData(true);
     }, 20000);
@@ -124,15 +149,14 @@ export default function PartnerPortalPage() {
       if (!res.ok) throw new Error(json.error || "Erreur lors de la transmission");
 
       toast.success(
-        `🎉 Chauffeur ${driverName} transmis à GoCab ! Éligible à 150 DH dès prise de voiture ou précommande.`,
-        { duration: 6000 }
+        `🎉 Chauffeur ${driverName} transmis à GoCab ! Commission de 150 DH activée dès validation.`,
+        { duration: 5000 }
       );
 
-      // Reset form
       setDriverName("");
       setDriverPhone("");
       setDriverNotes("");
-      setShowAddForm(false);
+      setShowAddModal(false);
       fetchData(true);
     } catch (err: any) {
       toast.error(err.message || "Erreur de transmission");
@@ -141,165 +165,753 @@ export default function PartnerPortalPage() {
     }
   };
 
+  // Copy referral link
+  const handleShareLink = () => {
+    if (typeof window !== "undefined") {
+      const url = `${window.location.origin}/zakaria`;
+      navigator.clipboard.writeText(url).then(
+        () => {
+          toast.success("Lien copié dans le presse-papier !");
+        },
+        () => {
+          toast.error("Impossible de copier le lien");
+        }
+      );
+    }
+  };
+
   // Filtered leads
   const filteredLeads = useMemo(() => {
     if (!data?.leads) return [];
     return data.leads.filter((l) => {
-      if (filterTab === "VALIDATED" && !l.isConverted) return false;
-      if (filterTab === "PENDING" && l.status !== "PENDING") return false;
-      if (filterTab === "LOST" && l.status !== "LOST") return false;
+      if (filterCategory === "VALIDATED" && !l.isConverted) return false;
+      if (filterCategory === "PENDING" && l.status !== "PENDING") return false;
+      if (filterCategory === "LOST" && l.status !== "LOST") return false;
+
+      if (selectedCity !== "ALL" && l.city?.toLowerCase() !== selectedCity.toLowerCase()) {
+        return false;
+      }
 
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchName = l.name.toLowerCase().includes(q);
-        const matchPhone = l.phone.toLowerCase().includes(q);
-        const matchCity = (l.city || "").toLowerCase().includes(q);
-        return matchName || matchPhone || matchCity;
+        const q = searchQuery.toLowerCase();
+        const matchesName = l.name.toLowerCase().includes(q);
+        const matchesPhone = l.phone.includes(q);
+        const matchesCity = (l.city || "").toLowerCase().includes(q);
+        return matchesName || matchesPhone || matchesCity;
       }
       return true;
     });
-  }, [data?.leads, filterTab, searchQuery]);
+  }, [data?.leads, filterCategory, selectedCity, searchQuery]);
+
+  // Analytics stats
+  const analyticsBreakdown = useMemo(() => {
+    if (!data) return { validated: 0, pending: 0, lost: 0, total: 0, valPct: 0, penPct: 0, lostPct: 0 };
+    const validated = data.convertedLeads || 0;
+    const pending = data.pendingLeads || 0;
+    const lost = data.lostLeads || 0;
+    const total = data.totalLeads || 0;
+    return {
+      validated,
+      pending,
+      lost,
+      total,
+      valPct: total > 0 ? Math.round((validated / total) * 100) : 0,
+      penPct: total > 0 ? Math.round((pending / total) * 100) : 0,
+      lostPct: total > 0 ? Math.round((lost / total) * 100) : 0,
+    };
+  }, [data]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      <Toaster position="top-right" />
+    <div className="min-h-screen bg-[#F4F6F0] text-[#151E19] flex justify-center selection:bg-[#0E382B] selection:text-white pb-28 font-sans antialiased">
+      <Toaster position="top-center" reverseOrder={false} />
 
-      {/* Top Brand Banner */}
-      <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 p-1 flex items-center justify-center">
-            <Image
-              src="/gocab-official-logo.png"
-              alt="GoCab Logo"
-              width={40}
-              height={40}
-              className="object-contain"
-              priority
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-100">
-                GoCab Morocco
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                Partenaire Officiel 🇲🇦
-              </span>
+      {/* Main Mobile/Tablet Frame Container */}
+      <div className="w-full max-w-md md:max-w-xl lg:max-w-2xl px-4 py-5 flex flex-col space-y-5">
+        {/* ===================== TOP BAR (Fintech App Header) ===================== */}
+        <header className="flex items-center justify-between pt-1 pb-1">
+          <div className="flex items-center space-x-3">
+            <div className="w-11 h-11 rounded-full bg-[#0E382B] text-white flex items-center justify-center font-bold text-base shadow-sm ring-2 ring-white">
+              {partnerDisplayName.charAt(0)}
             </div>
-            <h1 className="text-sm sm:text-base font-black text-amber-400 leading-tight">
-              Espace Apporteur d&apos;Affaires — {partnerDisplayName}
-            </h1>
+            <div>
+              <p className="text-xs text-[#697871] font-medium tracking-wide">Bonjour 👋</p>
+              <h1 className="text-lg font-bold tracking-tight text-[#11241C] flex items-center gap-1.5">
+                {partnerDisplayName}
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#D8EEDF] text-[#0E382B]">
+                  Apporteur GoCab
+                </span>
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => fetchData()}
+              disabled={refreshing}
+              title="Actualiser en direct"
+              className="w-10 h-10 rounded-full bg-white border border-[#E5ECE7] text-[#151E19] flex items-center justify-center hover:bg-[#EAF2ED] active:scale-95 transition-all shadow-xs"
+            >
+              <RefreshCw className={`w-4 h-4 text-[#0E382B] ${refreshing ? "animate-spin" : ""}`} />
+            </button>
+            <a
+              href="https://wa.me/212645398932?text=Bonjour%20GoCab%2C%20c%27est%20Zakaria.%20J%27aimerais%20faire%20un%20point%20sur%20mes%20leads."
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Contacter GoCab sur WhatsApp"
+              className="w-10 h-10 rounded-full bg-white border border-[#E5ECE7] text-[#0E382B] flex items-center justify-center hover:bg-[#EAF2ED] active:scale-95 transition-all shadow-xs"
+            >
+              <MessageCircle className="w-4 h-4 fill-[#0E382B]/10" />
+            </a>
+          </div>
+        </header>
+
+        {/* ===================== HERO BALANCE CARD (Dark Emerald Fintech Wallet) ===================== */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0E382B] via-[#114232] to-[#0A2B21] text-white p-6 shadow-xl shadow-[#0E382B]/15">
+          {/* Subtle geometric background glow */}
+          <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-[#186049]/40 blur-2xl pointer-events-none" />
+          <div className="absolute -left-12 -bottom-12 w-40 h-40 rounded-full bg-[#D8EEDF]/10 blur-xl pointer-events-none" />
+
+          {/* Top row */}
+          <div className="relative z-10 flex items-center justify-between mb-4">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-medium text-emerald-100 border border-white/10">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Total Commissions</span>
+              <button
+                onClick={() => setShowBalance(!showBalance)}
+                className="opacity-70 hover:opacity-100 transition-opacity ml-1"
+              >
+                {showBalance ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-white/10 text-[11px] font-semibold text-emerald-200">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-300" />
+              <span>150 DH / validation</span>
+            </div>
+          </div>
+
+          {/* Center Balance Display */}
+          <div className="relative z-10 my-3">
+            <div className="flex items-baseline space-x-2">
+              <span className="text-4xl md:text-5xl font-extrabold tracking-tight">
+                {showBalance ? (data?.totalCommissionEarnedMAD || 0).toLocaleString("fr-FR") : "••••"}
+              </span>
+              <span className="text-xl md:text-2xl font-bold text-emerald-300">DH</span>
+            </div>
+            <p className="text-xs text-emerald-200/80 mt-1 font-normal flex items-center gap-1.5">
+              <span>{data?.convertedLeads || 0} chauffeur(s) validé(s)</span>
+              <span>•</span>
+              <span className="text-emerald-300">
+                {data?.leads?.length ? Math.round(((data.convertedLeads || 0) / data.leads.length) * 100) : 0}% de conversion
+              </span>
+            </p>
+          </div>
+
+          {/* Bottom Card Strip: Potential In Progress */}
+          <div className="relative z-10 mt-5 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-emerald-100/90">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-3.5 h-3.5 text-amber-300" />
+              <span>En cours de qualification :</span>
+            </div>
+            <span className="font-semibold text-amber-200">
+              {showBalance ? `+${(data?.potentialPendingCommissionMAD || 0).toLocaleString("fr-FR")} DH` : "••• DH"}{" "}
+              <span className="opacity-75 font-normal">({data?.pendingLeads || 0} dossiers)</span>
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* ===================== QUICK ACTIONS ROW (Fintech Pills) ===================== */}
+        <div className="grid grid-cols-4 gap-2.5 pt-1">
+          {/* Action 1: Add Lead */}
           <button
-            onClick={() => fetchData()}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-xs font-bold text-slate-200 border border-slate-700/80 transition-all cursor-pointer disabled:opacity-50"
-            title="Rafraîchir les données en direct"
+            onClick={() => setShowAddModal(true)}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:bg-[#F0F5F2] active:scale-95 transition-all shadow-xs group"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-amber-400" : ""}`} />
-            <span className="hidden sm:inline">Actualiser</span>
+            <div className="w-12 h-12 rounded-full bg-[#0E382B] text-white flex items-center justify-center mb-1.5 shadow-sm group-hover:scale-105 transition-transform">
+              <Plus className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <span className="text-xs font-semibold text-[#151E19]">Ajouter</span>
+            <span className="text-[10px] text-[#697871]">+150 DH</span>
+          </button>
+
+          {/* Action 2: Share referral */}
+          <button
+            onClick={handleShareLink}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:bg-[#F0F5F2] active:scale-95 transition-all shadow-xs group"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#E8F4EC] text-[#0E382B] flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
+              <Send className="w-5 h-5 stroke-[2]" />
+            </div>
+            <span className="text-xs font-semibold text-[#151E19]">Partager</span>
+            <span className="text-[10px] text-[#697871]">Mon lien</span>
+          </button>
+
+          {/* Action 3: Analytics */}
+          <button
+            onClick={() => setActiveTab("ANALYTICS")}
+            className={`flex flex-col items-center justify-center p-3 rounded-2xl border active:scale-95 transition-all shadow-xs group ${
+              activeTab === "ANALYTICS"
+                ? "bg-[#0E382B] text-white border-[#0E382B]"
+                : "bg-white border-[#E5ECE7] hover:border-[#0E382B]/30 hover:bg-[#F0F5F2] text-[#151E19]"
+            }`}
+          >
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform ${
+                activeTab === "ANALYTICS" ? "bg-white/15 text-white" : "bg-[#E8F4EC] text-[#0E382B]"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5 stroke-[2]" />
+            </div>
+            <span className={`text-xs font-semibold ${activeTab === "ANALYTICS" ? "text-white" : "text-[#151E19]"}`}>
+              Stats
+            </span>
+            <span className={`text-[10px] ${activeTab === "ANALYTICS" ? "text-emerald-200" : "text-[#697871]"}`}>
+              Gains
+            </span>
+          </button>
+
+          {/* Action 4: WhatsApp Support */}
+          <a
+            href="https://wa.me/212645398932?text=Salam%20GoCab%2C%20c%27est%20Zakaria%2C%20j%27ai%20une%20question%20concernant%20un%20chauffeur."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:bg-[#F0F5F2] active:scale-95 transition-all shadow-xs group"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#E8F4EC] text-[#0E382B] flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
+              <MessageCircle className="w-5 h-5 stroke-[2]" />
+            </div>
+            <span className="text-xs font-semibold text-[#151E19]">Support</span>
+            <span className="text-[10px] text-[#697871]">WhatsApp</span>
+          </a>
+        </div>
+
+        {/* ===================== TAB VIEW SWITCHER ===================== */}
+        <div className="flex rounded-2xl bg-[#E7ECE9] p-1 text-xs font-semibold">
+          <button
+            onClick={() => setActiveTab("HOME")}
+            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === "HOME" ? "bg-white text-[#0E382B] shadow-xs font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Historique ({data?.leads?.length || 0})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("ANALYTICS")}
+            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === "ANALYTICS"
+                ? "bg-white text-[#0E382B] shadow-xs font-bold"
+                : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <PieChart className="w-3.5 h-3.5" />
+            <span>Analytique</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("ALL_LEADS")}
+            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === "ALL_LEADS"
+                ? "bg-white text-[#0E382B] shadow-xs font-bold"
+                : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Recherche & Filtres</span>
           </button>
         </div>
-      </header>
 
-      {/* Hero Header & Value Proposition */}
-      <section className="bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900 border-b border-slate-800 px-4 sm:px-8 pt-6 pb-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Welcome & Rule Notice */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs font-bold mb-2">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Rémunération Directe à la Performance</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                Tableau de Bord des Commissions
-              </h2>
-              <p className="text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                Chaque chauffeur recommandé qui <strong className="text-slate-200">prend une voiture</strong> ou qui <strong className="text-slate-200">verse une précommande</strong> vous rapporte automatiquement <span className="text-amber-400 font-bold">150 MAD</span> de commission, validée dès la confirmation par l&apos;équipe GoCab.
-              </p>
+        {/* ===================== TAB 1: RECENT TRANSACTIONS / DOSSIERS ===================== */}
+        {activeTab === "HOME" && (
+          <div className="space-y-4">
+            {/* Section Header */}
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-base font-bold text-[#11241C] tracking-tight">Dossiers & Commissions Récents</h2>
+              <button
+                onClick={() => setActiveTab("ALL_LEADS")}
+                className="text-xs font-semibold text-[#0E382B] hover:underline flex items-center gap-1"
+              >
+                <span>Voir tout ({data?.leads?.length || 0})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-lg shadow-amber-500/20 transition-all transform active:scale-95 cursor-pointer shrink-0"
-            >
-              <Send className="w-4 h-4" />
-              <span>Transmettre un Chauffeur (+150 DH)</span>
-            </button>
-          </div>
+            {/* Quick status filter pills */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+              <button
+                onClick={() => setFilterCategory("ALL")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                  filterCategory === "ALL"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                Tous ({data?.leads?.length || 0})
+              </button>
+              <button
+                onClick={() => setFilterCategory("VALIDATED")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  filterCategory === "VALIDATED"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Validés ({data?.convertedLeads || 0})</span>
+              </button>
+              <button
+                onClick={() => setFilterCategory("PENDING")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  filterCategory === "PENDING"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                <span>En cours ({data?.pendingLeads || 0})</span>
+              </button>
+              <button
+                onClick={() => setFilterCategory("LOST")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  filterCategory === "LOST"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                <span>Non retenus ({data?.lostLeads || 0})</span>
+              </button>
+            </div>
 
-          {/* Quick Submission Modal / Collapsible Form */}
-          {showAddForm && (
-            <div className="mb-8 p-5 sm:p-6 rounded-3xl bg-slate-850 border-2 border-amber-500/40 shadow-2xl shadow-amber-500/10 animate-fade-in">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
-                <div className="flex items-center gap-2.5">
-                  <span className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                    <Car className="w-5 h-5" />
-                  </span>
+            {/* List of Leads styled as Transactions */}
+            <div className="space-y-2.5">
+              {loading ? (
+                <div className="p-8 text-center bg-white rounded-3xl border border-[#E5ECE7]">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#0E382B] mx-auto mb-2" />
+                  <p className="text-xs text-[#697871]">Chargement de votre portefeuille...</p>
+                </div>
+              ) : filteredLeads.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-3xl border border-[#E5ECE7] space-y-3">
+                  <div className="w-14 h-14 rounded-full bg-[#E8F4EC] text-[#0E382B] flex items-center justify-center mx-auto">
+                    <Users className="w-6 h-6" />
+                  </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-white">
-                      Nouveau Chauffeur à Enregistrer
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Le lead sera immédiatement injecté dans le CRM GoCab avec votre tag partenaire ({partnerDisplayName}).
+                    <h3 className="text-sm font-bold text-[#11241C]">Aucun chauffeur dans cette vue</h3>
+                    <p className="text-xs text-[#697871] max-w-xs mx-auto mt-1">
+                      Ajoutez votre premier candidat pour déclencher automatiquement votre commission de 150 DH dès
+                      validation.
                     </p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0E382B] text-white text-xs font-semibold shadow-xs hover:bg-[#114232] active:scale-95 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Ajouter un chauffeur</span>
+                  </button>
+                </div>
+              ) : (
+                filteredLeads.map((lead) => {
+                  const isValidated = lead.isConverted;
+                  const isPending = lead.status === "PENDING";
+
+                  return (
+                    <div
+                      key={lead.id}
+                      onClick={() => setSelectedLead(lead)}
+                      className="p-4 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:shadow-sm active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between gap-3"
+                    >
+                      {/* Left Avatar Icon */}
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div
+                          className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                            isValidated
+                              ? "bg-[#D8EEDF] text-[#0E382B]"
+                              : isPending
+                              ? "bg-[#FEF3C7] text-[#92400E]"
+                              : "bg-[#F3F4F6] text-[#6B7280]"
+                          }`}
+                        >
+                          {isValidated ? (
+                            lead.conversionReason === "VEHICLE_ASSIGNED" ? (
+                              <Car className="w-5 h-5" />
+                            ) : (
+                              <Coins className="w-5 h-5" />
+                            )
+                          ) : isPending ? (
+                            <Clock className="w-5 h-5" />
+                          ) : (
+                            <Users className="w-5 h-5" />
+                          )}
+                        </div>
+
+                        {/* Middle Info */}
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[#11241C] truncate">{lead.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-[#697871] mt-0.5">
+                            <span className="flex items-center gap-0.5">
+                              <MapPin className="w-3 h-3 text-[#697871]" />
+                              {lead.city || "Maroc"}
+                            </span>
+                            <span>•</span>
+                            <span>{new Date(lead.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
+                          </div>
+                          {/* Status Pill */}
+                          <div className="mt-1">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                                isValidated
+                                  ? "bg-[#D8EEDF] text-[#0E382B]"
+                                  : isPending
+                                  ? "bg-[#FEF3C7] text-[#92400E]"
+                                  : "bg-[#FEE2E2] text-[#991B1B]"
+                              }`}
+                            >
+                              {lead.statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Amount / Commission */}
+                      <div className="text-right shrink-0">
+                        {isValidated ? (
+                          <div>
+                            <span className="text-sm md:text-base font-extrabold text-[#0E382B] block">
+                              +150.00 DH
+                            </span>
+                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              Validé ✓
+                            </span>
+                          </div>
+                        ) : isPending ? (
+                          <div>
+                            <span className="text-xs font-bold text-amber-700 block">En cours</span>
+                            <span className="text-[10px] text-[#697871]">+150 DH pot.</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-xs font-semibold text-slate-400 block">0.00 DH</span>
+                            <span className="text-[10px] text-slate-400">Non converti</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 2: ANALYTICS VIEW (Screen 3 in Inspiration) ===================== */}
+        {activeTab === "ANALYTICS" && (
+          <div className="space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-base font-bold text-[#11241C]">Analytique & Performance</h2>
+              <span className="text-xs text-[#697871] font-medium">Cumul temps réel</span>
+            </div>
+
+            {/* Total Spent / Earned Donut Card */}
+            <div className="p-6 rounded-3xl bg-white border border-[#E5ECE7] shadow-sm flex flex-col items-center text-center">
+              <p className="text-xs font-semibold text-[#697871] uppercase tracking-wider mb-4">
+                Répartition de vos Chauffeurs
+              </p>
+
+              {/* Central Circle Metric (Donut Style) */}
+              <div className="relative w-44 h-44 rounded-full border-8 border-[#0E382B] flex flex-col items-center justify-center bg-[#F4F6F0]/50 shadow-inner my-2">
+                <span className="text-3xl font-extrabold text-[#0E382B]">
+                  {(data?.totalCommissionEarnedMAD || 0).toLocaleString("fr-FR")}
+                </span>
+                <span className="text-xs font-bold text-[#697871] uppercase tracking-wider">DH Gagnés</span>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-[#D8EEDF] px-2 py-0.5 rounded-full mt-1">
+                  {analyticsBreakdown.validated} / {analyticsBreakdown.total} Chauffeurs
+                </span>
+              </div>
+
+              {/* Legend Grid */}
+              <div className="grid grid-cols-2 gap-3 w-full mt-6 pt-5 border-t border-[#E5ECE7] text-left text-xs">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-[#0E382B]" />
+                  <span className="text-[#697871] flex-1">Validés (150 DH)</span>
+                  <span className="font-bold text-[#11241C]">{analyticsBreakdown.valPct}%</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-[#F59E0B]" />
+                  <span className="text-[#697871] flex-1">En cours</span>
+                  <span className="font-bold text-[#11241C]">{analyticsBreakdown.penPct}%</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-[#E5E7EB]" />
+                  <span className="text-[#697871] flex-1">Non convertis</span>
+                  <span className="font-bold text-[#11241C]">{analyticsBreakdown.lostPct}%</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-[#10B981]" />
+                  <span className="text-[#697871] flex-1">Taux succès</span>
+                  <span className="font-bold text-[#0E382B]">{analyticsBreakdown.valPct}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Motivational Performance Insight Pill (Matching screen 3) */}
+            <div className="p-4 rounded-2xl bg-[#E8F4EC] border border-[#CDE5D4] flex items-center justify-between text-xs text-[#0E382B]">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Sparkles className="w-5 h-5 text-[#0E382B]" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm">
+                    {analyticsBreakdown.valPct >= 50 ? "Excellente rentabilité !" : "Pipeline en pleine croissance !"}
+                  </p>
+                  <p className="text-[11px] text-[#0E382B]/80">
+                    Chaque voiture prise ou précommande versée crédite instantanément 150 DH sur votre compte.
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#0E382B] shrink-0" />
+            </div>
+
+            {/* Performance KPI Cards */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Total Présentés</span>
+                <p className="text-2xl font-extrabold text-[#11241C] mt-1">{data?.totalLeads || 0}</p>
+                <span className="text-[10px] text-emerald-700 font-semibold">Chauffeurs transmis</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Gains Potentiels</span>
+                <p className="text-2xl font-extrabold text-amber-700 mt-1">
+                  {(data?.potentialPendingCommissionMAD || 0).toLocaleString()} DH
+                </p>
+                <span className="text-[10px] text-amber-700 font-semibold">
+                  {data?.pendingLeads || 0} en qualification
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 3: SEARCH & COMPLETE DIRECTORY ===================== */}
+        {activeTab === "ALL_LEADS" && (
+          <div className="space-y-4">
+            <div className="px-1">
+              <h2 className="text-base font-bold text-[#11241C]">Recherche & Registre Complet</h2>
+              <p className="text-xs text-[#697871]">Filtrer tous vos chauffeurs enregistrés</p>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#697871] absolute left-3.5 top-3.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher par nom, téléphone, ville..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white border border-[#E5ECE7] text-xs text-[#151E19] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3.5 top-3.5 text-xs text-[#697871] hover:text-[#151E19]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* City Filter Pills */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+              <button
+                onClick={() => setSelectedCity("ALL")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                  selectedCity === "ALL"
+                    ? "bg-[#0E382B] text-white font-semibold"
+                    : "bg-white text-[#697871] border border-[#E5ECE7]"
+                }`}
+              >
+                Toutes les villes
+              </button>
+              {MOROCCAN_CITIES.slice(0, 6).map((city) => (
+                <button
+                  key={city}
+                  onClick={() => setSelectedCity(city)}
+                  className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                    selectedCity === city
+                      ? "bg-[#0E382B] text-white font-semibold"
+                      : "bg-white text-[#697871] border border-[#E5ECE7]"
+                  }`}
+                >
+                  {city}
+                </button>
+              ))}
+            </div>
+
+            {/* Results count */}
+            <p className="text-xs text-[#697871] px-1 font-medium">
+              Affichage de {filteredLeads.length} chauffeur(s)
+            </p>
+
+            {/* Results list */}
+            <div className="space-y-2.5">
+              {filteredLeads.map((lead) => (
+                <div
+                  key={lead.id}
+                  onClick={() => setSelectedLead(lead)}
+                  className="p-4 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 transition-all cursor-pointer flex items-center justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#11241C] truncate">{lead.name}</p>
+                    <p className="text-xs text-[#697871] mt-0.5">
+                      {lead.phone} • {lead.city || "Maroc"}
+                    </p>
+                    <span
+                      className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        lead.isConverted
+                          ? "bg-[#D8EEDF] text-[#0E382B]"
+                          : lead.status === "PENDING"
+                          ? "bg-[#FEF3C7] text-[#92400E]"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {lead.statusLabel}
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span
+                      className={`text-sm font-extrabold block ${
+                        lead.isConverted ? "text-[#0E382B]" : "text-[#697871]"
+                      }`}
+                    >
+                      {lead.isConverted ? "+150.00 DH" : "0.00 DH"}
+                    </span>
+                    <span className="text-[10px] text-[#697871]">
+                      {new Date(lead.createdAt).toLocaleDateString("fr-FR")}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== FLOATING FINTECH BOTTOM DOCK ===================== */}
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-md bg-white/95 backdrop-blur-md border border-[#E5ECE7] rounded-full p-2 shadow-2xl flex items-center justify-between z-30 ring-1 ring-black/5">
+          {/* Home Nav */}
+          <button
+            onClick={() => setActiveTab("HOME")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
+              activeTab === "HOME" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Wallet className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Accueil</span>
+          </button>
+
+          {/* Analytics Nav */}
+          <button
+            onClick={() => setActiveTab("ANALYTICS")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
+              activeTab === "ANALYTICS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <PieChart className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Stats</span>
+          </button>
+
+          {/* Central Floating Action: Add Lead (Large Emerald Button) */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="w-13 h-13 -my-3 rounded-full bg-[#0E382B] text-white flex items-center justify-center shadow-lg shadow-[#0E382B]/30 hover:scale-105 active:scale-95 transition-all ring-4 ring-white"
+          >
+            <Plus className="w-6 h-6 stroke-[3]" />
+          </button>
+
+          {/* Directory Nav */}
+          <button
+            onClick={() => setActiveTab("ALL_LEADS")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
+              activeTab === "ALL_LEADS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Dossiers</span>
+          </button>
+
+          {/* WhatsApp Direct Nav */}
+          <a
+            href="https://wa.me/212645398932?text=Salam%20GoCab%2C%20c%27est%20Zakaria."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex flex-col items-center py-1 rounded-full text-[#697871] hover:text-[#0E382B] transition-all"
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Contact</span>
+          </a>
+        </div>
+
+        {/* ===================== MODAL: AJOUT CHAUFFEUR RAPIDE ===================== */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E5ECE7]">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-full bg-[#D8EEDF] text-[#0E382B] flex items-center justify-center font-bold">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#11241C]">Nouveau Chauffeur</h3>
+                    <p className="text-xs text-[#697871]">Éligible à +150 DH de commission</p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowAddForm(false)}
-                  className="text-xs font-bold text-slate-400 hover:text-white px-2 py-1 rounded-lg"
+                  onClick={() => setShowAddModal(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
                 >
-                  ✕ Fermer
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleAddLead} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Nom et Prénom du Chauffeur <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Youssef El Amrani"
-                      value={driverName}
-                      onChange={(e) => setDriverName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Téléphone WhatsApp Marocain <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="Ex: 06 61 23 45 67 ou +2126..."
-                      value={driverPhone}
-                      onChange={(e) => setDriverPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all font-mono"
-                    />
-                  </div>
+              <form onSubmit={handleAddLead} className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#11241C] mb-1">
+                    Nom Complet du Chauffeur *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={driverName}
+                    onChange={(e) => setDriverName(e.target.value)}
+                    placeholder="Ex: Mohamed Alami"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#D1D5DB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#11241C] mb-1">
+                    Numéro de Téléphone WhatsApp *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={driverPhone}
+                    onChange={(e) => setDriverPhone(e.target.value)}
+                    placeholder="06 12 34 56 78 ou +212..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#D1D5DB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+                  />
+                  <p className="text-[11px] text-[#697871] mt-1">Format marocain supporté (06/07/+212)</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Ville Souhaitée
-                    </label>
+                    <label className="block text-xs font-semibold text-[#11241C] mb-1">Ville</label>
                     <select
                       value={driverCity}
                       onChange={(e) => setDriverCity(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                      className="w-full px-3 py-2.5 rounded-xl border border-[#D1D5DB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0E382B] bg-white"
                     >
                       {MOROCCAN_CITIES.map((c) => (
-                        <option key={c} value={c} className="bg-slate-900 text-white">
+                        <option key={c} value={c}>
                           {c}
                         </option>
                       ))}
@@ -307,324 +919,160 @@ export default function PartnerPortalPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Objectif du Chauffeur
-                    </label>
+                    <label className="block text-xs font-semibold text-[#11241C] mb-1">Intention Chauffeur</label>
                     <select
                       value={driverIntention}
                       onChange={(e) => setDriverIntention(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                      className="w-full px-3 py-2.5 rounded-xl border border-[#D1D5DB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0E382B] bg-white"
                     >
-                      <option value="Prendre une voiture immédiatement">Prendre une voiture immédiatement</option>
-                      <option value="Verser une précommande (Réservation)">Verser une précommande (Réservation)</option>
-                      <option value="Renseignement & Intégration">Renseignement & Intégration</option>
+                      <option value="Prendre une voiture immédiatement">Prendre voiture direct</option>
+                      <option value="Déposer un acompte précommande">Verser acompte</option>
+                      <option value="Information & Session formation">Intéressé formation</option>
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    Remarques / Disponibilité (Optionnel)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Permis depuis 4 ans, disponible de suite, prêt pour caution"
+                  <label className="block text-xs font-semibold text-[#11241C] mb-1">Remarques ou détails (Optionnel)</label>
+                  <textarea
+                    rows={2}
                     value={driverNotes}
                     onChange={(e) => setDriverNotes(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                    placeholder="Ex: Permis B depuis 5 ans, disponible de suite pour récupérer le véhicule..."
+                    className="w-full px-4 py-2 rounded-xl border border-[#D1D5DB] text-sm focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
                   />
                 </div>
 
-                <div className="flex items-center justify-between pt-2">
-                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Dès que l&apos;onboarding confirme la prise de véhicule ou la précommande, vous gagnez 150 DH.</span>
-                  </div>
+                {/* Commission Guarantee Banner */}
+                <div className="p-3.5 rounded-2xl bg-[#E8F4EC] border border-[#CDE5D4] text-xs text-[#0E382B] flex items-center space-x-2.5">
+                  <Coins className="w-5 h-5 shrink-0 text-[#0E382B]" />
+                  <p>
+                    <span className="font-bold">Garantie 150 DH :</span> Dès que l'agent GoCab valide l'affectation du
+                    véhicule ou le versement de l'acompte, la commission s'ajoute immédiatement à votre solde.
+                  </p>
+                </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddForm(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      {submitting ? "Transmission en cours..." : "Confirmer l'Envoi Chauffeur"}
-                    </button>
-                  </div>
+                {/* Form Buttons */}
+                <div className="flex items-center space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 py-3 rounded-xl border border-[#D1D5DB] text-sm font-semibold text-[#697871] hover:bg-slate-50 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 py-3 rounded-xl bg-[#0E382B] hover:bg-[#114232] text-white text-sm font-bold shadow-md hover:shadow-lg active:scale-98 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Envoi à GoCab...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Transmettre (+150 DH)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </form>
             </div>
-          )}
-
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Card 1: Total Commission Validated */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/80 to-slate-900 border border-emerald-500/30 shadow-lg relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                  Commissions Gagnées
-                </span>
-                <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-                  <Coins className="w-5 h-5" />
-                </span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {data ? `${data.totalCommissionEarnedMAD} DH` : "—"}
-              </div>
-              <p className="text-[11px] text-emerald-400/90 font-semibold mt-1">
-                {data?.convertedLeads || 0} chauffeur{(data?.convertedLeads || 0) > 1 ? "s" : ""} validé{(data?.convertedLeads || 0) > 1 ? "s" : ""} × 150 DH
-              </p>
-            </div>
-
-            {/* Card 2: Converted Drivers */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Voiture ou Précommande
-                </span>
-                <span className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
-                  <CheckCircle2 className="w-5 h-5" />
-                </span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {data?.convertedLeads || 0}
-              </div>
-              <p className="text-[11px] text-slate-400 font-semibold mt-1">
-                Contrats confirmés par GoCab
-              </p>
-            </div>
-
-            {/* Card 3: In Progress Leads */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Dossiers En Cours
-                </span>
-                <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-                  <Clock className="w-5 h-5" />
-                </span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">
-                {data?.pendingLeads || 0}
-              </div>
-              <p className="text-[11px] text-slate-400 font-semibold mt-1">
-                Gain potentiel : +{data?.potentialPendingCommissionMAD || 0} DH
-              </p>
-            </div>
-
-            {/* Card 4: Total Repertoire */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Total Transmis
-                </span>
-                <span className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-                  <Users className="w-5 h-5" />
-                </span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {data?.totalLeads || 0}
-              </div>
-              <p className="text-[11px] text-slate-400 font-semibold mt-1">
-                Taux de conversion : {data?.conversionRatePct || 0}%
-              </p>
-            </div>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* Main Content: Driver Ledger */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-8">
-        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl">
-          {/* Header & Filter Controls */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
-            <div>
-              <h3 className="text-lg font-black text-white">
-                Suivi Détaillé des Chauffeurs Recommandés
-              </h3>
-              <p className="text-xs text-slate-400">
-                Statuts actualisés en temps réel par les agents d&apos;onboarding et la flotte.
-              </p>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Rechercher nom, ville, tél..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-1.5 sm:gap-2 pt-4 pb-4 overflow-x-auto scrollbar-none text-xs">
-            <button
-              onClick={() => setFilterTab("ALL")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
-                filterTab === "ALL"
-                  ? "bg-amber-500 text-slate-950 shadow-xs"
-                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              Tous ({data?.totalLeads || 0})
-            </button>
-            <button
-              onClick={() => setFilterTab("VALIDATED")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
-                filterTab === "VALIDATED"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              ✅ Validés (+150 DH) ({data?.convertedLeads || 0})
-            </button>
-            <button
-              onClick={() => setFilterTab("PENDING")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
-                filterTab === "PENDING"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              ⏳ En cours ({data?.pendingLeads || 0})
-            </button>
-            <button
-              onClick={() => setFilterTab("LOST")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
-                filterTab === "LOST"
-                  ? "bg-rose-600/80 text-white shadow-xs"
-                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              ❌ Non convertis ({data?.lostLeads || 0})
-            </button>
-          </div>
-
-          {/* Driver List */}
-          {loading ? (
-            <div className="py-16 text-center text-slate-400 space-y-3">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-amber-500" />
-              <p className="text-sm font-semibold">Chargement de votre portefeuille...</p>
-            </div>
-          ) : filteredLeads.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 space-y-3 bg-slate-950/40 rounded-2xl border border-slate-800/50 my-2">
-              <Users className="w-10 h-10 mx-auto text-slate-600" />
-              <h4 className="text-sm font-bold text-slate-300">Aucun chauffeur trouvé</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                {searchQuery
-                  ? "Aucun résultat ne correspond à votre recherche."
-                  : "Vous n'avez pas encore de chauffeur dans cette catégorie. Cliquez sur le bouton ci-dessus pour en ajouter un !"}
-              </p>
-              {!searchQuery && (
-                <button
-                  onClick={() => setShowAddForm(true)}
-                  className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
-                >
-                  + Ajouter mon premier chauffeur
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3 pt-2">
-              {filteredLeads.map((lead) => (
-                <div
-                  key={lead.id}
-                  className={`p-4 rounded-2xl border transition-all ${
-                    lead.isConverted
-                      ? "bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border-emerald-500/40 shadow-sm"
-                      : lead.status === "LOST"
-                      ? "bg-slate-950/40 border-slate-800/60 opacity-75"
-                      : "bg-slate-950/70 border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {/* Left: Driver Identity */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-extrabold text-white">
-                          {lead.name}
-                        </span>
-                        <span className="text-xs font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md">
-                          {lead.phone}
-                        </span>
-                        <span className="text-xs text-slate-400 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-500" />
-                          {lead.city}
-                        </span>
-                      </div>
-
-                      {/* Notes / Details */}
-                      {lead.notes && (
-                        <p className="text-xs text-slate-400 italic">
-                          &ldquo;{lead.notes}&rdquo;
-                        </p>
-                      )}
-
-                      <div className="text-[11px] text-slate-500 flex items-center gap-2 pt-0.5">
-                        <Calendar className="w-3 h-3" />
-                        <span>Transmis le {new Date(lead.createdAt).toLocaleDateString("fr-FR")}</span>
-                      </div>
-                    </div>
-
-                    {/* Right: CRM Stage & Commission Badge */}
-                    <div className="flex items-center gap-3 sm:self-center shrink-0">
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-slate-300">
-                          {lead.statusLabel}
-                        </div>
-                      </div>
-
-                      {/* Big Commission Outcome Badge */}
-                      {lead.isConverted ? (
-                        <div className="px-3.5 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-md flex items-center gap-1.5 font-black text-xs">
-                          <Coins className="w-4 h-4 text-amber-400" />
-                          <span>+150 DH GAGNÉ</span>
-                        </div>
-                      ) : lead.status === "LOST" ? (
-                        <div className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">
-                          Non éligible
-                        </div>
-                      ) : (
-                        <div className="px-3 py-1.5 rounded-xl bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-bold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-blue-400" />
-                          <span>150 DH En cours</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+        {/* ===================== MODAL / DRAWER: DETAIL DU DOSSIER ===================== */}
+        {selectedLead && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E5ECE7]">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#697871] uppercase tracking-wider">
+                    Fiche Chauffeur
+                  </span>
+                  <h3 className="text-lg font-bold text-[#11241C]">{selectedLead.name}</h3>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
+                <button
+                  onClick={() => setSelectedLead(null)}
+                  className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-      {/* Footer & Partner Support WhatsApp */}
-      <footer className="border-t border-slate-800 bg-slate-950 px-4 sm:px-8 py-6 text-center text-xs text-slate-500 space-y-2">
-        <div className="flex items-center justify-center gap-4 flex-wrap">
-          <span className="font-semibold text-slate-400">Besoin d&apos;un renseignement sur vos virements de commission ?</span>
-          <a
-            href="https://wa.me/212662145109?text=Bonjour%20GoCab,%20je%20suis%20Zakaria,%20apporteur%20d%27affaires."
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all font-bold"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>Contacter GoCab WhatsApp (+212 6 62 14 51 09)</span>
-          </a>
-        </div>
-        <p>GoCab Technologies Maroc © 2026 — Plateforme Sécurisée Partenaires & Apporteurs d&apos;Affaires</p>
-      </footer>
+              {/* Commission status card */}
+              <div
+                className={`p-4 rounded-2xl border ${
+                  selectedLead.isConverted
+                    ? "bg-[#D8EEDF]/40 border-[#A3D9B5]"
+                    : selectedLead.status === "PENDING"
+                    ? "bg-[#FEF3C7]/40 border-[#FDE68A]"
+                    : "bg-slate-50 border-slate-200"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#697871]">Statut Commission</span>
+                  <span
+                    className={`text-base font-extrabold ${
+                      selectedLead.isConverted ? "text-[#0E382B]" : "text-amber-800"
+                    }`}
+                  >
+                    {selectedLead.isConverted ? "+150.00 DH Validé" : "⏳ 150 DH en cours"}
+                  </span>
+                </div>
+                <p className="text-xs text-[#11241C] font-medium mt-1">{selectedLead.statusLabel}</p>
+              </div>
+
+              {/* Driver attributes */}
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-[#697871]">Téléphone</span>
+                  <a
+                    href={`https://wa.me/${selectedLead.phone.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-[#0E382B] flex items-center gap-1 hover:underline"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    {selectedLead.phone}
+                  </a>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-[#697871]">Ville</span>
+                  <span className="font-semibold text-[#11241C]">{selectedLead.city || "Maroc"}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-[#697871]">Date d'enregistrement</span>
+                  <span className="font-semibold text-[#11241C]">
+                    {new Date(selectedLead.createdAt).toLocaleString("fr-FR", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+                {selectedLead.notes && (
+                  <div className="py-1.5">
+                    <span className="text-[#697871] block mb-0.5">Notes :</span>
+                    <p className="p-2.5 rounded-xl bg-slate-50 text-slate-700 italic border border-slate-100">
+                      {selectedLead.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setSelectedLead(null)}
+                className="w-full py-2.5 rounded-xl bg-[#0E382B] text-white text-xs font-bold hover:bg-[#114232] transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
