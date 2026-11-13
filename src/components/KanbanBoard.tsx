@@ -1089,22 +1089,15 @@ export default function KanbanBoard() {
     // Helper: Match training leads to the current trainingDateFilter
     const isLeadStatusMatchingTrainingFilter = (l: Lead, filter: string): boolean => {
       if (!filter || filter === "ALL") return true;
-      if (filter === "TODAY") {
-        if (isStatusChangedToday(l)) return true;
-        if (l.reminder_date && isScheduledDateToday(l.reminder_date)) return true;
-        return false;
+
+      // If the lead has a scheduled training date (reminder_date), it is authoritative:
+      // it MUST match the filter date strictly and never match today if scheduled for another day.
+      if (l.reminder_date) {
+        return matchesDate(l.reminder_date, filter);
       }
-      if (filter === "TOMORROW") {
-        if (l.reminder_date && matchesDate(l.reminder_date, "TOMORROW")) return true;
-        if (l.status_changed_at && matchesDate(l.status_changed_at, "TOMORROW")) return true;
-        if ((l as any).updated_at && matchesDate((l as any).updated_at, "TOMORROW")) return true;
-        return false;
-      }
-      // Specific date (YYYY-MM-DD or fr-FR DD/MM/YYYY)
+
+      // If no reminder_date is set, fallback only if status_changed_at matches the filter
       if (l.status_changed_at && matchesDate(l.status_changed_at, filter)) return true;
-      if ((l as any).updated_at && matchesDate((l as any).updated_at, filter)) return true;
-      if (l.reminder_date && matchesDate(l.reminder_date, filter)) return true;
-      if ((l as any).created_at && matchesDate((l as any).created_at, filter)) return true;
       return false;
     };
 
@@ -1221,7 +1214,7 @@ export default function KanbanBoard() {
             (l.brand_status || "").toLowerCase() === "training fixed";
           if (!isMatch) return false;
           if (isSearching || l.id === activeDragId) return true;
-          return isLeadStatusMatchingTrainingFilter(l, trainingDateFilter);
+          return isLeadTrainingDateMatch(l, trainingDateFilter);
         });
       }
 
