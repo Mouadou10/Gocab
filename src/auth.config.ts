@@ -22,16 +22,19 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon") ||
         pathname.startsWith("/field-missions") ||
-        pathname.startsWith("/confirm-fleet-accident");
+        pathname.startsWith("/confirm-fleet-accident") ||
+        pathname.startsWith("/zakaria") ||
+        pathname.startsWith("/partenaire") ||
+        pathname.startsWith("/api/partners");
 
       if (isPublic) return true;
 
-      // Ensure we redirect strictly using the host the user actually visited (e.g. gocab-iota.vercel.app)
+      // Ensure we redirect strictly using the host the user actually visited (e.g. gocab-psi.vercel.app)
       // Never use internal or stale Vercel deployment hashes
       const rawHost =
         request.headers.get("x-forwarded-host") ||
         request.headers.get("host") ||
-        "gocab-iota.vercel.app";
+        "gocab-psi.vercel.app";
       const host = rawHost.split(",")[0].trim();
       const proto =
         request.headers.get("x-forwarded-proto") ||
