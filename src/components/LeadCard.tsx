@@ -40,6 +40,8 @@ interface Lead {
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
   handled_by?: string | null;
+  referrer_name?: string | null;
+  referrer_phone?: string | null;
   national_blacklist_match?: any | null;
   notes?: string | null;
   whatsapp_invite_sent?: boolean;
@@ -418,6 +420,33 @@ function LeadCardComponent({
             return null;
           })()}
         </div>
+
+        {/* Referrer / Third-party Partner Badge (e.g. Zakaria) */}
+        {(() => {
+          const referrer = lead.referrer_name || (lead.campaign_source && lead.campaign_source.toLowerCase().includes("zakaria") ? "Zakaria" : null);
+          if (!referrer) return null;
+          const isConverted =
+            lead.board_column === "VEHICLE_ASSIGNMENT" ||
+            (lead.training_status || "").toLowerCase() === "assign vehicle" ||
+            (lead.training_status || "").toLowerCase() === "accept offer" ||
+            (lead.training_status || "").toLowerCase() === "preorder" ||
+            (typeof lead.preorder_amount === "number" && lead.preorder_amount > 0);
+          return (
+            <div className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${
+              isConverted
+                ? "bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs"
+                : "bg-purple-50 text-purple-800 border-purple-200/80"
+            }`}>
+              <span>🤝</span>
+              <span>{referrer}</span>
+              <span className={`px-1 py-0.2 rounded text-[9px] font-black ${
+                isConverted ? "bg-emerald-200 text-emerald-900" : "bg-purple-200 text-purple-900"
+              }`}>
+                {isConverted ? "+150 DH Validé ✓" : "150 DH en cours"}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* KYC indicator for training phase or if any doc checked */}
         {(lead.board_column === "TRAINING_PIPELINE" ||

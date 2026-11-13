@@ -54,6 +54,9 @@ export async function PATCH(
       whatsapp_invite_sent_at?: Date | null;
       notes?: string | null;
       handled_by?: string | null;
+      referrer_name?: string | null;
+      referrer_phone?: string | null;
+      campaign_source?: string;
     } = {};
 
     if (body.raw_name || body.name) {
@@ -125,6 +128,15 @@ export async function PATCH(
     }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
+    }
+    if (body.referrer_name !== undefined) {
+      updateData.referrer_name = body.referrer_name ? body.referrer_name.trim() : null;
+    }
+    if (body.referrer_phone !== undefined) {
+      updateData.referrer_phone = body.referrer_phone ? body.referrer_phone.trim() : null;
+    }
+    if (body.campaign_source) {
+      updateData.campaign_source = body.campaign_source;
     }
     const validBodyHandledBy =
       body.handled_by && body.handled_by.trim() !== "" && body.handled_by.trim().toLowerCase() !== "agent"

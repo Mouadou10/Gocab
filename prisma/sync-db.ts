@@ -84,6 +84,8 @@ async function syncSchema() {
       "ALTER TABLE Lead ADD COLUMN presence_confirmed_at DATETIME",
       "ALTER TABLE Lead ADD COLUMN whatsapp_invite_sent BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE Lead ADD COLUMN whatsapp_invite_sent_at DATETIME",
+      "ALTER TABLE Lead ADD COLUMN referrer_name TEXT",
+      "ALTER TABLE Lead ADD COLUMN referrer_phone TEXT",
       "ALTER TABLE Vehicle ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE MaintenanceTicket ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE MaintenanceTicket ADD COLUMN started_at DATETIME",

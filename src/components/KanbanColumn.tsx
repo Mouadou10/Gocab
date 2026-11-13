@@ -37,6 +37,8 @@ interface Lead {
   presence_confirmed_at?: string | null;
   whatsapp_invite_sent?: boolean;
   whatsapp_invite_sent_at?: string | null;
+  referrer_name?: string | null;
+  referrer_phone?: string | null;
   notes?: string | null;
 }
 

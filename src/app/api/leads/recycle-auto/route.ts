@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { autoRecycleDueLeads } from "@/lib/services/leadRecyclingService";
+import { touchSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ export async function POST(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const force = searchParams.get("force") === "true";
     const result = await autoRecycleDueLeads(force);
+    if (result.totalRecycled > 0) {
+      await touchSyncState("leads");
+    }
     return NextResponse.json({
       success: true,
       ...result,

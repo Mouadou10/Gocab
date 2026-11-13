@@ -13,6 +13,7 @@
 - [`MEM-2026-11-03-006`](#mem-2026-11-03-006-bulk-balance-spreadsheet-upload-timeout--connection-error): Bulk Balance Spreadsheet Upload Timeout & Connection Error
 - [`MEM-2026-11-03-008`](#mem-2026-11-03-008-training-fixed-pipeline-invariance--stale-override-elimination): Training Fixed Pipeline Invariance & Stale Override Elimination
 - [`MEM-2026-11-03-009`](#mem-2026-11-03-009-sqlite_corrupt-disk-image-malformed-recovery--balance-upload-resilience): SQLite Corrupt Disk Image Recovery & Balance Upload Resilience
+- [`MEM-2026-11-13-011`](#mem-2026-11-13-011-third-party-partner-referral-program--150-mad-commission-tracking-zakaria): Third-Party Partner Referral Program & 150 MAD Commission Tracking (Zakaria)
 
 ---
 
@@ -208,6 +209,27 @@
 - **Anti-Regression Guardrail**:
   - Downstream onboarding updates (`presence_confirmed`, `training_status`, `notes`, `KYC`) must never alter `status_changed_at`.
   - Acquisition training fixed conversions are cumulative and invariant to subsequent training attendance.
+
+---
+
+### MEM-2026-11-13-011: Third-Party Partner Referral Program & 150 MAD Commission Tracking (Zakaria)
+- **Date**: 2026-11-13
+- **Layer**: Full-Stack Architecture (Database, Backend Service, REST APIs, CRM UI, External Portal)
+- **Symptom**:
+  GoCab engaged a third-party introducer (Zakaria) who refers driver candidates to take a car or deposit a preorder, with a guaranteed commission of 150 MAD per converted driver. The CRM needed an internal tagging mechanism, an external dedicated portal for Zakaria to submit leads and track conversions in real-time, and zero latency between CRM agent onboarding confirmations and Zakaria's commission ledger.
+- **Root Cause / Architecture Need**:
+  1. Leads schema lacked explicit `referrer_name` and `referrer_phone` columns.
+  2. No unified service existed to evaluate partner commission rules idempotently (driver takes car via `VEHICLE_ASSIGNMENT` / `Assign vehicle` OR deposits preorder via `Preorder` / `preorder_amount > 0`).
+  3. External partners required an isolated, branded, mobile-first dashboard without exposing full CRM administrative controls.
+- **Applied Solution**:
+  1. Updated `prisma/schema.prisma` adding `referrer_name` and `referrer_phone` to `model Lead`, synced schema via Turso migration.
+  2. Built `src/lib/services/partnerCommissionService.ts` containing `evaluateLeadCommission` and `getPartnerSummary` enforcing strict non-double-counting 150 MAD rules.
+  3. Created REST APIs `GET /api/partners/[slug]`, `POST /api/partners/[slug]/leads`, and updated `PATCH /api/leads/[id]`.
+  4. Built mobile-first partner portal at `/partenaire/[slug]` and `/zakaria` featuring KPI summary cards, Moroccan phone formatting, live filterable driver ledger, and WhatsApp quick-help.
+  5. Enhanced internal CRM with "Apporteur - Zakaria" source tag, Kanban badges (`🤝 Zakaria 150 DH` / `+150 DH Validé ✓`), and dynamic drawer commission cards.
+- **Anti-Regression Guardrail**:
+  - Commission logic is tested via `tests/partner-commission.test.ts`. Double-counting is prohibited: a candidate depositing a preorder and subsequently taking a vehicle earns exactly 150 MAD.
+  - Non-destructive idempotent GET routes standard strictly enforced across all partner endpoints.
 
 ---
 

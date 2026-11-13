@@ -125,6 +125,8 @@ export async function POST(request: Request) {
       training_status,
       reminder_date,
       preorder_amount,
+      referrer_name,
+      referrer_phone,
     } = body;
 
     if (!name || !name.trim()) {
@@ -210,6 +212,8 @@ export async function POST(request: Request) {
         has_fiche_anthropometrique: Boolean(has_fiche_anthropometrique),
         has_confirmation_adresse: Boolean(has_confirmation_adresse),
         handled_by: body.handled_by || null,
+        referrer_name: referrer_name ? referrer_name.trim() : (campaign_source && campaign_source.toLowerCase().includes("zakaria") ? "Zakaria" : null),
+        referrer_phone: referrer_phone ? referrer_phone.trim() : null,
         status_changed_at: (brand_status || training_status || board_column !== "NEW_LEADS") ? new Date() : null,
       },
     });

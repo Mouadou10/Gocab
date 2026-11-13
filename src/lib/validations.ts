@@ -32,6 +32,8 @@ export const LeadCreateSchema = z.object({
   has_fiche_anthropometrique: z.boolean().default(false),
   has_confirmation_adresse: z.boolean().default(false),
   handled_by: z.string().optional().nullable(),
+  referrer_name: z.string().optional().nullable(),
+  referrer_phone: z.string().optional().nullable(),
 });
 
 export const LeadUpdateSchema = z.object({
@@ -39,6 +41,7 @@ export const LeadUpdateSchema = z.object({
   name: z.string().trim().min(2).optional(),
   sanitized_phone: z.string().optional(),
   phone: z.string().optional(),
+  campaign_source: z.string().optional().nullable(),
   board_column: z.string().optional(),
   brand_status: z.string().optional().nullable(),
   training_status: z.string().optional().nullable(),
@@ -51,6 +54,8 @@ export const LeadUpdateSchema = z.object({
   has_permis: z.boolean().optional(),
   notes: z.string().optional().nullable(),
   handled_by: z.string().optional().nullable(),
+  referrer_name: z.string().optional().nullable(),
+  referrer_phone: z.string().optional().nullable(),
   assigned_vehicle_id: z.string().optional().nullable(),
   is_recalled: z.boolean().optional(),
   mark_as_called: z.boolean().optional(),

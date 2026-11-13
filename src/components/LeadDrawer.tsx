@@ -84,6 +84,8 @@ interface Lead {
   updated_at?: string;
   status_changed_at?: string | null;
   handled_by?: string | null;
+  referrer_name?: string | null;
+  referrer_phone?: string | null;
   notes?: string | null;
   presence_confirmed?: boolean;
   presence_confirmed_at?: string | null;
@@ -159,6 +161,9 @@ export default function LeadDrawer({
   );
   const [preorderAmount, setPreorderAmount] = useState<string>(
     lead.preorder_amount !== null ? String(lead.preorder_amount) : ""
+  );
+  const [referrerName, setReferrerName] = useState<string>(
+    lead.referrer_name || (lead.campaign_source && lead.campaign_source.toLowerCase().includes("zakaria") ? "Zakaria" : "")
   );
 
   const [recallDate, setRecallDate] = useState(() => {
@@ -326,6 +331,7 @@ export default function LeadDrawer({
         sanitized_phone: phone.trim(),
         city: city || null,
         notes: notes || null,
+        referrer_name: referrerName ? referrerName.trim() : null,
       };
 
       if (
@@ -685,6 +691,69 @@ export default function LeadDrawer({
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 text-xs text-gray-600 space-y-2">
             <p><span className="font-semibold text-gray-800">Source:</span> {lead.campaign_source}</p>
             <p><span className="font-semibold text-gray-800">Created At:</span> {new Date(lead.created_at).toLocaleString()}</p>
+          </div>
+
+          {/* Third-Party Partner / Apporteur Card (e.g. Zakaria) */}
+          <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                <span>🤝</span>
+                <span>Apporteur d&apos;Affaires / Tiers</span>
+              </label>
+              <span className="text-[10px] font-extrabold px-2 py-0.5 bg-purple-200 text-purple-900 rounded-full">
+                150 DH / Véhicule ou Précommande
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Nom de l'apporteur (ex: Zakaria)..."
+                value={referrerName}
+                onChange={(e) => setReferrerName(e.target.value)}
+                className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              />
+              {referrerName && (
+                <button
+                  type="button"
+                  onClick={() => setReferrerName("")}
+                  className="text-xs text-purple-500 hover:text-red-600 font-bold px-2 py-1 cursor-pointer"
+                  title="Supprimer l'apporteur"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {referrerName && (
+              <div className="pt-1">
+                {(() => {
+                  const isConverted =
+                    boardType === "training"
+                      ? trainingStatus === "Assign vehicle" ||
+                        trainingStatus === "Accept offer" ||
+                        trainingStatus === "Preorder" ||
+                        (preorderAmount && parseFloat(preorderAmount) > 0)
+                      : lead.board_column === "VEHICLE_ASSIGNMENT" ||
+                        (lead.training_status || "").toLowerCase() === "assign vehicle" ||
+                        (lead.training_status || "").toLowerCase() === "accept offer" ||
+                        (lead.training_status || "").toLowerCase() === "preorder" ||
+                        (typeof lead.preorder_amount === "number" && lead.preorder_amount > 0);
+                  return (
+                    <div className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                      isConverted
+                        ? "bg-emerald-100/90 text-emerald-900 border border-emerald-300"
+                        : "bg-amber-100/80 text-amber-900 border border-amber-200"
+                    }`}>
+                      <span>{isConverted ? "🎉" : "⏳"}</span>
+                      <span>
+                        {isConverted
+                          ? `Commission de 150 DH VALIDÉE pour ${referrerName} ! (Véhicule assigné ou précommande versée).`
+                          : `En cours. Dès validation de prise de voiture ou précommande, 150 DH seront crédités pour ${referrerName}.`}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* City Selector */}

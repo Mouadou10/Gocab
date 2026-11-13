@@ -32,6 +32,8 @@ const CAMPAIGN_SOURCES = [
   "Instagram Lead",
   "TikTok Ads",
   "Driver Referral",
+  "Apporteur - Zakaria",
+  "Apporteur d'Affaires (Tiers)",
   "Manual Entry",
 ] as const;
 
@@ -80,6 +82,7 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("Casablanca");
   const [campaignSource, setCampaignSource] = useState("Direct Phone Call");
+  const [referrerName, setReferrerName] = useState("Zakaria");
   const [age, setAge] = useState<string>("25");
   const [permisSeniority, setPermisSeniority] = useState<string>("3");
   const [isResident, setIsResident] = useState<boolean>(true);
@@ -186,6 +189,9 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
           phone: phone.trim(),
           city,
           campaign_source: campaignSource,
+          referrer_name: campaignSource.includes("Apporteur") || campaignSource.includes("Zakaria")
+            ? (referrerName.trim() || "Zakaria")
+            : null,
           board_column: targetBoardColumn,
           brand_status: targetBrandStatus,
           training_status: targetTrainingStatus,
@@ -532,7 +538,12 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
               </label>
               <select
                 value={campaignSource}
-                onChange={(e) => setCampaignSource(e.target.value)}
+                onChange={(e) => {
+                  setCampaignSource(e.target.value);
+                  if (e.target.value.includes("Zakaria") && !referrerName) {
+                    setReferrerName("Zakaria");
+                  }
+                }}
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-navy/20 focus:border-navy transition-all outline-none"
               >
                 {CAMPAIGN_SOURCES.map((s) => (
@@ -543,6 +554,30 @@ export default function AddLeadModal({ isOpen, onClose, onLeadAdded, activeTab =
               </select>
             </div>
           </div>
+
+          {/* Conditional Partner / Referrer Name Input */}
+          {(campaignSource.includes("Apporteur") || campaignSource.includes("Zakaria")) && (
+            <div className="p-3 bg-purple-50/80 border border-purple-200/90 rounded-2xl animate-fade-in space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-purple-900">
+                  🤝 Nom de l&apos;Apporteur d&apos;Affaires (Tiers)
+                </label>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 bg-purple-200 text-purple-900 rounded-full">
+                  150 DH / Conversion
+                </span>
+              </div>
+              <input
+                type="text"
+                placeholder="Ex: Zakaria"
+                value={referrerName}
+                onChange={(e) => setReferrerName(e.target.value)}
+                className="w-full px-3.5 py-2 bg-white border border-purple-200 rounded-xl text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-purple-400 focus:border-purple-600 outline-none"
+              />
+              <p className="text-[11px] text-purple-700/90 leading-tight">
+                💡 Dès que ce chauffeur prend une voiture ou verse une précommande, la commission de <strong>150 DH</strong> sera automatiquement créditée sur le portail de {referrerName || "l'apporteur"}.
+              </p>
+            </div>
+          )}
 
           {/* KYC Documents Checklist */}
           <div className="space-y-2">

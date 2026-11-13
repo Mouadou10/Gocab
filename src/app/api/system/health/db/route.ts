@@ -6,8 +6,6 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const startTime = Date.now();
-  const testKey = `_health_check_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-  const testVal = `ok_${Date.now()}`;
 
   try {
     const isRemote = Boolean(
@@ -15,14 +13,48 @@ export async function GET() {
       (process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith("file:"))
     );
 
-    // 1. Verify read capability and count records
+    // 1. Verify read capability and count records (idempotent read-only)
     const [leadsCount, driversCount, vehiclesCount] = await Promise.all([
       prisma.lead.count(),
       prisma.driverProfile.count(),
       prisma.vehicle.count(),
     ]);
 
-    // 2. Verify transactional write, commit, read & cleanup
+    const latencyMs = Date.now() - startTime;
+
+    return NextResponse.json({
+      status: "healthy",
+      database: {
+        mode: isRemote ? "hosted_database" : "local_sqlite",
+        provider: "libsql",
+        latencyMs,
+        counts: {
+          leads: leadsCount,
+          drivers: driversCount,
+          vehicles: vehiclesCount,
+        },
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error("[HealthCheck /api/system/health/db] Failed:", err);
+    return NextResponse.json(
+      {
+        status: "unhealthy",
+        error: err?.message || String(err),
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST() {
+  const startTime = Date.now();
+  const testKey = `_health_check_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+  const testVal = `ok_${Date.now()}`;
+
+  try {
     let writeConfirmed = false;
     await prisma.$transaction(async (tx) => {
       await tx.setting.create({
@@ -40,7 +72,6 @@ export async function GET() {
         writeConfirmed = true;
       }
 
-      // Clean up test key
       await tx.setting.delete({
         where: { key: testKey },
       });
@@ -50,23 +81,11 @@ export async function GET() {
 
     return NextResponse.json({
       status: "healthy",
-      database: {
-        mode: isRemote ? "hosted_database" : "local_sqlite",
-        provider: "libsql",
-        latencyMs,
-        writeTransactionVerified: writeConfirmed,
-        counts: {
-          leads: leadsCount,
-          drivers: driversCount,
-          vehicles: vehiclesCount,
-        },
-      },
+      writeTransactionVerified: writeConfirmed,
+      latencyMs,
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error("[HealthCheck /api/system/health/db] Failed:", err);
-
-    // Clean up if dangling
     try {
       await prisma.setting.delete({ where: { key: testKey } });
     } catch {}
