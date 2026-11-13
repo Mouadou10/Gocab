@@ -2,7 +2,7 @@
  * Lead Recycling Service
  *
  * Implements automated pipeline recycling rules:
- * 1. "No response 1" & "No response 2" automatically return to NEW_LEADS after 24 hours.
+ * 1. "No response 1" automatically returns to NEW_LEADS after 24 hours ("No response 2" is excluded).
  * 2. "To Recall" automatically returns to NEW_LEADS on the day set for the call (or when scheduled time arrives).
  */
 
@@ -44,7 +44,7 @@ export async function autoRecycleDueLeads(force = false): Promise<RecycleResult>
     timeZone: "Africa/Casablanca",
   });
 
-  // Query candidate leads in either No response 1/2 or To Recall
+  // Query candidate leads in either No response 1 or To Recall
   const candidateLeads = await prisma.lead.findMany({
     where: {
       OR: [
@@ -52,11 +52,8 @@ export async function autoRecycleDueLeads(force = false): Promise<RecycleResult>
           brand_status: {
             in: [
               "No response 1",
-              "No response 2",
               "NO RESPONSE 1",
-              "NO RESPONSE 2",
               "no response 1",
-              "no response 2",
             ],
           },
         },
@@ -93,7 +90,7 @@ export async function autoRecycleDueLeads(force = false): Promise<RecycleResult>
     const status = (l.brand_status || "").trim().toLowerCase();
     const referenceTime = l.status_changed_at || l.updated_at || new Date(0);
 
-    if (status === "no response 1" || status === "no response 2") {
+    if (status === "no response 1") {
       // Must be at least 24 hours old since status change
       if (referenceTime.getTime() <= cutoff24h.getTime()) {
         eligibleNoResponse.push(l);

@@ -33,7 +33,7 @@ async function testRecycling() {
       },
     });
 
-    // Lead 2: No response 2 from 25h ago (SHOULD RECYCLE)
+    // Lead 2: No response 2 from 25h ago (SHOULD NOT RECYCLE - excluded per rule)
     await prisma.lead.create({
       data: {
         id: testId2,
@@ -86,11 +86,11 @@ async function testRecycling() {
       throw new Error("Lead 1 was not recycled!");
     }
 
-    // Verify Lead 2
+    // Verify Lead 2 (Must NOT be recycled)
     const l2 = await prisma.lead.findUnique({ where: { id: testId2 } });
     console.log("Lead 2 (No response 2):", l2?.board_column, l2?.brand_status);
-    if (l2?.board_column !== "NEW_LEADS" || l2?.brand_status !== null) {
-      throw new Error("Lead 2 was not recycled!");
+    if (l2?.board_column !== "BRAND_PRE_FILTER" || l2?.brand_status !== "No response 2") {
+      throw new Error("Lead 2 was incorrectly recycled!");
     }
 
     // Verify Lead 3

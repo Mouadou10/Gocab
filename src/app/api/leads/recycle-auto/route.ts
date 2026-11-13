@@ -4,7 +4,7 @@
  * GET /api/leads/recycle-auto
  *
  * Automatically recycles:
- * - "No response 1" and "No response 2" after 24 hours.
+ * - "No response 1" after 24 hours ("No response 2" is excluded).
  * - "To Recall" on the day set for the call.
  */
 

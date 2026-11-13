@@ -736,7 +736,7 @@ export default function LeadDrawer({
                     </option>
                   ))}
                 </select>
-                {(brandStatus === "No response 1" || brandStatus === "No response 2") && (
+                {brandStatus === "No response 1" && (
                   <p className="mt-1.5 text-2xs text-amber-700 bg-amber-50 border border-amber-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium">
                     <span>⏱️</span>
                     <span>Ce prospect retournera automatiquement dans <strong>New Leads</strong> après 24 heures.</span>

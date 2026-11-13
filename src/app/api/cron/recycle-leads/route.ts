@@ -3,7 +3,7 @@
  * GET /api/cron/recycle-leads
  *
  * Runs periodically to automatically return eligible leads back to NEW_LEADS:
- * - "No response 1" / "No response 2" after 24 hours.
+ * - "No response 1" after 24 hours ("No response 2" is excluded).
  * - "To Recall" on the day of the scheduled call.
  */
 
