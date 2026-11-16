@@ -72,7 +72,7 @@ export default function PartnerPortalPage() {
   const [showBalance, setShowBalance] = useState(true);
 
   // Filters & Search
-  const [filterCategory, setFilterCategory] = useState<"ALL" | "VALIDATED" | "PENDING" | "LOST">("ALL");
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "SHOWED_UP" | "VALIDATED" | "PENDING" | "LOST">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string>("ALL");
 
@@ -184,6 +184,7 @@ export default function PartnerPortalPage() {
   const filteredLeads = useMemo(() => {
     if (!data?.leads) return [];
     return data.leads.filter((l) => {
+      if (filterCategory === "SHOWED_UP" && !l.presenceConfirmed && l.stageBadgeColor !== "purple") return false;
       if (filterCategory === "VALIDATED" && !l.isConverted) return false;
       if (filterCategory === "PENDING" && l.status !== "PENDING") return false;
       if (filterCategory === "LOST" && l.status !== "LOST") return false;
@@ -448,6 +449,16 @@ export default function PartnerPortalPage() {
                 Tous ({data?.leads?.length || 0})
               </button>
               <button
+                onClick={() => setFilterCategory("SHOWED_UP")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  filterCategory === "SHOWED_UP"
+                    ? "bg-purple-800 text-white font-semibold shadow-xs"
+                    : "bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100"
+                }`}
+              >
+                <span>👤 Présents ({data?.showedUpLeads || 0})</span>
+              </button>
+              <button
                 onClick={() => setFilterCategory("VALIDATED")}
                 className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
                   filterCategory === "VALIDATED"
@@ -525,6 +536,8 @@ export default function PartnerPortalPage() {
                           className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
                             isValidated
                               ? "bg-[#D8EEDF] text-[#0E382B]"
+                              : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
+                              ? "bg-purple-100 text-purple-800 ring-1 ring-purple-200"
                               : isPending
                               ? "bg-[#FEF3C7] text-[#92400E]"
                               : "bg-[#F3F4F6] text-[#6B7280]"
@@ -536,6 +549,8 @@ export default function PartnerPortalPage() {
                             ) : (
                               <Coins className="w-5 h-5" />
                             )
+                          ) : lead.presenceConfirmed || lead.stageBadgeColor === "purple" ? (
+                            <Users className="w-5 h-5 text-purple-700" />
                           ) : isPending ? (
                             <Clock className="w-5 h-5" />
                           ) : (
@@ -555,11 +570,18 @@ export default function PartnerPortalPage() {
                             <span>{new Date(lead.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
                           </div>
                           {/* Status Pill */}
-                          <div className="mt-1">
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            {lead.presenceConfirmed && !isValidated && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                👤 Présent
+                              </span>
+                            )}
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                                 isValidated
                                   ? "bg-[#D8EEDF] text-[#0E382B]"
+                                  : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
+                                  ? "bg-purple-50 text-purple-900 border border-purple-100"
                                   : isPending
                                   ? "bg-[#FEF3C7] text-[#92400E]"
                                   : "bg-[#FEE2E2] text-[#991B1B]"
@@ -1039,6 +1061,18 @@ export default function PartnerPortalPage() {
                     <MessageCircle className="w-3.5 h-3.5" />
                     {selectedLead.phone}
                   </a>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-[#697871]">Présence au siège</span>
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                      selectedLead.presenceConfirmed
+                        ? "bg-purple-100 text-purple-800"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {selectedLead.presenceConfirmed ? "👤 Présent au siège" : "Non encore présenté"}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-slate-100">
                   <span className="text-[#697871]">Ville</span>

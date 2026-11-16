@@ -139,6 +139,26 @@ describe("Partner Commission Service (Zakaria 150 DH)", () => {
     assert.strictEqual(evalResult.isConverted, false);
   });
 
+  it("should evaluate lead with presence confirmed as showed up with purple badge", () => {
+    const lead = {
+      id: "test-presence",
+      raw_name: "Youssef Present",
+      sanitized_phone: "+212611223344",
+      board_column: "NEW_LEADS",
+      presence_confirmed: true,
+      presence_confirmed_at: new Date(),
+      training_status: null,
+      preorder_amount: null,
+      created_at: new Date(),
+    };
+
+    const evalResult = evaluateLeadCommission(lead);
+    assert.strictEqual(evalResult.presenceConfirmed, true);
+    assert.strictEqual(evalResult.stageBadgeColor, "purple");
+    assert.strictEqual(evalResult.status, "PENDING");
+    assert.match(evalResult.statusLabel, /Présent au siège/i);
+  });
+
   it("should test live DB persistence and partner summary calculation for Zakaria", async () => {
     const testPhone = "+212699990001";
     // Clean up if existed

@@ -53,6 +53,7 @@ import AddLeadModal from "./AddLeadModal";
 import PowerBiDashboardView from "./PowerBiDashboardView";
 import WhatsAppCrmView from "./WhatsAppCrmView";
 import AgentActivityModal from "./AgentActivityModal";
+import ZakariaOnboardingView from "./ZakariaOnboardingView";
 import GoCabLogo from "./GoCabLogo";
 import { useLanguage } from "@/context/LanguageContext";
 import { generateThankYouURL } from "@/lib/whatsapp";
@@ -90,15 +91,15 @@ interface Lead {
 
 // Default Role → tabs fallback
 const DEFAULT_ROLE_PERMISSIONS: Record<string, TabType[]> = {
-  LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
-  BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "whatsapp"],
-  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "drivers", "flagged-drivers", "whatsapp"],
+  LEAD_ACQUISITION_JR:   ["dashboard", "kpi-dashboard", "leads", "zakaria-onboarding", "drivers", "flagged-drivers", "whatsapp"],
+  BRAND_MANAGER:         ["dashboard", "kpi-dashboard", "leads", "zakaria-onboarding", "drivers", "flagged-drivers", "whatsapp"],
+  ONBOARDING_SPECIALIST: ["dashboard", "kpi-dashboard", "training", "zakaria-onboarding", "drivers", "flagged-drivers", "whatsapp"],
   FLEET_PERF_MANAGER:    ["dashboard", "kpi-dashboard", "leads", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "whatsapp"],
   FIELD_SUPERVISOR:      ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "field", "field-missions", "tickets", "whatsapp"],
   FINANCE_OFFICER:       ["dashboard", "kpi-dashboard", "drivers", "flagged-drivers", "vehicle-ops", "performance", "insurance", "whatsapp"],
   ASSURANCE:             ["insurance"],
-  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
-  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  OPS_MANAGER:           ["dashboard", "kpi-dashboard", "leads", "training", "zakaria-onboarding", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
+  ADMIN:                 ["dashboard", "kpi-dashboard", "leads", "training", "zakaria-onboarding", "drivers", "flagged-drivers", "fleet", "vehicle-ops", "tickets", "performance", "field", "field-missions", "insurance", "whatsapp", "settings"],
 };
 
 const DEFAULT_ROLE_LABELS: Record<string, string> = {
@@ -125,7 +126,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:                 "bg-red-100 text-red-700",
 };
 
-type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
+type TabType = "dashboard" | "kpi-dashboard" | "leads" | "training" | "zakaria-onboarding" | "drivers" | "flagged-drivers" | "fleet" | "vehicle-ops" | "tickets" | "performance" | "field" | "field-missions" | "insurance" | "whatsapp" | "settings";
 
 // Default Landing Page for each role on initial login
 const ROLE_DEFAULT_LANDING_TAB: Record<string, TabType> = {
@@ -381,7 +382,6 @@ export default function KanbanBoard() {
 
   // Filters
   const [filterCity, setFilterCity] = useState("");
-  const [filterSource, setFilterSource] = useState<string>("ALL");
   const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [trainingDateFilter, setTrainingDateFilter] = useState<string>("ALL");
@@ -392,19 +392,6 @@ export default function KanbanBoard() {
     }
     return new Date().toISOString().split("T")[0];
   });
-
-  // Distinct Campaign Sources sorted with MG4 at top
-  const campaignSources = useMemo(() => {
-    const set = new Set<string>();
-    for (const l of leads) {
-      if (l.campaign_source) set.add(l.campaign_source);
-    }
-    return Array.from(set).sort((a, b) => {
-      if (a.includes("MG4")) return -1;
-      if (b.includes("MG4")) return 1;
-      return a.localeCompare(b);
-    });
-  }, [leads]);
 
   const handleLeadsDateChange = (val: string) => {
     setLeadsDateFilter(val);
@@ -1066,10 +1053,6 @@ export default function KanbanBoard() {
     if (filterCity) {
       filteredLeads = filteredLeads.filter(l => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()));
     }
-
-    if (filterSource && filterSource !== "ALL") {
-      filteredLeads = filteredLeads.filter(l => l.campaign_source === filterSource);
-    }
     
     if (filterHasNote === "YES") {
       filteredLeads = filteredLeads.filter(l => (l as any).notes && (l as any).notes.trim() !== "");
@@ -1213,7 +1196,7 @@ export default function KanbanBoard() {
             return getTimestamp(b) - getTimestamp(a);
           });
 
-        if (isSearching || (filterSource && filterSource !== "ALL")) {
+        if (isSearching) {
           return allNewLeads;
         }
 
@@ -1299,7 +1282,6 @@ export default function KanbanBoard() {
     leads,
     searchQuery,
     filterCity,
-    filterSource,
     filterHasNote,
     activeTab,
     leadsDateFilter,
@@ -1967,6 +1949,29 @@ export default function KanbanBoard() {
               </button>
             )}
 
+            {allowedTabs.includes("zakaria-onboarding") && (
+              <button
+                onClick={() => handleSelectTab("zakaria-onboarding")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === "zakaria-onboarding"
+                    ? "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-300 font-bold"
+                    : "text-gray-600 hover:text-emerald-800 hover:bg-emerald-50/60"
+                }`}
+                title="Candidats transmis par Zakaria (Validation Présence, Véhicule & Précommande)"
+              >
+                🤝 {t.zakariaOnboarding || "Candidats Zakaria"}
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                    activeTab === "zakaria-onboarding"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {leads.filter(l => (l.campaign_source && l.campaign_source.toLowerCase().includes("zakaria")) || ((l as any).referrer_name && (l as any).referrer_name.toLowerCase().includes("zakaria"))).length}
+                </span>
+              </button>
+            )}
+
             {allowedTabs.includes("drivers") && (
               <button
                 onClick={() => handleSelectTab("drivers")}
@@ -2370,38 +2375,6 @@ export default function KanbanBoard() {
               )}
             </div>
 
-            {/* Campaign Source Filter */}
-            <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-slate-400 text-xs">🏷️</span>
-              <select
-                value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value)}
-                className={`pl-7 pr-3 py-2 border rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer shadow-2xs transition-all max-w-[13rem] truncate ${
-                  filterSource !== "ALL"
-                    ? "border-blue-400 bg-blue-50/90 text-blue-900 font-bold"
-                    : "border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50 hover:bg-white"
-                }`}
-                title="Filtrer par campagne / source de prospect"
-              >
-                <option value="ALL">Toutes les sources</option>
-                {campaignSources.map((src) => (
-                  <option key={src} value={src}>
-                    {src}
-                  </option>
-                ))}
-              </select>
-              {filterSource !== "ALL" && (
-                <button
-                  type="button"
-                  onClick={() => setFilterSource("ALL")}
-                  className="absolute right-2 text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
-                  title="Effacer filtre source"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
             {/* Has Note Filter */}
             <div className="relative flex items-center">
               <span className="absolute left-2.5 text-slate-400 text-xs">📝</span>
@@ -2517,13 +2490,12 @@ export default function KanbanBoard() {
           </div>
 
           {/* Active Filter Clear Button */}
-          {(searchQuery || filterCity || filterSource !== "ALL" || filterHasNote !== "ALL" || trainingDateFilter !== "ALL") && (
+          {(searchQuery || filterCity || filterHasNote !== "ALL" || trainingDateFilter !== "ALL") && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery("");
                 setFilterCity("");
-                setFilterSource("ALL");
                 setFilterHasNote("ALL");
                 setTrainingDateFilter("ALL");
               }}
@@ -2564,6 +2536,8 @@ export default function KanbanBoard() {
           <FieldMissionsView standalone={false} onBackToAgenda={() => handleSelectTab("field")} />
         ) : activeTab === "insurance" ? (
           <InsuranceView />
+        ) : activeTab === "zakaria-onboarding" ? (
+          <ZakariaOnboardingView />
         ) : activeTab === "whatsapp" ? (
           <WhatsAppCrmView />
         ) : (

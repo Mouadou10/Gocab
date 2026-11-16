@@ -17,6 +17,7 @@
 - [`MEM-2026-11-16-012`](#mem-2026-11-16-012-fleet-vehicle-spreadsheet-bulk-upload-504-gateway-timeout-elimination): Fleet Vehicle Spreadsheet Bulk Upload 504 Gateway Timeout Elimination
 - [`MEM-2026-11-16-013`](#mem-2026-11-16-013-google-sheet-mg4-leads-bulk-ingestion--45mb-payload-optimization): Google Sheet MG4 Leads Bulk Ingestion & 4.5MB Payload Optimization
 - [`MEM-2026-11-16-014`](#mem-2026-11-16-014-full-russian-ru-localization--vercel-function-glob-pattern-repair): Full Russian (RU) Localization & Vercel Function Glob Pattern Repair
+- [`MEM-2026-11-16-015`](#mem-2026-11-16-015-zakaria-onboarding-workflow--filter-cleanup--real-time-partner-commission-sync): Zakaria Onboarding Workflow, Filter Cleanup & Real-Time Partner Commission Sync
 
 ---
 
@@ -305,6 +306,28 @@
 - **Anti-Regression Guardrail**:
   - Never add non-existent directory globs to `functions` in `vercel.json`.
   - All new UI components must pull text from `useLanguage().t` or respect the active language state.
+
+---
+
+### MEM-2026-11-16-015: Zakaria Onboarding Workflow, Filter Cleanup & Real-Time Partner Commission Sync
+- **Date**: 2026-11-16
+- **Layer**: Full-Stack / Onboarding Operations / Partner Commissions / UI-Sync
+- **Symptom**:
+  1. Cluttered campaign sources dropdown in the top toolbar was obsolete and confusing for agents.
+  2. The onboarding agent lacked a dedicated portal view to quickly review candidates referred by Zakaria (partner/apporteur), validate their physical arrival/presence at the GoCab headquarters, and approve their vehicle assignment or preorder deposit.
+  3. Zakaria needed real-time visibility into who showed up (`👤 Présents au siège`) and confirmed commissions (+150 DH) on his fintech mobile dashboard.
+- **Root Cause**:
+  1. The campaign source filter in `KanbanBoard.tsx` was displayed prominently on the board toolbar instead of isolating partner-specific workflows.
+  2. Partner commission logic previously evaluated only binary conversion without tracking the intermediate physical presence (`presenceConfirmed`) step.
+- **Applied Solution**:
+  1. Removed `filterSource` / `campaignSources` dropdown and its state from `KanbanBoard.tsx`.
+  2. Implemented `ZakariaOnboardingView.tsx` with dedicated KPI summary cards (Total Transmis, Chauffeurs Présents, Commissions Validées, Total Dû en MAD), search & filter tabs, and 1-click action triggers (`Valider Présence`, `Prend Véhicule (+150 DH)`, `Précommande (+150 DH)`, `Refus / Absent`).
+  3. Added `zakaria-onboarding` navigation tab to `KanbanBoard.tsx` for `ONBOARDING_SPECIALIST`, `LEAD_ACQUISITION_JR`, `OPS_MANAGER`, and `ADMIN`.
+  4. Added `/onboarding/zakaria` direct route redirecting seamlessly to the dedicated onboarding view.
+  5. Updated `partnerCommissionService.ts` and `src/app/partenaire/[slug]/page.tsx` with `showedUpLeads` metrics, `👤 Présent au siège` badge, and presence filtering so Zakaria sees both shown-up drivers and confirmed 150 DH commissions instantly.
+- **Anti-Regression Guardrail**:
+  - Non-double-counting rule is strictly enforced (maximum 150 DH per driver even if both preorder and vehicle assigned).
+  - All actions on leads trigger LiveSync `touchSyncState("leads")` so Zakaria and agents see live updates without manual refresh.
 
 ---
 

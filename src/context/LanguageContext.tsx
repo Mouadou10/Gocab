@@ -11,6 +11,7 @@ export interface Translations {
   home: string;
   leads: string;
   training: string;
+  zakariaOnboarding: string;
   drivers: string;
   flaggedDrivers: string;
   fleet: string;
@@ -115,6 +116,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "Home",
     leads: "Leads",
     training: "Training",
+    zakariaOnboarding: "Zakaria Leads",
     drivers: "Drivers",
     flaggedDrivers: "Flagged Drivers",
     fleet: "Fleet",
@@ -214,6 +216,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "Accueil",
     leads: "Prospects",
     training: "Formation",
+    zakariaOnboarding: "Candidats Zakaria",
     drivers: "Chauffeurs",
     flaggedDrivers: "Chauffeurs Signalés",
     fleet: "Flotte",
@@ -313,6 +316,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "الرئيسية",
     leads: "المرشحين",
     training: "التدريب",
+    zakariaOnboarding: "مرشحو زكرياء",
     drivers: "السائقين",
     flaggedDrivers: "السائقين المعلمين",
     fleet: "الأسطول",
@@ -412,6 +416,7 @@ export const DICTIONARY: Record<Language, Translations> = {
     home: "Главная",
     leads: "Лиды",
     training: "Обучение",
+    zakariaOnboarding: "Кандидаты Закарии",
     drivers: "Водители",
     flaggedDrivers: "Отмеченные водители",
     fleet: "Автопарк",

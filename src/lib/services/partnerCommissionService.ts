@@ -24,19 +24,22 @@ export interface PartnerLeadEvaluation {
   brandStatus: string | null;
   trainingStatus: string | null;
   preorderAmount: number | null;
+  presenceConfirmed: boolean;
+  presenceConfirmedAt: string | null;
   notes: string | null;
   isConverted: boolean;
   conversionReason: "VEHICLE_ASSIGNED" | "PREORDER_DEPOSITED" | null;
   commissionMAD: number;
   status: "VALIDATED" | "PENDING" | "LOST";
   statusLabel: string;
-  stageBadgeColor: "emerald" | "amber" | "slate" | "rose" | "blue";
+  stageBadgeColor: "emerald" | "amber" | "slate" | "rose" | "blue" | "purple";
 }
 
 export interface PartnerSummary {
   partnerName: string;
   partnerSlug: string;
   totalLeads: number;
+  showedUpLeads: number;
   convertedLeads: number;
   pendingLeads: number;
   lostLeads: number;
@@ -62,6 +65,8 @@ export function evaluateLeadCommission(lead: {
   training_status?: string | null;
   preorder_amount?: number | null;
   notes?: string | null;
+  presence_confirmed?: boolean | null;
+  presence_confirmed_at?: Date | string | null;
 }): PartnerLeadEvaluation {
   const boardCol = (lead.board_column || "NEW_LEADS").trim();
   const brandStat = (lead.brand_status || "").trim();
@@ -82,6 +87,13 @@ export function evaluateLeadCommission(lead: {
 
   // Evaluation outcome
   const isConverted = takesCar || depositsPreorder;
+
+  // Presence check (candidate showed up in person)
+  const presenceConfirmed = Boolean(
+    lead.presence_confirmed ||
+      trainStat.toLowerCase() === "attended" ||
+      isConverted
+  );
 
   let conversionReason: "VEHICLE_ASSIGNED" | "PREORDER_DEPOSITED" | null = null;
   if (takesCar) {
@@ -115,13 +127,18 @@ export function evaluateLeadCommission(lead: {
     commissionMAD = PARTNER_COMMISSION_RATE_MAD;
     stageBadgeColor = "emerald";
     statusLabel = takesCar
-      ? "🚗 Véhicule Assigné (+150 DH)"
-      : `💵 Précommande Versée (${preorderAmt > 0 ? preorderAmt + " DH" : "Validée"} • +150 DH)`;
+      ? "🚗 Véhicule Assigné (+150 DH Confirmé)"
+      : `💵 Précommande Versée (${preorderAmt > 0 ? preorderAmt + " DH" : "Validée"} • +150 DH Confirmé)`;
   } else if (isLost) {
     status = "LOST";
     commissionMAD = 0;
     stageBadgeColor = "rose";
     statusLabel = brandStat ? `❌ Non converti (${brandStat})` : "❌ Non converti";
+  } else if (presenceConfirmed) {
+    status = "PENDING";
+    commissionMAD = 0;
+    stageBadgeColor = "purple";
+    statusLabel = "👤 Présent au siège (Validation Véhicule / Précommande en cours)";
   } else {
     status = "PENDING";
     commissionMAD = 0;
@@ -132,8 +149,6 @@ export function evaluateLeadCommission(lead: {
       statusLabel = "📅 Formation fixée (Entretien programmé)";
     } else if (trainStatLower === "scheduled") {
       statusLabel = "📅 Session formation programmée";
-    } else if (trainStatLower === "attended") {
-      statusLabel = "✅ Formation suivie (Choix véhicule en cours)";
     } else if (trainStatLower === "pending") {
       statusLabel = "⏳ Dossier en cours de revue";
     } else if (brandStat) {
@@ -154,6 +169,8 @@ export function evaluateLeadCommission(lead: {
     brandStatus: brandStat || null,
     trainingStatus: trainStat || null,
     preorderAmount: lead.preorder_amount ?? null,
+    presenceConfirmed,
+    presenceConfirmedAt: lead.presence_confirmed_at ? new Date(lead.presence_confirmed_at).toISOString() : null,
     notes: lead.notes || null,
     isConverted,
     conversionReason,
@@ -191,6 +208,7 @@ export async function getPartnerSummary(partnerNameOrSlug: string): Promise<Part
   const evaluatedLeads = leads.map((l) => evaluateLeadCommission(l));
 
   const totalLeads = evaluatedLeads.length;
+  const showedUpLeads = evaluatedLeads.filter((l) => l.presenceConfirmed || l.isConverted).length;
   const convertedLeads = evaluatedLeads.filter((l) => l.isConverted).length;
   const lostLeads = evaluatedLeads.filter((l) => l.status === "LOST").length;
   const pendingLeads = totalLeads - convertedLeads - lostLeads;
@@ -203,6 +221,7 @@ export async function getPartnerSummary(partnerNameOrSlug: string): Promise<Part
     partnerName: displayName,
     partnerSlug: normalized.toLowerCase(),
     totalLeads,
+    showedUpLeads,
     convertedLeads,
     pendingLeads,
     lostLeads,
