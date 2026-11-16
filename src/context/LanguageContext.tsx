@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-export type Language = "en" | "fr" | "ar";
+export type Language = "en" | "fr" | "ar" | "ru";
 
 export interface Translations {
   // Navigation & General
@@ -406,6 +406,105 @@ export const DICTIONARY: Record<Language, Translations> = {
     changeRole: "تغيير الدور",
     whatsappTemplates: "قوالب رسائل واتساب",
   },
+  ru: {
+    appName: "GoCab CRM",
+    appSubtitle: "МОДУЛЬ РОСТА И KYC",
+    home: "Главная",
+    leads: "Лиды",
+    training: "Обучение",
+    drivers: "Водители",
+    flaggedDrivers: "Отмеченные водители",
+    fleet: "Автопарк",
+    support: "Поддержка",
+    perf: "Сборы и показатели",
+    field: "Полевые операции",
+    fieldMissions: "Миссии Telegram",
+    insurance: "Страхование",
+    vehicleOps: "Журнал автопарка",
+    settings: "Настройки",
+    signOut: "Выйти",
+    autoClosing: "автозакрытие",
+    reminderDue: "Напоминание",
+    followUpWhatsapp: "Связаться в WhatsApp",
+    save: "Сохранить",
+    cancel: "Отмена",
+    delete: "Удалить",
+    edit: "Редактировать",
+    create: "Создать",
+    saving: "Сохранение…",
+    search: "Поиск...",
+    filter: "Фильтр",
+    all: "Все",
+    status: "Статус",
+    actions: "Действия",
+
+    // Collections & Financial Ledger
+    dailyContract: "Ежедневный (300 MAD/день Пн-Сб)",
+    weeklyContract: "Еженедельный (1 800 MAD каждый понедельник)",
+    redAlert3rdDay: "Критическая задолженность (3-й день)",
+    expectedToday: "Ожидается сегодня",
+    collectedToday: "Собрано сегодня",
+    remainingToCollect: "Осталось собрать",
+    totalArrears: "Общая задолженность",
+    consecutiveUnpaidDays: "Дней без оплаты",
+    riskImmobilization: "Риск блокировки автомобиля",
+    opportunityLoss: "Упущенная выгода (250 MAD/день)",
+    recordPayment: "Подтвердить платеж",
+    onTrack: "В графике",
+
+    executiveDashboard: "Исполнительная панель",
+    executiveSubtitle: "Обзор операционной эффективности GoCab по 3 ключевым направлениям",
+    leadConversion: "КОНВЕРСИЯ ЛИДОВ",
+    fleetUtilization: "УТИЛИЗАЦИЯ АВТОПАРКА",
+    totalDowntime: "ОБЩИЙ ПРОСТОЙ",
+    totalLeadsImported: "всего импортировано лидов",
+    vehiclesOnRoad: "Автомобилей на линии",
+    cumulativeDowntimeDays: "Совокупные дни простоя",
+    leadProgression: "Воронка движения лидов",
+    fleetStatusDist: "Распределение статусов автопарка",
+    weeklyExecutiveReport: "Еженедельный исполнительный отчет",
+    opsPerformanceKpiHealth: "Операционная эффективность и здоровье KPI",
+    alertsActive: "Активные предупреждения KPI",
+    targetAchieved: "Все операционные цели отделов в настоящее время выполняются.",
+    viewReport: "Посмотреть отчет",
+
+    weeklyDepartmentTargets: "Еженедельные цели и пороговые значения отделов",
+    departmentTargetsSubtitle: "Определите целевые показатели эффективности для каждого операционного направления. Система рассчитывает отклонения и оповещения в реальном времени.",
+    saveDepartmentTargets: "Сохранить цели отделов",
+    resetDefaults: "Сбросить по умолчанию",
+    leadAcquisitionJr: "Привлечение лидов (Младший)",
+    weeklyNewLeadsTarget: "Цель новых лидов в неделю",
+    trainingShowupRate: "Доля явки на обучение",
+    kycCompletionTarget: "Цель верификации KYC (4/4 документов)",
+    fleetPerfAndChurn: "Эффективность автопарка и отток",
+    activeFleetUtilization: "Коэффициент утилизации активного автопарка",
+    maxAllowedDowntime: "Макс. допустимый средний простой",
+    weeklyChurnLimit: "Лимит еженедельного оттока (макс.)",
+    fieldOpsAndRecovery: "Полевые операции и возврат",
+    monthlyInspectionRate: "Доля ежемесячных физических осмотров",
+    gpsActiveRate: "Доля активных GPS-трекеров",
+    assetRecoveryRate: "Доля возврата автомобилей",
+    supportAndSla: "Поддержка и SLA 24ч",
+    slaResolutionTarget: "Цель разрешения тикетов по SLA 24ч",
+    maxOpenTickets: "Макс. количество открытых тикетов",
+    financeAndCollections: "Финансы и сборы",
+    dailyClearingRate: "Ежедневный уровень сборов",
+    targetWeeklyCollections: "Целевые еженедельные сборы (MAD)",
+
+    rolePermissions: "Управление доступом по ролям и вкладкам",
+    rolePermissionsSubtitle: "Выберите доступные вкладки для каждой роли. Изменения применяются ко всем участникам с этой ролью.",
+    teamMembers: "Учетные записи команды",
+    teamMembersSubtitle: "Управляйте участниками команды, меняйте роли или удаляйте аккаунты.",
+    addTeamMember: "Добавить сотрудника",
+    createNewRole: "Создать новую роль",
+    saveAllPermissions: "Сохранить все права",
+    user: "Сотрудник",
+    email: "Эл. почта",
+    region: "Регион",
+    currentRole: "Текущая роль и доступ",
+    changeRole: "Изменить роль",
+    whatsappTemplates: "Шаблоны WhatsApp",
+  },
 };
 
 interface LanguageContextType {
@@ -423,7 +522,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Read saved language from localStorage
     const saved = localStorage.getItem("gocab_lang") as Language;
-    if (saved && (saved === "en" || saved === "fr" || saved === "ar")) {
+    if (saved && (saved === "en" || saved === "fr" || saved === "ar" || saved === "ru")) {
       setLanguageState(saved);
       document.documentElement.dir = saved === "ar" ? "rtl" : "ltr";
       document.documentElement.lang = saved;

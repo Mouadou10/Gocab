@@ -2129,7 +2129,7 @@ export default function KanbanBoard() {
               <button
                 type="button"
                 onClick={() => setLanguage("fr")}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   language === "fr" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-900"
                 }`}
                 title="Français"
@@ -2139,7 +2139,7 @@ export default function KanbanBoard() {
               <button
                 type="button"
                 onClick={() => setLanguage("ar")}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   language === "ar" ? "bg-white text-navy shadow-sm font-semibold" : "text-gray-500 hover:text-gray-900"
                 }`}
                 title="العربية (Arabic)"
@@ -2149,12 +2149,22 @@ export default function KanbanBoard() {
               <button
                 type="button"
                 onClick={() => setLanguage("en")}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   language === "en" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-900"
                 }`}
                 title="English"
               >
                 🇬🇧 EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("ru")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  language === "ru" ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="Русский (Russian)"
+              >
+                🇷🇺 RU
               </button>
             </div>
 
@@ -2164,10 +2174,10 @@ export default function KanbanBoard() {
                   type="button"
                   onClick={() => setIsAddLeadModalOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all hover:shadow cursor-pointer"
-                  title={language === "fr" ? "Ajouter un prospect manuellement" : language === "ar" ? "إضافة مرشح جديد يدوياً" : "Add lead manually"}
+                  title={language === "fr" ? "Ajouter un prospect manuellement" : language === "ar" ? "إضافة مرشح جديد يدوياً" : language === "ru" ? "Добавить лида вручную" : "Add lead manually"}
                 >
                   <span>👤➕</span>
-                  <span>{language === "fr" ? "Nouveau Prospect" : language === "ar" ? "إضافة مرشح" : "Add Lead"}</span>
+                  <span>{language === "fr" ? "Nouveau Prospect" : language === "ar" ? "إضافة مرشح" : language === "ru" ? "Новый Лид" : "Add Lead"}</span>
                 </button>
                 <CSVUploader onUploadComplete={fetchLeads} />
               </div>
@@ -2178,11 +2188,11 @@ export default function KanbanBoard() {
               type="button"
               onClick={() => setIsAgentLogOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
-              title={language === "fr" ? "Consulter mon journal d'activité" : language === "ar" ? "سجل نشاطي" : "My Activity Log"}
+              title={language === "fr" ? "Consulter mon journal d'activité" : language === "ar" ? "سجل نشاطي" : language === "ru" ? "Мой журнал активности" : "My Activity Log"}
             >
               <span>📋</span>
               <span className="hidden sm:inline">
-                {language === "fr" ? "Mon Journal" : language === "ar" ? "سجلي" : "My Log"}
+                {language === "fr" ? "Mon Journal" : language === "ar" ? "سجلي" : language === "ru" ? "Мой Журнал" : "My Log"}
               </span>
             </button>
 
@@ -2199,7 +2209,7 @@ export default function KanbanBoard() {
                   type="button"
                   onClick={() => setIsProfileModalOpen(true)}
                   className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-2xl hover:bg-gray-100 border border-transparent hover:border-gray-200 transition-all cursor-pointer group text-left shadow-2xs"
-                  title={language === "fr" ? "Mon Profil (Nom, Photo, Mot de passe)" : "My Profile (Name, Photo, Password)"}
+                  title={language === "fr" ? "Mon Profil (Nom, Photo, Mot de passe)" : language === "ru" ? "Мой профиль (Имя, Фото, Пароль)" : "My Profile (Name, Photo, Password)"}
                 >
                   <div className="relative shrink-0">
                     <div className="w-8 h-8 rounded-2xl overflow-hidden bg-gradient-to-tr from-navy to-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-navy/15 group-hover:ring-navy/30 transition-all shadow-xs">
@@ -2261,6 +2271,8 @@ export default function KanbanBoard() {
                     ? "Rechercher par nom ou tél..."
                     : language === "ar"
                     ? "بحث بالاسم أو الهاتف..."
+                    : language === "ru"
+                    ? "Поиск по имени или телефону..."
                     : "Search by name or phone..."
                 }
                 className="pl-8 pr-7 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs text-slate-900 bg-slate-50/50 hover:bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy w-60 shadow-2xs font-semibold transition-all"
@@ -2281,7 +2293,12 @@ export default function KanbanBoard() {
             {searchQuery.trim().length > 0 && (
               <div className="flex items-center gap-1.5 animate-fade-in">
                 <span className="px-2.5 py-1 rounded-xl text-xs font-bold bg-navy/10 text-navy border border-navy/15 shadow-2xs">
-                  {searchMatches.total} {language === "fr" ? (searchMatches.total > 1 ? "résultats" : "résultat") : "result(s)"}
+                  {searchMatches.total}{" "}
+                  {language === "fr"
+                    ? (searchMatches.total > 1 ? "résultats" : "résultat")
+                    : language === "ru"
+                    ? (searchMatches.total === 1 ? "результат" : searchMatches.total > 1 && searchMatches.total < 5 ? "результата" : "результатов")
+                    : "result(s)"}
                 </span>
 
                 {activeTab === "leads" && searchMatches.inLeadsTab === 0 && searchMatches.inTrainingTab > 0 && (
@@ -2289,11 +2306,12 @@ export default function KanbanBoard() {
                     type="button"
                     onClick={() => handleSelectTab("training")}
                     className="flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer animate-pulse"
-                    title="Voir les résultats dans l'onglet Formation"
+                    title={language === "ru" ? "Посмотреть результаты в Обучении" : "Voir les résultats dans l'onglet Formation"}
                   >
                     <span>🎓</span>
                     <span>
-                      {searchMatches.inTrainingTab} {language === "fr" ? "dans Formation → Voir" : "in Training → View"}
+                      {searchMatches.inTrainingTab}{" "}
+                      {language === "fr" ? "dans Formation → Voir" : language === "ru" ? "в Обучении → Посмотреть" : "in Training → View"}
                     </span>
                   </button>
                 )}
@@ -2303,11 +2321,12 @@ export default function KanbanBoard() {
                     type="button"
                     onClick={() => handleSelectTab("leads")}
                     className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer animate-pulse"
-                    title="Voir les résultats dans l'onglet Prospects"
+                    title={language === "ru" ? "Посмотреть результаты в Лидах" : "Voir les résultats dans l'onglet Prospects"}
                   >
                     <span>💼</span>
                     <span>
-                      {searchMatches.inLeadsTab} {language === "fr" ? "dans Prospects → Voir" : "in Leads → View"}
+                      {searchMatches.inLeadsTab}{" "}
+                      {language === "fr" ? "dans Prospects → Voir" : language === "ru" ? "в Лидах → Посмотреть" : "in Leads → View"}
                     </span>
                   </button>
                 )}
@@ -2317,13 +2336,13 @@ export default function KanbanBoard() {
                     type="button"
                     onClick={() => setSelectedLead(searchMatches.leadList[0])}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs"
-                    title="Ouvrir la fiche de ce prospect"
+                    title={language === "ru" ? "Открыть карточку лида" : "Ouvrir la fiche de ce prospect"}
                   >
                     <span>👤</span>
                     <span className="truncate max-w-[200px]">
-                      {searchMatches.leadList[0].raw_name} ({searchMatches.leadList[0].brand_status || searchMatches.leadList[0].training_status || "Nouveau"})
+                      {searchMatches.leadList[0].raw_name} ({searchMatches.leadList[0].brand_status || searchMatches.leadList[0].training_status || (language === "ru" ? "Новый" : "Nouveau")})
                     </span>
-                    <span className="underline ml-0.5">{language === "fr" ? "Ouvrir" : "Open"}</span>
+                    <span className="underline ml-0.5">{language === "fr" ? "Ouvrir" : language === "ru" ? "Открыть" : "Open"}</span>
                   </button>
                 )}
               </div>

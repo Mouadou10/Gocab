@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Inbox } from "lucide-react";
 import LeadCard from "./LeadCard";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface Lead {
   id: string;
@@ -67,6 +68,75 @@ const COLUMN_LABELS: Record<string, string> = {
   "No response": "No Response",
   Preorder: "Preorder",
   VEHICLE_ASSIGNMENT: "Assign Vehicle",
+};
+
+const COLUMN_LABELS_BY_LANG: Record<string, Record<string, string>> = {
+  ru: {
+    NEW_LEADS: "Новые лиды",
+    "Not interested": "Не заинтересован",
+    "No response 1": "Нет ответа 1",
+    "Training fixed": "Обучение назначено",
+    "To Recall": "Перезвонить",
+    "Wrong number": "Неверный номер",
+    "No response 2": "Нет ответа 2",
+    "Hors zone": "Вне зоны",
+    "Already a client": "Уже клиент",
+    Scheduled: "Обучение назначено (План)",
+    Attended: "Присутствовал",
+    "Attended and not interested": "Был, не заинтересован",
+    Pending: "В ожидании",
+    "Refused the offer": "Отказ от предложения",
+    "Assign vehicle": "Выдача авто",
+    "Accept offer": "Выдача авто",
+    "Not attended": "Не пришел",
+    "No response": "Нет ответа",
+    Preorder: "Предзаказ",
+    VEHICLE_ASSIGNMENT: "Выдача авто",
+  },
+  fr: {
+    NEW_LEADS: "Nouvelles demandes",
+    "Not interested": "Pas intéressé",
+    "No response 1": "Pas de réponse 1",
+    "Training fixed": "Formation fixée",
+    "To Recall": "À rappeler",
+    "Wrong number": "Faux numéro",
+    "No response 2": "Pas de réponse 2",
+    "Hors zone": "Hors zone",
+    "Already a client": "Déjà client",
+    Scheduled: "Formation fixée (Planifié)",
+    Attended: "Présent",
+    "Attended and not interested": "Présent & Non intéressé",
+    Pending: "En attente",
+    "Refused the offer": "Offre refusée",
+    "Assign vehicle": "Attribution véhicule",
+    "Accept offer": "Attribution véhicule",
+    "Not attended": "Non présenté",
+    "No response": "Pas de réponse",
+    Preorder: "Précommande",
+    VEHICLE_ASSIGNMENT: "Attribution véhicule",
+  },
+  ar: {
+    NEW_LEADS: "طلبات جديدة",
+    "Not interested": "غير مهتم",
+    "No response 1": "لا يجيب 1",
+    "Training fixed": "تم تحديد التدريب",
+    "To Recall": "إعادة الاتصال",
+    "Wrong number": "رقم خاطئ",
+    "No response 2": "لا يجيب 2",
+    "Hors zone": "خارج النطاق",
+    "Already a client": "عميل سابق",
+    Scheduled: "تدريب محدد (مجدول)",
+    Attended: "حاضر",
+    "Attended and not interested": "حضر وغير مهتم",
+    Pending: "قيد الانتظار",
+    "Refused the offer": "رفض العرض",
+    "Assign vehicle": "تسليم السيارة",
+    "Accept offer": "تسليم السيارة",
+    "Not attended": "لم يحضر",
+    "No response": "لا يجيب",
+    Preorder: "طلب مسبق",
+    VEHICLE_ASSIGNMENT: "تسليم السيارة",
+  },
 };
 
 /** Column-specific accent colors (left border gradient). */
@@ -138,6 +208,10 @@ function KanbanColumnComponent({
     transition,
   };
 
+  const { language } = useLanguage();
+  const columnTitle = (COLUMN_LABELS_BY_LANG[language] && COLUMN_LABELS_BY_LANG[language][columnId])
+    || (COLUMN_LABELS[columnId] || columnId);
+
   const isNewLeadsColumn = columnId === "NEW_LEADS";
   const [isGoalBannerExpanded, setIsGoalBannerExpanded] = useState(false);
 
@@ -188,7 +262,7 @@ function KanbanColumnComponent({
           }`}
         />
         <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase truncate">
-          {COLUMN_LABELS[columnId] || columnId}
+          {columnTitle}
         </h3>
         <span
           className={`ml-auto text-3xs font-extrabold px-2 py-0.5 rounded-full font-mono shadow-3xs shrink-0 ${
@@ -200,7 +274,7 @@ function KanbanColumnComponent({
           }`}
         >
           {isNewLeadsColumn && isDailyGoalAchieved
-            ? "✅ Atteint"
+            ? (language === "ru" ? "✅ Достигнуто" : language === "ar" ? "✅ محقق" : "✅ Atteint")
             : isNewLeadsColumn && totalNewLeadsCount !== undefined
             ? `${safeLeads.length} / ${totalNewLeadsCount}`
             : safeLeads.length}
