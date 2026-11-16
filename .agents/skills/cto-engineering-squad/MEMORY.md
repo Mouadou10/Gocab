@@ -16,6 +16,7 @@
 - [`MEM-2026-11-13-011`](#mem-2026-11-13-011-third-party-partner-referral-program--150-mad-commission-tracking-zakaria): Third-Party Partner Referral Program & 150 MAD Commission Tracking (Zakaria)
 - [`MEM-2026-11-16-012`](#mem-2026-11-16-012-fleet-vehicle-spreadsheet-bulk-upload-504-gateway-timeout-elimination): Fleet Vehicle Spreadsheet Bulk Upload 504 Gateway Timeout Elimination
 - [`MEM-2026-11-16-013`](#mem-2026-11-16-013-google-sheet-mg4-leads-bulk-ingestion--45mb-payload-optimization): Google Sheet MG4 Leads Bulk Ingestion & 4.5MB Payload Optimization
+- [`MEM-2026-11-16-014`](#mem-2026-11-16-014-full-russian-ru-localization--vercel-function-glob-pattern-repair): Full Russian (RU) Localization & Vercel Function Glob Pattern Repair
 
 ---
 
@@ -283,6 +284,27 @@
 - **Anti-Regression Guardrail**:
   - `src/lib/prisma.ts` auto-loads `.env.local` to prevent local/remote database split-brain during script executions.
   - Remote database transactions over high-latency links must specify `{ timeout: 30000 }` and batch in chunks of <= 20.
+
+---
+
+### MEM-2026-11-16-014: Full Russian (RU) Localization & Vercel Function Glob Pattern Repair
+- **Date**: 2026-11-16
+- **Layer**: Frontend UI / Internationalization (i18n) / DevOps Infrastructure
+- **Symptom**:
+  User requested adding Russian language translation (`RU`) when agents click on it. Concurrently, Vercel deployments failed with `The pattern "api/**/*" defined in functions doesn't match any Serverless Functions.`
+- **Root Cause**:
+  1. `LanguageContext.tsx` only supported `"en" | "fr" | "ar"` without Russian vocabulary.
+  2. `KanbanColumn.tsx` had static English column labels rather than reactive localized column headings.
+  3. `vercel.json` included both `"api/**/*"` and `"src/app/api/**/*"`; Vercel throws an `unused_function` deployment error if any pattern in `functions` matches 0 files.
+- **Applied Solution**:
+  1. Added `"ru"` to `type Language = "en" | "fr" | "ar" | "ru"` in `LanguageContext.tsx` with complete business-grade Russian dictionary translations for all navigation tabs, metrics, financial ledger, and department goals.
+  2. Added `🇷🇺 RU` button to the language switcher in `KanbanBoard.tsx`.
+  3. Added dynamic `COLUMN_LABELS_BY_LANG` in `KanbanColumn.tsx` so all Kanban stage headers translate to Russian (e.g., `Новые лиды`, `Обучение назначено`, `Выдача авто`, etc.).
+  4. Localized modals (`AddLeadModal.tsx`), search feedback, and action buttons for Russian.
+  5. Cleaned up `vercel.json` removing the unused `"api/**/*"` pattern, restoring instant green builds on Vercel.
+- **Anti-Regression Guardrail**:
+  - Never add non-existent directory globs to `functions` in `vercel.json`.
+  - All new UI components must pull text from `useLanguage().t` or respect the active language state.
 
 ---
 
