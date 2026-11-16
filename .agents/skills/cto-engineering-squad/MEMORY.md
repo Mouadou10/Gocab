@@ -14,6 +14,8 @@
 - [`MEM-2026-11-03-008`](#mem-2026-11-03-008-training-fixed-pipeline-invariance--stale-override-elimination): Training Fixed Pipeline Invariance & Stale Override Elimination
 - [`MEM-2026-11-03-009`](#mem-2026-11-03-009-sqlite_corrupt-disk-image-malformed-recovery--balance-upload-resilience): SQLite Corrupt Disk Image Recovery & Balance Upload Resilience
 - [`MEM-2026-11-13-011`](#mem-2026-11-13-011-third-party-partner-referral-program--150-mad-commission-tracking-zakaria): Third-Party Partner Referral Program & 150 MAD Commission Tracking (Zakaria)
+- [`MEM-2026-11-16-012`](#mem-2026-11-16-012-fleet-vehicle-spreadsheet-bulk-upload-504-gateway-timeout-elimination): Fleet Vehicle Spreadsheet Bulk Upload 504 Gateway Timeout Elimination
+- [`MEM-2026-11-16-013`](#mem-2026-11-16-013-google-sheet-mg4-leads-bulk-ingestion--45mb-payload-optimization): Google Sheet MG4 Leads Bulk Ingestion & 4.5MB Payload Optimization
 
 ---
 
@@ -252,6 +254,33 @@
   4. Created automated performance test `tests/bulk-vehicle-upload-speed.test.ts` verifying bulk operations and reconciliation finish in <200ms.
 - **Anti-Regression Guardrail**:
   - Never execute individual `prisma.<model>.update` or `prisma.<model>.create` inside spreadsheet row iteration loops. Always accumulate rows in memory and execute batch `createMany` or chunked `prisma.$transaction`.
+
+---
+
+### MEM-2026-11-16-013: Google Sheet MG4 Leads Bulk Ingestion & 4.5MB Payload Optimization
+- **Date**: 2026-11-16
+- **Layer**: Database Persistence / Backend API Serialization / Frontend CRM Kanban
+- **Symptom**:
+  User reported they could not find leads from their Google Sheet (`Copy of GOCAB - Leads - Campagne MG4 - Septembre 2026`, gid=1470793392) in the CRM and requested them to be placed as new leads.
+- **Root Cause**:
+  1. **Source Labeling Disconnect**: The leads were present in the database but tagged with the generic source `"Google Sheets Import"` from an earlier sync on Nov 12, without distinguishing them as the MG4 campaign. 226 leads had also been moved to other stages during operations.
+  2. **Vercel 4.5 MB Serverless Payload Limit Exceeded**: Over 5,900 leads with full nested objects produced a `GET /api/leads` payload of **4.91 MB**, which breached Vercel's hard 4.5 MB limit for serverless functions, causing network truncation and failed leads rendering.
+  3. **Kanban Slice Limit**: `KanbanBoard.tsx` clamped the `NEW_LEADS` column to `targetBatchCount` (15-45 leads) sorted by timestamp, meaning older import timestamps were sliced off and not visible without a direct phone search.
+- **Applied Solution**:
+  1. Synchronized all 2,807 unique valid leads from Google Sheet tab `gid=1470793392` into Turso Cloud:
+     - Tagged all 2,807 leads with `campaign_source = "Campagne MG4 - Septembre 2026"`.
+     - Reset 2,805 leads to `board_column = "NEW_LEADS"` and touched `updated_at` so they immediately surface in the operational queue.
+     - Strictly preserved active vehicle assignment contracts in `VEHICLE_ASSIGNMENT` (Fayçal Waray on `39457-Y-6` and Azzdine Kaddi on `WW028107`).
+  2. Compacted `GET /api/leads` serialization:
+     - Excluded archived leads (`is_archived: false`).
+     - Omitted null, undefined, and default `false` boolean fields from the JSON wire representation.
+     - Slashed payload from 4.91 MB down to 1.95 MB (>60% reduction), safely below Vercel's 4.5 MB threshold.
+  3. Added interactive Campaign Source filter in `KanbanBoard.tsx`:
+     - Added dropdown filter (`🏷️ Campagne MG4 - Septembre 2026`, `Google Sheets Import`, etc.).
+     - Unclamped `NEW_LEADS` rendering when filtering by source so agents can scroll through all campaign leads seamlessly.
+- **Anti-Regression Guardrail**:
+  - Prisma parameter limits (>999) must be respected by chunking batch queries into slices of 500 (`allPhones.slice(i, i + 500)`).
+  - API responses returning large collections must compact sparse null fields to keep serialized payload under 4 MB.
 
 ---
 

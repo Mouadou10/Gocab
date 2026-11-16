@@ -59,6 +59,7 @@ export async function GET() {
     }
 
     const leads = await prisma.lead.findMany({
+      where: { is_archived: false },
       orderBy: [
         { updated_at: "desc" },
         { created_at: "desc" },
@@ -68,11 +69,41 @@ export async function GET() {
     const enrichedLeads = leads.map((lead) => {
       const nationalMatch = matchNationalBlacklist(lead.raw_name);
       const isInviteSent = Boolean((lead as any).whatsapp_invite_sent || lead.notes?.includes("[INVITE_SENT]"));
-      return {
-        ...lead,
-        whatsapp_invite_sent: isInviteSent,
-        national_blacklist_match: nationalMatch.isBlacklisted ? nationalMatch : null,
+
+      const item: any = {
+        id: lead.id,
+        raw_name: lead.raw_name,
+        sanitized_phone: lead.sanitized_phone,
+        board_column: lead.board_column,
+        campaign_source: lead.campaign_source,
+        created_at: lead.created_at,
+        updated_at: lead.updated_at,
       };
+
+      if (lead.city) item.city = lead.city;
+      if (lead.brand_status) item.brand_status = lead.brand_status;
+      if (lead.training_status) item.training_status = lead.training_status;
+      if (lead.reminder_date) item.reminder_date = lead.reminder_date;
+      if (lead.preorder_amount) item.preorder_amount = lead.preorder_amount;
+      if (lead.status_changed_at) item.status_changed_at = lead.status_changed_at;
+      if (lead.handled_by) item.handled_by = lead.handled_by;
+      if (lead.has_cin) item.has_cin = true;
+      if (lead.has_fiche_anthropometrique) item.has_fiche_anthropometrique = true;
+      if (lead.has_confirmation_adresse) item.has_confirmation_adresse = true;
+      if (lead.has_permis) item.has_permis = true;
+      if (lead.presence_confirmed) item.presence_confirmed = true;
+      if (lead.presence_confirmed_at) item.presence_confirmed_at = lead.presence_confirmed_at;
+      if (isInviteSent) item.whatsapp_invite_sent = true;
+      if (lead.whatsapp_invite_sent_at) item.whatsapp_invite_sent_at = lead.whatsapp_invite_sent_at;
+      if (lead.referrer_name) item.referrer_name = lead.referrer_name;
+      if (lead.referrer_phone) item.referrer_phone = lead.referrer_phone;
+      if (lead.notes) item.notes = lead.notes;
+      if (lead.age) item.age = lead.age;
+      if (lead.permis_seniority_years) item.permis_seniority_years = lead.permis_seniority_years;
+      if (lead.is_resident !== null && lead.is_resident !== undefined) item.is_resident = lead.is_resident;
+      if (nationalMatch.isBlacklisted) item.national_blacklist_match = nationalMatch;
+
+      return item;
     });
 
     setCachedLeads(enrichedLeads);

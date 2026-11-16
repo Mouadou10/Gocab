@@ -381,6 +381,7 @@ export default function KanbanBoard() {
 
   // Filters
   const [filterCity, setFilterCity] = useState("");
+  const [filterSource, setFilterSource] = useState<string>("ALL");
   const [filterHasNote, setFilterHasNote] = useState<"ALL" | "YES" | "NO">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [trainingDateFilter, setTrainingDateFilter] = useState<string>("ALL");
@@ -391,6 +392,19 @@ export default function KanbanBoard() {
     }
     return new Date().toISOString().split("T")[0];
   });
+
+  // Distinct Campaign Sources sorted with MG4 at top
+  const campaignSources = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of leads) {
+      if (l.campaign_source) set.add(l.campaign_source);
+    }
+    return Array.from(set).sort((a, b) => {
+      if (a.includes("MG4")) return -1;
+      if (b.includes("MG4")) return 1;
+      return a.localeCompare(b);
+    });
+  }, [leads]);
 
   const handleLeadsDateChange = (val: string) => {
     setLeadsDateFilter(val);
@@ -1052,6 +1066,10 @@ export default function KanbanBoard() {
     if (filterCity) {
       filteredLeads = filteredLeads.filter(l => l.city && l.city.toLowerCase().includes(filterCity.toLowerCase()));
     }
+
+    if (filterSource && filterSource !== "ALL") {
+      filteredLeads = filteredLeads.filter(l => l.campaign_source === filterSource);
+    }
     
     if (filterHasNote === "YES") {
       filteredLeads = filteredLeads.filter(l => (l as any).notes && (l as any).notes.trim() !== "");
@@ -1195,7 +1213,7 @@ export default function KanbanBoard() {
             return getTimestamp(b) - getTimestamp(a);
           });
 
-        if (isSearching) {
+        if (isSearching || (filterSource && filterSource !== "ALL")) {
           return allNewLeads;
         }
 
@@ -1281,6 +1299,7 @@ export default function KanbanBoard() {
     leads,
     searchQuery,
     filterCity,
+    filterSource,
     filterHasNote,
     activeTab,
     leadsDateFilter,
@@ -2318,7 +2337,7 @@ export default function KanbanBoard() {
                 value={filterCity}
                 onChange={(e) => setFilterCity(e.target.value)}
                 placeholder="Ville (ex: Casablanca)"
-                className="pl-7 pr-6 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-slate-50/50 hover:bg-white outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy w-40 shadow-2xs transition-all"
+                className="pl-7 pr-6 py-2 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 bg-slate-50/50 hover:bg-white outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy w-36 shadow-2xs transition-all"
               />
               {filterCity && (
                 <button
@@ -2326,6 +2345,38 @@ export default function KanbanBoard() {
                   onClick={() => setFilterCity("")}
                   className="absolute right-2 text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
                   title="Effacer filtre ville"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Campaign Source Filter */}
+            <div className="relative flex items-center">
+              <span className="absolute left-2.5 text-slate-400 text-xs">🏷️</span>
+              <select
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                className={`pl-7 pr-3 py-2 border rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy cursor-pointer shadow-2xs transition-all max-w-[13rem] truncate ${
+                  filterSource !== "ALL"
+                    ? "border-blue-400 bg-blue-50/90 text-blue-900 font-bold"
+                    : "border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50 hover:bg-white"
+                }`}
+                title="Filtrer par campagne / source de prospect"
+              >
+                <option value="ALL">Toutes les sources</option>
+                {campaignSources.map((src) => (
+                  <option key={src} value={src}>
+                    {src}
+                  </option>
+                ))}
+              </select>
+              {filterSource !== "ALL" && (
+                <button
+                  type="button"
+                  onClick={() => setFilterSource("ALL")}
+                  className="absolute right-2 text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
+                  title="Effacer filtre source"
                 >
                   ✕
                 </button>
@@ -2447,12 +2498,13 @@ export default function KanbanBoard() {
           </div>
 
           {/* Active Filter Clear Button */}
-          {(searchQuery || filterCity || filterHasNote !== "ALL" || trainingDateFilter !== "ALL") && (
+          {(searchQuery || filterCity || filterSource !== "ALL" || filterHasNote !== "ALL" || trainingDateFilter !== "ALL") && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery("");
                 setFilterCity("");
+                setFilterSource("ALL");
                 setFilterHasNote("ALL");
                 setTrainingDateFilter("ALL");
               }}
