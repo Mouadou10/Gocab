@@ -266,21 +266,23 @@
   1. **Source Labeling Disconnect**: The leads were present in the database but tagged with the generic source `"Google Sheets Import"` from an earlier sync on Nov 12, without distinguishing them as the MG4 campaign. 226 leads had also been moved to other stages during operations.
   2. **Vercel 4.5 MB Serverless Payload Limit Exceeded**: Over 5,900 leads with full nested objects produced a `GET /api/leads` payload of **4.91 MB**, which breached Vercel's hard 4.5 MB limit for serverless functions, causing network truncation and failed leads rendering.
   3. **Kanban Slice Limit**: `KanbanBoard.tsx` clamped the `NEW_LEADS` column to `targetBatchCount` (15-45 leads) sorted by timestamp, meaning older import timestamps were sliced off and not visible without a direct phone search.
+  4. **Turso Cloud Local Env Isolation**: Running CLI scripts without `--env-file=.env.local` left `TURSO_DATABASE_URL` undefined, falling back to local `dev.db` rather than remote Turso Cloud where Vercel production queries live.
 - **Applied Solution**:
-  1. Synchronized all 2,807 unique valid leads from Google Sheet tab `gid=1470793392` into Turso Cloud:
+  1. Enhanced `src/lib/prisma.ts` with auto `.env.local` discovery so CLI scripts and test runners automatically target the authoritative Turso Cloud database.
+  2. Synchronized all 2,807 unique valid leads directly into Turso Cloud:
      - Tagged all 2,807 leads with `campaign_source = "Campagne MG4 - Septembre 2026"`.
      - Reset 2,805 leads to `board_column = "NEW_LEADS"` and touched `updated_at` so they immediately surface in the operational queue.
      - Strictly preserved active vehicle assignment contracts in `VEHICLE_ASSIGNMENT` (Fayçal Waray on `39457-Y-6` and Azzdine Kaddi on `WW028107`).
-  2. Compacted `GET /api/leads` serialization:
+  3. Compacted `GET /api/leads` serialization:
      - Excluded archived leads (`is_archived: false`).
      - Omitted null, undefined, and default `false` boolean fields from the JSON wire representation.
      - Slashed payload from 4.91 MB down to 1.95 MB (>60% reduction), safely below Vercel's 4.5 MB threshold.
-  3. Added interactive Campaign Source filter in `KanbanBoard.tsx`:
+  4. Added interactive Campaign Source filter in `KanbanBoard.tsx`:
      - Added dropdown filter (`🏷️ Campagne MG4 - Septembre 2026`, `Google Sheets Import`, etc.).
      - Unclamped `NEW_LEADS` rendering when filtering by source so agents can scroll through all campaign leads seamlessly.
 - **Anti-Regression Guardrail**:
-  - Prisma parameter limits (>999) must be respected by chunking batch queries into slices of 500 (`allPhones.slice(i, i + 500)`).
-  - API responses returning large collections must compact sparse null fields to keep serialized payload under 4 MB.
+  - `src/lib/prisma.ts` auto-loads `.env.local` to prevent local/remote database split-brain during script executions.
+  - Remote database transactions over high-latency links must specify `{ timeout: 30000 }` and batch in chunks of <= 20.
 
 ---
 

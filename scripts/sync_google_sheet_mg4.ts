@@ -163,15 +163,16 @@ async function syncGoogleSheetLeads() {
     console.log(`Inserted ${leadsToInsert.length} new leads`);
   }
 
-  // 2. Batch Update in chunks of 50 via $transaction
+  // 2. Batch Update in chunks of 20 via $transaction with 30s timeout
   if (leadsToUpdate.length > 0) {
-    for (let i = 0; i < leadsToUpdate.length; i += 50) {
-      const chunk = leadsToUpdate.slice(i, i + 50);
+    for (let i = 0; i < leadsToUpdate.length; i += 20) {
+      const chunk = leadsToUpdate.slice(i, i + 20);
       await prisma.$transaction(
-        chunk.map((u) => prisma.lead.update({ where: { id: u.id }, data: u.data }))
+        chunk.map((u) => prisma.lead.update({ where: { id: u.id }, data: u.data })),
+        { timeout: 30000, maxWait: 10000 }
       );
-      if (i % 500 === 0 || i + 50 >= leadsToUpdate.length) {
-        console.log(`Updated ${Math.min(i + 50, leadsToUpdate.length)} / ${leadsToUpdate.length} leads...`);
+      if (i % 100 === 0 || i + 20 >= leadsToUpdate.length) {
+        console.log(`Updated ${Math.min(i + 20, leadsToUpdate.length)} / ${leadsToUpdate.length} leads...`);
       }
     }
     console.log(`Finished updating ${leadsToUpdate.length} leads.`);

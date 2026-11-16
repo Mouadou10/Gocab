@@ -18,7 +18,37 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+function loadEnvLocalIfAvailable() {
+  if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) return;
+  try {
+    const candidates = [
+      path.join(process.cwd(), ".env.local"),
+      path.resolve(".env.local"),
+    ];
+    for (const envFile of candidates) {
+      if (fs.existsSync(envFile)) {
+        const content = fs.readFileSync(envFile, "utf-8");
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith("#")) {
+            const eqIdx = trimmed.indexOf("=");
+            if (eqIdx !== -1) {
+              const k = trimmed.slice(0, eqIdx).trim();
+              const v = trimmed.slice(eqIdx + 1).trim().replace(/^['"](.*)['"]$/, "$1");
+              if (!process.env[k]) {
+                process.env[k] = v;
+              }
+            }
+          }
+        }
+        break;
+      }
+    }
+  } catch {}
+}
+
 function resolveDatabaseUrl(): { url: string; isRemote: boolean; authToken?: string } {
+  loadEnvLocalIfAvailable();
   const envUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
 
