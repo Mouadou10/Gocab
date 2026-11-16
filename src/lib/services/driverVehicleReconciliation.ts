@@ -92,6 +92,9 @@ export async function reconcileDriverVehicleAssignments(): Promise<Reconciliatio
     }
   }
 
+  // Collect all reconciliation operations for chunked atomic execution
+  const reconciliationOps: any[] = [];
+
   // Iterate over drivers with multiple vehicles
   for (const [normName, assignedVehicles] of driverToVehiclesMap.entries()) {
     if (assignedVehicles.length <= 1) continue;
@@ -149,22 +152,26 @@ export async function reconcileDriverVehicleAssignments(): Promise<Reconciliatio
       null;
 
     // 1. Ensure the current working car has the active driver fields and DriverProfile relation
-    await prisma.vehicle.update({
-      where: { id: currentWorkingCar.id },
-      data: {
-        assigned_driver_name: realDriverName,
-        assigned_driver_phone: realDriverPhone,
-        historical_driver_name: null,
-      },
-    });
+    reconciliationOps.push(
+      prisma.vehicle.update({
+        where: { id: currentWorkingCar.id },
+        data: {
+          assigned_driver_name: realDriverName,
+          assigned_driver_phone: realDriverPhone,
+          historical_driver_name: null,
+        },
+      })
+    );
 
     if (driverProfile && driverProfile.assignedVehicleId !== currentWorkingCar.id) {
-      await prisma.driverProfile.update({
-        where: { id: driverProfile.id },
-        data: {
-          assignedVehicleId: currentWorkingCar.id,
-        },
-      });
+      reconciliationOps.push(
+        prisma.driverProfile.update({
+          where: { id: driverProfile.id },
+          data: {
+            assignedVehicleId: currentWorkingCar.id,
+          },
+        })
+      );
     }
 
     // 2. Move older vehicles to HISTORY ONLY
@@ -172,11 +179,6 @@ export async function reconcileDriverVehicleAssignments(): Promise<Reconciliatio
 
     for (const oldCar of olderHistoricalCars) {
       historicalPlates.push(oldCar.plate_number);
-
-      // Unlink driver profile if it was pointing here
-      if (driverProfile && driverProfile.assignedVehicleId === oldCar.id) {
-        // Already handled above
-      }
 
       // Append to notes for transparent audit history
       let updatedNotes = oldCar.notes || "";
@@ -194,17 +196,19 @@ export async function reconcileDriverVehicleAssignments(): Promise<Reconciliatio
         newStatus = "Available";
       }
 
-      await prisma.vehicle.update({
-        where: { id: oldCar.id },
-        data: {
-          assigned_driver_name: null,
-          assigned_driver_phone: null,
-          historical_driver_name: realDriverName,
-          historical_driver_phone: realDriverPhone,
-          status: newStatus,
-          notes: updatedNotes,
-        },
-      });
+      reconciliationOps.push(
+        prisma.vehicle.update({
+          where: { id: oldCar.id },
+          data: {
+            assigned_driver_name: null,
+            assigned_driver_phone: null,
+            historical_driver_name: realDriverName,
+            historical_driver_phone: realDriverPhone,
+            status: newStatus,
+            notes: updatedNotes,
+          },
+        })
+      );
     }
 
     result.reconciledCount++;
@@ -213,6 +217,16 @@ export async function reconcileDriverVehicleAssignments(): Promise<Reconciliatio
       currentWorkingCarPlate: currentWorkingCar.plate_number,
       historicalCarsPlates: historicalPlates,
     });
+  }
+
+  // Execute batch operations in chunked transactions to avoid N+1 query latency over HTTP
+  if (reconciliationOps.length > 0) {
+    for (let i = 0; i < reconciliationOps.length; i += 40) {
+      const chunk = reconciliationOps.slice(i, i + 40);
+      await prisma.$transaction(chunk).catch((err) => {
+        console.warn("Reconciliation batch transaction error:", err);
+      });
+    }
   }
 
   return result;

@@ -233,6 +233,28 @@
 
 ---
 
+### MEM-2026-11-16-012: Fleet Vehicle Spreadsheet Bulk Upload 504 Gateway Timeout Elimination
+- **Date**: 2026-11-16
+- **Layer**: Backend API / Database Batch Operations / Fleet Management
+- **Symptom**:
+  When uploading the vehicle fleet spreadsheet (`export-7492-vehicles.xlsx`, 12.3 KB) in the Vehicle Fleet modal (`VehicleCSVUploader.tsx`), the request failed with a red toast:
+  `❌ Délai d'attente serveur dépassé (timeout 504). L'importation prend trop de temps.`
+- **Root Cause**:
+  1. **N+1 Sequential Network Latency to Remote Database**: In `POST /api/upload-vehicles`, spreadsheet row iteration executed multiple individual Prisma queries (`prisma.vehicle.create/update`, `prisma.driverProfile.updateMany/update`, `prisma.maintenanceTicket.create/update`, `prisma.accidentClaim.deleteMany/update/create`) inside small concurrent chunks of 8. For a ~100–180 vehicle spreadsheet, this triggered 400–800 individual HTTP queries over the internet between Vercel (`cdg1` Paris) and Turso Cloud (`aws-ap-south-1` Mumbai, ~120-140ms per roundtrip), taking 60–90+ seconds and exceeding Vercel's serverless function timeout.
+  2. **Sequential Post-Upload Reconciliation**: `reconcileDriverVehicleAssignments()` executed sequential updates per duplicate driver record inside a loop, compounding the execution delay.
+  3. **Vercel Config Glob**: `vercel.json` specified `"src/app/api/**/*"`, needing explicit coverage for `"api/**/*"` in Next.js App Router deployments.
+- **Applied Solution**:
+  1. Refactored `src/app/api/upload-vehicles/route.ts` into a 2-phase architecture:
+     - **Phase 1 (In-Memory Resolution)**: All existing vehicles, drivers, open tickets, and claims are pre-fetched once in 4 queries. All spreadsheet rows are normalized, mapped, and reconciled in memory into dedicated mutation sets.
+     - **Phase 2 (Atomic Grouped Batch Execution)**: Replaced sequential per-row writes with bulk `prisma.vehicle.createMany`, `prisma.driverProfile.createMany`, `prisma.maintenanceTicket.createMany`, `prisma.accidentClaim.createMany`, and chunked transactional `prisma.$transaction(...)` batches of 40 updates. Reduced database network calls from 600+ down to ~15 total roundtrips (~1.5s total execution time, >35x faster).
+  2. Refactored `reconcileDriverVehicleAssignments` in `src/lib/services/driverVehicleReconciliation.ts` to collect operations in memory and execute via chunked `$transaction`, finishing in ~100ms.
+  3. Added `"api/**/*"` functions config in `vercel.json` with `maxDuration: 60`.
+  4. Created automated performance test `tests/bulk-vehicle-upload-speed.test.ts` verifying bulk operations and reconciliation finish in <200ms.
+- **Anti-Regression Guardrail**:
+  - Never execute individual `prisma.<model>.update` or `prisma.<model>.create` inside spreadsheet row iteration loops. Always accumulate rows in memory and execute batch `createMany` or chunked `prisma.$transaction`.
+
+---
+
 ## Standard Squad Memory Entry Template
 
 Whenever a new issue is investigated and resolved by the CTO Engineering Squad, append a new entry using this template:

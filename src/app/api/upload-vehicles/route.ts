@@ -245,13 +245,19 @@ export async function POST(request: NextRequest) {
     const driverByName = new Map<string, typeof allDrivers[0]>();
     const driverByPhone = new Map<string, typeof allDrivers[0]>();
     const driverByAssignedVehicleId = new Map<string, typeof allDrivers[0]>();
+    const existingCins = new Set<string>();
+    const existingPhones = new Set<string>();
 
     for (const d of allDrivers) {
       const clean = d.fullName.toLowerCase().replace(/\s+/g, " ").trim();
       driverByName.set(clean, d);
       if (d.phoneSanitized) {
+        existingPhones.add(d.phoneSanitized.trim());
         const cleanP = d.phoneSanitized.replace(/\D/g, "").slice(-9);
         if (cleanP) driverByPhone.set(cleanP, d);
+      }
+      if (d.cinNumber) {
+        existingCins.add(d.cinNumber.toUpperCase().trim());
       }
       if (d.assignedVehicleId) {
         driverByAssignedVehicleId.set(d.assignedVehicleId, d);
@@ -416,610 +422,574 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process valid rows in concurrent batches of 8 for optimal network throughput to Turso
-    const BATCH_SIZE = 8;
-    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
-      const chunk = validRows.slice(i, i + BATCH_SIZE);
+    // In-memory accumulation collections for high-speed batch execution (eliminates N+1 query latency)
+    const newVehiclesToCreate: any[] = [];
+    const vehicleUpdates = new Map<string, any>();
+    const ticketPlateUpdates: { vehicleId: string; newPlate: string }[] = [];
 
-      await Promise.all(
-        chunk.map(async (item) => {
-          try {
-            let existing = vehicleByPlate.get(item.plate_number) || vehicleByNorm.get(item.normPlate);
+    const driverUnlinkVehicleIds = new Set<string>();
+    const driverNameUpdates = new Map<string, string>();
+    const formerVehicleHistoryUpdates: { vehicleId: string; historicalName: string; historicalPhone?: string | null }[] = [];
+    const driverAssignUpdates = new Map<string, string>();
+    const newDriversToCreate: any[] = [];
 
-            // 1. Try matching by VIN (handles license plate transitions like WW -> permanent)
-            if (!existing && item.vin) {
-              const cleanVin = item.vin.toUpperCase().trim();
-              existing = vehicleByVin.get(cleanVin);
+    const ticketsToCreate: any[] = [];
+    const ticketsToUpdate = new Map<string, any>();
+    const ticketIdsToResolve = new Set<string>();
+
+    const claimsToCreate: any[] = [];
+    const claimsToUpdate = new Map<string, any>();
+    const claimIdsToDelete = new Set<string>();
+    const claimIdsToSetVehicleBack = new Set<string>();
+
+    // ── Phase 1: Parse and Reconcile All Rows In-Memory ──
+    for (const item of validRows) {
+      try {
+        let existing = vehicleByPlate.get(item.plate_number) || vehicleByNorm.get(item.normPlate);
+
+        // 1. Try matching by VIN (handles license plate transitions like WW -> permanent)
+        if (!existing && item.vin) {
+          const cleanVin = item.vin.toUpperCase().trim();
+          existing = vehicleByVin.get(cleanVin);
+        }
+
+        // 2. Try matching by Old Number
+        if (!existing && item.oldNumber) {
+          const cleanOld = cleanPlateInput(item.oldNumber);
+          const normOld = normalizePlate(item.oldNumber);
+          existing =
+            vehicleByPlate.get(cleanOld) ||
+            vehicleByNorm.get(normOld) ||
+            vehicleByOldPlate.get(cleanOld) ||
+            vehicleByOldPlate.get(normOld);
+        }
+
+        // 3. Try matching by Registration Number
+        if (!existing && item.regNu) {
+          const cleanReg = cleanPlateInput(item.regNu);
+          const normReg = normalizePlate(item.regNu);
+          existing = vehicleByPlate.get(cleanReg) || vehicleByNorm.get(normReg);
+        }
+
+        let vehicleId: string;
+
+        if (!existing) {
+          vehicleId = crypto.randomUUID();
+          const newVehicle = {
+            id: vehicleId,
+            plate_number: item.plate_number,
+            make_model: item.make_model,
+            year: item.year,
+            vin: item.vin,
+            hub_city: item.hub_city,
+            status: item.status,
+            total_downtime_days: item.downtimeDays,
+            insurance_policy_number: item.insurancePolicy,
+            isInsuranceActive: item.isInsuranceActive,
+            assigned_driver_name: item.driverName,
+            assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
+            assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
+            notes: item.notes,
+            current_mileage: 0,
+            created_at: new Date(),
+            updated_at: new Date(),
+          };
+          newVehiclesToCreate.push(newVehicle);
+          vehicleByPlate.set(item.plate_number, newVehicle as any);
+          vehicleByNorm.set(item.normPlate, newVehicle as any);
+          if (newVehicle.vin) vehicleByVin.set(newVehicle.vin.toUpperCase().trim(), newVehicle as any);
+          inserted++;
+        } else {
+          vehicleId = existing.id;
+          let notesToSave = item.notes || existing.notes;
+          const previousPlate = existing.plate_number;
+          if (previousPlate !== item.plate_number) {
+            const transitionNote = `Ancien N°: ${previousPlate}`;
+            if (!notesToSave || !notesToSave.includes(previousPlate)) {
+              notesToSave = notesToSave ? `${notesToSave} · ${transitionNote}` : transitionNote;
             }
 
-            // 2. Try matching by Old Number
-            if (!existing && item.oldNumber) {
-              const cleanOld = cleanPlateInput(item.oldNumber);
-              const normOld = normalizePlate(item.oldNumber);
-              existing =
-                vehicleByPlate.get(cleanOld) ||
-                vehicleByNorm.get(normOld) ||
-                vehicleByOldPlate.get(cleanOld) ||
-                vehicleByOldPlate.get(normOld);
-            }
-
-            // 3. Try matching by Registration Number
-            if (!existing && item.regNu) {
-              const cleanReg = cleanPlateInput(item.regNu);
-              const normReg = normalizePlate(item.regNu);
-              existing = vehicleByPlate.get(cleanReg) || vehicleByNorm.get(normReg);
-            }
-
-            let vehicleId: string;
-
-            if (!existing) {
-              const newVehicle = await prisma.vehicle.create({
-                data: {
-                  plate_number: item.plate_number,
-                  make_model: item.make_model,
-                  year: item.year,
-                  vin: item.vin,
-                  hub_city: item.hub_city,
-                  status: item.status,
-                  total_downtime_days: item.downtimeDays,
-                  insurance_policy_number: item.insurancePolicy,
-                  isInsuranceActive: item.isInsuranceActive,
-                  assigned_driver_name: item.driverName,
-                  assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
-                  assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
-                  notes: item.notes,
-                  current_mileage: 0,
-                },
-              });
-              vehicleId = newVehicle.id;
-              vehicleByPlate.set(item.plate_number, newVehicle);
-              vehicleByNorm.set(item.normPlate, newVehicle);
-              if (newVehicle.vin) vehicleByVin.set(newVehicle.vin.toUpperCase().trim(), newVehicle);
-              inserted++;
-            } else {
-              let notesToSave = item.notes || existing.notes;
-              const previousPlate = existing.plate_number;
-              if (previousPlate !== item.plate_number) {
-                const transitionNote = `Ancien N°: ${previousPlate}`;
-                if (!notesToSave || !notesToSave.includes(previousPlate)) {
-                  notesToSave = notesToSave ? `${notesToSave} · ${transitionNote}` : transitionNote;
-                }
-
-                // Update any maintenance tickets still under previous plate
-                await prisma.maintenanceTicket.updateMany({
-                  where: { vehicle_id: existing.id },
-                  data: { plate_number: item.plate_number },
-                }).catch(() => {});
-              }
-
-              const updatedVehicle = await prisma.vehicle.update({
-                where: { id: existing.id },
-                data: {
-                  plate_number: item.plate_number,
-                  make_model: item.make_model,
-                  year: item.year,
-                  vin: item.vin || existing.vin,
-                  hub_city: item.hub_city,
-                  status:
-                    item.status === "Available"
-                      ? (item.driverName ? "Actif" : "Available")
-                      : item.status,
-                  is_archived: false,
-                  total_downtime_days: item.downtimeDays || existing.total_downtime_days,
-                  insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
-                  isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
-                  assigned_driver_name:
-                    item.status === "Available" && !item.driverName
-                      ? null
-                      : item.driverName || existing.assigned_driver_name,
-                  historical_driver_name:
-                    item.status === "Available" && !item.driverName && existing.assigned_driver_name
-                      ? existing.assigned_driver_name
-                      : existing.historical_driver_name,
-                  assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_supervisor || "Mohamed Aziz"),
-                  assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_collector || "Mohamed Aziz"),
-                  notes: notesToSave,
-                },
-              });
-              vehicleId = updatedVehicle.id;
-              vehicleByPlate.set(item.plate_number, updatedVehicle);
-              vehicleByNorm.set(item.normPlate, updatedVehicle);
-              if (updatedVehicle.vin) vehicleByVin.set(updatedVehicle.vin.toUpperCase().trim(), updatedVehicle);
-              updated++;
-            }
-
-            processedVehicleIds.add(vehicleId);
-
-            // Driver profile auto-link (Multi-strategy: Phone -> Vehicle Existing Driver -> Fuzzy Name)
-            let matchedDriver: any = null;
-            if (vehicleId) {
-              const targetPhone = item.driverPhone || existing?.assigned_driver_phone;
-              if (targetPhone) {
-                const cleanP = targetPhone.replace(/\D/g, "").slice(-9);
-                if (cleanP && driverByPhone.has(cleanP)) {
-                  matchedDriver = driverByPhone.get(cleanP);
-                }
-              }
-
-              // Check existing driver assigned to this vehicle
-              if (!matchedDriver && driverByAssignedVehicleId.has(vehicleId)) {
-                const currentAssigned = driverByAssignedVehicleId.get(vehicleId)!;
-                if (!item.driverName) {
-                  matchedDriver = currentAssigned;
-                } else {
-                  const curNorm = currentAssigned.fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
-                  const targetNorm = item.driverName.toLowerCase().replace(/[^a-z0-9]/g, "");
-                  if (curNorm === targetNorm || curNorm.includes(targetNorm) || targetNorm.includes(curNorm)) {
-                    matchedDriver = currentAssigned;
-                  }
-                }
-              }
-
-              // Match by name
-              if (!matchedDriver && item.driverName) {
-                const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
-                matchedDriver = driverByName.get(cleanTarget);
-
-                // Fallback word & fuzzy matching
-                if (!matchedDriver) {
-                  const targetWords = cleanTarget.split(" ").filter((w: string) => w.length >= 3);
-                  for (const [key, d] of driverByName.entries()) {
-                    const keyWords = key.split(" ").filter((w: string) => w.length >= 3);
-                    if (targetWords.length >= 2 && targetWords.every((w: string) => key.includes(w))) {
-                      matchedDriver = d;
-                      break;
-                    }
-                    // Handle spelling variations like benjaloun vs benjelloun
-                    if (targetWords.length >= 2 && keyWords.length >= 2) {
-                      const firstNameMatch = targetWords[0] === keyWords[0];
-                      const lastName1 = targetWords[targetWords.length - 1];
-                      const lastName2 = keyWords[keyWords.length - 1];
-                      if (firstNameMatch && (lastName1.startsWith(lastName2.slice(0, 4)) || lastName2.startsWith(lastName1.slice(0, 4)))) {
-                        matchedDriver = d;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-
-              if (item.status !== "Actif") {
-                // Non-working vehicle (Available, maintenance, police_immobilization, missing_key, etc.):
-                // Release any active DriverProfile pointing to this vehicle so immobilized/garage cars
-                // do not inflate active daily collection driver counts.
-                await prisma.driverProfile.updateMany({
-                  where: { assignedVehicleId: vehicleId },
-                  data: { assignedVehicleId: null },
-                }).catch(() => {});
-                for (const d of allDrivers) {
-                  if (d.assignedVehicleId === vehicleId) {
-                    d.assignedVehicleId = null;
-                  }
-                }
-                driverByAssignedVehicleId.delete(vehicleId);
-              } else if (matchedDriver) {
-                // Update driver name if vehicle CSV has a better/updated spelling
-                if (item.driverName && matchedDriver.fullName !== item.driverName) {
-                  await prisma.driverProfile.update({
-                    where: { id: matchedDriver.id },
-                    data: { fullName: item.driverName, is_archived: false },
-                  }).catch(() => {});
-                  matchedDriver.fullName = item.driverName;
-                }
-
-                if (matchedDriver.assignedVehicleId !== vehicleId || matchedDriver.is_archived) {
-                  // Release driver's former vehicle to history
-                  if (matchedDriver.assignedVehicleId && matchedDriver.assignedVehicleId !== vehicleId) {
-                    await prisma.vehicle.update({
-                      where: { id: matchedDriver.assignedVehicleId },
-                      data: {
-                        assigned_driver_name: null,
-                        assigned_driver_phone: null,
-                        historical_driver_name: matchedDriver.fullName,
-                        historical_driver_phone: matchedDriver.phoneSanitized,
-                      },
-                    }).catch(() => {});
-                  }
-
-                  // Release this vehicle from ANY other driver first to prevent unique constraint violation
-                  await prisma.driverProfile.updateMany({
-                    where: { assignedVehicleId: vehicleId, id: { not: matchedDriver.id } },
-                    data: { assignedVehicleId: null },
-                  });
-                  for (const d of allDrivers) {
-                    if (d.assignedVehicleId === vehicleId && d.id !== matchedDriver.id) {
-                      d.assignedVehicleId = null;
-                    }
-                  }
-
-                  await prisma.driverProfile.update({
-                    where: { id: matchedDriver.id },
-                    data: { assignedVehicleId: vehicleId, is_archived: false },
-                  });
-                  matchedDriver.assignedVehicleId = vehicleId;
-                  matchedDriver.is_archived = false;
-                  driverByAssignedVehicleId.set(vehicleId, matchedDriver);
-                }
-                linked_drivers++;
-              } else if (item.driverName) {
-                try {
-                  // Release this vehicle from ANY other driver first
-                  await prisma.driverProfile.updateMany({
-                    where: { assignedVehicleId: vehicleId },
-                    data: { assignedVehicleId: null },
-                  });
-                  for (const d of allDrivers) {
-                    if (d.assignedVehicleId === vehicleId) {
-                      d.assignedVehicleId = null;
-                    }
-                  }
-
-                  const realPhone = item.driverPhone || existing?.assigned_driver_phone;
-                  const cleanRealPhone = realPhone ? realPhone.replace(/\D/g, "") : "";
-                  const phoneFormatted = cleanRealPhone && cleanRealPhone.length >= 9
-                    ? (cleanRealPhone.startsWith("212") ? `+${cleanRealPhone}` : `+212${cleanRealPhone.slice(-9)}`)
-                    : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
-
-                  const newDriver = await prisma.driverProfile.create({
-                    data: {
-                      fullName: item.driverName,
-                      phoneSanitized: phoneFormatted,
-                      cinNumber: `CIN-${item.plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`,
-                      age: 30,
-                      licenseSeniority: 4,
-                      contractType: "STANDARD",
-                      isKycVerified: true,
-                      defaultStage: "NOMINAL",
-                      currentArrearsMAD: 0.0,
-                      monthlyTripCount: 0,
-                      assignedVehicleId: vehicleId,
-                    },
-                  });
-                  matchedDriver = newDriver;
-                  const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
-                  driverByName.set(cleanTarget, newDriver);
-                  const pDigits = phoneFormatted.replace(/\D/g, "").slice(-9);
-                  if (pDigits) driverByPhone.set(pDigits, newDriver);
-                  driverByAssignedVehicleId.set(vehicleId, newDriver);
-                  allDrivers.push(newDriver as any);
-                  linked_drivers++;
-                } catch (e) {
-                  // Ignore duplicate key if concurrently inserted
-                }
-              }
-            }
-
-            // Status-driven Ticket & Claim synchronization
-            const statusStartDate = new Date(Date.now() - (item.downtimeDays || 0) * 24 * 60 * 60 * 1000);
-            const startDateFormatted = statusStartDate.toLocaleDateString("fr-FR");
-
-            if (item.status === "impounded") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
-              const existingTicket = openTickets.find((t) =>
-                ["Fourrière", "impounded", "Fourriere"].includes(t.ticket_type)
-              );
-
-              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
-              const desc = `🚨 Véhicule en fourrière depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Suivi sortie de fourrière & frais journaliers.`;
-
-              if (existingTicket) {
-                await prisma.maintenanceTicket.update({
-                  where: { id: existingTicket.id },
-                  data: {
-                    description: desc,
-                    priority,
-                    driver_name: item.driverName || existingTicket.driver_name,
-                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                  },
-                }).catch(() => {});
-                tickets_updated++;
-              } else {
-                const newTicket = await prisma.maintenanceTicket.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    plate_number: item.plate_number,
-                    driver_name: item.driverName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    ticket_type: "Fourrière",
-                    priority,
-                    status: "OPEN",
-                    description: desc,
-                    created_at: statusStartDate,
-                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                  },
-                }).catch(() => null);
-
-                if (newTicket) {
-                  openTickets.push(newTicket);
-                  openTicketsByVehicleId.set(vehicleId, openTickets);
-                  tickets_created++;
-                }
-              }
-            } else if (item.status === "police_immobilization") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
-              const existingTicket = openTickets.find((t) =>
-                ["Police Immobilization", "police_immobilization", "Sabot"].includes(t.ticket_type)
-              );
-
-              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
-              const desc = `🚔 Immobilisation Police / Sabot depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative et mainlevée.`;
-
-              if (existingTicket) {
-                await prisma.maintenanceTicket.update({
-                  where: { id: existingTicket.id },
-                  data: {
-                    description: desc,
-                    priority,
-                    driver_name: item.driverName || existingTicket.driver_name,
-                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                  },
-                }).catch(() => {});
-                tickets_updated++;
-              } else {
-                const newTicket = await prisma.maintenanceTicket.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    plate_number: item.plate_number,
-                    driver_name: item.driverName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    ticket_type: "Police Immobilization",
-                    priority,
-                    status: "OPEN",
-                    description: desc,
-                    created_at: statusStartDate,
-                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                  },
-                }).catch(() => null);
-
-                if (newTicket) {
-                  openTickets.push(newTicket);
-                  openTicketsByVehicleId.set(vehicleId, openTickets);
-                  tickets_created++;
-                }
-              }
-            } else if (item.status === "missing_document") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
-              const existingTicket = openTickets.find((t) =>
-                ["Documents manquants", "missing_document", "missing_documents"].includes(t.ticket_type)
-              );
-
-              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
-              const desc = `📄 Documents manquants signalés depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative requise.`;
-
-              if (existingTicket) {
-                await prisma.maintenanceTicket.update({
-                  where: { id: existingTicket.id },
-                  data: {
-                    description: desc,
-                    priority,
-                    driver_name: item.driverName || existingTicket.driver_name,
-                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                  },
-                }).catch(() => {});
-                tickets_updated++;
-              } else {
-                const newTicket = await prisma.maintenanceTicket.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    plate_number: item.plate_number,
-                    driver_name: item.driverName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    ticket_type: "Documents manquants",
-                    priority,
-                    status: "OPEN",
-                    description: desc,
-                    created_at: statusStartDate,
-                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                  },
-                }).catch(() => null);
-
-                if (newTicket) {
-                  openTickets.push(newTicket);
-                  openTicketsByVehicleId.set(vehicleId, openTickets);
-                  tickets_created++;
-                }
-              }
-            } else if (item.status === "missing_key") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
-              const existingTicket = openTickets.find((t) =>
-                ["Clé manquante", "missing_key"].includes(t.ticket_type)
-              );
-
-              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
-              const desc = `🔑 Clé manquante signalée depuis ${item.downtimeDays} jour(s) (depuis le ${startDateFormatted}). Récupération ou double de clé requis.`;
-
-              if (existingTicket) {
-                await prisma.maintenanceTicket.update({
-                  where: { id: existingTicket.id },
-                  data: {
-                    description: desc,
-                    priority,
-                    driver_name: item.driverName || existingTicket.driver_name,
-                    driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
-                  },
-                }).catch(() => {});
-                tickets_updated++;
-              } else {
-                const newTicket = await prisma.maintenanceTicket.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    plate_number: item.plate_number,
-                    driver_name: item.driverName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    ticket_type: "Clé manquante",
-                    priority,
-                    status: "OPEN",
-                    description: desc,
-                    created_at: statusStartDate,
-                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                  },
-                }).catch(() => null);
-
-                if (newTicket) {
-                  openTickets.push(newTicket);
-                  openTicketsByVehicleId.set(vehicleId, openTickets);
-                  tickets_created++;
-                }
-              }
-            } else if (item.status === "Accident" || item.status === "In garage") {
-              const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
-              const existingTicket = openTickets[0];
-              const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
-              const desc = `💥 Véhicule en maintenance / accident signalé via import CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`;
-
-              if (!existingTicket) {
-                const newTicket = await prisma.maintenanceTicket.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    plate_number: item.plate_number,
-                    driver_name: item.driverName || matchedDriver?.fullName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    ticket_type: "Accident",
-                    priority,
-                    status: "IN_PROGRESS",
-                    started_at: statusStartDate,
-                    description: desc,
-                    created_at: statusStartDate,
-                    sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                  },
-                }).catch(() => null);
-
-                if (newTicket) {
-                  openTickets.push(newTicket);
-                  openTicketsByVehicleId.set(vehicleId, openTickets);
-                  tickets_created++;
-                }
-              }
-
-              const vClaims = claimsByVehicleId.get(vehicleId) || [];
-              const activeClaim = vClaims.find((c) => c.timeline_step !== "VEHICLE_BACK");
-
-              if (activeClaim) {
-                // Vehicle already in "Dossiers En Cours"
-                // Clean up any old duplicate completed claims in VEHICLE_BACK so vehicle is removed from retablis
-                const restoredDuplicates = vClaims.filter((c) => c.timeline_step === "VEHICLE_BACK");
-                if (restoredDuplicates.length > 0) {
-                  await prisma.accidentClaim.deleteMany({
-                    where: { id: { in: restoredDuplicates.map((c) => c.id) } },
-                  }).catch(() => {});
-                  claimsByVehicleId.set(vehicleId, [activeClaim]);
-                }
-              } else if (vClaims.length > 0) {
-                // Vehicle has claim(s) in VEHICLE_BACK (Véhicules Rétablis) but is currently in maintenance in Excel!
-                // Reopen the primary claim to CAR_IN_GARAGE ("need to be in dossiers en cours and get removed from retablis")!
-                const sortedClaims = [...vClaims].sort((a, b) => {
-                  let aComments = 0;
-                  let bComments = 0;
-                  try { aComments = a.comments ? JSON.parse(a.comments).length : 0; } catch {}
-                  try { bComments = b.comments ? JSON.parse(b.comments).length : 0; } catch {}
-                  return bComments - aComments;
-                });
-                const primaryClaim = sortedClaims[0];
-                const extraDuplicates = sortedClaims.slice(1);
-
-                await prisma.accidentClaim.update({
-                  where: { id: primaryClaim.id },
-                  data: {
-                    timeline_step: "CAR_IN_GARAGE",
-                    step_updated_at: statusStartDate,
-                    driver_id: matchedDriver?.id || null,
-                    driver_name: item.driverName || matchedDriver?.fullName || primaryClaim.driver_name,
-                    driver_phone: matchedDriver?.phoneSanitized || primaryClaim.driver_phone,
-                  },
-                }).catch(() => {});
-
-                if (extraDuplicates.length > 0) {
-                  await prisma.accidentClaim.deleteMany({
-                    where: { id: { in: extraDuplicates.map((c) => c.id) } },
-                  }).catch(() => {});
-                }
-
-                primaryClaim.timeline_step = "CAR_IN_GARAGE";
-                claimsByVehicleId.set(vehicleId, [primaryClaim]);
-              } else {
-                // No claim at all -> create new in CAR_IN_GARAGE
-                const newClaim = await prisma.accidentClaim.create({
-                  data: {
-                    vehicle_id: vehicleId,
-                    driver_id: matchedDriver?.id || null,
-                    driver_name: item.driverName || matchedDriver?.fullName || null,
-                    driver_phone: matchedDriver?.phoneSanitized || null,
-                    severity: "HARD",
-                    fault: null,
-                    timeline_step: "CAR_IN_GARAGE",
-                    step_updated_at: statusStartDate,
-                    created_at: statusStartDate,
-                    comments: JSON.stringify([
-                      {
-                        id: crypto.randomUUID(),
-                        timeline_step: "CAR_IN_GARAGE",
-                        comment: `Dossier créé automatiquement via import Flotte CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`,
-                        author: "Import Flotte",
-                        created_at: statusStartDate.toISOString(),
-                      },
-                    ]),
-                  },
-                }).catch(() => null);
-
-                if (newClaim) {
-                  claimsByVehicleId.set(vehicleId, [newClaim]);
-                }
-              }
-            } else if (item.status === "Actif" || item.status === "Available") {
-              const allOpenTicketsForVehicle = openTicketsByVehicleId.get(vehicleId) || [];
-              const openTickets = allOpenTicketsForVehicle.filter(
-                (t) => t.ticket_type !== "VEHICLE_RECOVERY" && t.ticket_type !== "Vehicle Recovery"
-              );
-              if (openTickets.length > 0) {
-                await prisma.maintenanceTicket.updateMany({
-                  where: { id: { in: openTickets.map((t) => t.id) } },
-                  data: {
-                    status: "RESOLVED",
-                    resolved_at: new Date(),
-                    resolution_notes: `Résolu automatiquement via import CSV Flotte : Véhicule remis en statut "${item.status}" le ${new Date().toLocaleDateString("fr-FR")}.`,
-                  },
-                }).catch(() => {});
-                tickets_resolved += openTickets.length;
-                openTicketsByVehicleId.set(
-                  vehicleId,
-                  allOpenTicketsForVehicle.filter(
-                    (t) => t.ticket_type === "VEHICLE_RECOVERY" || t.ticket_type === "Vehicle Recovery"
-                  )
-                );
-              }
-
-              const vClaims = claimsByVehicleId.get(vehicleId) || [];
-              const activeClaims = vClaims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
-              if (activeClaims.length > 0) {
-                await prisma.accidentClaim.updateMany({
-                  where: {
-                    vehicle_id: vehicleId,
-                    timeline_step: { not: "VEHICLE_BACK" },
-                  },
-                  data: {
-                    timeline_step: "VEHICLE_BACK",
-                    step_updated_at: new Date(),
-                  },
-                }).catch(() => {});
-
-                for (const c of activeClaims) {
-                  c.timeline_step = "VEHICLE_BACK";
-                }
-              }
-            }
-          } catch (rowErr: any) {
-            console.warn(`Error processing vehicle row ${item.plate_number}:`, rowErr?.message || rowErr);
+            // Update any maintenance tickets still under previous plate
+            ticketPlateUpdates.push({ vehicleId: existing.id, newPlate: item.plate_number });
           }
-        })
-      );
+
+          const newStatus =
+            item.status === "Available"
+              ? (item.driverName ? "Actif" : "Available")
+              : item.status;
+          const newAssignedDriverName =
+            item.status === "Available" && !item.driverName
+              ? null
+              : item.driverName || existing.assigned_driver_name;
+          const newHistoricalDriverName =
+            item.status === "Available" && !item.driverName && existing.assigned_driver_name
+              ? existing.assigned_driver_name
+              : existing.historical_driver_name;
+          const newSupervisor = isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_supervisor || "Mohamed Aziz");
+          const newCollector = isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_collector || "Mohamed Aziz");
+
+          const updateData = {
+            plate_number: item.plate_number,
+            make_model: item.make_model,
+            year: item.year,
+            vin: item.vin || existing.vin,
+            hub_city: item.hub_city,
+            status: newStatus,
+            is_archived: false,
+            total_downtime_days: item.downtimeDays || existing.total_downtime_days,
+            insurance_policy_number: item.insurancePolicy || existing.insurance_policy_number,
+            isInsuranceActive: item.isInsuranceActive || existing.isInsuranceActive,
+            assigned_driver_name: newAssignedDriverName,
+            historical_driver_name: newHistoricalDriverName,
+            assigned_supervisor: newSupervisor,
+            assigned_collector: newCollector,
+            notes: notesToSave,
+            updated_at: new Date(),
+          };
+
+          vehicleUpdates.set(existing.id, updateData);
+          Object.assign(existing, updateData);
+          vehicleByPlate.set(item.plate_number, existing);
+          vehicleByNorm.set(item.normPlate, existing);
+          if (existing.vin) vehicleByVin.set(existing.vin.toUpperCase().trim(), existing);
+          updated++;
+        }
+
+        processedVehicleIds.add(vehicleId);
+
+        // Driver profile auto-link (Multi-strategy: Phone -> Vehicle Existing Driver -> Fuzzy Name)
+        let matchedDriver: any = null;
+        if (vehicleId) {
+          const targetPhone = item.driverPhone || existing?.assigned_driver_phone;
+          if (targetPhone) {
+            const cleanP = targetPhone.replace(/\D/g, "").slice(-9);
+            if (cleanP && driverByPhone.has(cleanP)) {
+              matchedDriver = driverByPhone.get(cleanP);
+            }
+          }
+
+          // Check existing driver assigned to this vehicle
+          if (!matchedDriver && driverByAssignedVehicleId.has(vehicleId)) {
+            const currentAssigned = driverByAssignedVehicleId.get(vehicleId)!;
+            if (!item.driverName) {
+              matchedDriver = currentAssigned;
+            } else {
+              const curNorm = currentAssigned.fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
+              const targetNorm = item.driverName.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (curNorm === targetNorm || curNorm.includes(targetNorm) || targetNorm.includes(curNorm)) {
+                matchedDriver = currentAssigned;
+              }
+            }
+          }
+
+          // Match by name
+          if (!matchedDriver && item.driverName) {
+            const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
+            matchedDriver = driverByName.get(cleanTarget);
+
+            // Fallback word & fuzzy matching
+            if (!matchedDriver) {
+              const targetWords = cleanTarget.split(" ").filter((w: string) => w.length >= 3);
+              for (const [key, d] of driverByName.entries()) {
+                const keyWords = key.split(" ").filter((w: string) => w.length >= 3);
+                if (targetWords.length >= 2 && targetWords.every((w: string) => key.includes(w))) {
+                  matchedDriver = d;
+                  break;
+                }
+                // Handle spelling variations like benjaloun vs benjelloun
+                if (targetWords.length >= 2 && keyWords.length >= 2) {
+                  const firstNameMatch = targetWords[0] === keyWords[0];
+                  const lastName1 = targetWords[targetWords.length - 1];
+                  const lastName2 = keyWords[keyWords.length - 1];
+                  if (firstNameMatch && (lastName1.startsWith(lastName2.slice(0, 4)) || lastName2.startsWith(lastName1.slice(0, 4)))) {
+                    matchedDriver = d;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (item.status !== "Actif") {
+            // Non-working vehicle (Available, maintenance, police_immobilization, missing_key, etc.):
+            // Release any active DriverProfile pointing to this vehicle so immobilized/garage cars
+            // do not inflate active daily collection driver counts.
+            driverUnlinkVehicleIds.add(vehicleId);
+            for (const d of allDrivers) {
+              if (d.assignedVehicleId === vehicleId) {
+                d.assignedVehicleId = null;
+              }
+            }
+            driverByAssignedVehicleId.delete(vehicleId);
+          } else if (matchedDriver) {
+            // Update driver name if vehicle CSV has a better/updated spelling
+            if (item.driverName && matchedDriver.fullName !== item.driverName) {
+              driverNameUpdates.set(matchedDriver.id, item.driverName);
+              matchedDriver.fullName = item.driverName;
+            }
+
+            if (matchedDriver.assignedVehicleId !== vehicleId || matchedDriver.is_archived) {
+              // Release driver's former vehicle to history
+              if (matchedDriver.assignedVehicleId && matchedDriver.assignedVehicleId !== vehicleId) {
+                formerVehicleHistoryUpdates.push({
+                  vehicleId: matchedDriver.assignedVehicleId,
+                  historicalName: matchedDriver.fullName,
+                  historicalPhone: matchedDriver.phoneSanitized,
+                });
+              }
+
+              // Release this vehicle from ANY other driver first to prevent unique constraint violation
+              driverUnlinkVehicleIds.add(vehicleId);
+              for (const d of allDrivers) {
+                if (d.assignedVehicleId === vehicleId && d.id !== matchedDriver.id) {
+                  d.assignedVehicleId = null;
+                }
+              }
+
+              driverAssignUpdates.set(matchedDriver.id, vehicleId);
+              matchedDriver.assignedVehicleId = vehicleId;
+              matchedDriver.is_archived = false;
+              driverByAssignedVehicleId.set(vehicleId, matchedDriver);
+            }
+            linked_drivers++;
+          } else if (item.driverName) {
+            // Release this vehicle from ANY other driver first
+            driverUnlinkVehicleIds.add(vehicleId);
+            for (const d of allDrivers) {
+              if (d.assignedVehicleId === vehicleId) {
+                d.assignedVehicleId = null;
+              }
+            }
+
+            const realPhone = item.driverPhone || existing?.assigned_driver_phone;
+            const cleanRealPhone = realPhone ? realPhone.replace(/\D/g, "") : "";
+            let phoneFormatted = cleanRealPhone && cleanRealPhone.length >= 9
+              ? (cleanRealPhone.startsWith("212") ? `+${cleanRealPhone}` : `+212${cleanRealPhone.slice(-9)}`)
+              : `+212600${Math.floor(100000 + Math.random() * 900000)}`;
+
+            while (existingPhones.has(phoneFormatted)) {
+              phoneFormatted = `+212600${Math.floor(100000 + Math.random() * 900000)}`;
+            }
+            existingPhones.add(phoneFormatted);
+
+            let cinNumber = `CIN-${item.plate_number.replace(/\D/g, "").slice(-4) || Math.floor(1000 + Math.random() * 9000)}`;
+            while (existingCins.has(cinNumber)) {
+              cinNumber = `CIN-${Math.floor(100000 + Math.random() * 900000)}`;
+            }
+            existingCins.add(cinNumber);
+
+            const newDriverId = crypto.randomUUID();
+            const newDriver = {
+              id: newDriverId,
+              fullName: item.driverName,
+              phoneSanitized: phoneFormatted,
+              cinNumber,
+              age: 30,
+              licenseSeniority: 4,
+              contractType: "STANDARD",
+              isKycVerified: true,
+              defaultStage: "NOMINAL",
+              currentArrearsMAD: 0.0,
+              monthlyTripCount: 0,
+              assignedVehicleId: vehicleId,
+              is_archived: false,
+              created_at: new Date(),
+              updated_at: new Date(),
+            };
+
+            newDriversToCreate.push(newDriver);
+            matchedDriver = newDriver;
+            const cleanTarget = item.driverName.toLowerCase().replace(/\s+/g, " ").trim();
+            driverByName.set(cleanTarget, newDriver as any);
+            const pDigits = phoneFormatted.replace(/\D/g, "").slice(-9);
+            if (pDigits) driverByPhone.set(pDigits, newDriver as any);
+            driverByAssignedVehicleId.set(vehicleId, newDriver as any);
+            allDrivers.push(newDriver as any);
+            linked_drivers++;
+          }
+        }
+
+        // Status-driven Ticket & Claim synchronization
+        const statusStartDate = new Date(Date.now() - (item.downtimeDays || 0) * 24 * 60 * 60 * 1000);
+        const startDateFormatted = statusStartDate.toLocaleDateString("fr-FR");
+
+        if (item.status === "impounded") {
+          const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+          const existingTicket = openTickets.find((t) =>
+            ["Fourrière", "impounded", "Fourriere"].includes(t.ticket_type)
+          );
+
+          const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+          const desc = `🚨 Véhicule en fourrière depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Suivi sortie de fourrière & frais journaliers.`;
+
+          if (existingTicket) {
+            ticketsToUpdate.set(existingTicket.id, {
+              description: desc,
+              priority,
+              driver_name: item.driverName || existingTicket.driver_name,
+              driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+            });
+            tickets_updated++;
+          } else {
+            const newTicket = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              plate_number: item.plate_number,
+              driver_name: item.driverName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              ticket_type: "Fourrière",
+              priority,
+              status: "OPEN",
+              description: desc,
+              created_at: statusStartDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            };
+            ticketsToCreate.push(newTicket);
+            openTickets.push(newTicket as any);
+            openTicketsByVehicleId.set(vehicleId, openTickets);
+            tickets_created++;
+          }
+        } else if (item.status === "police_immobilization") {
+          const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+          const existingTicket = openTickets.find((t) =>
+            ["Police Immobilization", "police_immobilization", "Sabot"].includes(t.ticket_type)
+          );
+
+          const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+          const desc = `🚔 Immobilisation Police / Sabot depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative et mainlevée.`;
+
+          if (existingTicket) {
+            ticketsToUpdate.set(existingTicket.id, {
+              description: desc,
+              priority,
+              driver_name: item.driverName || existingTicket.driver_name,
+              driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+            });
+            tickets_updated++;
+          } else {
+            const newTicket = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              plate_number: item.plate_number,
+              driver_name: item.driverName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              ticket_type: "Police Immobilization",
+              priority,
+              status: "OPEN",
+              description: desc,
+              created_at: statusStartDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            };
+            ticketsToCreate.push(newTicket);
+            openTickets.push(newTicket as any);
+            openTicketsByVehicleId.set(vehicleId, openTickets);
+            tickets_created++;
+          }
+        } else if (item.status === "missing_document") {
+          const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+          const existingTicket = openTickets.find((t) =>
+            ["Documents manquants", "missing_document", "missing_documents"].includes(t.ticket_type)
+          );
+
+          const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+          const desc = `📄 Documents manquants signalés depuis ${item.downtimeDays} jours (depuis le ${startDateFormatted}). Régularisation administrative requise.`;
+
+          if (existingTicket) {
+            ticketsToUpdate.set(existingTicket.id, {
+              description: desc,
+              priority,
+              driver_name: item.driverName || existingTicket.driver_name,
+              driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+            });
+            tickets_updated++;
+          } else {
+            const newTicket = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              plate_number: item.plate_number,
+              driver_name: item.driverName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              ticket_type: "Documents manquants",
+              priority,
+              status: "OPEN",
+              description: desc,
+              created_at: statusStartDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            };
+            ticketsToCreate.push(newTicket);
+            openTickets.push(newTicket as any);
+            openTicketsByVehicleId.set(vehicleId, openTickets);
+            tickets_created++;
+          }
+        } else if (item.status === "missing_key") {
+          const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+          const existingTicket = openTickets.find((t) =>
+            ["Clé manquante", "missing_key"].includes(t.ticket_type)
+          );
+
+          const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+          const desc = `🔑 Clé manquante signalée depuis ${item.downtimeDays} jour(s) (depuis le ${startDateFormatted}). Récupération ou double de clé requis.`;
+
+          if (existingTicket) {
+            ticketsToUpdate.set(existingTicket.id, {
+              description: desc,
+              priority,
+              driver_name: item.driverName || existingTicket.driver_name,
+              driver_phone: matchedDriver?.phoneSanitized || existingTicket.driver_phone,
+            });
+            tickets_updated++;
+          } else {
+            const newTicket = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              plate_number: item.plate_number,
+              driver_name: item.driverName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              ticket_type: "Clé manquante",
+              priority,
+              status: "OPEN",
+              description: desc,
+              created_at: statusStartDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            };
+            ticketsToCreate.push(newTicket);
+            openTickets.push(newTicket as any);
+            openTicketsByVehicleId.set(vehicleId, openTickets);
+            tickets_created++;
+          }
+        } else if (item.status === "Accident" || item.status === "In garage") {
+          const openTickets = openTicketsByVehicleId.get(vehicleId) || [];
+          const existingTicket = openTickets[0];
+          const priority = item.downtimeDays >= 7 ? "Critical" : "Urgent";
+          const desc = `💥 Véhicule en maintenance / accident signalé via import CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`;
+
+          if (!existingTicket) {
+            const newTicket = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              plate_number: item.plate_number,
+              driver_name: item.driverName || matchedDriver?.fullName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              ticket_type: "Accident",
+              priority,
+              status: "IN_PROGRESS",
+              started_at: statusStartDate,
+              description: desc,
+              created_at: statusStartDate,
+              sla_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            };
+            ticketsToCreate.push(newTicket);
+            openTickets.push(newTicket as any);
+            openTicketsByVehicleId.set(vehicleId, openTickets);
+            tickets_created++;
+          }
+
+          const vClaims = claimsByVehicleId.get(vehicleId) || [];
+          const activeClaim = vClaims.find((c) => c.timeline_step !== "VEHICLE_BACK");
+
+          if (activeClaim) {
+            // Vehicle already in "Dossiers En Cours"
+            // Clean up any old duplicate completed claims in VEHICLE_BACK so vehicle is removed from retablis
+            const restoredDuplicates = vClaims.filter((c) => c.timeline_step === "VEHICLE_BACK");
+            if (restoredDuplicates.length > 0) {
+              for (const c of restoredDuplicates) {
+                claimIdsToDelete.add(c.id);
+              }
+              claimsByVehicleId.set(vehicleId, [activeClaim]);
+            }
+          } else if (vClaims.length > 0) {
+            // Vehicle has claim(s) in VEHICLE_BACK (Véhicules Rétablis) but is currently in maintenance in Excel!
+            // Reopen the primary claim to CAR_IN_GARAGE
+            const sortedClaims = [...vClaims].sort((a, b) => {
+              let aComments = 0;
+              let bComments = 0;
+              try { aComments = a.comments ? JSON.parse(a.comments).length : 0; } catch {}
+              try { bComments = b.comments ? JSON.parse(b.comments).length : 0; } catch {}
+              return bComments - aComments;
+            });
+            const primaryClaim = sortedClaims[0];
+            const extraDuplicates = sortedClaims.slice(1);
+
+            claimsToUpdate.set(primaryClaim.id, {
+              timeline_step: "CAR_IN_GARAGE",
+              step_updated_at: statusStartDate,
+              driver_id: matchedDriver?.id || null,
+              driver_name: item.driverName || matchedDriver?.fullName || primaryClaim.driver_name,
+              driver_phone: matchedDriver?.phoneSanitized || primaryClaim.driver_phone,
+            });
+
+            if (extraDuplicates.length > 0) {
+              for (const c of extraDuplicates) {
+                claimIdsToDelete.add(c.id);
+              }
+            }
+
+            primaryClaim.timeline_step = "CAR_IN_GARAGE";
+            claimsByVehicleId.set(vehicleId, [primaryClaim]);
+          } else {
+            // No claim at all -> create new in CAR_IN_GARAGE
+            const newClaim = {
+              id: crypto.randomUUID(),
+              vehicle_id: vehicleId,
+              driver_id: matchedDriver?.id || null,
+              driver_name: item.driverName || matchedDriver?.fullName || null,
+              driver_phone: matchedDriver?.phoneSanitized || null,
+              severity: "HARD",
+              fault: null,
+              timeline_step: "CAR_IN_GARAGE",
+              step_updated_at: statusStartDate,
+              created_at: statusStartDate,
+              comments: JSON.stringify([
+                {
+                  id: crypto.randomUUID(),
+                  timeline_step: "CAR_IN_GARAGE",
+                  comment: `Dossier créé automatiquement via import Flotte CSV (${item.downtimeDays > 0 ? `${item.downtimeDays} jours d'immobilisation` : "En cours"}).`,
+                  author: "Import Flotte",
+                  created_at: statusStartDate.toISOString(),
+                },
+              ]),
+            };
+            claimsToCreate.push(newClaim);
+            claimsByVehicleId.set(vehicleId, [newClaim as any]);
+          }
+        } else if (item.status === "Actif" || item.status === "Available") {
+          const allOpenTicketsForVehicle = openTicketsByVehicleId.get(vehicleId) || [];
+          const openTickets = allOpenTicketsForVehicle.filter(
+            (t) => t.ticket_type !== "VEHICLE_RECOVERY" && t.ticket_type !== "Vehicle Recovery"
+          );
+          if (openTickets.length > 0) {
+            for (const t of openTickets) {
+              ticketIdsToResolve.add(t.id);
+            }
+            tickets_resolved += openTickets.length;
+            openTicketsByVehicleId.set(
+              vehicleId,
+              allOpenTicketsForVehicle.filter(
+                (t) => t.ticket_type === "VEHICLE_RECOVERY" || t.ticket_type === "Vehicle Recovery"
+              )
+            );
+          }
+
+          const vClaims = claimsByVehicleId.get(vehicleId) || [];
+          const activeClaims = vClaims.filter((c) => c.timeline_step !== "VEHICLE_BACK");
+          if (activeClaims.length > 0) {
+            for (const c of activeClaims) {
+              claimIdsToSetVehicleBack.add(c.id);
+              c.timeline_step = "VEHICLE_BACK";
+            }
+          }
+        }
+      } catch (rowErr: any) {
+        console.warn(`Error processing vehicle row ${item.plate_number}:`, rowErr?.message || rowErr);
+      }
     }
 
-    // Reconcile fleet against CSV (Single Source of Truth)
-    // Archive any vehicles in DB not present in the CSV so ghost/duplicate records are removed
+    // ── Phase 2: High-Speed Batch Writes to Database (Grouped Operations) ──
+
+    // 1. Archive ghost/orphaned vehicles absent from spreadsheet
     const ghostVehicles = allExistingVehicles.filter(
       (v) => !processedVehicleIds.has(v.id) && !v.is_archived && v.plate_number !== "TEST"
     );
-
     if (ghostVehicles.length > 0) {
       await prisma.vehicle.updateMany({
         where: { id: { in: ghostVehicles.map((v) => v.id) } },
@@ -1030,6 +1000,179 @@ export async function POST(request: NextRequest) {
         },
       });
       archived_orphans = ghostVehicles.length;
+    }
+
+    // 2. Batch insert new vehicles in chunks of 50
+    if (newVehiclesToCreate.length > 0) {
+      for (let i = 0; i < newVehiclesToCreate.length; i += 50) {
+        const chunk = newVehiclesToCreate.slice(i, i + 50);
+        await prisma.vehicle.createMany({
+          data: chunk,
+        });
+      }
+    }
+
+    // 3. Batch update existing vehicles in chunked transactions of 40
+    if (vehicleUpdates.size > 0) {
+      const updatesList = Array.from(vehicleUpdates.entries());
+      for (let i = 0; i < updatesList.length; i += 40) {
+        const chunk = updatesList.slice(i, i + 40);
+        await prisma.$transaction(
+          chunk.map(([id, data]) => prisma.vehicle.update({ where: { id }, data }))
+        );
+      }
+    }
+
+    // 4. Batch update maintenance ticket plate transitions
+    if (ticketPlateUpdates.length > 0) {
+      await Promise.all(
+        ticketPlateUpdates.map((t) =>
+          prisma.maintenanceTicket.updateMany({
+            where: { vehicle_id: t.vehicleId },
+            data: { plate_number: t.newPlate },
+          }).catch(() => {})
+        )
+      );
+    }
+
+    // 5. Driver unlinks & history updates (First release all assigned vehicles)
+    if (driverUnlinkVehicleIds.size > 0) {
+      const unlinks = Array.from(driverUnlinkVehicleIds);
+      for (let i = 0; i < unlinks.length; i += 50) {
+        const chunk = unlinks.slice(i, i + 50);
+        await prisma.driverProfile.updateMany({
+          where: { assignedVehicleId: { in: chunk } },
+          data: { assignedVehicleId: null },
+        });
+      }
+    }
+
+    if (formerVehicleHistoryUpdates.length > 0) {
+      for (let i = 0; i < formerVehicleHistoryUpdates.length; i += 40) {
+        const chunk = formerVehicleHistoryUpdates.slice(i, i + 40);
+        await prisma.$transaction(
+          chunk.map((h) =>
+            prisma.vehicle.update({
+              where: { id: h.vehicleId },
+              data: {
+                assigned_driver_name: null,
+                assigned_driver_phone: null,
+                historical_driver_name: h.historicalName,
+                historical_driver_phone: h.historicalPhone || null,
+              },
+            })
+          )
+        ).catch(() => {});
+      }
+    }
+
+    // 6. Batch insert new drivers in chunks of 50
+    if (newDriversToCreate.length > 0) {
+      for (let i = 0; i < newDriversToCreate.length; i += 50) {
+        const chunk = newDriversToCreate.slice(i, i + 50);
+        await prisma.driverProfile.createMany({
+          data: chunk,
+        });
+      }
+    }
+
+    // 7. Update driver names and assignments in chunked transactions
+    const driverUpdateOps: any[] = [];
+    for (const [id, fullName] of driverNameUpdates.entries()) {
+      driverUpdateOps.push(
+        prisma.driverProfile.update({
+          where: { id },
+          data: { fullName, is_archived: false },
+        })
+      );
+    }
+    for (const [driverId, vehicleId] of driverAssignUpdates.entries()) {
+      driverUpdateOps.push(
+        prisma.driverProfile.update({
+          where: { id: driverId },
+          data: { assignedVehicleId: vehicleId, is_archived: false },
+        })
+      );
+    }
+    if (driverUpdateOps.length > 0) {
+      for (let i = 0; i < driverUpdateOps.length; i += 40) {
+        const chunk = driverUpdateOps.slice(i, i + 40);
+        await prisma.$transaction(chunk).catch(() => {});
+      }
+    }
+
+    // 8. Maintenance tickets batch create / update / resolve
+    if (ticketsToCreate.length > 0) {
+      for (let i = 0; i < ticketsToCreate.length; i += 50) {
+        const chunk = ticketsToCreate.slice(i, i + 50);
+        await prisma.maintenanceTicket.createMany({
+          data: chunk,
+        });
+      }
+    }
+    if (ticketsToUpdate.size > 0) {
+      const ticketsList = Array.from(ticketsToUpdate.entries());
+      for (let i = 0; i < ticketsList.length; i += 40) {
+        const chunk = ticketsList.slice(i, i + 40);
+        await prisma.$transaction(
+          chunk.map(([id, data]) => prisma.maintenanceTicket.update({ where: { id }, data }))
+        ).catch(() => {});
+      }
+    }
+    if (ticketIdsToResolve.size > 0) {
+      const resolveList = Array.from(ticketIdsToResolve);
+      for (let i = 0; i < resolveList.length; i += 50) {
+        const chunk = resolveList.slice(i, i + 50);
+        await prisma.maintenanceTicket.updateMany({
+          where: { id: { in: chunk } },
+          data: {
+            status: "RESOLVED",
+            resolved_at: new Date(),
+            resolution_notes: `Résolu automatiquement via import CSV Flotte : Véhicule remis en service le ${new Date().toLocaleDateString("fr-FR")}.`,
+          },
+        });
+      }
+    }
+
+    // 9. Accident claims batch delete / create / update / resolve
+    if (claimIdsToDelete.size > 0) {
+      const deleteList = Array.from(claimIdsToDelete);
+      for (let i = 0; i < deleteList.length; i += 50) {
+        const chunk = deleteList.slice(i, i + 50);
+        await prisma.accidentClaim.deleteMany({
+          where: { id: { in: chunk } },
+        }).catch(() => {});
+      }
+    }
+    if (claimsToCreate.length > 0) {
+      for (let i = 0; i < claimsToCreate.length; i += 50) {
+        const chunk = claimsToCreate.slice(i, i + 50);
+        await prisma.accidentClaim.createMany({
+          data: chunk,
+        });
+      }
+    }
+    if (claimsToUpdate.size > 0) {
+      const claimsList = Array.from(claimsToUpdate.entries());
+      for (let i = 0; i < claimsList.length; i += 40) {
+        const chunk = claimsList.slice(i, i + 40);
+        await prisma.$transaction(
+          chunk.map(([id, data]) => prisma.accidentClaim.update({ where: { id }, data }))
+        ).catch(() => {});
+      }
+    }
+    if (claimIdsToSetVehicleBack.size > 0) {
+      const setBackList = Array.from(claimIdsToSetVehicleBack);
+      for (let i = 0; i < setBackList.length; i += 50) {
+        const chunk = setBackList.slice(i, i + 50);
+        await prisma.accidentClaim.updateMany({
+          where: { id: { in: chunk }, timeline_step: { not: "VEHICLE_BACK" } },
+          data: {
+            timeline_step: "VEHICLE_BACK",
+            step_updated_at: new Date(),
+          },
+        }).catch(() => {});
+      }
     }
 
     // Run driver-vehicle reconciliation to guarantee 1 driver = 1 working car
