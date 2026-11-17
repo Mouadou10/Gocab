@@ -12,7 +12,7 @@ import {
 describe("Fleet Manager WhatsApp Accident Notification & GoCab Fleet Sync", () => {
   it("resolves Mehdi Elyattouti (+212667960025) for Mehdi's locked portfolio plates", () => {
     const contact = resolveFleetManagerContactForVehicle({
-      plate_number: "26515-Y-6",
+      plate_number: "26514-Y-6",
     });
     assert.equal(contact.key, "mehdi elyattouti");
     assert.equal(contact.name, "Mehdi Elyattouti");

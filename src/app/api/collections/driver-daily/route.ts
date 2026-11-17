@@ -304,7 +304,10 @@ export async function GET(request: NextRequest) {
       const firstPayment = driver.payments[0];
       const totalDelta = driver.payments.reduce((sum, p) => sum + (p.calculatedDelta || 0), 0);
       let manager: string;
-      if (isMehdiPlate(resolvedVehicle?.plate_number)) {
+      const isMehdiVehicle = isMehdiPlate(resolvedVehicle?.plate_number) || 
+        (resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || "").toLowerCase().includes("mehdi");
+
+      if (isMehdiVehicle) {
         manager = "Mehdi Elyattouti";
         if (
           resolvedVehicle?.id &&
@@ -322,24 +325,21 @@ export async function GET(request: NextRequest) {
             .catch(() => {});
         }
       } else {
-        const rawMgr = resolvedVehicle?.assigned_collector || resolvedVehicle?.assigned_supervisor || null;
-        if (!rawMgr || !rawMgr.trim() || rawMgr.toLowerCase() === "unassigned") {
-          manager = "Mohamed Aziz";
-          if (resolvedVehicle?.id) {
-            prisma.vehicle
-              .update({
-                where: { id: resolvedVehicle.id },
-                data: {
-                  assigned_collector: "Mohamed Aziz",
-                  assigned_supervisor: "Mohamed Aziz",
-                },
-              })
-              .catch(() => {});
-          }
-        } else if (rawMgr.toLowerCase().includes("mehdi")) {
-          manager = "Mehdi Elyattouti";
-        } else {
-          manager = "Mohamed Aziz";
+        manager = "Mohamed Aziz";
+        if (
+          resolvedVehicle?.id &&
+          ((resolvedVehicle.assigned_collector || "").toLowerCase() !== "mohamed aziz" ||
+            (resolvedVehicle.assigned_supervisor || "").toLowerCase() !== "mohamed aziz")
+        ) {
+          prisma.vehicle
+            .update({
+              where: { id: resolvedVehicle.id },
+              data: {
+                assigned_collector: "Mohamed Aziz",
+                assigned_supervisor: "Mohamed Aziz",
+              },
+            })
+            .catch(() => {});
         }
       }
 
@@ -445,15 +445,15 @@ export async function GET(request: NextRequest) {
     if (managerParam && managerParam !== "ALL") {
       const targetM = managerParam.trim().toLowerCase();
       if (targetM.includes("mehdi")) {
-        targetDriverSet = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi") || isMehdiPlate(d.vehicle?.plate_number));
+        targetDriverSet = driverList.filter((d) => isMehdiPlate(d.vehicle?.plate_number) || (d.manager || "").toLowerCase().includes("mehdi"));
       } else {
-        targetDriverSet = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi") && !isMehdiPlate(d.vehicle?.plate_number));
+        targetDriverSet = driverList.filter((d) => !isMehdiPlate(d.vehicle?.plate_number) && !(d.manager || "").toLowerCase().includes("mehdi"));
       }
     }
 
     // Calculate individual portfolio stats for Aziz and Mehdi (all non-mehdi drivers assigned to Aziz)
-    const azizDrivers = driverList.filter((d) => !(d.manager || "").toLowerCase().includes("mehdi") && !isMehdiPlate(d.vehicle?.plate_number));
-    const mehdiDrivers = driverList.filter((d) => (d.manager || "").toLowerCase().includes("mehdi") || isMehdiPlate(d.vehicle?.plate_number));
+    const azizDrivers = driverList.filter((d) => !isMehdiPlate(d.vehicle?.plate_number) && !(d.manager || "").toLowerCase().includes("mehdi"));
+    const mehdiDrivers = driverList.filter((d) => isMehdiPlate(d.vehicle?.plate_number) || (d.manager || "").toLowerCase().includes("mehdi"));
 
     const calcPortfolioMetrics = (subset: typeof driverList, totalVehicles: number) => {
       let mDebt = 0;

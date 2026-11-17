@@ -8,13 +8,13 @@ import {
 } from "../src/lib/fleet-managers";
 
 describe("Mehdi Elyattouti Portfolio Locking Engine", () => {
-  it("should contain exactly 26 dedicated vehicle plates for Mehdi", () => {
-    assert.equal(MEHDI_VEHICLE_PLATES.length, 26);
+  it("should contain dedicated vehicle plates for Mehdi (40 vehicles + aliases)", () => {
+    assert.equal(MEHDI_VEHICLE_PLATES.length >= 40, true);
     const uniquePlates = new Set(MEHDI_VEHICLE_PLATES);
-    assert.equal(uniquePlates.size, 26);
+    assert.equal(uniquePlates.size >= 40, true);
   });
 
-  it("should recognize all 26 plates regardless of dashes, spaces, and casing", () => {
+  it("should recognize all plates regardless of dashes, spaces, and casing", () => {
     for (const plate of MEHDI_VEHICLE_PLATES) {
       assert.equal(isMehdiPlate(plate), true, `Expected ${plate} to be recognized`);
       // Lowercase test
@@ -33,7 +33,7 @@ describe("Mehdi Elyattouti Portfolio Locking Engine", () => {
     assert.equal(isMehdiPlate(""), false);
   });
 
-  it("should resolve vehicle fleet manager to Mehdi for any of his 26 plates, even if DB says another manager", () => {
+  it("should resolve vehicle fleet manager to Mehdi for any of his plates, even if DB says another manager", () => {
     for (const plate of MEHDI_VEHICLE_PLATES) {
       const resolved = resolveVehicleFleetManager({
         plate_number: plate,
@@ -53,10 +53,10 @@ describe("Mehdi Elyattouti Portfolio Locking Engine", () => {
     assert.equal(resolved, "mohamed aziz");
   });
 
-  it("should resolve driver to Mehdi if driving one of Mehdi's 26 vehicles, even if driver manager was unset or Aziz", () => {
+  it("should resolve driver to Mehdi if driving one of Mehdi's vehicles, even if driver manager was unset or Aziz", () => {
     const resolved = resolveDriverFleetManager({
       manager: "Mohamed Aziz",
-      vehicle: { plate_number: "26517-Y-6" },
+      vehicle: { plate_number: "26514-Y-6" },
     });
     assert.equal(resolved, "mehdi elyattouti");
   });

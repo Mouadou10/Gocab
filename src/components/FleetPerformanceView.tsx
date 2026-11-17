@@ -988,7 +988,7 @@ export default function FleetPerformanceView() {
     const arrears = summary?.totalArrearsAllMAD || 0;
     const redCount = summary?.criticalRedCount || 0;
     const driverCount = summary?.totalDrivers || filteredDrivers.length;
-    const vehicleCount = (portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26);
+    const vehicleCount = (portfolios?.aziz?.vehicleCount ?? 62) + (portfolios?.mehdi?.vehicleCount ?? 40);
     const hasCsv = summary?.hasMorningCsv ?? false;
 
     return {
@@ -1220,7 +1220,7 @@ export default function FleetPerformanceView() {
           {/* Portfolio Quick Badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-2xs font-bold text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-xl">
-              🚗 Flotte Totale : <strong className="text-navy">{(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules</strong>
+              🚗 Flotte Totale : <strong className="text-navy">{(portfolios?.aziz?.vehicleCount ?? 62) + (portfolios?.mehdi?.vehicleCount ?? 40)} Véhicules</strong>
             </span>
             <span className="text-2xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
               👨‍✈️ Chauffeurs Portefeuille : <strong className="text-emerald-900">{activeKPIs.driverCount}</strong>
@@ -1266,7 +1266,7 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                {portfolios?.aziz?.vehicleCount ?? 75} Véhicules
+                {portfolios?.aziz?.vehicleCount ?? 62} Véhicules
               </span>
             </div>
 
@@ -1329,7 +1329,7 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                {portfolios?.mehdi?.vehicleCount ?? 26} Véhicules
+                {portfolios?.mehdi?.vehicleCount ?? 40} Véhicules
               </span>
             </div>
 
@@ -1392,13 +1392,13 @@ export default function FleetPerformanceView() {
                   ? "bg-gold text-navy border-gold font-black shadow-xs"
                   : "bg-white text-navy border-gray-200"
               }`}>
-                {(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules
+                {(portfolios?.aziz?.vehicleCount ?? 62) + (portfolios?.mehdi?.vehicleCount ?? 40)} Véhicules
               </span>
             </div>
 
             <div className="pt-2.5 border-t border-white/10 flex items-center justify-between text-2xs">
               <span className={selectedManager === "ALL" ? "text-white/80" : "text-gray-500"}>
-                Aziz ({portfolios?.aziz?.vehicleCount ?? 75}) + Mehdi ({portfolios?.mehdi?.vehicleCount ?? 26})
+                Aziz ({portfolios?.aziz?.vehicleCount ?? 62}) + Mehdi ({portfolios?.mehdi?.vehicleCount ?? 40})
               </span>
               <div className="text-right">
                 <span className={`font-mono font-bold block ${selectedManager === "ALL" ? "text-emerald-300 font-black" : "text-emerald-700"}`}>
@@ -1435,13 +1435,13 @@ export default function FleetPerformanceView() {
             <div>
               <p className="font-black text-xs sm:text-sm">
                 {selectedManager.toLowerCase().includes("aziz") && (
-                  <>Portefeuille Actif : Mohamed Aziz ({portfolios?.aziz?.vehicleCount ?? 75} Véhicules — inclut les véhicules transférés de Hamza Rassid).</>
+                  <>Portefeuille Actif : Mohamed Aziz ({portfolios?.aziz?.vehicleCount ?? 62} Véhicules — inclut les véhicules transférés de Hamza Rassid).</>
                 )}
                 {selectedManager.toLowerCase().includes("mehdi") && (
-                  <>Portefeuille Actif : Mehdi Elyattouti ({portfolios?.mehdi?.vehicleCount ?? 26} Véhicules sous gestion directe).</>
+                  <>Portefeuille Actif : Mehdi Elyattouti ({portfolios?.mehdi?.vehicleCount ?? 40} Véhicules sous gestion directe).</>
                 )}
                 {selectedManager === "ALL" && (
-                  <>Vue Globale Flotte ({(portfolios?.aziz?.vehicleCount ?? 75) + (portfolios?.mehdi?.vehicleCount ?? 26)} Véhicules) — Cliquez sur Mohamed Aziz ou Mehdi Elyattouti ci-dessus pour isoler leur performance.</>
+                  <>Vue Globale Flotte ({(portfolios?.aziz?.vehicleCount ?? 62) + (portfolios?.mehdi?.vehicleCount ?? 40)} Véhicules) — Cliquez sur Mohamed Aziz ou Mehdi Elyattouti ci-dessus pour isoler leur performance.</>
                 )}
               </p>
               <p className="text-2xs opacity-80 mt-0.5">
@@ -1478,14 +1478,14 @@ export default function FleetPerformanceView() {
                   onClick={() => handleSelectManager("Mohamed Aziz")}
                   className="px-3 py-1.5 bg-white hover:bg-blue-50 text-navy font-black text-2xs rounded-xl border border-gray-300 transition-colors cursor-pointer shadow-2xs"
                 >
-                  Voir Aziz (68)
+                  Voir Aziz ({portfolios?.aziz?.vehicleCount || 62})
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSelectManager("mehdi elyattouti")}
                   className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-navy font-black text-2xs rounded-xl border border-gray-300 transition-colors cursor-pointer shadow-2xs"
                 >
-                  Voir Mehdi (26)
+                  Voir Mehdi ({portfolios?.mehdi?.vehicleCount || 40})
                 </button>
               </div>
             )}
@@ -1920,9 +1920,9 @@ export default function FleetPerformanceView() {
               onChange={(e) => handleSelectManager(e.target.value)}
               className="bg-transparent text-navy text-xs font-black focus:outline-none cursor-pointer"
             >
-              <option value="Mohamed Aziz">👤 Mohamed Aziz (68)</option>
-              <option value="mehdi elyattouti">👤 Mehdi Elyattouti (26)</option>
-              <option value="ALL">🌐 Tous les gestionnaires (100)</option>
+              <option value="Mohamed Aziz">👤 Mohamed Aziz ({portfolios?.aziz?.vehicleCount || 62})</option>
+              <option value="mehdi elyattouti">👤 Mehdi Elyattouti ({portfolios?.mehdi?.vehicleCount || 40})</option>
+              <option value="ALL">🌐 Tous les gestionnaires ({(portfolios?.aziz?.vehicleCount || 62) + (portfolios?.mehdi?.vehicleCount || 40)})</option>
               {availableManagers
                 .filter(
                   (m) =>
@@ -2019,9 +2019,9 @@ export default function FleetPerformanceView() {
         </div>
         <p className="text-2xs text-gray-500">
           {selectedManager.toLowerCase().includes("aziz")
-            ? "Affichage des 68 véhicules d'Aziz (dont 2 transférés de Hamza Rassid)"
+            ? `Affichage des ${portfolios?.aziz?.vehicleCount || 62} véhicules d'Aziz sous gestion directe`
             : selectedManager.toLowerCase().includes("mehdi")
-            ? "Affichage des 26 véhicules de Mehdi sous gestion directe"
+            ? `Affichage des ${portfolios?.mehdi?.vehicleCount || 40} véhicules de Mehdi sous gestion directe`
             : "Affichage global de tous les chauffeurs de la flotte"}
         </p>
       </div>

@@ -487,8 +487,8 @@ export async function POST(request: NextRequest) {
             insurance_policy_number: item.insurancePolicy,
             isInsuranceActive: item.isInsuranceActive,
             assigned_driver_name: item.driverName,
-            assigned_supervisor: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
-            assigned_collector: isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || "Mohamed Aziz"),
+            assigned_supervisor: (isMehdiPlate(item.plate_number) || (item.manager && item.manager.toLowerCase().includes("mehdi"))) ? "mehdi elyattouti" : "Mohamed Aziz",
+            assigned_collector: (isMehdiPlate(item.plate_number) || (item.manager && item.manager.toLowerCase().includes("mehdi"))) ? "mehdi elyattouti" : "Mohamed Aziz",
             notes: item.notes,
             current_mileage: 0,
             created_at: new Date(),
@@ -525,8 +525,9 @@ export async function POST(request: NextRequest) {
             item.status === "Available" && !item.driverName && existing.assigned_driver_name
               ? existing.assigned_driver_name
               : existing.historical_driver_name;
-          const newSupervisor = isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_supervisor || "Mohamed Aziz");
-          const newCollector = isMehdiPlate(item.plate_number) ? "mehdi elyattouti" : (item.manager || existing.assigned_collector || "Mohamed Aziz");
+          const isMehdiVehicle = isMehdiPlate(item.plate_number) || (item.manager && item.manager.toLowerCase().includes("mehdi"));
+          const newSupervisor = isMehdiVehicle ? "mehdi elyattouti" : "Mohamed Aziz";
+          const newCollector = isMehdiVehicle ? "mehdi elyattouti" : "Mohamed Aziz";
 
           const updateData = {
             plate_number: item.plate_number,

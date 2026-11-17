@@ -18,6 +18,7 @@
 - [`MEM-2026-11-16-013`](#mem-2026-11-16-013-google-sheet-mg4-leads-bulk-ingestion--45mb-payload-optimization): Google Sheet MG4 Leads Bulk Ingestion & 4.5MB Payload Optimization
 - [`MEM-2026-11-16-014`](#mem-2026-11-16-014-full-russian-ru-localization--vercel-function-glob-pattern-repair): Full Russian (RU) Localization & Vercel Function Glob Pattern Repair
 - [`MEM-2026-11-16-015`](#mem-2026-11-16-015-zakaria-onboarding-workflow--filter-cleanup--real-time-partner-commission-sync): Zakaria Onboarding Workflow, Filter Cleanup & Real-Time Partner Commission Sync
+- [`MEM-2026-11-17-016`](#mem-2026-11-17-016-fleet-performance-vehicle-portfolio-anchoring--full-fleet-refresh): Fleet Performance Vehicle Portfolio Anchoring & Full Fleet Refresh
 
 ---
 
@@ -328,6 +329,37 @@
 - **Anti-Regression Guardrail**:
   - Non-double-counting rule is strictly enforced (maximum 150 DH per driver even if both preorder and vehicle assigned).
   - All actions on leads trigger LiveSync `touchSyncState("leads")` so Zakaria and agents see live updates without manual refresh.
+
+---
+
+### MEM-2026-11-17-016: Fleet Performance Vehicle Portfolio Anchoring & Full Fleet Refresh
+- **Date**: 2026-11-17
+- **Layer**: Full-Stack / Fleet Performance / Database Persistence / Business Logic
+- **Symptom**:
+  1. Fleet performance portfolio assignment was previously tied to individual drivers (`d.manager`), which meant that whenever a driver switched vehicles, was unassigned, or changed shifts, the portfolio metrics could drift or misattribute cars.
+  2. The user required fleet performance agents to have **vehicles assigned instead of drivers** (irrespective of who drives or switches to the car): all vehicles with manager `Mehdi El yattouti` in the Excel spreadsheet must be assigned to Mehdi in the CRM (40 vehicles), and all others to Mohamed Aziz (62 vehicles).
+  3. The entire fleet needed a full refresh based on the provided 102-vehicle spreadsheet (`export-7545-vehicles.xlsx` / CSV).
+- **Root Cause**:
+  1. `resolveDriverFleetManager` and `GET /api/collections/driver-daily` fell back to `d.manager` on driver profiles instead of enforcing the vehicle as the single source of truth.
+  2. Hardcoded UI counts (`26` and `68`) lingered in `FleetPerformanceView.tsx` from an earlier legacy snapshot.
+  3. Two duplicate temporary WW records (`WW964985` and `WW990522`) existed in the database sharing VINs with permanent Y-plate vehicles (`39445-Y-6` and `40844-Y-6`), inflating the total DB count to 104 instead of 102.
+  4. Updating `DriverProfile.assignedVehicleId` collided with SQLite unique constraints when reassigned without clearing previous assignments.
+- **Applied Solution**:
+  1. **Master Portfolio Engine (`src/lib/fleet-managers.ts`)**:
+     - Updated `MEHDI_VEHICLE_PLATES` with the 40 primary plates assigned to Mehdi from the spreadsheet plus normalized registration aliases.
+     - Updated `resolveDriverFleetManager`: checks `driver.vehicle.plate_number` through `isMehdiPlate(plate)` before falling back to unassigned driver defaults.
+  2. **API & UI Alignment**:
+     - Updated `src/app/api/collections/driver-daily/route.ts` to derive driver manager strictly from the assigned vehicle (`isMehdiVehicle = isMehdiPlate(resolvedVehicle?.plate_number)`).
+     - Updated `src/app/api/upload-vehicles/route.ts` to automatically assign supervisor and collector to Mehdi or Aziz based on the vehicle plate.
+     - Updated `FleetPerformanceView.tsx` and `FleetView.tsx` to render dynamic portfolio counts (`portfolios?.mehdi?.vehicleCount || 40` and `portfolios?.aziz?.vehicleCount || 62`) instead of hardcoded numbers.
+  3. **Database Fleet Refresh**:
+     - Removed obsolete duplicate temporary WW records sharing VINs with registered vehicles.
+     - Synchronized all 102 vehicles with exact status, duration, VIN, brand, and driver profile associations.
+     - Flushed changes via `flushDatabaseSync()`.
+     - Verified final counts in DB: exactly 102 total vehicles (40 Mehdi, 62 Aziz).
+- **Anti-Regression Guardrail**:
+  - Always resolve portfolio attribution via `isMehdiPlate(vehicle.plate_number)` rather than mutable driver attributes.
+  - When reassigning `DriverProfile.assignedVehicleId`, always null out prior assignments first to satisfy the `@unique` constraint.
 
 ---
 
