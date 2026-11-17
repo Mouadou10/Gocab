@@ -558,6 +558,16 @@ export default function ZakariaOnboardingView() {
                           ✓ Présence Validée
                         </span>
                       )}
+
+                      {lead.wasExistingInDb && (
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-3xs"
+                          title="Ce numéro de téléphone existait déjà dans la base GoCab avant l'apport de Zakaria. Vérification requise par l'agent onboarding."
+                        >
+                          <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>Déjà en base GoCab (À vérifier)</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Contact & Meta */}

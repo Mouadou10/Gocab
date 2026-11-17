@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { invalidateLeadsCache } from "@/lib/leads-cache";
 
@@ -24,34 +24,37 @@ export async function POST(
 
     const partnerName = slug ? slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase() : "Zakaria";
 
-    if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: "Le nom complet du chauffeur est obligatoire." },
-        { status: 400 }
-      );
-    }
+    const rawName = (name && String(name).trim()) || "Chauffeur Partenaire";
+    const rawPhone = (phone && String(phone).trim()) || "";
 
-    if (!phone || !phone.trim()) {
+    if (!rawPhone) {
       return NextResponse.json(
         { error: "Le numéro de téléphone est obligatoire." },
         { status: 400 }
       );
     }
 
-    // Sanitize Moroccan phone number
-    let cleaned = phone.replace(/[\s\-\.\(\)]/g, "");
-    if (cleaned.startsWith("+")) cleaned = cleaned.slice(1);
-    if (cleaned.startsWith("212")) cleaned = cleaned.slice(3);
-    cleaned = cleaned.replace(/^0+/, "");
+    // Flexible phone sanitization that never blocks arbitrary phone input
+    const digitsOnly = rawPhone.replace(/\D/g, "");
+    let sanitized_phone = rawPhone;
 
-    if (cleaned.length < 8) {
-      return NextResponse.json(
-        { error: "Numéro de téléphone marocain invalide (Ex: 06 12 34 56 78 ou 07 ...)." },
-        { status: 400 }
-      );
+    if (rawPhone.startsWith("+")) {
+      sanitized_phone = `+${digitsOnly}`;
+    } else if (digitsOnly.startsWith("00")) {
+      sanitized_phone = `+${digitsOnly.slice(2)}`;
+    } else if (digitsOnly.startsWith("212")) {
+      sanitized_phone = `+${digitsOnly}`;
+    } else if (digitsOnly.startsWith("0") && digitsOnly.length >= 9) {
+      sanitized_phone = `+212${digitsOnly.slice(1)}`;
+    } else if (digitsOnly.length === 9) {
+      sanitized_phone = `+212${digitsOnly}`;
+    } else if (digitsOnly.length >= 8) {
+      sanitized_phone = `+212${digitsOnly}`;
+    } else if (digitsOnly.length > 0) {
+      sanitized_phone = `+${digitsOnly}`;
+    } else {
+      sanitized_phone = `+212${Date.now().toString().slice(-9)}`;
     }
-
-    const sanitized_phone = `+212${cleaned}`;
 
     // Check if phone already exists in GoCab database
     const existing = await prisma.lead.findUnique({
@@ -61,73 +64,113 @@ export async function POST(
         raw_name: true,
         sanitized_phone: true,
         referrer_name: true,
+        campaign_source: true,
         board_column: true,
         brand_status: true,
         training_status: true,
+        preorder_amount: true,
+        city: true,
+        notes: true,
+        is_archived: true,
       },
     });
 
-    if (existing) {
-      // If already brought by this partner
-      const isSamePartner = (existing.referrer_name || "").toLowerCase() === partnerName.toLowerCase();
-      return NextResponse.json(
-        {
-          error: isSamePartner
-            ? `Ce chauffeur (${sanitized_phone}) est déjà dans votre liste de suivi.`
-            : `Ce chauffeur (${sanitized_phone}) existe déjà dans la base GoCab.`,
-          existingLead: existing,
-        },
-        { status: 409 }
-      );
-    }
+    // NOTICE: Duplicate blocking check CANCELLED per requirements.
+    // Zakaria is allowed to enter any number and any name.
+    // The onboarding agent will verify eligibility and duplicates in the CRM later.
+    const wasExistingInDb = Boolean(existing);
+    const prevSource = existing?.campaign_source || "CRM";
+    const duplicateNotice = wasExistingInDb
+      ? ` [⚠️ Vérif Onboarding: Ce numéro existait déjà en base GoCab (${prevSource} / ${existing?.board_column || "NEW"}). Transmis par ${partnerName} pour vérification onboarding]`
+      : "";
 
     const formattedNotes = [
       intention ? `[Objectif Chauffeur: ${intention}]` : null,
-      notes ? notes.trim() : null,
-      `Apporteur d'Affaires: ${partnerName} (Commission éligible: 150 DH dès prise de voiture ou précommande)`,
+      notes && String(notes).trim() ? String(notes).trim() : null,
+      `Apporteur d'Affaires: ${partnerName}${duplicateNotice} (Commission éligible: 150 DH dès prise de voiture ou précommande)`,
     ]
       .filter(Boolean)
       .join(" — ");
 
-    // Create the lead in NEW_LEADS
-    const newLead = await prisma.lead.create({
-      data: {
-        raw_name: name.trim(),
-        sanitized_phone,
-        city: city?.trim() || "Casablanca",
-        campaign_source: `Apporteur - ${partnerName}`,
-        referrer_name: partnerName,
-        board_column: "NEW_LEADS",
-        brand_status: null,
-        training_status: null,
-        notes: formattedNotes,
-        handled_by: null,
-      },
-    });
+    let savedLead: any;
 
-    // Record audit activity log
-    await prisma.leadActivityLog.create({
-      data: {
-        lead_id: newLead.id,
-        agent: `Partenaire (${partnerName})`,
-        action: "PARTNER_LEAD_SUBMISSION",
-        detail: `Nouveau chauffeur apporté par ${partnerName}. Éligible à 150 DH de commission dès prise de véhicule ou versement précommande.`,
-      },
-    }).catch(() => {});
+    if (existing) {
+      // Reactivate / Update existing lead under Zakaria's portfolio without blocking
+      const combinedNotes = existing.notes
+        ? `${formattedNotes}\n${existing.notes}`
+        : formattedNotes;
+
+      // If lead was lost, archived, or in early qualification, bring to NEW_LEADS so onboarding agent sees it
+      const shouldResetColumn =
+        existing.is_archived ||
+        existing.board_column === "BRAND_PRE_FILTER" ||
+        existing.board_column === "NEW_LEADS" ||
+        existing.brand_status === "Not interested";
+
+      savedLead = await prisma.lead.update({
+        where: { id: existing.id },
+        data: {
+          raw_name: rawName,
+          city: city && String(city).trim() ? String(city).trim() : (existing.city || "Casablanca"),
+          campaign_source: `Apporteur - ${partnerName}`,
+          referrer_name: partnerName,
+          is_archived: false,
+          board_column: shouldResetColumn ? "NEW_LEADS" : existing.board_column,
+          brand_status: shouldResetColumn ? null : existing.brand_status,
+          notes: combinedNotes,
+          status_changed_at: new Date(),
+        },
+      });
+
+      await prisma.leadActivityLog.create({
+        data: {
+          lead_id: savedLead.id,
+          agent: `Partenaire (${partnerName})`,
+          action: "PARTNER_LEAD_SUBMISSION",
+          detail: `Chauffeur transmis par ${partnerName} (numéro réactivé/actualisé depuis GoCab ${prevSource}). Vérification à faire par l'agent onboarding.`,
+        },
+      }).catch(() => {});
+    } else {
+      // Create new lead in NEW_LEADS
+      savedLead = await prisma.lead.create({
+        data: {
+          raw_name: rawName,
+          sanitized_phone,
+          city: city && String(city).trim() ? String(city).trim() : "Casablanca",
+          campaign_source: `Apporteur - ${partnerName}`,
+          referrer_name: partnerName,
+          board_column: "NEW_LEADS",
+          brand_status: null,
+          training_status: null,
+          notes: formattedNotes,
+          handled_by: null,
+        },
+      });
+
+      await prisma.leadActivityLog.create({
+        data: {
+          lead_id: savedLead.id,
+          agent: `Partenaire (${partnerName})`,
+          action: "PARTNER_LEAD_SUBMISSION",
+          detail: `Nouveau chauffeur apporté par ${partnerName}. Éligible à 150 DH de commission dès prise de véhicule ou versement précommande.`,
+        },
+      }).catch(() => {});
+    }
 
     // Invalidate cache and trigger real-time LiveSync for internal CRM agents
     invalidateLeadsCache();
     await touchSyncState("leads").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
 
     return NextResponse.json({
       success: true,
-      message: `Chauffeur ${newLead.raw_name} enregistré avec succès !`,
+      message: `Chauffeur ${savedLead.raw_name} enregistré avec succès !`,
       lead: {
-        id: newLead.id,
-        name: newLead.raw_name,
-        phone: newLead.sanitized_phone,
-        city: newLead.city,
-        createdAt: newLead.created_at.toISOString(),
+        id: savedLead.id,
+        name: savedLead.raw_name,
+        phone: savedLead.sanitized_phone,
+        city: savedLead.city,
+        createdAt: savedLead.created_at.toISOString(),
       },
     });
   } catch (error: any) {

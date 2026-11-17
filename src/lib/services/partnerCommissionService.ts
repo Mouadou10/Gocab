@@ -33,6 +33,7 @@ export interface PartnerLeadEvaluation {
   status: "VALIDATED" | "PENDING" | "LOST";
   statusLabel: string;
   stageBadgeColor: "emerald" | "amber" | "slate" | "rose" | "blue" | "purple";
+  wasExistingInDb?: boolean;
 }
 
 export interface PartnerSummary {
@@ -158,6 +159,14 @@ export function evaluateLeadCommission(lead: {
     }
   }
 
+  const wasExistingInDb = Boolean(
+    lead.notes && (
+      lead.notes.includes("Vérif Onboarding: Ce numéro existait déjà") ||
+      lead.notes.includes("Déjà en base GoCab") ||
+      lead.notes.includes("Ancien prospect GoCab")
+    )
+  );
+
   return {
     id: lead.id,
     name: lead.raw_name || "Chauffeur",
@@ -178,6 +187,7 @@ export function evaluateLeadCommission(lead: {
     status,
     statusLabel,
     stageBadgeColor,
+    wasExistingInDb,
   };
 }
 

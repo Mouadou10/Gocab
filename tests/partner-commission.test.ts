@@ -1,11 +1,13 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
 import {
   evaluateLeadCommission,
   getPartnerSummary,
   PARTNER_COMMISSION_RATE_MAD,
 } from "../src/lib/services/partnerCommissionService";
 import { prisma } from "../src/lib/prisma";
+import { POST as submitPartnerLead } from "../src/app/api/partners/[slug]/leads/route";
 
 describe("Partner Commission Service (Zakaria 150 DH)", () => {
   it("should verify commission constant is 150 MAD", () => {
@@ -221,5 +223,71 @@ describe("Partner Commission Service (Zakaria 150 DH)", () => {
       // Clean up test lead
       await prisma.lead.deleteMany({ where: { sanitized_phone: testPhone } });
     }
+  });
+
+  it("should allow Zakaria to submit any name and any number, updating existing leads without 409 duplicate errors", async () => {
+    const existingPhone = "+212645398999";
+    // Clean up if existed
+    await prisma.lead.deleteMany({ where: { sanitized_phone: existingPhone } });
+
+    // Step 1: Simulate an old lead already in GoCab from a past marketing campaign
+    const oldLead = await prisma.lead.create({
+      data: {
+        raw_name: "Mouad Old Lead",
+        sanitized_phone: existingPhone,
+        campaign_source: "CSV1",
+        board_column: "BRAND_PRE_FILTER",
+        brand_status: "Not interested",
+        city: "Casablanca",
+      },
+    });
+
+    try {
+      // Step 2: Zakaria submits the same number with a new name and intention
+      const req = new NextRequest("http://localhost:3000/api/partners/zakaria/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Mouad Koudia",
+          phone: "0645398999", // raw moroccan input
+          city: "Casablanca",
+          intention: "Prendre voiture direct",
+          notes: "Permis B depuis 5 ans",
+        }),
+      });
+
+      const res = await submitPartnerLead(req, {
+        params: Promise.resolve({ slug: "zakaria" }),
+      });
+
+      // Must succeed with 200 OK (NEVER 409 error)
+      assert.strictEqual(res.status, 200, "Must return HTTP 200 without blocking duplicate check");
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.lead.name, "Mouad Koudia");
+      assert.strictEqual(json.lead.phone, existingPhone);
+
+      // Step 3: Verify lead in DB is now under Zakaria's portfolio and reset to NEW_LEADS
+      const updatedInDb = await prisma.lead.findUnique({
+        where: { sanitized_phone: existingPhone },
+      });
+      assert.strictEqual(updatedInDb?.raw_name, "Mouad Koudia");
+      assert.strictEqual(updatedInDb?.referrer_name, "Zakaria");
+      assert.strictEqual(updatedInDb?.campaign_source, "Apporteur - Zakaria");
+      assert.strictEqual(updatedInDb?.board_column, "NEW_LEADS");
+      assert.strictEqual(updatedInDb?.brand_status, null);
+      assert.match(updatedInDb?.notes || "", /Vérif Onboarding: Ce numéro existait déjà en base GoCab/);
+
+      // Step 4: Verify evaluation flags wasExistingInDb for Onboarding Agent review
+      const evaluated = evaluateLeadCommission(updatedInDb!);
+      assert.strictEqual(evaluated.wasExistingInDb, true, "Onboarding agent must see wasExistingInDb badge");
+      assert.strictEqual(evaluated.status, "PENDING");
+    } finally {
+      await prisma.lead.deleteMany({ where: { sanitized_phone: existingPhone } });
+    }
+  });
+
+  after(async () => {
+    await prisma.$disconnect();
   });
 });

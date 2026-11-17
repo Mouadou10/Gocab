@@ -19,6 +19,7 @@
 - [`MEM-2026-11-16-014`](#mem-2026-11-16-014-full-russian-ru-localization--vercel-function-glob-pattern-repair): Full Russian (RU) Localization & Vercel Function Glob Pattern Repair
 - [`MEM-2026-11-16-015`](#mem-2026-11-16-015-zakaria-onboarding-workflow--filter-cleanup--real-time-partner-commission-sync): Zakaria Onboarding Workflow, Filter Cleanup & Real-Time Partner Commission Sync
 - [`MEM-2026-11-17-016`](#mem-2026-11-17-016-fleet-performance-vehicle-portfolio-anchoring--full-fleet-refresh): Fleet Performance Vehicle Portfolio Anchoring & Full Fleet Refresh
+- [`MEM-2026-11-17-017`](#mem-2026-11-17-017-partner-lead-submission-duplicate-check-cancellation--onboarding-deferred-validation): Partner Lead Submission Duplicate Check Cancellation & Onboarding Deferred Validation
 
 ---
 
@@ -360,6 +361,25 @@
 - **Anti-Regression Guardrail**:
   - Always resolve portfolio attribution via `isMehdiPlate(vehicle.plate_number)` rather than mutable driver attributes.
   - When reassigning `DriverProfile.assignedVehicleId`, always null out prior assignments first to satisfy the `@unique` constraint.
+
+---
+
+### MEM-2026-11-17-017: Partner Lead Submission Duplicate Check Cancellation & Onboarding Deferred Validation
+- **Date**: 2026-11-17
+- **Layer**: Full-Stack / Partner API / Onboarding Operations / Database Integrity
+- **Symptom**:
+  When Zakaria (or an external partner) attempted to transmit a driver candidate (e.g. Mouad Koudia, `0645398932`), the submission was blocked with a 409 conflict error toast: `"Ce chauffeur (+212645398932) existe déjà dans la base GoCab."`. The partner was completely prevented from registering referred candidates who previously existed in past marketing campaigns (e.g. `CSV1`).
+- **Root Cause**:
+  `POST /api/partners/[slug]/leads` strictly enforced a pre-insertion uniqueness query `prisma.lead.findUnique({ where: { sanitized_phone } })` and aborted with HTTP 409 if any record existed in `dev.db`.
+- **Applied Solution**:
+  1. Cancelled the blocking duplicate check in `src/app/api/partners/[slug]/leads/route.ts`.
+  2. Accepted arbitrary name and phone inputs, sanitizing phone numbers gracefully.
+  3. When an existing lead is found, it is updated and reactivated under the partner's referral portfolio (`referrer_name = partnerName`, `campaign_source = 'Apporteur - ' + partnerName`, `board_column = 'NEW_LEADS'`), preserving previous notes with an onboarding audit tag: `[⚠️ Vérif Onboarding: Ce numéro existait déjà en base GoCab...]`.
+  4. Added `wasExistingInDb` flag in `partnerCommissionService.ts` and rendered an informative badge (`⚠️ Déjà en base GoCab (À vérifier)`) in `ZakariaOnboardingView.tsx` so the internal onboarding agent performs the verification and eligibility check later.
+  5. Added unit test suite in `tests/partner-commission.test.ts` verifying duplicate lead submission succeeds with HTTP 200 and flags `wasExistingInDb`.
+- **Anti-Regression Guardrail**:
+  - External partner portals must never block referrals due to internal CRM history.
+  - Verification of duplicate status and physical presence remains the responsibility of the onboarding agent in the CRM.
 
 ---
 
