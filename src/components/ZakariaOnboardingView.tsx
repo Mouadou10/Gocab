@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Sparkles,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 import { PartnerSummary, PartnerLeadEvaluation } from "@/lib/services/partnerCommissionService";
 import { useLanguage } from "@/context/LanguageContext";
@@ -212,6 +213,28 @@ export default function ZakariaOnboardingView() {
       await fetchPartnerData(true);
     } catch (err: any) {
       toast.error(err.message || "Erreur");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Delete lead permanently
+  const handleDeleteLead = async (lead: PartnerLeadEvaluation) => {
+    if (!confirm(`Supprimer définitivement le dossier de ${lead.name} (${lead.phone}) ?`)) {
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erreur de suppression");
+
+      toast.success(`Dossier de ${lead.name} supprimé avec succès.`);
+      await fetchPartnerData(true);
+    } catch (err: any) {
+      toast.error(err.message || "Erreur de suppression");
     } finally {
       setIsUpdating(false);
     }
@@ -669,6 +692,17 @@ export default function ZakariaOnboardingView() {
                       ✕
                     </button>
                   )}
+
+                  {/* Action 5: Supprimer définitivement */}
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleDeleteLead(lead)}
+                    className="p-2 rounded-xl border border-slate-200 hover:border-rose-400 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
+                    title="Supprimer définitivement ce dossier"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             );

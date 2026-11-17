@@ -37,6 +37,7 @@ import {
   AlertCircle,
   ArrowRight,
   Filter,
+  Trash2,
 } from "lucide-react";
 import { PartnerSummary, PartnerLeadEvaluation } from "@/lib/services/partnerCommissionService";
 
@@ -79,6 +80,7 @@ export default function PartnerPortalPage() {
   // Lead modal / drawer
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<PartnerLeadEvaluation | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form state
   const [driverName, setDriverName] = useState("");
@@ -162,6 +164,36 @@ export default function PartnerPortalPage() {
       toast.error(err.message || "Erreur de transmission");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Delete lead
+  const handleDeleteLead = async (lead: PartnerLeadEvaluation) => {
+    if (
+      !window.confirm(
+        `Êtes-vous sûr de vouloir supprimer définitivement le dossier de ${lead.name} (${lead.phone}) ?`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(lead.id);
+    try {
+      const res = await fetch(`/api/partners/${encodeURIComponent(slug)}/leads?id=${lead.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erreur de suppression");
+
+      toast.success(`Dossier de ${lead.name} supprimé avec succès.`);
+      if (selectedLead?.id === lead.id) {
+        setSelectedLead(null);
+      }
+      fetchData(true);
+    } catch (err: any) {
+      toast.error(err.message || "Impossible de supprimer ce dossier");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -593,28 +625,48 @@ export default function PartnerPortalPage() {
                         </div>
                       </div>
 
-                      {/* Right Amount / Commission */}
-                      <div className="text-right shrink-0">
-                        {isValidated ? (
-                          <div>
-                            <span className="text-sm md:text-base font-extrabold text-[#0E382B] block">
-                              +150.00 DH
-                            </span>
-                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                              Validé ✓
-                            </span>
-                          </div>
-                        ) : isPending ? (
-                          <div>
-                            <span className="text-xs font-bold text-amber-700 block">En cours</span>
-                            <span className="text-[10px] text-[#697871]">+150 DH pot.</span>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="text-xs font-semibold text-slate-400 block">0.00 DH</span>
-                            <span className="text-[10px] text-slate-400">Non converti</span>
-                          </div>
-                        )}
+                      {/* Right Amount / Commission & Delete Action */}
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="text-right">
+                          {isValidated ? (
+                            <div>
+                              <span className="text-sm md:text-base font-extrabold text-[#0E382B] block">
+                                +150.00 DH
+                              </span>
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                Validé ✓
+                              </span>
+                            </div>
+                          ) : isPending ? (
+                            <div>
+                              <span className="text-xs font-bold text-amber-700 block">En cours</span>
+                              <span className="text-[10px] text-[#697871]">+150 DH pot.</span>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="text-xs font-semibold text-slate-400 block">0.00 DH</span>
+                              <span className="text-[10px] text-slate-400">Non converti</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Delete Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteLead(lead);
+                          }}
+                          disabled={deletingId === lead.id}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Supprimer ce dossier"
+                        >
+                          {deletingId === lead.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   );
@@ -799,17 +851,36 @@ export default function PartnerPortalPage() {
                       {lead.statusLabel}
                     </span>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span
-                      className={`text-sm font-extrabold block ${
-                        lead.isConverted ? "text-[#0E382B]" : "text-[#697871]"
-                      }`}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="text-right">
+                      <span
+                        className={`text-sm font-extrabold block ${
+                          lead.isConverted ? "text-[#0E382B]" : "text-[#697871]"
+                        }`}
+                      >
+                        {lead.isConverted ? "+150.00 DH" : "0.00 DH"}
+                      </span>
+                      <span className="text-[10px] text-[#697871]">
+                        {new Date(lead.createdAt).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteLead(lead);
+                      }}
+                      disabled={deletingId === lead.id}
+                      className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                      title="Supprimer ce dossier"
                     >
-                      {lead.isConverted ? "+150.00 DH" : "0.00 DH"}
-                    </span>
-                    <span className="text-[10px] text-[#697871]">
-                      {new Date(lead.createdAt).toLocaleDateString("fr-FR")}
-                    </span>
+                      {deletingId === lead.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1097,12 +1168,28 @@ export default function PartnerPortalPage() {
                 )}
               </div>
 
-              <button
-                onClick={() => setSelectedLead(null)}
-                className="w-full py-2.5 rounded-xl bg-[#0E382B] text-white text-xs font-bold hover:bg-[#114232] transition-colors"
-              >
-                Fermer
-              </button>
+              <div className="pt-2 flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLead(selectedLead)}
+                  disabled={deletingId === selectedLead.id}
+                  className="flex-1 py-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {deletingId === selectedLead.id ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>Supprimer</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#0E382B] text-white text-xs font-bold hover:bg-[#114232] transition-colors cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         )}

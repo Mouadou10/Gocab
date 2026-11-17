@@ -20,6 +20,7 @@
 - [`MEM-2026-11-16-015`](#mem-2026-11-16-015-zakaria-onboarding-workflow--filter-cleanup--real-time-partner-commission-sync): Zakaria Onboarding Workflow, Filter Cleanup & Real-Time Partner Commission Sync
 - [`MEM-2026-11-17-016`](#mem-2026-11-17-016-fleet-performance-vehicle-portfolio-anchoring--full-fleet-refresh): Fleet Performance Vehicle Portfolio Anchoring & Full Fleet Refresh
 - [`MEM-2026-11-17-017`](#mem-2026-11-17-017-partner-lead-submission-duplicate-check-cancellation--onboarding-deferred-validation): Partner Lead Submission Duplicate Check Cancellation & Onboarding Deferred Validation
+- [`MEM-2026-11-17-018`](#mem-2026-11-17-018-lead-deletion-capability-in-partner-portal--onboarding-view): Lead Deletion Capability in Partner Portal & Onboarding View
 
 ---
 
@@ -380,6 +381,25 @@
 - **Anti-Regression Guardrail**:
   - External partner portals must never block referrals due to internal CRM history.
   - Verification of duplicate status and physical presence remains the responsibility of the onboarding agent in the CRM.
+
+---
+
+### MEM-2026-11-17-018: Lead Deletion Capability in Partner Portal & Onboarding View
+- **Date**: 2026-11-17
+- **Layer**: Full-Stack / Partner Portal / Onboarding View / REST API / Persistence
+- **Symptom**:
+  Users and partners (e.g. Zakaria on `/partenaire/zakaria` or onboarding specialists) had no mechanism to delete mistakenly submitted leads, duplicate records, or cancelled prospects from the fintech mobile interface or onboarding view.
+- **Root Cause**:
+  `DELETE /api/leads/[id]` was strictly guarded by `requireAuth()`, which is unreachable from public partner sessions. Additionally, neither the partner card components (`src/app/partenaire/[slug]/page.tsx`) nor the onboarding candidate cards (`ZakariaOnboardingView.tsx`) rendered a delete trigger.
+- **Applied Solution**:
+  1. Implemented `DELETE /api/partners/[slug]/leads` (supporting `?id=...` and body `{ id }`) and `DELETE /api/partners/[slug]/leads/[id]` with activity log cascading cleanup, `invalidateLeadsCache()`, `touchSyncState("leads")`, and cloud WAL synchronization (`flushDatabaseSync()`).
+  2. Added one-click delete buttons (with `Trash2` icon and confirmation prompt) directly onto the driver cards across both HOME and ALL_LEADS tabs in the partner portal.
+  3. Added "Supprimer" button inside the driver detail modal (`selectedLead`).
+  4. Added permanent delete action button in `ZakariaOnboardingView.tsx` for onboarding agents.
+  5. Added unit test in `tests/partner-commission.test.ts` verifying lead deletion and ledger removal.
+- **Anti-Regression Guardrail**:
+  - Always clean up orphaned `leadActivityLog` records when deleting a lead.
+  - Delete actions must always call `touchSyncState("leads")` and `flushDatabaseSync()`.
 
 ---
 

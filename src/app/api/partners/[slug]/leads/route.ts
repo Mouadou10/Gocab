@@ -181,3 +181,63 @@ export async function POST(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+    const { searchParams } = new URL(request.url);
+    const body = await request.json().catch(() => ({}));
+    const leadId = searchParams.get("id") || body?.id || body?.leadId;
+
+    if (!leadId) {
+      return NextResponse.json(
+        { error: "L'identifiant du chauffeur (id) est obligatoire." },
+        { status: 400 }
+      );
+    }
+
+    const partnerName = slug ? slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase() : "Zakaria";
+
+    // Verify lead exists
+    const existing = await prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Dossier chauffeur introuvable." },
+        { status: 404 }
+      );
+    }
+
+    // Delete associated activity logs
+    await prisma.leadActivityLog.deleteMany({
+      where: { lead_id: leadId },
+    }).catch(() => {});
+
+    // Delete the lead
+    await prisma.lead.delete({
+      where: { id: leadId },
+    });
+
+    // Invalidate cache and trigger real-time LiveSync for internal CRM agents
+    invalidateLeadsCache();
+    await touchSyncState("leads").catch(() => {});
+    await flushDatabaseSync().catch(() => {});
+
+    return NextResponse.json({
+      success: true,
+      message: `Dossier de ${existing.raw_name} supprimé avec succès.`,
+      deletedLeadId: leadId,
+    });
+  } catch (error: any) {
+    console.error("Error in DELETE /api/partners/[slug]/leads:", error);
+    return NextResponse.json(
+      { error: "Échec de la suppression du dossier", message: error?.message },
+      { status: 500 }
+    );
+  }
+}

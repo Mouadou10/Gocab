@@ -7,7 +7,7 @@ import {
   PARTNER_COMMISSION_RATE_MAD,
 } from "../src/lib/services/partnerCommissionService";
 import { prisma } from "../src/lib/prisma";
-import { POST as submitPartnerLead } from "../src/app/api/partners/[slug]/leads/route";
+import { POST as submitPartnerLead, DELETE as deletePartnerLead } from "../src/app/api/partners/[slug]/leads/route";
 
 describe("Partner Commission Service (Zakaria 150 DH)", () => {
   it("should verify commission constant is 150 MAD", () => {
@@ -284,6 +284,55 @@ describe("Partner Commission Service (Zakaria 150 DH)", () => {
       assert.strictEqual(evaluated.status, "PENDING");
     } finally {
       await prisma.lead.deleteMany({ where: { sanitized_phone: existingPhone } });
+    }
+  });
+
+  it("should allow deleting a partner lead via DELETE /api/partners/[slug]/leads", async () => {
+    const testDeletePhone = "+212688887777";
+    await prisma.lead.deleteMany({ where: { sanitized_phone: testDeletePhone } });
+
+    // 1. Create a lead
+    const leadToDelete = await prisma.lead.create({
+      data: {
+        raw_name: "Chauffeur To Delete",
+        sanitized_phone: testDeletePhone,
+        campaign_source: "Apporteur - Zakaria",
+        referrer_name: "Zakaria",
+        board_column: "NEW_LEADS",
+      },
+    });
+
+    try {
+      // 2. Call DELETE endpoint with leadId in query param
+      const req = new NextRequest(
+        `http://localhost:3000/api/partners/zakaria/leads?id=${leadToDelete.id}`,
+        { method: "DELETE" }
+      );
+
+      const res = await deletePartnerLead(req, {
+        params: Promise.resolve({ slug: "zakaria" }),
+      });
+
+      assert.strictEqual(res.status, 200, "DELETE must return HTTP 200");
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.deletedLeadId, leadToDelete.id);
+
+      // 3. Verify lead is gone from DB
+      const checkInDb = await prisma.lead.findUnique({
+        where: { id: leadToDelete.id },
+      });
+      assert.strictEqual(checkInDb, null, "Lead must be deleted from DB");
+
+      // 4. Verify partner summary no longer contains this lead
+      const summary = await getPartnerSummary("zakaria");
+      assert.strictEqual(
+        summary.leads.some((l) => l.id === leadToDelete.id),
+        false,
+        "Deleted lead must not appear in partner summary"
+      );
+    } finally {
+      await prisma.lead.deleteMany({ where: { sanitized_phone: testDeletePhone } });
     }
   });
 
