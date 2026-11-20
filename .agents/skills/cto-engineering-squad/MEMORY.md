@@ -21,6 +21,7 @@
 - [`MEM-2026-11-17-016`](#mem-2026-11-17-016-fleet-performance-vehicle-portfolio-anchoring--full-fleet-refresh): Fleet Performance Vehicle Portfolio Anchoring & Full Fleet Refresh
 - [`MEM-2026-11-17-017`](#mem-2026-11-17-017-partner-lead-submission-duplicate-check-cancellation--onboarding-deferred-validation): Partner Lead Submission Duplicate Check Cancellation & Onboarding Deferred Validation
 - [`MEM-2026-11-17-018`](#mem-2026-11-17-018-lead-deletion-capability-in-partner-portal--onboarding-view): Lead Deletion Capability in Partner Portal & Onboarding View
+- [`MEM-2026-11-20-019`](#mem-2026-11-20-019-driverprofile-createmany-created_at-schema-mismatch--weekly-autonomous-cto-audit): DriverProfile createMany `created_at` Schema Mismatch & Weekly Autonomous CTO Audit
 
 ---
 
@@ -400,6 +401,25 @@
 - **Anti-Regression Guardrail**:
   - Always clean up orphaned `leadActivityLog` records when deleting a lead.
   - Delete actions must always call `touchSyncState("leads")` and `flushDatabaseSync()`.
+
+---
+
+### MEM-2026-11-20-019: DriverProfile createMany `created_at` Schema Mismatch & Weekly Autonomous CTO Audit
+- **Date**: 2026-11-20
+- **Layer**: Backend API / Prisma Schema / CTO Squad Automation
+- **Symptom**:
+  When importing a fleet spreadsheet (`export-7690-vehicles.xlsx`) containing new drivers (e.g. `LAMSADAK SAID`), `POST /api/upload-vehicles` failed with:
+  `Invalid prisma.driverProfile.createMany() invocation: Unknown argument created_at. Available options are marked with ?.`
+- **Root Cause**:
+  1. `model DriverProfile` in `prisma/schema.prisma` does NOT have `created_at` or `updated_at` columns.
+  2. In `src/app/api/upload-vehicles/route.ts`, `newDriversToCreate` was typed as `any[]`, bypassing TypeScript type checking when `created_at: new Date()` and `updated_at: new Date()` were added to `newDriver`.
+- **Applied Solution**:
+  1. Removed `created_at` and `updated_at` from `newDriver` in `src/app/api/upload-vehicles/route.ts` and strongly typed `newDriversToCreate` as `Prisma.DriverProfileCreateManyInput[]`.
+  2. Enhanced `.agents/skills/cto-engineering-squad/scripts/audit-crm-workflows.ts` (Step 6) to parse `prisma/schema.prisma` and flag any untyped `any[]` passed to `prisma.*.createMany()` as well as invalid `created_at` fields on `DriverProfile`, with automatic Dev Agent role routing.
+  3. Added automated weekly CTO Squad check (`0 8 * * 1`, Mondays 08:00 UTC) via `.github/workflows/cto-weekly-audit.yml` and an autonomous daemon schedule so the appropriate Dev Agent audits the entire codebase once per week without user intervention.
+- **Anti-Regression Guardrail**:
+  - Never type Prisma bulk insert arrays as `any[]`; always use `Prisma.<Model>CreateManyInput[]`.
+  - Weekly CTO Squad audit runs `tsc --noEmit` + `audit-crm-workflows.ts` automatically every Monday.
 
 ---
 

@@ -144,3 +144,17 @@ Whenever this skill is triggered, execute the following steps in order:
 6. **Deploy & Report**:
    - Commit and push via the `auto-deploy` workflow (`git add -A ; git commit -m "..." ; git push origin main`).
    - Present a structured **CTO Engineering Squad Report** summarizing the health of Frontend, Backend, QA Tests, Database Sync, Squad Memory, and DevOps Deployment.
+
+---
+
+## 6. Weekly Autonomous Audit Schedule (Zero-Intervention)
+
+- **Schedule**: Automatically runs **once per week every Monday at 08:00 UTC** (`0 8 * * 1`) without user intervention via:
+  1. **GitHub Actions CI**: `.github/workflows/cto-weekly-audit.yml` (runs `prisma generate`, `tsc --noEmit`, and `audit-crm-workflows.ts --ci`; automatically opens a GitHub Issue on any failure).
+  2. **Autonomous Agent Daemon Schedule**: Triggers the CTO Squad agent on the same weekly cadence to run `audit-crm-workflows.ts`, `full-diagnostic-check.ts`, and `npx tsc --noEmit`.
+- **Automatic Dev Agent Routing**:
+  - `BACKEND_API` / `DATABASE` / Prisma schema mismatches → **Senior Backend Engineer**
+  - `FRONTEND_UI` / LiveSync / broken handlers → **Senior Frontend Engineer**
+  - TypeScript / unit test regressions → **Senior QA / Test Engineer**
+  - `DEVOPS_SYNC` / Docker / Kubernetes / Backup → **Senior DevOps / Docker / K8s Engineer**
+- Any technical, schema, or sync bug detected during the weekly audit is fixed automatically (strictly respecting the Core Business Logic Guardrail), logged in `MEMORY.md`, and auto-deployed.

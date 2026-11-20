@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
 import { parseSpreadsheetFile } from "@/lib/spreadsheet";
@@ -431,7 +432,7 @@ export async function POST(request: NextRequest) {
     const driverNameUpdates = new Map<string, string>();
     const formerVehicleHistoryUpdates: { vehicleId: string; historicalName: string; historicalPhone?: string | null }[] = [];
     const driverAssignUpdates = new Map<string, string>();
-    const newDriversToCreate: any[] = [];
+    const newDriversToCreate: Prisma.DriverProfileCreateManyInput[] = [];
 
     const ticketsToCreate: any[] = [];
     const ticketsToUpdate = new Map<string, any>();
@@ -694,8 +695,6 @@ export async function POST(request: NextRequest) {
               monthlyTripCount: 0,
               assignedVehicleId: vehicleId,
               is_archived: false,
-              created_at: new Date(),
-              updated_at: new Date(),
             };
 
             newDriversToCreate.push(newDriver);

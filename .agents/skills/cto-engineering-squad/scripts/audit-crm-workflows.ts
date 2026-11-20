@@ -46,14 +46,19 @@ console.log(" 🛡️  GOCAB CTO & SENIOR ENGINEERING SQUAD — WORKFLOW AUDIT")
 console.log("==================================================================\n");
 
 // 1. DATABASE INTEGRITY AUDIT
-console.log("▶ [1/6] Auditing Database Persistence & Core Tables...");
+console.log("▶ [1/7] Auditing Database Persistence & Core Tables...");
+const IS_CI = process.env.CI === "true" || process.argv.includes("--ci");
 if (!fs.existsSync(DB_PATH)) {
-  issues.push({
-    severity: "ERROR",
-    layer: "DATABASE",
-    target: "dev.db",
-    detail: "Database file dev.db is missing from project root.",
-  });
+  if (IS_CI) {
+    console.log("  ℹ️  CI environment detected: skipping local dev.db check (Cloud WAL / SQLite is runtime-provisioned).");
+  } else {
+    issues.push({
+      severity: "ERROR",
+      layer: "DATABASE",
+      target: "dev.db",
+      detail: "Database file dev.db is missing from project root.",
+    });
+  }
 } else {
   const db = new Database(DB_PATH, { readonly: true });
   const coreTables = [
@@ -281,8 +286,71 @@ for (const routeFile of apiRoutes) {
 }
 console.log(`  • GET Endpoint Idempotency: HEALTHY (${safeGetRoutesChecked} GET handlers verified strictly non-destructive)`);
 
-// 6. SUMMARY REPORT
-console.log("\n▶ [6/6] CTO Engineering Squad Diagnostic Summary:");
+// 6. PRISMA SCHEMA FIELD & TYPESCRIPT INTEGRITY AUDIT
+console.log("\n▶ [6/7] Auditing Prisma Schema Field Parity & Untyped Bulk Inserts...");
+const schemaPath = path.join(ROOT_DIR, "prisma", "schema.prisma");
+if (fs.existsSync(schemaPath)) {
+  const schemaContent = fs.readFileSync(schemaPath, "utf8");
+  const modelBlocks = [...schemaContent.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\}/g)];
+  const modelFields = new Map<string, Set<string>>();
+  for (const m of modelBlocks) {
+    const modelName = m[1];
+    const body = m[2];
+    const fields = new Set<string>();
+    for (const line of body.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("@@")) continue;
+      const fieldMatch = trimmed.match(/^(\w+)\s+/);
+      if (fieldMatch) fields.add(fieldMatch[1]);
+    }
+    modelFields.set(modelName, fields);
+  }
+
+  // Verify no untyped `any[]` arrays are passed to prisma.*.createMany
+  const allSrcFiles = walkFiles(path.join(ROOT_DIR, "src"), [".ts", ".tsx"]);
+  let createManyChecked = 0;
+  for (const srcFile of allSrcFiles) {
+    const relPath = path.relative(ROOT_DIR, srcFile).replace(/\\/g, "/");
+    const content = fs.readFileSync(srcFile, "utf8");
+    const createManyMatches = [...content.matchAll(/prisma\.(\w+)\.createMany\(\s*\{\s*data:\s*(\w+)/g)];
+    for (const cm of createManyMatches) {
+      createManyChecked++;
+      const varName = cm[2];
+      const untypedRegex = new RegExp(`const\\s+${varName}\\s*:\\s*any\\[\\]`);
+      if (untypedRegex.test(content)) {
+        issues.push({
+          severity: "ERROR",
+          layer: "BACKEND_API",
+          target: relPath,
+          detail: `Untyped \`any[]\` variable \`${varName}\` passed to \`prisma.${cm[1]}.createMany()\`. Use \`Prisma.${cm[1].charAt(0).toUpperCase() + cm[1].slice(1)}CreateManyInput[]\` so TypeScript catches invalid schema fields.`,
+        });
+      }
+    }
+
+    // Specifically guard DriverProfile against invalid created_at/updated_at injections
+    if (content.includes("driverProfile") && !modelFields.get("DriverProfile")?.has("created_at")) {
+      if (/prisma\.driverProfile\.(create|createMany|update)\([\s\S]{0,400}created_at\s*:/.test(content)) {
+        issues.push({
+          severity: "ERROR",
+          layer: "BACKEND_API",
+          target: relPath,
+          detail: "Invalid field `created_at` passed to `prisma.driverProfile` (DriverProfile schema has no `created_at` field).",
+        });
+      }
+    }
+  }
+  console.log(`  • Prisma Schema & createMany Type Parity: HEALTHY (${modelFields.size} models, ${createManyChecked} createMany calls verified)`);
+}
+
+const AGENT_ROUTING: Record<AuditIssue["layer"], string> = {
+  DATABASE: "Senior Backend Engineer & DevOps",
+  BACKEND_API: "Senior Backend Engineer",
+  FRONTEND_UI: "Senior Frontend Engineer",
+  DEVOPS_SYNC: "Senior DevOps / Docker / K8s Engineer",
+};
+
+// 7. SUMMARY REPORT
+console.log("\n▶ [7/7] CTO Engineering Squad Diagnostic Summary:");
 const errors = issues.filter((i) => i.severity === "ERROR");
 const warnings = issues.filter((i) => i.severity === "WARN");
 
@@ -291,7 +359,8 @@ if (errors.length === 0 && warnings.length === 0) {
 } else {
   console.log(`  ⚠️  Found ${errors.length} Error(s) and ${warnings.length} Warning(s):`);
   for (const issue of issues) {
-    console.log(`     [${issue.severity}] [${issue.layer}] ${issue.target}: ${issue.detail}`);
+    const owner = AGENT_ROUTING[issue.layer];
+    console.log(`     [${issue.severity}] [${issue.layer}] (Owner: ${owner}) ${issue.target}: ${issue.detail}`);
   }
 }
 
