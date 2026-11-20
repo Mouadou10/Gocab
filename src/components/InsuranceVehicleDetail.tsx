@@ -1540,7 +1540,7 @@ export default function InsuranceVehicleDetail({
                     </span>
                   </h5>
                   <p className="text-2xs text-gray-500 mt-0.5">
-                    Chaque intervenant valide l&apos;avancement de son étape dédiée. Cliquez sur une étape pour consulter ou changer.
+                    Chaque intervenant valide l&apos;avancement de son étape dédiée via le panneau de validation ci-dessous.
                   </p>
                 </div>
 
@@ -1588,13 +1588,12 @@ export default function InsuranceVehicleDetail({
                   return (
                     <div
                       key={s.id}
-                      onClick={() => handleStepClick(s.id)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between relative ${
                         isCurrent
                           ? "bg-gradient-to-b from-navy to-navy-light text-white border-navy shadow-lg ring-2 ring-navy/30 scale-[1.02]"
                           : isPast
-                          ? "bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:bg-emerald-100/70 hover:border-emerald-300"
-                          : "bg-gray-50/80 text-gray-700 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
+                          ? "bg-emerald-50/70 text-emerald-950 border-emerald-200"
+                          : "bg-gray-50/80 text-gray-700 border-gray-200"
                       }`}
                     >
                       {/* Top Header: Step Number & Intervenant */}
