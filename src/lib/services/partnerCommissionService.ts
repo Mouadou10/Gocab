@@ -36,6 +36,15 @@ export interface PartnerLeadEvaluation {
   wasExistingInDb?: boolean;
 }
 
+export interface PartnerAvailableCar {
+  id: string;
+  plateNumber: string;
+  makeModel: string;
+  year: number | null;
+  hubCity: string | null;
+  status: string;
+}
+
 export interface PartnerSummary {
   partnerName: string;
   partnerSlug: string;
@@ -49,6 +58,8 @@ export interface PartnerSummary {
   commissionRateMAD: number;
   conversionRatePct: number;
   leads: PartnerLeadEvaluation[];
+  availableCarsCount: number;
+  availableCars: PartnerAvailableCar[];
 }
 
 /**
@@ -199,21 +210,52 @@ export async function getPartnerSummary(partnerNameOrSlug: string): Promise<Part
   const displayName = normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
 
   // Search by exact referrer_name OR campaign_source containing the partner's name
-  const leads = await prisma.lead.findMany({
-    where: {
-      is_archived: false,
-      OR: [
-        { referrer_name: { equals: displayName } },
-        { referrer_name: { equals: normalized } },
-        { campaign_source: { contains: displayName } },
-        { campaign_source: { contains: normalized } },
+  // and fetch currently available cars in parallel
+  const [leads, availableVehicles] = await Promise.all([
+    prisma.lead.findMany({
+      where: {
+        is_archived: false,
+        OR: [
+          { referrer_name: { equals: displayName } },
+          { referrer_name: { equals: normalized } },
+          { campaign_source: { contains: displayName } },
+          { campaign_source: { contains: normalized } },
+        ],
+      },
+      orderBy: [
+        { created_at: "desc" },
+        { updated_at: "desc" },
       ],
-    },
-    orderBy: [
-      { created_at: "desc" },
-      { updated_at: "desc" },
-    ],
-  });
+    }),
+    prisma.vehicle.findMany({
+      where: {
+        is_archived: false,
+        status: { in: ["Available", "Disponible", "disponible", "available"] },
+      },
+      orderBy: [
+        { hub_city: "asc" },
+        { make_model: "asc" },
+        { plate_number: "asc" },
+      ],
+      select: {
+        id: true,
+        plate_number: true,
+        make_model: true,
+        year: true,
+        hub_city: true,
+        status: true,
+      },
+    }),
+  ]);
+
+  const availableCars: PartnerAvailableCar[] = availableVehicles.map((v) => ({
+    id: v.id,
+    plateNumber: v.plate_number,
+    makeModel: v.make_model,
+    year: v.year ?? null,
+    hubCity: v.hub_city || "Casablanca",
+    status: v.status,
+  }));
 
   const evaluatedLeads = leads.map((l) => evaluateLeadCommission(l));
 
@@ -240,5 +282,7 @@ export async function getPartnerSummary(partnerNameOrSlug: string): Promise<Part
     commissionRateMAD: PARTNER_COMMISSION_RATE_MAD,
     conversionRatePct,
     leads: evaluatedLeads,
+    availableCarsCount: availableCars.length,
+    availableCars,
   };
 }

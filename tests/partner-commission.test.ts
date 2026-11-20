@@ -336,6 +336,34 @@ describe("Partner Commission Service (Zakaria 150 DH)", () => {
     }
   });
 
+  it("should include only non-archived Available vehicles in partner summary", async () => {
+    const testPlate = "TEST-AVAIL-999";
+    await prisma.vehicle.deleteMany({ where: { plate_number: testPlate } });
+
+    const createdVehicle = await prisma.vehicle.create({
+      data: {
+        plate_number: testPlate,
+        make_model: "DACIA SANDERO",
+        year: 2026,
+        hub_city: "Casablanca",
+        status: "Available",
+        is_archived: false,
+      },
+    });
+
+    try {
+      const summary = await getPartnerSummary("zakaria");
+      assert.ok(summary.availableCarsCount >= 1, "Should count available vehicle");
+      const found = summary.availableCars.find((c) => c.id === createdVehicle.id);
+      assert.ok(found, "Available vehicle must be listed for Zakaria");
+      assert.strictEqual(found?.plateNumber, testPlate);
+      assert.strictEqual(found?.makeModel, "DACIA SANDERO");
+      assert.strictEqual(found?.hubCity, "Casablanca");
+    } finally {
+      await prisma.vehicle.deleteMany({ where: { plate_number: testPlate } });
+    }
+  });
+
   after(async () => {
     await prisma.$disconnect();
   });

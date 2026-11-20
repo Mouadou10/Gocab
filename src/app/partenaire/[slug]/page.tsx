@@ -39,7 +39,7 @@ import {
   Filter,
   Trash2,
 } from "lucide-react";
-import { PartnerSummary, PartnerLeadEvaluation } from "@/lib/services/partnerCommissionService";
+import { PartnerSummary, PartnerLeadEvaluation, PartnerAvailableCar } from "@/lib/services/partnerCommissionService";
 
 const MOROCCAN_CITIES = [
   "Casablanca",
@@ -64,7 +64,7 @@ export default function PartnerPortalPage() {
   const partnerDisplayName = slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase();
 
   // Navigation state (Fintech App Tabs)
-  const [activeTab, setActiveTab] = useState<"HOME" | "ANALYTICS" | "ALL_LEADS">("HOME");
+  const [activeTab, setActiveTab] = useState<"HOME" | "ANALYTICS" | "ALL_LEADS" | "AVAILABLE_CARS">("HOME");
 
   // Data state
   const [data, setData] = useState<PartnerSummary | null>(null);
@@ -76,6 +76,8 @@ export default function PartnerPortalPage() {
   const [filterCategory, setFilterCategory] = useState<"ALL" | "SHOWED_UP" | "VALIDATED" | "PENDING" | "LOST">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string>("ALL");
+  const [carSearchQuery, setCarSearchQuery] = useState("");
+  const [carCityFilter, setCarCityFilter] = useState<string>("ALL");
 
   // Lead modal / drawer
   const [showAddModal, setShowAddModal] = useState(false);
@@ -235,6 +237,40 @@ export default function PartnerPortalPage() {
       return true;
     });
   }, [data?.leads, filterCategory, selectedCity, searchQuery]);
+
+  // Available cars filtering
+  const availableCarCities = useMemo(() => {
+    const cities = new Set<string>();
+    (data?.availableCars || []).forEach((c) => {
+      if (c.hubCity) cities.add(c.hubCity);
+    });
+    return Array.from(cities);
+  }, [data?.availableCars]);
+
+  const filteredAvailableCars = useMemo(() => {
+    const list = data?.availableCars || [];
+    return list.filter((c) => {
+      if (carCityFilter !== "ALL" && (c.hubCity || "").toLowerCase() !== carCityFilter.toLowerCase()) {
+        return false;
+      }
+      if (carSearchQuery.trim()) {
+        const q = carSearchQuery.toLowerCase();
+        return (
+          c.makeModel.toLowerCase().includes(q) ||
+          c.plateNumber.toLowerCase().includes(q) ||
+          (c.hubCity || "").toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [data?.availableCars, carCityFilter, carSearchQuery]);
+
+  const handleProposeDriverForCar = (car: PartnerAvailableCar) => {
+    setDriverCity(car.hubCity || "Casablanca");
+    setDriverIntention("Prendre une voiture immédiatement");
+    setDriverNotes(`Véhicule disponible souhaité : ${car.makeModel} (${car.plateNumber})`);
+    setShowAddModal(true);
+  };
 
   // Analytics stats
   const analyticsBreakdown = useMemo(() => {
@@ -418,38 +454,79 @@ export default function PartnerPortalPage() {
           </a>
         </div>
 
+        {/* ===================== LIVE AVAILABLE CARS BANNER ===================== */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("AVAILABLE_CARS")}
+          className="w-full p-3.5 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/40 hover:bg-[#F0F5F2]/60 transition-all flex items-center justify-between shadow-2xs group text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#D8EEDF] text-[#0E382B] flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#11241C]">Véhicules disponibles en flotte</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#0E382B] text-white">
+                  {data?.availableCarsCount ?? 0}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#697871] truncate mt-0.5">
+                {(data?.availableCarsCount ?? 0) > 0
+                  ? "Consultez les voitures prêtes à être attribuées dès aujourd'hui"
+                  : "Aucune voiture libre actuellement — proposez en précommande (+150 DH)"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-xs font-bold text-[#0E382B] shrink-0 group-hover:translate-x-0.5 transition-transform">
+            <span>Voir</span>
+            <ChevronRight className="w-4 h-4" />
+          </div>
+        </button>
+
         {/* ===================== TAB VIEW SWITCHER ===================== */}
-        <div className="flex rounded-2xl bg-[#E7ECE9] p-1 text-xs font-semibold">
+        <div className="grid grid-cols-4 rounded-2xl bg-[#E7ECE9] p-1 text-[11px] sm:text-xs font-semibold gap-1">
           <button
             onClick={() => setActiveTab("HOME")}
-            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
               activeTab === "HOME" ? "bg-white text-[#0E382B] shadow-xs font-bold" : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <Wallet className="w-3.5 h-3.5" />
-            <span>Historique ({data?.leads?.length || 0})</span>
+            <Wallet className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Historique ({data?.leads?.length || 0})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("AVAILABLE_CARS")}
+            className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
+              activeTab === "AVAILABLE_CARS"
+                ? "bg-white text-[#0E382B] shadow-xs font-bold"
+                : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Car className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Voitures ({data?.availableCarsCount ?? 0})</span>
           </button>
           <button
             onClick={() => setActiveTab("ANALYTICS")}
-            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
               activeTab === "ANALYTICS"
                 ? "bg-white text-[#0E382B] shadow-xs font-bold"
                 : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <PieChart className="w-3.5 h-3.5" />
-            <span>Analytique</span>
+            <PieChart className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Stats</span>
           </button>
           <button
             onClick={() => setActiveTab("ALL_LEADS")}
-            className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
               activeTab === "ALL_LEADS"
                 ? "bg-white text-[#0E382B] shadow-xs font-bold"
                 : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Recherche & Filtres</span>
+            <Filter className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Filtres</span>
           </button>
         </div>
 
@@ -888,6 +965,145 @@ export default function PartnerPortalPage() {
           </div>
         )}
 
+        {/* ===================== TAB 4: AVAILABLE CARS IN FLEET ===================== */}
+        {activeTab === "AVAILABLE_CARS" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h2 className="text-base font-bold text-[#11241C] tracking-tight">Véhicules Disponibles</h2>
+                <p className="text-[11px] text-[#697871]">
+                  Parc GoCab prêt pour attribution immédiate (+150 DH / chauffeur)
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-[#D8EEDF] text-[#0E382B] text-xs font-extrabold">
+                {data?.availableCarsCount ?? 0} libre(s)
+              </span>
+            </div>
+
+            {/* Search bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#697871] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Rechercher par modèle (Sandero, Logan), plaque ou ville..."
+                value={carSearchQuery}
+                onChange={(e) => setCarSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-[#E5ECE7] text-sm text-[#11241C] placeholder-[#697871] focus:outline-none focus:ring-2 focus:ring-[#0E382B]/20 focus:border-[#0E382B]"
+              />
+            </div>
+
+            {/* City filter pills */}
+            {availableCarCities.length > 0 && (
+              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                <button
+                  onClick={() => setCarCityFilter("ALL")}
+                  className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                    carCityFilter === "ALL"
+                      ? "bg-[#0E382B] text-white font-semibold"
+                      : "bg-white text-[#697871] border border-[#E5ECE7]"
+                  }`}
+                >
+                  Toutes les villes ({data?.availableCarsCount ?? 0})
+                </button>
+                {availableCarCities.map((city) => (
+                  <button
+                    key={city}
+                    onClick={() => setCarCityFilter(city)}
+                    className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                      carCityFilter === city
+                        ? "bg-[#0E382B] text-white font-semibold"
+                        : "bg-white text-[#697871] border border-[#E5ECE7]"
+                    }`}
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Available cars list */}
+            {filteredAvailableCars.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-white border border-[#E5ECE7] text-center space-y-2.5">
+                <div className="w-12 h-12 rounded-2xl bg-[#F0F5F2] text-[#0E382B] mx-auto flex items-center justify-center">
+                  <Car className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-bold text-[#11241C]">
+                  {(data?.availableCarsCount ?? 0) === 0
+                    ? "Aucun véhicule disponible pour le moment"
+                    : "Aucun véhicule ne correspond à votre recherche"}
+                </p>
+                <p className="text-xs text-[#697871] max-w-xs mx-auto">
+                  {(data?.availableCarsCount ?? 0) === 0
+                    ? "Tous les véhicules de la flotte sont actuellement attribués. Vous pouvez tout de même proposer des chauffeurs en précommande (+150 DH)."
+                    : "Essayez un autre modèle, matricule ou filtre de ville."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDriverIntention("Déposer un acompte précommande");
+                    setDriverNotes("");
+                    setShowAddModal(true);
+                  }}
+                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0E382B] text-white text-xs font-bold hover:bg-[#114232] transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Proposer un chauffeur (+150 DH)</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredAvailableCars.map((car) => (
+                  <div
+                    key={car.id}
+                    className="p-4 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 transition-all flex items-center justify-between gap-3 shadow-2xs"
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-11 h-11 rounded-2xl bg-[#D8EEDF] text-[#0E382B] flex items-center justify-center shrink-0">
+                        <Car className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-[#11241C] truncate">
+                            {car.makeModel}
+                          </p>
+                          {car.year && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                              {car.year}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-[#697871] mt-0.5">
+                          <span className="font-mono font-bold text-[#0E382B] bg-[#F0F5F2] px-1.5 py-0.5 rounded">
+                            {car.plateNumber}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-0.5">
+                            <MapPin className="w-3 h-3" />
+                            {car.hubCity || "Casablanca"}
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Disponible immédiatement
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleProposeDriverForCar(car)}
+                      className="px-3 py-2 rounded-xl bg-[#0E382B] hover:bg-[#114232] text-white text-xs font-bold shrink-0 active:scale-95 transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Proposer</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===================== FLOATING FINTECH BOTTOM DOCK ===================== */}
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-md bg-white/95 backdrop-blur-md border border-[#E5ECE7] rounded-full p-2 shadow-2xl flex items-center justify-between z-30 ring-1 ring-black/5">
           {/* Home Nav */}
@@ -901,15 +1117,22 @@ export default function PartnerPortalPage() {
             <span className="text-[10px] mt-0.5">Accueil</span>
           </button>
 
-          {/* Analytics Nav */}
+          {/* Available Cars Nav */}
           <button
-            onClick={() => setActiveTab("ANALYTICS")}
-            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
-              activeTab === "ANALYTICS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            onClick={() => setActiveTab("AVAILABLE_CARS")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all relative ${
+              activeTab === "AVAILABLE_CARS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <PieChart className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5">Stats</span>
+            <div className="relative">
+              <Car className="w-5 h-5" />
+              {(data?.availableCarsCount ?? 0) > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[16px] h-4 rounded-full bg-[#0E382B] text-white text-[9px] font-extrabold flex items-center justify-center">
+                  {data?.availableCarsCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] mt-0.5">Voitures</span>
           </button>
 
           {/* Central Floating Action: Add Lead (Large Emerald Button) */}
