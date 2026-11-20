@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import { calculateAccidentDays } from "@/lib/accident-utils";
 import {
   Car,
   Clock,
@@ -225,7 +226,7 @@ export default function InsuranceVehicleDetail({
   };
 
   const daysInStatus = calculateDays(claim.step_updated_at || claim.created_at);
-  const totalDays = calculateDays(claim.created_at);
+  const totalDays = calculateAccidentDays(claim);
 
   const currentStepIndex = getTimelineStepIndex(claim.timeline_step);
   const currentStepDef = getTimelineStepDef(claim.timeline_step);

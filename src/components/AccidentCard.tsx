@@ -128,6 +128,7 @@ export interface AccidentClaim {
   vehicle: {
     plate_number: string;
     make_model: string;
+    total_downtime_days?: number | null;
   };
   driver?: {
     isRedFlagged?: boolean;

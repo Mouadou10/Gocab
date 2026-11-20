@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useLiveSync } from "@/context/LiveSyncContext";
 import { resolveVehicleFleetManager } from "@/lib/fleet-managers";
+import { calculateAccidentDays } from "@/lib/accident-utils";
 import {
   AccidentClaim,
   TIMELINE_STEPS,
@@ -231,8 +232,7 @@ export default function InsuranceView() {
   const readyForPickupCount = activeClaims.filter((c) => normalizeTimelineStep(c.timeline_step) === "READY_FOR_PICKUP").length;
 
   const totalDowntimeDays = activeClaims.reduce((sum, c) => {
-    const diffTime = Math.abs(new Date().getTime() - new Date(c.created_at).getTime());
-    return sum + Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return sum + calculateAccidentDays(c);
   }, 0);
   const avgDowntimeDays = totalActive > 0 ? Math.round(totalDowntimeDays / totalActive) : 0;
 
@@ -785,8 +785,8 @@ export default function InsuranceView() {
               ) : (
                 filteredLeftClaims.map((claim) => {
                   const isSelected = claim.id === selectedClaim?.id;
-                  // Exact requirement: days counting starts from the first day vehicle appeared on Assurance page
-                  const daysSinceFirstAppeared = calculateDaysInStatus(claim.created_at);
+                  // Exact requirement: calculate only the days since the car made the current accident
+                  const daysSinceFirstAppeared = calculateAccidentDays(claim);
 
                   // Extract garage name, insurance & GoCab Fleet sync status from claim comments
                   let garageName = "Emergence";
@@ -879,11 +879,11 @@ export default function InsuranceView() {
                         </div>
                       </div>
 
-                      {/* Right: Days since vehicle first appeared on Assurance page */}
+                      {/* Right: Days since the car made the current accident */}
                       <div className="shrink-0 flex items-center gap-2 text-right">
                         <div
                           className={`px-2.5 py-1 rounded-xl border text-2xs font-extrabold shadow-2xs flex items-center gap-1 ${daysColor}`}
-                          title={`Présent sur la page Assurance depuis ${daysSinceFirstAppeared} jour(s) (entré le ${new Date(claim.created_at).toLocaleDateString("fr-FR")})`}
+                          title={`Durée depuis l'accident : ${daysSinceFirstAppeared} jour(s)`}
                         >
                           <Clock className="w-3 h-3 shrink-0" />
                           <span>{daysSinceFirstAppeared} jour{daysSinceFirstAppeared > 1 ? "s" : ""}</span>

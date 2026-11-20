@@ -912,6 +912,7 @@ export async function POST(request: NextRequest) {
 
             claimsToUpdate.set(primaryClaim.id, {
               timeline_step: "CAR_IN_GARAGE",
+              created_at: statusStartDate,
               step_updated_at: statusStartDate,
               driver_id: matchedDriver?.id || null,
               driver_name: item.driverName || matchedDriver?.fullName || primaryClaim.driver_name,
