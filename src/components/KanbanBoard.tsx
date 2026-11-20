@@ -358,6 +358,7 @@ export default function KanbanBoard() {
   
   // Navigation & Settings State — persisted across refreshes
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
+  const [trainingSubpage, setTrainingSubpage] = useState<"pipeline" | "zakaria">("pipeline");
   const [isTabRestored, setIsTabRestored] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
   const [whatsappMissingDocsTemplate, setWhatsappMissingDocsTemplate] = useState("");
@@ -1183,6 +1184,13 @@ export default function KanbanBoard() {
               (!l.training_status || l.training_status === "NEW_LEADS")
           )
           .sort((a, b) => {
+            const isZak = (item: any) =>
+              (item?.referrer_name || "").toLowerCase().includes("zakaria") ||
+              (item?.campaign_source || "").toLowerCase().includes("zakaria");
+            const aZak = isZak(a);
+            const bZak = isZak(b);
+            if (aZak !== bZak) return aZak ? -1 : 1;
+
             const getTimestamp = (item: any) => {
               try {
                 const dateStr = item?.updated_at || item?.created_at;
@@ -1298,10 +1306,21 @@ export default function KanbanBoard() {
 
   /** Precompute memoized column leads map — avoids re-filtering all leads on every card click / hover */
   const columnLeadsMap = useMemo(() => {
+    const isZak = (item: any) =>
+      (item?.referrer_name || "").toLowerCase().includes("zakaria") ||
+      (item?.campaign_source || "").toLowerCase().includes("zakaria");
+
     const map: Record<string, Lead[]> = {};
     const cols = activeTab === "leads" ? leadsColumns : trainingColumns;
     for (const col of cols) {
-      map[col] = getLeadsByColumn(col);
+      const list = getLeadsByColumn(col);
+      // Always keep Zakaria referral leads prioritized at the top of every column
+      map[col] = [...list].sort((a, b) => {
+        const aZak = isZak(a);
+        const bZak = isZak(b);
+        if (aZak !== bZak) return aZak ? -1 : 1;
+        return 0;
+      });
     }
     return map;
   }, [activeTab, leadsColumns, trainingColumns, getLeadsByColumn]);
@@ -2540,6 +2559,37 @@ export default function KanbanBoard() {
           <ZakariaOnboardingView />
         ) : activeTab === "whatsapp" ? (
           <WhatsAppCrmView />
+        ) : activeTab === "training" && trainingSubpage === "zakaria" ? (
+          <div className="flex flex-col flex-1">
+            {/* Training Page Subpage Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTrainingSubpage("pipeline")}
+                  className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-slate-100 text-slate-700 hover:bg-slate-200"
+                >
+                  <span>🎓</span>
+                  <span>Pipeline Formation</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrainingSubpage("zakaria")}
+                  className="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer bg-purple-700 text-white shadow-sm"
+                >
+                  <span>🤝</span>
+                  <span>Leads Zakaria — Présence &amp; Validation</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 text-white">
+                    {leads.filter(l => (l.campaign_source && l.campaign_source.toLowerCase().includes("zakaria")) || ((l as any).referrer_name && (l as any).referrer_name.toLowerCase().includes("zakaria"))).length}
+                  </span>
+                </button>
+              </div>
+              <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-3 py-1 rounded-lg border border-purple-200">
+                Validez la présence le jour de formation + Précommande / Prise de véhicule (+150 DH)
+              </span>
+            </div>
+            <ZakariaOnboardingView />
+          </div>
         ) : (
 
           <DndContext
@@ -2559,12 +2609,41 @@ export default function KanbanBoard() {
               />
             )}
             {activeTab === "training" && (
-              <TrainingScorecard
-                leads={leads}
-                onSelectStatus={handleBringColumnToSecond}
-                selectedDate={trainingDateFilter}
-                onDateChange={setTrainingDateFilter}
-              />
+              <div className="space-y-3 mb-2">
+                {/* Training Page Subpage Switcher */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTrainingSubpage("pipeline")}
+                      className="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer bg-navy text-white shadow-sm"
+                    >
+                      <span>🎓</span>
+                      <span>Pipeline Formation</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTrainingSubpage("zakaria")}
+                      className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100"
+                    >
+                      <span>🤝</span>
+                      <span>Leads Zakaria — Présence &amp; Validation</span>
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-purple-700 text-white">
+                        {leads.filter(l => (l.campaign_source && l.campaign_source.toLowerCase().includes("zakaria")) || ((l as any).referrer_name && (l as any).referrer_name.toLowerCase().includes("zakaria"))).length}
+                      </span>
+                    </button>
+                  </div>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    Basculez sur &laquo; Leads Zakaria &raquo; pour confirmer la présence le jour J, précommande ou véhicule
+                  </span>
+                </div>
+                <TrainingScorecard
+                  leads={leads}
+                  onSelectStatus={handleBringColumnToSecond}
+                  selectedDate={trainingDateFilter}
+                  onDateChange={setTrainingDateFilter}
+                />
+              </div>
             )}
             
             {/* Scrollable Horizontal Kanban Board Container */}

@@ -26,6 +26,7 @@ export interface PartnerLeadEvaluation {
   preorderAmount: number | null;
   presenceConfirmed: boolean;
   presenceConfirmedAt: string | null;
+  reminderDate: string | null;
   notes: string | null;
   isConverted: boolean;
   conversionReason: "VEHICLE_ASSIGNED" | "PREORDER_DEPOSITED" | null;
@@ -79,6 +80,7 @@ export function evaluateLeadCommission(lead: {
   notes?: string | null;
   presence_confirmed?: boolean | null;
   presence_confirmed_at?: Date | string | null;
+  reminder_date?: Date | string | null;
 }): PartnerLeadEvaluation {
   const boardCol = (lead.board_column || "NEW_LEADS").trim();
   const brandStat = (lead.brand_status || "").trim();
@@ -191,6 +193,7 @@ export function evaluateLeadCommission(lead: {
     preorderAmount: lead.preorder_amount ?? null,
     presenceConfirmed,
     presenceConfirmedAt: lead.presence_confirmed_at ? new Date(lead.presence_confirmed_at).toISOString() : null,
+    reminderDate: lead.reminder_date ? new Date(lead.reminder_date).toISOString() : null,
     notes: lead.notes || null,
     isConverted,
     conversionReason,

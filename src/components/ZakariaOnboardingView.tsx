@@ -52,6 +52,7 @@ export default function ZakariaOnboardingView() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"ALL" | "SHOWED_UP" | "VALIDATED" | "PENDING" | "LOST">("ALL");
+  const [trainingDateFilter, setTrainingDateFilter] = useState<string>("ALL"); // "ALL" | "TODAY" | "TOMORROW" | "YYYY-MM-DD"
 
   // Preorder modal state
   const [preorderModalLead, setPreorderModalLead] = useState<PartnerLeadEvaluation | null>(null);
@@ -277,14 +278,56 @@ export default function ZakariaOnboardingView() {
     }
   };
 
+  // Helper to compare date string (YYYY-MM-DD)
+  const getIsoDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const getTrainingDayInfo = (reminderDate: string | null) => {
+    if (!reminderDate) return null;
+    const d = new Date(reminderDate);
+    if (isNaN(d.getTime())) return null;
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const dIso = getIsoDate(d);
+    const todayIso = getIsoDate(today);
+    const tomorrowIso = getIsoDate(tomorrow);
+
+    const formatted = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+    if (dIso === todayIso) {
+      return { iso: dIso, label: `Formation Aujourd'hui (${formatted})`, badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300 font-black" };
+    }
+    if (dIso === tomorrowIso) {
+      return { iso: dIso, label: `Formation Demain (${formatted})`, badgeClass: "bg-sky-100 text-sky-900 border-sky-300 font-bold" };
+    }
+    return { iso: dIso, label: `Formation : ${formatted}`, badgeClass: "bg-indigo-50 text-indigo-800 border-indigo-200 font-bold" };
+  };
+
   // Filtered leads
   const filteredLeads = useMemo(() => {
     if (!data?.leads) return [];
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const todayIso = getIsoDate(today);
+    const tomorrowIso = getIsoDate(tomorrow);
+
     return data.leads.filter((l) => {
       if (filterStatus === "SHOWED_UP" && !l.presenceConfirmed && !l.isConverted) return false;
       if (filterStatus === "VALIDATED" && !l.isConverted) return false;
       if (filterStatus === "PENDING" && l.status !== "PENDING") return false;
       if (filterStatus === "LOST" && l.status !== "LOST") return false;
+
+      if (trainingDateFilter !== "ALL") {
+        if (!l.reminderDate) return false;
+        const d = new Date(l.reminderDate);
+        if (isNaN(d.getTime())) return false;
+        const dIso = getIsoDate(d);
+        if (trainingDateFilter === "TODAY" && dIso !== todayIso) return false;
+        else if (trainingDateFilter === "TOMORROW" && dIso !== tomorrowIso) return false;
+        else if (trainingDateFilter !== "TODAY" && trainingDateFilter !== "TOMORROW" && dIso !== trainingDateFilter) return false;
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -297,7 +340,7 @@ export default function ZakariaOnboardingView() {
       }
       return true;
     });
-  }, [data?.leads, filterStatus, searchQuery]);
+  }, [data?.leads, filterStatus, trainingDateFilter, searchQuery]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 min-h-[calc(100vh-8rem)] p-4 sm:p-6 lg:p-8 space-y-6">
@@ -493,6 +536,54 @@ export default function ZakariaOnboardingView() {
             Non retenus ({data?.lostLeads ?? 0})
           </button>
         </div>
+
+        {/* Training Day Filter Bar */}
+        <div className="w-full pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1 mr-1">
+            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Jour de formation :</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setTrainingDateFilter("ALL")}
+            className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              trainingDateFilter === "ALL"
+                ? "bg-indigo-600 text-white shadow-2xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            Toutes les dates
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrainingDateFilter("TODAY")}
+            className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              trainingDateFilter === "TODAY"
+                ? "bg-emerald-600 text-white shadow-2xs"
+                : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+            }`}
+          >
+            📅 Aujourd&apos;hui
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrainingDateFilter("TOMORROW")}
+            className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              trainingDateFilter === "TOMORROW"
+                ? "bg-sky-600 text-white shadow-2xs"
+                : "bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200"
+            }`}
+          >
+            📅 Demain
+          </button>
+          <input
+            type="date"
+            value={trainingDateFilter !== "ALL" && trainingDateFilter !== "TODAY" && trainingDateFilter !== "TOMORROW" ? trainingDateFilter : ""}
+            onChange={(e) => setTrainingDateFilter(e.target.value || "ALL")}
+            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            title="Filtrer par date de formation exacte"
+          />
+        </div>
       </div>
 
       {/* ======================= DRIVER CARDS LIST ======================= */}
@@ -527,6 +618,7 @@ export default function ZakariaOnboardingView() {
           filteredLeads.map((lead) => {
             const isCarAssigned = lead.conversionReason === "VEHICLE_ASSIGNED" || lead.boardColumn === "VEHICLE_ASSIGNMENT";
             const isPreorderDeposited = lead.conversionReason === "PREORDER_DEPOSITED" || (lead.preorderAmount && lead.preorderAmount > 0);
+            const trainingDay = getTrainingDayInfo(lead.reminderDate);
 
             return (
               <div
@@ -579,6 +671,21 @@ export default function ZakariaOnboardingView() {
                       {lead.presenceConfirmed && !lead.isConverted && (
                         <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                           ✓ Présence Validée
+                        </span>
+                      )}
+
+                      {trainingDay ? (
+                        <span
+                          className={`text-[10px] px-2.5 py-0.5 rounded-full border flex items-center gap-1 shadow-3xs ${trainingDay.badgeClass}`}
+                          title="Date de formation programmée"
+                        >
+                          <Calendar className="w-3 h-3 shrink-0" />
+                          <span>{trainingDay.label}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>Date formation à fixer</span>
                         </span>
                       )}
 
