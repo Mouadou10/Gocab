@@ -176,7 +176,7 @@ export async function POST(request: Request) {
         data: {
           vehicle_id: vehicle.id,
           plate_number: vehicle.plate_number,
-          inspector_name: "Hamza RASSID (Gérant)",
+          inspector_name: "Mouad Koudia (Gérant)",
           inspection_date: period.startDate,
           current_mileage: vehicle.current_mileage || 0,
           health_score: 5.0,

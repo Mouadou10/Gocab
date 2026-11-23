@@ -147,7 +147,7 @@ export function generateAttestationPrintHtml(data: AttestationPrintData): string
           <strong>84 RUE IBNOU MOUNIR N38 CENTRE ANDALUCIA - Casablanca</strong>, légalement représentée par :
         </p>
         <p style="font-weight: 700; margin: 10px 0;">
-          Mr ${data.validatorName || "Hamza RASSID"} (${data.validatorRole || "Gérant"})
+          Mr ${data.validatorName || "Mouad Koudia"} (${data.validatorRole || "Gérant"})
         </p>
         <p>
           Attestons par la présente avoir loué à :
@@ -186,7 +186,7 @@ export function generateAttestationPrintHtml(data: AttestationPrintData): string
       </div>
 
       <div style="display: flex; flex-direction: column; align-items: flex-end; min-height: 95px;">
-        <div>Signé : ${data.validatorName || "HAMZA RASSID"} (${data.validatorRole || "Gérant"})</div>
+        <div>Signé : ${data.validatorName || "MOUAD KOUDIA"} (${data.validatorRole || "Gérant"})</div>
         <div style="font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 4px;">Signature &amp; Cachet</div>
         <div style="margin-top: 4px;">
           ${getGocabStampHtml(195, -2.5)}

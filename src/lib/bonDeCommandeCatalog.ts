@@ -44,7 +44,7 @@ export interface BonDeCommandeData {
   total_ttc: number;
   execution_delay: string; // e.g. "16-09-2026"
   observations: string; // "N/A"
-  validator_name: string; // "Hamza RASSID"
+  validator_name: string; // "Mouad Koudia"
   validator_role: string; // "Gérant"
   validated: boolean;
   validated_at?: string | null;
@@ -415,7 +415,7 @@ export function generateBonDeCommandePrintHtml(data: BonDeCommandeData): string 
       <div class="validation-info">
         <div class="section-title">VALIDATION</div>
         <div style="font-weight: 700;">Pour GoCab Rent</div>
-        <div>Nom & Prénom : <strong>${data.validator_name || "Hamza RASSID"}</strong></div>
+        <div>Nom & Prénom : <strong>${data.validator_name || "Mouad Koudia"}</strong></div>
         <div>Qualité : <span>${data.validator_role || "Gérant"}</span></div>
         <div>Date : <span>${data.date || ""}</span></div>
         <div style="color: #6b7280; font-style: italic; margin-top: 4px;">Signature &amp; Cachet</div>

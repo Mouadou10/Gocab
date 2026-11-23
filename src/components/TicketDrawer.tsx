@@ -227,7 +227,7 @@ export default function TicketDrawer({
           : [],
       execution_delay: getFormattedToday(),
       observations: "N/A",
-      validator_name: "Hamza RASSID",
+      validator_name: "Mouad Koudia",
       validator_role: "Gérant",
       validated: false,
     };

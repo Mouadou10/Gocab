@@ -73,7 +73,7 @@ export default function BonDeCommandeModal({
   const [observations, setObservations] = useState<string>(initialData?.observations || "N/A");
 
   // Signatory
-  const [validatorName, setValidatorName] = useState<string>(initialData?.validator_name || "Hamza RASSID");
+  const [validatorName, setValidatorName] = useState<string>(initialData?.validator_name || "Mouad Koudia");
   const [validatorRole, setValidatorRole] = useState<string>(initialData?.validator_role || "Gérant");
   const [isValidated, setIsValidated] = useState<boolean>(initialData?.validated || false);
 
@@ -376,7 +376,7 @@ export default function BonDeCommandeModal({
       total_ttc: totals.total_ttc,
       execution_delay: executionDelay.trim() || date,
       observations: observations.trim() || "N/A",
-      validator_name: validatorName.trim() || "Hamza RASSID",
+      validator_name: validatorName.trim() || "Mouad Koudia",
       validator_role: validatorRole.trim() || "Gérant",
       validated: true,
       validated_at: new Date().toISOString(),

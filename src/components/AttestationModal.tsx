@@ -399,7 +399,7 @@ export default function AttestationModal({ data, isOpen, onClose, onSaveSuccess 
                   , légalement représentée par :
                 </p>
 
-                <p className="font-bold text-[14px]">Mr Hamza RASSID (Gérant)</p>
+                <p className="font-bold text-[14px]">Mr Mouad Koudia (Gérant)</p>
 
                 <p>Attestons par la présente avoir loué à :</p>
               </div>
@@ -458,7 +458,7 @@ export default function AttestationModal({ data, isOpen, onClose, onSaveSuccess 
                 <span className="font-semibold">{date || "_________________________"}</span>
               </div>
               <div className="flex flex-col items-end gap-1">
-                <div>Signé : HAMZA RASSID (Gérant)</div>
+                <div>Signé : MOUAD KOUDIA (Gérant)</div>
                 <div className="text-xs text-slate-400 italic">Signature &amp; Cachet</div>
                 <div className="mt-1">
                   <GocabStamp width={195} rotateDeg={-2.5} />
