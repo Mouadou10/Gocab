@@ -998,12 +998,12 @@ export async function ingestVehiclesFile(file: File): Promise<{ status: number; 
       }
     }
 
-    // 3. Batch update existing vehicles in chunked transactions of 15 (stays well under Prisma 5s tx timeout)
+    // 3. Batch update existing vehicles in chunks of 15 (avoids P2028 5s interactive tx timeout)
     if (vehicleUpdates.size > 0) {
       const updatesList = Array.from(vehicleUpdates.entries());
       for (let i = 0; i < updatesList.length; i += 15) {
         const chunk = updatesList.slice(i, i + 15);
-        await prisma.$transaction(
+        await Promise.all(
           chunk.map(([id, data]) => prisma.vehicle.update({ where: { id }, data }))
         );
       }
