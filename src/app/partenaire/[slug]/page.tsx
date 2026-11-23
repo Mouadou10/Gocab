@@ -38,6 +38,7 @@ import {
   ArrowRight,
   Filter,
   Trash2,
+  Archive,
 } from "lucide-react";
 import { PartnerSummary, PartnerLeadEvaluation, PartnerAvailableCar } from "@/lib/services/partnerCommissionService";
 
@@ -58,13 +59,60 @@ const MOROCCAN_CITIES = [
   "Autre ville",
 ];
 
+type DateRangePreset = "ALL" | "TODAY" | "7D" | "30D" | "THIS_MONTH" | "CUSTOM";
+
+function isWithinDateRange(
+  isoDate: string,
+  preset: DateRangePreset,
+  customStart: string,
+  customEnd: string
+): boolean {
+  if (preset === "ALL") return true;
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return false;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  if (preset === "TODAY") {
+    return d >= startOfToday && d <= endOfToday;
+  }
+  if (preset === "7D") {
+    const start = new Date(startOfToday);
+    start.setDate(start.getDate() - 6);
+    return d >= start && d <= endOfToday;
+  }
+  if (preset === "30D") {
+    const start = new Date(startOfToday);
+    start.setDate(start.getDate() - 29);
+    return d >= start && d <= endOfToday;
+  }
+  if (preset === "THIS_MONTH") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    return d >= start && d <= endOfToday;
+  }
+  if (preset === "CUSTOM") {
+    if (customStart) {
+      const s = new Date(`${customStart}T00:00:00`);
+      if (d < s) return false;
+    }
+    if (customEnd) {
+      const e = new Date(`${customEnd}T23:59:59.999`);
+      if (d > e) return false;
+    }
+    return true;
+  }
+  return true;
+}
+
 export default function PartnerPortalPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "zakaria";
   const partnerDisplayName = slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase();
 
   // Navigation state (Fintech App Tabs)
-  const [activeTab, setActiveTab] = useState<"HOME" | "ANALYTICS" | "ALL_LEADS" | "AVAILABLE_CARS">("HOME");
+  const [activeTab, setActiveTab] = useState<"HOME" | "ARCHIVE" | "ANALYTICS" | "ALL_LEADS" | "AVAILABLE_CARS">("HOME");
 
   // Data state
   const [data, setData] = useState<PartnerSummary | null>(null);
@@ -73,7 +121,12 @@ export default function PartnerPortalPage() {
   const [showBalance, setShowBalance] = useState(true);
 
   // Filters & Search
-  const [filterCategory, setFilterCategory] = useState<"ALL" | "SHOWED_UP" | "VALIDATED" | "PENDING" | "LOST">("ALL");
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "SHOWED_UP">("ALL");
+  const [archiveFilter, setArchiveFilter] = useState<"ALL_TREATED" | "VALIDATED" | "LOST">("ALL_TREATED");
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [datePreset, setDatePreset] = useState<DateRangePreset>("ALL");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string>("ALL");
   const [carSearchQuery, setCarSearchQuery] = useState("");
@@ -214,15 +267,49 @@ export default function PartnerPortalPage() {
     }
   };
 
-  // Filtered leads
+  // Split Active (En cours) vs Treated (Archive: VALIDATED or LOST)
+  const activeLeads = useMemo(() => {
+    if (!data?.leads) return [];
+    return data.leads.filter((l) => l.status === "PENDING");
+  }, [data?.leads]);
+
+  const treatedLeads = useMemo(() => {
+    if (!data?.leads) return [];
+    return data.leads.filter((l) => l.status === "VALIDATED" || l.status === "LOST");
+  }, [data?.leads]);
+
+  // Filtered active leads for HOME view
+  const filteredActiveLeads = useMemo(() => {
+    return activeLeads.filter((l) => {
+      if (filterCategory === "SHOWED_UP" && !l.presenceConfirmed && l.stageBadgeColor !== "purple") {
+        return false;
+      }
+      return true;
+    });
+  }, [activeLeads, filterCategory]);
+
+  // Filtered treated leads for ARCHIVE view
+  const filteredArchiveLeads = useMemo(() => {
+    return treatedLeads.filter((l) => {
+      if (archiveFilter === "VALIDATED" && l.status !== "VALIDATED") return false;
+      if (archiveFilter === "LOST" && l.status !== "LOST") return false;
+      if (!isWithinDateRange(l.createdAt, datePreset, customStartDate, customEndDate)) return false;
+
+      if (archiveSearch.trim()) {
+        const q = archiveSearch.toLowerCase();
+        const matchesName = l.name.toLowerCase().includes(q);
+        const matchesPhone = l.phone.includes(q);
+        const matchesCity = (l.city || "").toLowerCase().includes(q);
+        return matchesName || matchesPhone || matchesCity;
+      }
+      return true;
+    });
+  }, [treatedLeads, archiveFilter, datePreset, customStartDate, customEndDate, archiveSearch]);
+
+  // Filtered all leads for Directory (ALL_LEADS)
   const filteredLeads = useMemo(() => {
     if (!data?.leads) return [];
     return data.leads.filter((l) => {
-      if (filterCategory === "SHOWED_UP" && !l.presenceConfirmed && l.stageBadgeColor !== "purple") return false;
-      if (filterCategory === "VALIDATED" && !l.isConverted) return false;
-      if (filterCategory === "PENDING" && l.status !== "PENDING") return false;
-      if (filterCategory === "LOST" && l.status !== "LOST") return false;
-
       if (selectedCity !== "ALL" && l.city?.toLowerCase() !== selectedCity.toLowerCase()) {
         return false;
       }
@@ -236,7 +323,7 @@ export default function PartnerPortalPage() {
       }
       return true;
     });
-  }, [data?.leads, filterCategory, selectedCity, searchQuery]);
+  }, [data?.leads, selectedCity, searchQuery]);
 
   // Available cars filtering
   const availableCarCities = useMemo(() => {
@@ -272,23 +359,233 @@ export default function PartnerPortalPage() {
     setShowAddModal(true);
   };
 
-  // Analytics stats
+  // Analytics / Dashboard stats filtered by selected Date Range
   const analyticsBreakdown = useMemo(() => {
-    if (!data) return { validated: 0, pending: 0, lost: 0, total: 0, valPct: 0, penPct: 0, lostPct: 0 };
-    const validated = data.convertedLeads || 0;
-    const pending = data.pendingLeads || 0;
-    const lost = data.lostLeads || 0;
-    const total = data.totalLeads || 0;
+    const allLeads = data?.leads || [];
+    const ranged = allLeads.filter((l) =>
+      isWithinDateRange(l.createdAt, datePreset, customStartDate, customEndDate)
+    );
+    const total = ranged.length;
+    const validated = ranged.filter((l) => l.status === "VALIDATED").length;
+    const pending = ranged.filter((l) => l.status === "PENDING").length;
+    const lost = ranged.filter((l) => l.status === "LOST").length;
+    const showedUp = ranged.filter((l) => l.presenceConfirmed || l.stageBadgeColor === "purple").length;
+    const earnedMAD = ranged.reduce((sum, l) => sum + (l.isConverted ? l.commissionMAD || 150 : 0), 0);
+    const potentialMAD = pending * (data?.commissionRateMAD || 150);
+
+    const cityMap = new Map<string, { total: number; validated: number }>();
+    for (const l of ranged) {
+      const city = l.city?.trim() || "Maroc";
+      const cur = cityMap.get(city) || { total: 0, validated: 0 };
+      cur.total += 1;
+      if (l.isConverted) cur.validated += 1;
+      cityMap.set(city, cur);
+    }
+    const cityBreakdown = Array.from(cityMap.entries())
+      .map(([city, counts]) => ({ city, ...counts }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
     return {
       validated,
       pending,
       lost,
+      treated: validated + lost,
+      showedUp,
       total,
+      earnedMAD,
+      potentialMAD,
       valPct: total > 0 ? Math.round((validated / total) * 100) : 0,
       penPct: total > 0 ? Math.round((pending / total) * 100) : 0,
       lostPct: total > 0 ? Math.round((lost / total) * 100) : 0,
+      showUpPct: total > 0 ? Math.round((showedUp / total) * 100) : 0,
+      cityBreakdown,
     };
-  }, [data]);
+  }, [data, datePreset, customStartDate, customEndDate]);
+
+  const DATE_PRESETS: { id: DateRangePreset; label: string }[] = [
+    { id: "ALL", label: "Tout" },
+    { id: "TODAY", label: "Aujourd'hui" },
+    { id: "7D", label: "7 jours" },
+    { id: "30D", label: "30 jours" },
+    { id: "THIS_MONTH", label: "Ce mois" },
+    { id: "CUSTOM", label: "Personnalisé" },
+  ];
+
+  const renderDateRangeFilter = () => (
+    <div className="p-3 rounded-2xl bg-white border border-[#E5ECE7] space-y-2.5 shadow-2xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-[#11241C] flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5 text-[#0E382B]" />
+          <span>Période</span>
+        </span>
+        {datePreset !== "ALL" && (
+          <button
+            type="button"
+            onClick={() => {
+              setDatePreset("ALL");
+              setCustomStartDate("");
+              setCustomEndDate("");
+            }}
+            className="text-[10px] font-semibold text-[#0E382B] hover:underline"
+          >
+            Réinitialiser
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] no-scrollbar">
+        {DATE_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setDatePreset(p.id)}
+            className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap transition-all ${
+              datePreset === p.id
+                ? "bg-[#0E382B] text-white shadow-xs"
+                : "bg-[#F4F6F0] text-[#697871] hover:bg-[#E7ECE9]"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {datePreset === "CUSTOM" && (
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <div>
+            <label className="block text-[10px] font-semibold text-[#697871] mb-0.5">Du</label>
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-xl border border-[#E5ECE7] text-xs bg-[#F9FAF7] text-[#11241C] focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-[#697871] mb-0.5">Au</label>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-xl border border-[#E5ECE7] text-xs bg-[#F9FAF7] text-[#11241C] focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderLeadCard = (lead: PartnerLeadEvaluation) => {
+    const isValidated = lead.isConverted;
+    const isPending = lead.status === "PENDING";
+
+    return (
+      <div
+        key={lead.id}
+        onClick={() => setSelectedLead(lead)}
+        className="p-4 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:shadow-sm active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between gap-3"
+      >
+        <div className="flex items-center space-x-3 min-w-0">
+          <div
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+              isValidated
+                ? "bg-[#D8EEDF] text-[#0E382B]"
+                : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
+                ? "bg-purple-100 text-purple-800 ring-1 ring-purple-200"
+                : isPending
+                ? "bg-[#FEF3C7] text-[#92400E]"
+                : "bg-[#F3F4F6] text-[#6B7280]"
+            }`}
+          >
+            {isValidated ? (
+              lead.conversionReason === "VEHICLE_ASSIGNED" ? (
+                <Car className="w-5 h-5" />
+              ) : (
+                <Coins className="w-5 h-5" />
+              )
+            ) : lead.presenceConfirmed || lead.stageBadgeColor === "purple" ? (
+              <Users className="w-5 h-5 text-purple-700" />
+            ) : isPending ? (
+              <Clock className="w-5 h-5" />
+            ) : (
+              <Users className="w-5 h-5" />
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#11241C] truncate">{lead.name}</p>
+            <div className="flex items-center gap-2 text-xs text-[#697871] mt-0.5">
+              <span className="flex items-center gap-0.5">
+                <MapPin className="w-3 h-3 text-[#697871]" />
+                {lead.city || "Maroc"}
+              </span>
+              <span>•</span>
+              <span>{new Date(lead.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+              {lead.presenceConfirmed && !isValidated && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                  👤 Présent
+                </span>
+              )}
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                  isValidated
+                    ? "bg-[#D8EEDF] text-[#0E382B]"
+                    : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
+                    ? "bg-purple-50 text-purple-900 border border-purple-100"
+                    : isPending
+                    ? "bg-[#FEF3C7] text-[#92400E]"
+                    : "bg-[#FEE2E2] text-[#991B1B]"
+                }`}
+              >
+                {lead.statusLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="text-right">
+            {isValidated ? (
+              <div>
+                <span className="text-sm md:text-base font-extrabold text-[#0E382B] block">+150.00 DH</span>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                  Validé ✓
+                </span>
+              </div>
+            ) : isPending ? (
+              <div>
+                <span className="text-xs font-bold text-amber-700 block">En cours</span>
+                <span className="text-[10px] text-[#697871]">+150 DH pot.</span>
+              </div>
+            ) : (
+              <div>
+                <span className="text-xs font-semibold text-slate-400 block">0.00 DH</span>
+                <span className="text-[10px] text-slate-400">Non converti</span>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteLead(lead);
+            }}
+            disabled={deletingId === lead.id}
+            className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+            title="Supprimer ce dossier"
+          >
+            {deletingId === lead.id ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+            ) : (
+              <Trash2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#F4F6F0] text-[#151E19] flex justify-center selection:bg-[#0E382B] selection:text-white pb-36 font-sans antialiased">
@@ -485,15 +782,26 @@ export default function PartnerPortalPage() {
         </button>
 
         {/* ===================== TAB VIEW SWITCHER ===================== */}
-        <div className="grid grid-cols-4 rounded-2xl bg-[#E7ECE9] p-1 text-[11px] sm:text-xs font-semibold gap-1">
+        <div className="grid grid-cols-5 rounded-2xl bg-[#E7ECE9] p-1 text-[10px] sm:text-xs font-semibold gap-1">
           <button
             onClick={() => setActiveTab("HOME")}
             className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
               activeTab === "HOME" ? "bg-white text-[#0E382B] shadow-xs font-bold" : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <Wallet className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Historique ({data?.leads?.length || 0})</span>
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">En cours ({activeLeads.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("ARCHIVE")}
+            className={`py-2 px-1 rounded-xl transition-all flex items-center justify-center gap-1 truncate ${
+              activeTab === "ARCHIVE"
+                ? "bg-white text-[#0E382B] shadow-xs font-bold"
+                : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Archive ({treatedLeads.length})</span>
           </button>
           <button
             onClick={() => setActiveTab("AVAILABLE_CARS")}
@@ -514,8 +822,8 @@ export default function PartnerPortalPage() {
                 : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <PieChart className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Stats</span>
+            <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Dashboard</span>
           </button>
           <button
             onClick={() => setActiveTab("ALL_LEADS")}
@@ -526,26 +834,31 @@ export default function PartnerPortalPage() {
             }`}
           >
             <Filter className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Filtres</span>
+            <span className="truncate">Registre</span>
           </button>
         </div>
 
-        {/* ===================== TAB 1: RECENT TRANSACTIONS / DOSSIERS ===================== */}
+        {/* ===================== TAB 1: ACTIVE DOSSIERS (EN COURS) ===================== */}
         {activeTab === "HOME" && (
           <div className="space-y-4">
             {/* Section Header */}
             <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-[#11241C] tracking-tight">Dossiers & Commissions Récents</h2>
+              <div>
+                <h2 className="text-base font-bold text-[#11241C] tracking-tight">Dossiers Actifs (En cours)</h2>
+                <p className="text-[11px] text-[#697871]">
+                  Les dossiers validés ou clôturés sont archivés automatiquement
+                </p>
+              </div>
               <button
-                onClick={() => setActiveTab("ALL_LEADS")}
-                className="text-xs font-semibold text-[#0E382B] hover:underline flex items-center gap-1"
+                onClick={() => setActiveTab("ARCHIVE")}
+                className="text-xs font-semibold text-[#0E382B] hover:underline flex items-center gap-1 shrink-0"
               >
-                <span>Voir tout ({data?.leads?.length || 0})</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <Archive className="w-3.5 h-3.5" />
+                <span>Archive ({treatedLeads.length})</span>
               </button>
             </div>
 
-            {/* Quick status filter pills */}
+            {/* Quick status filter pills for active leads */}
             <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
               <button
                 onClick={() => setFilterCategory("ALL")}
@@ -555,7 +868,7 @@ export default function PartnerPortalPage() {
                     : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
                 }`}
               >
-                Tous ({data?.leads?.length || 0})
+                En cours ({activeLeads.length})
               </button>
               <button
                 onClick={() => setFilterCategory("SHOWED_UP")}
@@ -565,222 +878,256 @@ export default function PartnerPortalPage() {
                     : "bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100"
                 }`}
               >
-                <span>👤 Présents ({data?.showedUpLeads || 0})</span>
+                <span>👤 Présents ({activeLeads.filter((l) => l.presenceConfirmed || l.stageBadgeColor === "purple").length})</span>
               </button>
               <button
-                onClick={() => setFilterCategory("VALIDATED")}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                  filterCategory === "VALIDATED"
-                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
-                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
-                }`}
+                onClick={() => setActiveTab("ARCHIVE")}
+                className="px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 bg-emerald-50 text-[#0E382B] border border-emerald-200 hover:bg-emerald-100"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Validés ({data?.convertedLeads || 0})</span>
-              </button>
-              <button
-                onClick={() => setFilterCategory("PENDING")}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                  filterCategory === "PENDING"
-                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
-                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                <span>En cours ({data?.pendingLeads || 0})</span>
-              </button>
-              <button
-                onClick={() => setFilterCategory("LOST")}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                  filterCategory === "LOST"
-                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
-                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
-                }`}
-              >
-                <span>Non retenus ({data?.lostLeads || 0})</span>
+                <Archive className="w-3.5 h-3.5 text-[#0E382B]" />
+                <span>Traités → Archive ({treatedLeads.length})</span>
               </button>
             </div>
 
-            {/* List of Leads styled as Transactions */}
+            {/* List of Active Leads */}
             <div className="space-y-2.5">
               {loading ? (
                 <div className="p-8 text-center bg-white rounded-3xl border border-[#E5ECE7]">
                   <RefreshCw className="w-6 h-6 animate-spin text-[#0E382B] mx-auto mb-2" />
                   <p className="text-xs text-[#697871]">Chargement de votre portefeuille...</p>
                 </div>
-              ) : filteredLeads.length === 0 ? (
+              ) : filteredActiveLeads.length === 0 ? (
                 <div className="p-8 text-center bg-white rounded-3xl border border-[#E5ECE7] space-y-3">
                   <div className="w-14 h-14 rounded-full bg-[#E8F4EC] text-[#0E382B] flex items-center justify-center mx-auto">
-                    <Users className="w-6 h-6" />
+                    <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#11241C]">Aucun chauffeur dans cette vue</h3>
+                    <h3 className="text-sm font-bold text-[#11241C]">Aucun dossier en attente</h3>
                     <p className="text-xs text-[#697871] max-w-xs mx-auto mt-1">
-                      Ajoutez votre premier candidat pour déclencher automatiquement votre commission de 150 DH dès
-                      validation.
+                      {treatedLeads.length > 0
+                        ? `Vos ${treatedLeads.length} dossier(s) traité(s) sont classés dans l'Archive.`
+                        : "Ajoutez votre premier candidat pour déclencher automatiquement votre commission de 150 DH dès validation."}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0E382B] text-white text-xs font-semibold shadow-xs hover:bg-[#114232] active:scale-95 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Ajouter un chauffeur</span>
-                  </button>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0E382B] text-white text-xs font-semibold shadow-xs hover:bg-[#114232] active:scale-95 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Ajouter un chauffeur</span>
+                    </button>
+                    {treatedLeads.length > 0 && (
+                      <button
+                        onClick={() => setActiveTab("ARCHIVE")}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#E8F4EC] text-[#0E382B] text-xs font-semibold hover:bg-[#D8EEDF] transition-all"
+                      >
+                        <Archive className="w-4 h-4" />
+                        <span>Voir l&apos;Archive ({treatedLeads.length})</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
-                filteredLeads.map((lead) => {
-                  const isValidated = lead.isConverted;
-                  const isPending = lead.status === "PENDING";
-
-                  return (
-                    <div
-                      key={lead.id}
-                      onClick={() => setSelectedLead(lead)}
-                      className="p-4 rounded-2xl bg-white border border-[#E5ECE7] hover:border-[#0E382B]/30 hover:shadow-sm active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between gap-3"
-                    >
-                      {/* Left Avatar Icon */}
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <div
-                          className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                            isValidated
-                              ? "bg-[#D8EEDF] text-[#0E382B]"
-                              : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
-                              ? "bg-purple-100 text-purple-800 ring-1 ring-purple-200"
-                              : isPending
-                              ? "bg-[#FEF3C7] text-[#92400E]"
-                              : "bg-[#F3F4F6] text-[#6B7280]"
-                          }`}
-                        >
-                          {isValidated ? (
-                            lead.conversionReason === "VEHICLE_ASSIGNED" ? (
-                              <Car className="w-5 h-5" />
-                            ) : (
-                              <Coins className="w-5 h-5" />
-                            )
-                          ) : lead.presenceConfirmed || lead.stageBadgeColor === "purple" ? (
-                            <Users className="w-5 h-5 text-purple-700" />
-                          ) : isPending ? (
-                            <Clock className="w-5 h-5" />
-                          ) : (
-                            <Users className="w-5 h-5" />
-                          )}
-                        </div>
-
-                        {/* Middle Info */}
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-[#11241C] truncate">{lead.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-[#697871] mt-0.5">
-                            <span className="flex items-center gap-0.5">
-                              <MapPin className="w-3 h-3 text-[#697871]" />
-                              {lead.city || "Maroc"}
-                            </span>
-                            <span>•</span>
-                            <span>{new Date(lead.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
-                          </div>
-                          {/* Status Pill */}
-                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                            {lead.presenceConfirmed && !isValidated && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                👤 Présent
-                              </span>
-                            )}
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                                isValidated
-                                  ? "bg-[#D8EEDF] text-[#0E382B]"
-                                  : lead.presenceConfirmed || lead.stageBadgeColor === "purple"
-                                  ? "bg-purple-50 text-purple-900 border border-purple-100"
-                                  : isPending
-                                  ? "bg-[#FEF3C7] text-[#92400E]"
-                                  : "bg-[#FEE2E2] text-[#991B1B]"
-                              }`}
-                            >
-                              {lead.statusLabel}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Amount / Commission & Delete Action */}
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <div className="text-right">
-                          {isValidated ? (
-                            <div>
-                              <span className="text-sm md:text-base font-extrabold text-[#0E382B] block">
-                                +150.00 DH
-                              </span>
-                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                Validé ✓
-                              </span>
-                            </div>
-                          ) : isPending ? (
-                            <div>
-                              <span className="text-xs font-bold text-amber-700 block">En cours</span>
-                              <span className="text-[10px] text-[#697871]">+150 DH pot.</span>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="text-xs font-semibold text-slate-400 block">0.00 DH</span>
-                              <span className="text-[10px] text-slate-400">Non converti</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteLead(lead);
-                          }}
-                          disabled={deletingId === lead.id}
-                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                          title="Supprimer ce dossier"
-                        >
-                          {deletingId === lead.id ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
+                filteredActiveLeads.map(renderLeadCard)
               )}
             </div>
           </div>
         )}
 
-        {/* ===================== TAB 2: ANALYTICS VIEW (Screen 3 in Inspiration) ===================== */}
-        {activeTab === "ANALYTICS" && (
-          <div className="space-y-5">
-            {/* Header */}
+        {/* ===================== TAB: ARCHIVE (TREATED LEADS) ===================== */}
+        {activeTab === "ARCHIVE" && (
+          <div className="space-y-4">
             <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-[#11241C]">Analytique & Performance</h2>
-              <span className="text-xs text-[#697871] font-medium">Cumul temps réel</span>
+              <div>
+                <h2 className="text-base font-bold text-[#11241C] flex items-center gap-1.5">
+                  <Archive className="w-4 h-4 text-[#0E382B]" />
+                  <span>Archive — Dossiers Traités</span>
+                </h2>
+                <p className="text-[11px] text-[#697871]">
+                  Chauffeurs validés (+150 DH) ou clôturés automatiquement archivés
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#D8EEDF] text-[#0E382B]">
+                {filteredArchiveLeads.length} dossier(s)
+              </span>
             </div>
 
-            {/* Total Spent / Earned Donut Card */}
+            {/* Date Range Filter */}
+            {renderDateRangeFilter()}
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#697871] absolute left-3.5 top-3" />
+              <input
+                type="text"
+                value={archiveSearch}
+                onChange={(e) => setArchiveSearch(e.target.value)}
+                placeholder="Rechercher dans les archives (nom, téléphone, ville)..."
+                className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white border border-[#E5ECE7] text-xs text-[#151E19] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#0E382B]"
+              />
+              {archiveSearch && (
+                <button
+                  type="button"
+                  onClick={() => setArchiveSearch("")}
+                  className="absolute right-3.5 top-3 text-xs text-[#697871] hover:text-[#151E19]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Treated status filter pills */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+              <button
+                onClick={() => setArchiveFilter("ALL_TREATED")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                  archiveFilter === "ALL_TREATED"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                Tous traités ({treatedLeads.length})
+              </button>
+              <button
+                onClick={() => setArchiveFilter("VALIDATED")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  archiveFilter === "VALIDATED"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Validés +150 DH ({treatedLeads.filter((l) => l.status === "VALIDATED").length})</span>
+              </button>
+              <button
+                onClick={() => setArchiveFilter("LOST")}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                  archiveFilter === "LOST"
+                    ? "bg-[#0E382B] text-white font-semibold shadow-xs"
+                    : "bg-white text-[#697871] border border-[#E5ECE7] hover:bg-[#F0F5F2]"
+                }`}
+              >
+                <span>Non retenus ({treatedLeads.filter((l) => l.status === "LOST").length})</span>
+              </button>
+            </div>
+
+            {/* Archived Leads List */}
+            <div className="space-y-2.5">
+              {filteredArchiveLeads.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-3xl border border-[#E5ECE7] space-y-2">
+                  <Archive className="w-8 h-8 text-[#697871] mx-auto opacity-60" />
+                  <h3 className="text-sm font-bold text-[#11241C]">Aucun dossier traité sur cette période</h3>
+                  <p className="text-xs text-[#697871] max-w-xs mx-auto">
+                    Ajustez le filtre de date ou de statut pour afficher vos dossiers archivés.
+                  </p>
+                </div>
+              ) : (
+                filteredArchiveLeads.map(renderLeadCard)
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 2: DASHBOARD WITH DATE RANGE FILTER ===================== */}
+        {activeTab === "ANALYTICS" && (
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h2 className="text-base font-bold text-[#11241C] flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4 text-[#0E382B]" />
+                  <span>Dashboard &amp; Performance</span>
+                </h2>
+                <p className="text-[11px] text-[#697871]">Analyse filtrée par période en temps réel</p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#E8F4EC] text-[#0E382B]">
+                {analyticsBreakdown.total} dossier(s)
+              </span>
+            </div>
+
+            {/* Date Range Filter */}
+            {renderDateRangeFilter()}
+
+            {/* Performance KPI Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Commissions Gagnées</span>
+                <p className="text-2xl font-extrabold text-[#0E382B] mt-1">
+                  {analyticsBreakdown.earnedMAD.toLocaleString("fr-FR")} DH
+                </p>
+                <span className="text-[10px] text-emerald-700 font-semibold">
+                  {analyticsBreakdown.validated} validé(s) × 150 DH
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Total Présentés</span>
+                <p className="text-2xl font-extrabold text-[#11241C] mt-1">{analyticsBreakdown.total}</p>
+                <span className="text-[10px] text-[#697871] font-semibold">
+                  Taux conversion : {analyticsBreakdown.valPct}%
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Gains Potentiels</span>
+                <p className="text-2xl font-extrabold text-amber-700 mt-1">
+                  {analyticsBreakdown.potentialMAD.toLocaleString("fr-FR")} DH
+                </p>
+                <span className="text-[10px] text-amber-700 font-semibold">
+                  {analyticsBreakdown.pending} en cours
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Présents au siège</span>
+                <p className="text-2xl font-extrabold text-purple-800 mt-1">{analyticsBreakdown.showedUp}</p>
+                <span className="text-[10px] text-purple-700 font-semibold">
+                  {analyticsBreakdown.showUpPct}% de présence
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
+                <span className="text-[11px] font-medium text-[#697871]">Non retenus</span>
+                <p className="text-2xl font-extrabold text-slate-600 mt-1">{analyticsBreakdown.lost}</p>
+                <span className="text-[10px] text-slate-500 font-semibold">
+                  {analyticsBreakdown.lostPct}% des dossiers
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("ARCHIVE")}
+                className="p-4 rounded-2xl bg-[#E8F4EC] border border-[#CDE5D4] shadow-xs text-left hover:bg-[#D8EEDF] transition-all cursor-pointer"
+              >
+                <span className="text-[11px] font-semibold text-[#0E382B] flex items-center justify-between">
+                  <span>Traités (Archive)</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </span>
+                <p className="text-2xl font-extrabold text-[#0E382B] mt-1">{analyticsBreakdown.treated}</p>
+                <span className="text-[10px] text-[#0E382B]/80 font-semibold">Ouvrir l&apos;Archive →</span>
+              </button>
+            </div>
+
+            {/* Total Earned Donut Card */}
             <div className="p-6 rounded-3xl bg-white border border-[#E5ECE7] shadow-sm flex flex-col items-center text-center">
               <p className="text-xs font-semibold text-[#697871] uppercase tracking-wider mb-4">
-                Répartition de vos Chauffeurs
+                Répartition sur la période sélectionnée
               </p>
 
               {/* Central Circle Metric (Donut Style) */}
-              <div className="relative w-44 h-44 rounded-full border-8 border-[#0E382B] flex flex-col items-center justify-center bg-[#F4F6F0]/50 shadow-inner my-2">
-                <span className="text-3xl font-extrabold text-[#0E382B]">
-                  {(data?.totalCommissionEarnedMAD || 0).toLocaleString("fr-FR")}
+              <div className="relative w-40 h-40 rounded-full border-8 border-[#0E382B] flex flex-col items-center justify-center bg-[#F4F6F0]/50 shadow-inner my-1">
+                <span className="text-2xl font-extrabold text-[#0E382B]">
+                  {analyticsBreakdown.earnedMAD.toLocaleString("fr-FR")}
                 </span>
-                <span className="text-xs font-bold text-[#697871] uppercase tracking-wider">DH Gagnés</span>
+                <span className="text-[11px] font-bold text-[#697871] uppercase tracking-wider">DH Gagnés</span>
                 <span className="text-[10px] font-semibold text-emerald-700 bg-[#D8EEDF] px-2 py-0.5 rounded-full mt-1">
-                  {analyticsBreakdown.validated} / {analyticsBreakdown.total} Chauffeurs
+                  {analyticsBreakdown.validated} / {analyticsBreakdown.total} Validés
                 </span>
               </div>
 
               {/* Legend Grid */}
-              <div className="grid grid-cols-2 gap-3 w-full mt-6 pt-5 border-t border-[#E5ECE7] text-left text-xs">
+              <div className="grid grid-cols-2 gap-3 w-full mt-5 pt-4 border-t border-[#E5ECE7] text-left text-xs">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full bg-[#0E382B]" />
                   <span className="text-[#697871] flex-1">Validés (150 DH)</span>
@@ -798,13 +1145,47 @@ export default function PartnerPortalPage() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full bg-[#10B981]" />
-                  <span className="text-[#697871] flex-1">Taux succès</span>
-                  <span className="font-bold text-[#0E382B]">{analyticsBreakdown.valPct}%</span>
+                  <span className="text-[#697871] flex-1">Taux présence</span>
+                  <span className="font-bold text-[#0E382B]">{analyticsBreakdown.showUpPct}%</span>
                 </div>
               </div>
             </div>
 
-            {/* Motivational Performance Insight Pill (Matching screen 3) */}
+            {/* City Breakdown */}
+            {analyticsBreakdown.cityBreakdown.length > 0 && (
+              <div className="p-5 rounded-3xl bg-white border border-[#E5ECE7] shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-[#11241C] uppercase tracking-wider">Top Villes (Période)</h3>
+                  <span className="text-[11px] text-[#697871]">Validés / Total</span>
+                </div>
+                <div className="space-y-2.5">
+                  {analyticsBreakdown.cityBreakdown.map((c) => {
+                    const pct = analyticsBreakdown.total > 0 ? Math.round((c.total / analyticsBreakdown.total) * 100) : 0;
+                    return (
+                      <div key={c.city} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-[#11241C] flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-[#0E382B]" />
+                            {c.city}
+                          </span>
+                          <span className="text-[#697871] font-medium">
+                            <strong className="text-[#0E382B]">{c.validated}</strong> / {c.total} ({pct}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-[#F0F5F2] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[#0E382B] transition-all"
+                            style={{ width: `${Math.max(pct, 4)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Motivational Performance Insight Pill */}
             <div className="p-4 rounded-2xl bg-[#E8F4EC] border border-[#CDE5D4] flex items-center justify-between text-xs text-[#0E382B]">
               <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center shrink-0 shadow-xs">
@@ -820,25 +1201,6 @@ export default function PartnerPortalPage() {
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-[#0E382B] shrink-0" />
-            </div>
-
-            {/* Performance KPI Cards */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
-                <span className="text-[11px] font-medium text-[#697871]">Total Présentés</span>
-                <p className="text-2xl font-extrabold text-[#11241C] mt-1">{data?.totalLeads || 0}</p>
-                <span className="text-[10px] text-emerald-700 font-semibold">Chauffeurs transmis</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-white border border-[#E5ECE7] shadow-xs">
-                <span className="text-[11px] font-medium text-[#697871]">Gains Potentiels</span>
-                <p className="text-2xl font-extrabold text-amber-700 mt-1">
-                  {(data?.potentialPendingCommissionMAD || 0).toLocaleString()} DH
-                </p>
-                <span className="text-[10px] text-amber-700 font-semibold">
-                  {data?.pendingLeads || 0} en qualification
-                </span>
-              </div>
             </div>
           </div>
         )}
@@ -1113,8 +1475,45 @@ export default function PartnerPortalPage() {
               activeTab === "HOME" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
             }`}
           >
-            <Wallet className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5">Accueil</span>
+            <Clock className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">En cours</span>
+          </button>
+
+          {/* Archive Nav */}
+          <button
+            onClick={() => setActiveTab("ARCHIVE")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all relative ${
+              activeTab === "ARCHIVE" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <div className="relative">
+              <Archive className="w-5 h-5" />
+              {treatedLeads.length > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[16px] h-4 rounded-full bg-[#0E382B] text-white text-[9px] font-extrabold flex items-center justify-center">
+                  {treatedLeads.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] mt-0.5">Archive</span>
+          </button>
+
+          {/* Central Floating Action: Add Lead (Large Emerald Button) */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="w-13 h-13 -my-3 rounded-full bg-[#0E382B] text-white flex items-center justify-center shadow-lg shadow-[#0E382B]/30 hover:scale-105 active:scale-95 transition-all ring-4 ring-white"
+          >
+            <Plus className="w-6 h-6 stroke-[3]" />
+          </button>
+
+          {/* Dashboard Nav */}
+          <button
+            onClick={() => setActiveTab("ANALYTICS")}
+            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
+              activeTab === "ANALYTICS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
+            }`}
+          >
+            <BarChart3 className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Dashboard</span>
           </button>
 
           {/* Available Cars Nav */}
@@ -1134,36 +1533,6 @@ export default function PartnerPortalPage() {
             </div>
             <span className="text-[10px] mt-0.5">Voitures</span>
           </button>
-
-          {/* Central Floating Action: Add Lead (Large Emerald Button) */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="w-13 h-13 -my-3 rounded-full bg-[#0E382B] text-white flex items-center justify-center shadow-lg shadow-[#0E382B]/30 hover:scale-105 active:scale-95 transition-all ring-4 ring-white"
-          >
-            <Plus className="w-6 h-6 stroke-[3]" />
-          </button>
-
-          {/* Directory Nav */}
-          <button
-            onClick={() => setActiveTab("ALL_LEADS")}
-            className={`flex-1 flex flex-col items-center py-1 rounded-full transition-all ${
-              activeTab === "ALL_LEADS" ? "text-[#0E382B] font-bold" : "text-[#697871] hover:text-[#151E19]"
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5">Dossiers</span>
-          </button>
-
-          {/* WhatsApp Direct Nav */}
-          <a
-            href="https://wa.me/212645398932?text=Salam%20GoCab%2C%20c%27est%20Zakaria."
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex flex-col items-center py-1 rounded-full text-[#697871] hover:text-[#0E382B] transition-all"
-          >
-            <MessageCircle className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5">Contact</span>
-          </a>
         </div>
 
         {/* ===================== MODAL: AJOUT CHAUFFEUR RAPIDE ===================== */}
