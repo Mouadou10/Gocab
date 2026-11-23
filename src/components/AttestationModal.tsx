@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { printAttestation } from "@/lib/attestationPrint";
+import GocabStamp from "./GocabStamp";
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
 import { calculateOneMonthPeriod } from "@/lib/attestationDate";
 import toast from "react-hot-toast";
@@ -458,7 +459,10 @@ export default function AttestationModal({ data, isOpen, onClose, onSaveSuccess 
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div>Signé : HAMZA RASSID (Gérant)</div>
-                <div className="text-xs text-slate-400 italic">Signature & Cachet</div>
+                <div className="text-xs text-slate-400 italic">Signature &amp; Cachet</div>
+                <div className="mt-1">
+                  <GocabStamp width={195} rotateDeg={-2.5} />
+                </div>
               </div>
             </div>
           </div>

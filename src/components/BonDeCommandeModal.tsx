@@ -11,6 +11,7 @@ import {
   printBonDeCommande,
 } from "@/lib/bonDeCommandeCatalog";
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
+import GocabStamp from "./GocabStamp";
 import { Printer, Check, Plus, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
 import { VidangeStats } from "@/lib/vidangeStats";
@@ -1132,7 +1133,10 @@ export default function BonDeCommandeModal({
                   <p className="text-gray-700">
                     Date : <span className="font-semibold">{date}</span>
                   </p>
-                  <p className="text-gray-500 italic pt-1">Signature & Cachet</p>
+                  <p className="text-gray-500 italic pt-1">Signature &amp; Cachet</p>
+                  <div className="pt-1 flex justify-end">
+                    <GocabStamp width={185} rotateDeg={-2.5} />
+                  </div>
                 </div>
               </div>
             </div>

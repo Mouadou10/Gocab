@@ -1,5 +1,7 @@
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "./gocabOfficialLogo";
 
+import { getGocabStampHtml } from "./gocabStamp";
+
 export interface AttestationPrintData {
   fullName: string;
   cin: string;
@@ -183,9 +185,12 @@ export function generateAttestationPrintHtml(data: AttestationPrintData): string
         Fait à Casablanca, le <span style="font-weight: 600;">${data.date || ""}</span>
       </div>
 
-      <div style="display: flex; flex-direction: column; align-items: flex-end; min-height: 70px;">
+      <div style="display: flex; flex-direction: column; align-items: flex-end; min-height: 95px;">
         <div>Signé : ${data.validatorName || "HAMZA RASSID"} (${data.validatorRole || "Gérant"})</div>
-        <div style="font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 6px;">Signature & Cachet</div>
+        <div style="font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 4px;">Signature &amp; Cachet</div>
+        <div style="margin-top: 4px;">
+          ${getGocabStampHtml(195, -2.5)}
+        </div>
       </div>
     </div>
   </div>

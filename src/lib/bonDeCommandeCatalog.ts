@@ -4,6 +4,8 @@
  * Predefined services, tires, and mechanical maintenance prices for GoCab Rent.
  */
 
+import { getGocabStampHtml } from "./gocabStamp";
+
 export interface CatalogItem {
   id: string;
   category: "Entretien" | "Freinage & Batterie" | "Pneumatiques";
@@ -416,7 +418,10 @@ export function generateBonDeCommandePrintHtml(data: BonDeCommandeData): string 
         <div>Nom & Prénom : <strong>${data.validator_name || "Hamza RASSID"}</strong></div>
         <div>Qualité : <span>${data.validator_role || "Gérant"}</span></div>
         <div>Date : <span>${data.date || ""}</span></div>
-        <div style="color: #6b7280; font-style: italic; margin-top: 4px;">Signature & Cachet</div>
+        <div style="color: #6b7280; font-style: italic; margin-top: 4px;">Signature &amp; Cachet</div>
+        <div style="margin-top: 4px;">
+          ${getGocabStampHtml(185, -2.5)}
+        </div>
       </div>
     </div>
   </div>
