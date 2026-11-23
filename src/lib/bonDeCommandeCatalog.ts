@@ -482,3 +482,80 @@ export function printBonDeCommande(data: BonDeCommandeData) {
   }, 250);
 }
 
+/**
+ * Generates and directly downloads the Bon de Commande as a crisp A4 PDF file.
+ */
+export async function downloadBonDeCommandePdf(data: BonDeCommandeData): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const [{ jsPDF }, html2canvasModule] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  const html2canvas = html2canvasModule.default;
+
+  const html = generateBonDeCommandePrintHtml(data);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.left = "-9999px";
+  iframe.style.top = "0";
+  iframe.style.width = "794px";
+  iframe.style.height = "1123px";
+  iframe.style.border = "none";
+  iframe.style.background = "#ffffff";
+  document.body.appendChild(iframe);
+
+  try {
+    const doc = iframe.contentWindow?.document;
+    if (!doc) throw new Error("Impossible d'initialiser le moteur PDF");
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    // Wait for fonts & embedded images/SVG to render cleanly
+    await new Promise((r) => setTimeout(r, 250));
+
+    const targetEl = (doc.querySelector(".page-container") as HTMLElement) || doc.body;
+    const canvas = await html2canvas(targetEl, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      windowWidth: 794,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let finalHeight = imgHeight;
+    let finalWidth = imgWidth;
+    if (finalHeight > pageHeight) {
+      const ratio = pageHeight / finalHeight;
+      finalHeight = pageHeight;
+      finalWidth = imgWidth * ratio;
+    }
+
+    const xOffset = (pageWidth - finalWidth) / 2;
+    pdf.addImage(imgData, "PNG", xOffset, 0, finalWidth, finalHeight, undefined, "FAST");
+
+    const safeRef = (data.bc_number || data.vehicle_plate || "GoCab")
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .replace(/-+/g, "-");
+    pdf.save(`Bon_de_Commande_${safeRef}.pdf`);
+  } finally {
+    if (iframe.parentNode) {
+      iframe.parentNode.removeChild(iframe);
+    }
+  }
+}
+

@@ -9,10 +9,11 @@ import {
   getFormattedToday,
   CatalogItem,
   printBonDeCommande,
+  downloadBonDeCommandePdf,
 } from "@/lib/bonDeCommandeCatalog";
 import { GOCAB_OFFICIAL_LOGO_BASE64 } from "@/lib/gocabOfficialLogo";
 import GocabStamp from "./GocabStamp";
-import { Printer, Check, Plus, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Printer, Download, Loader2, Check, Plus, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
 import { VidangeStats } from "@/lib/vidangeStats";
 
@@ -456,6 +457,39 @@ export default function BonDeCommandeModal({
     printBonDeCommande(data);
   };
 
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      const data = getCurrentData();
+
+      if (data.bc_number) {
+        fetch("/api/bon-de-commande/next-ref", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ usedRef: data.bc_number }),
+        })
+          .then((res) => res.json())
+          .then((resJson) => {
+            if (resJson?.nextRef && typeof window !== "undefined") {
+              localStorage.setItem("gocab_next_bc_ref", resJson.nextRef);
+            }
+          })
+          .catch(() => {});
+      }
+
+      await downloadBonDeCommandePdf(data);
+      toast.success("PDF du Bon de Commande téléchargé !");
+    } catch (err: any) {
+      console.error("Failed to download Bon de Commande PDF:", err);
+      toast.error(err?.message || "Erreur lors de la génération du PDF");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-xs">
       {/* Main Modal Container */}
@@ -479,6 +513,20 @@ export default function BonDeCommandeModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Télécharger directement en format PDF A4"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{isDownloadingPdf ? "Génération..." : "Télécharger PDF"}</span>
+            </button>
             <button
               type="button"
               onClick={handlePrint}
