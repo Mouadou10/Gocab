@@ -187,8 +187,9 @@ export default function WhatsAppCrmView() {
   // Active selected conversation object
   const activeConversation = conversations.find((c) => c.id === selectedConvId) || null;
 
-  // Hide Lead Acquisition templates (formation, vendredi, rabat) when viewing Support Flotte conversations
+  // Separate Lead Acquisition templates vs Support Flotte templates
   const LEAD_ACQUISITION_TEMPLATE_NAMES = new Set(["formation", "vendredi", "rabat"]);
+  const SUPPORT_FLOTTE_TEMPLATE_NAMES = new Set(["relance_impaye"]);
   const isSupportFlotteConversation = Boolean(
     activeConversation &&
       activeConversation.contactType !== "LEAD" &&
@@ -199,8 +200,25 @@ export default function WhatsAppCrmView() {
     if (isSupportFlotteConversation && LEAD_ACQUISITION_TEMPLATE_NAMES.has(name)) {
       return false;
     }
+    if (!isSupportFlotteConversation && SUPPORT_FLOTTE_TEMPLATE_NAMES.has(name)) {
+      return false;
+    }
     return true;
   });
+
+  const getRelanceImpayeParams = (conv: ConversationItem): [string, string, string] => {
+    const plate = conv.driver?.plateNumber || conv.matchedPlate || "Véhicule GoCab";
+    const driverName = conv.driver?.fullName || conv.contactName || "Chauffeur";
+    const arrears = String(Math.round(Math.abs(conv.driver?.currentArrearsMAD ?? 0)));
+    return [plate, driverName, arrears];
+  };
+
+  const formatRelanceImpayeText = (templateText: string, params: [string, string, string]): string => {
+    return templateText
+      .replace(/\{\{1\}\}/g, params[0])
+      .replace(/\{\{2\}\}/g, params[1])
+      .replace(/\{\{3\}\}/g, params[2]);
+  };
 
   // 24-hour Meta Customer Service Window evaluation
   const lastInboundMsg = [...messages].reverse().find((m) => m.direction === "INBOUND");
@@ -460,12 +478,20 @@ export default function WhatsAppCrmView() {
     }
 
     const isRabatTpl = Boolean(matched360Tpl && matched360Tpl.name.toLowerCase() === "rabat");
+    const isRelanceImpayeTpl = Boolean(matched360Tpl && matched360Tpl.name.toLowerCase() === "relance_impaye");
+    const relanceParams = isRelanceImpayeTpl ? getRelanceImpayeParams(activeConversation) : undefined;
     const targetLoc = isRabatTpl ? GOCAB_RABAT_LOCATION : GOCAB_HQ_LOCATION;
+
+    const resolvedTemplateText = matched360Tpl
+      ? isRelanceImpayeTpl && relanceParams
+        ? formatRelanceImpayeText(matched360Tpl.template, relanceParams)
+        : matched360Tpl.template
+      : "";
 
     const displayOptimisticText = matched360Tpl
       ? matched360Tpl.headerFormat === "LOCATION"
-        ? `📍 ${targetLoc.name} (${targetLoc.address})\n\n${matched360Tpl.template}`
-        : matched360Tpl.template
+        ? `📍 ${targetLoc.name} (${targetLoc.address})\n\n${resolvedTemplateText}`
+        : resolvedTemplateText
       : messageText || (uploadedMediaUrl ? "📷 Photo" : "");
 
     // Optimistic UI message insertion
@@ -490,9 +516,10 @@ export default function WhatsAppCrmView() {
         body: JSON.stringify({
           conversationId: activeConversation.id,
           phoneNumber: activeConversation.phoneNumber,
-          text: matched360Tpl ? matched360Tpl.template : messageText,
+          text: matched360Tpl ? resolvedTemplateText : messageText,
           templateName: matched360Tpl ? matched360Tpl.name : undefined,
           templateLanguage: matched360Tpl ? matched360Tpl.language : undefined,
+          templateParams: relanceParams,
           mediaUrl: uploadedMediaUrl || undefined,
           mediaType: uploadedMediaUrl ? "image" : undefined,
         }),
@@ -584,13 +611,16 @@ export default function WhatsAppCrmView() {
     const name = activeConversation.contactName || activeConversation.lead?.name || "Chauffeur";
     const city = activeConversation.lead?.city || "Casablanca";
 
-    const text = hasVars
-      ? formatLeadWhatsAppMessage(tpl.template, {
-          name,
-          city,
-          templateId: tpl.id,
-        })
-      : tpl.template;
+    let text = tpl.template;
+    if (tpl.name.toLowerCase() === "relance_impaye") {
+      text = formatRelanceImpayeText(tpl.template, getRelanceImpayeParams(activeConversation));
+    } else if (hasVars) {
+      text = formatLeadWhatsAppMessage(tpl.template, {
+        name,
+        city,
+        templateId: tpl.id,
+      });
+    }
 
     setSelected360Template(tpl);
     setInputMessage(text);

@@ -114,6 +114,23 @@ export const APPROVED_360_TEMPLATES: Approved360TemplateDef[] = [
     template:
       "مرحباً ، نؤكد لكم موعد تكوينكم مع  على الساعة الثالثة و نصف زوالا. نحن متواجدون في 32 زنقة سيام، العمارة 32، حي المحيط، الرباط . إلى اللقاء قريباً\nhttps://maps.app.goo.gl/WaXbchnwMGhzC4kn6",
   },
+  {
+    id: "relance_impaye",
+    name: "relance_impaye",
+    language: "ar",
+    category: "MARKETING",
+    status: "approved",
+    title: "relance_impaye (Relance Impayé)",
+    badge: "Approuvé 360dialog",
+    icon: "💰",
+    description:
+      "Relance officielle des impayés Support Flotte (immatriculation, nom du chauffeur, solde impayé en MAD)",
+    headerFormat: "TEXT",
+    bodyParamCount: 3,
+    hasDynamicButtonUrl: false,
+    template:
+      "مرحباً {{2}}،\n\nنتواصل معك بخصوص دفعتك المستحقة لـ GoCab (المركبة رقم {{1}}).\nيبلغ رصيد المبالغ غير المسددة حالياً: {{3}} درهم مغربي\nيرجى تسوية المبلغ اليوم لتجنب تعليق العقد\nفريق العمليات في GoCab.",
+  },
 ];
 
 /**
@@ -193,6 +210,9 @@ export function detectApproved360Template(
   }
   if (norm.includes("موعد تكوينكم") && (norm.includes("3 زوالا") || norm.includes("المعاريف"))) {
     return getApproved360Template("formation", pool);
+  }
+  if (norm.includes("نتواصل معك بخصوص دفعتك المستحقة") || norm.includes("رصيد المبالغ غير المسددة")) {
+    return getApproved360Template("relance_impaye", pool);
   }
   return null;
 }
