@@ -47,6 +47,7 @@ import { useSession } from "next-auth/react";
 import { useLanguage } from "@/context/LanguageContext";
 import BalanceReconciliationModal from "./BalanceReconciliationModal";
 import WhatsAppDirectModal, { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
+import BulkWhatsAppModal from "./BulkWhatsAppModal";
 import DriverDailyCommentModal, { DriverCommentItem } from "./DriverDailyCommentModal";
 import RedFlagBadge from "./RedFlagBadge";
 import { isMehdiPlate } from "@/lib/fleet-managers";
@@ -255,8 +256,15 @@ export default function FleetPerformanceView() {
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "RED" | "RED_FLAGS" | "UNPAID" | "DAILY" | "WEEKLY">("ALL");
+  const [soldeFilter, setSoldeFilter] = useState<"ALL" | "NEGATIVE" | "LE_NEG_500" | "LE_NEG_1000" | "LE_NEG_2000" | "POSITIVE_OR_ZERO" | "CUSTOM">("ALL");
+  const [soldeMinInput, setSoldeMinInput] = useState("");
+  const [soldeMaxInput, setSoldeMaxInput] = useState("");
   const [sortField, setSortField] = useState<"name" | "solde" | "expected" | "cleared" | "unpaid">("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Multi-select & Bulk WhatsApp states
+  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
+  const [isBulkWhatsAppModalOpen, setIsBulkWhatsAppModalOpen] = useState(false);
 
   // Local inputs state for editing cleared amounts
   const [paymentInputs, setPaymentInputs] = useState<Record<string, number>>({});
@@ -822,6 +830,12 @@ export default function FleetPerformanceView() {
   }
 
   // Filtered driver list
+  const getEffectiveSolde = (d: DriverDailyItem): number => {
+    const excelBal = d.eveningBalance ?? d.morningBalance ?? d.excelBalance;
+    if (excelBal !== null && excelBal !== undefined) return excelBal;
+    return -(d.currentArrearsMAD || 0);
+  };
+
   const filteredDrivers = drivers.filter((d) => {
     // Only drivers with an assigned vehicle appear in this list
     if (!d.vehicle) return false;
@@ -854,6 +868,21 @@ export default function FleetPerformanceView() {
     if (filterType === "UNPAID" && d.isPaidToday) return false;
     if (filterType === "DAILY" && d.contractType !== "DAILY") return false;
     if (filterType === "WEEKLY" && d.contractType !== "WEEKLY") return false;
+
+    if (soldeFilter !== "ALL") {
+      const solde = getEffectiveSolde(d);
+      if (soldeFilter === "NEGATIVE" && !(solde < 0)) return false;
+      if (soldeFilter === "LE_NEG_500" && !(solde <= -500)) return false;
+      if (soldeFilter === "LE_NEG_1000" && !(solde <= -1000)) return false;
+      if (soldeFilter === "LE_NEG_2000" && !(solde <= -2000)) return false;
+      if (soldeFilter === "POSITIVE_OR_ZERO" && !(solde >= 0)) return false;
+      if (soldeFilter === "CUSTOM") {
+        const minVal = soldeMinInput.trim() !== "" ? Number(soldeMinInput) : null;
+        const maxVal = soldeMaxInput.trim() !== "" ? Number(soldeMaxInput) : null;
+        if (minVal !== null && !Number.isNaN(minVal) && solde < minVal) return false;
+        if (maxVal !== null && !Number.isNaN(maxVal) && solde > maxVal) return false;
+      }
+    }
 
     return true;
   });
@@ -893,6 +922,51 @@ export default function FleetPerformanceView() {
       return sortDirection === "asc" ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
     });
   }, [filteredDrivers, sortField, sortDirection]);
+
+  // Multi-select helpers
+  const allVisibleSelected =
+    sortedDrivers.length > 0 && sortedDrivers.every((d) => selectedDriverIds.has(d.id));
+
+  const toggleSelectDriver = (driverId: string) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(driverId)) {
+        next.delete(driverId);
+      } else {
+        next.add(driverId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const d of sortedDrivers) next.delete(d.id);
+      } else {
+        for (const d of sortedDrivers) next.add(d.id);
+      }
+      return next;
+    });
+  };
+
+  const selectedWhatsAppTargets: WhatsAppDirectTarget[] = useMemo(() => {
+    return drivers
+      .filter((d) => selectedDriverIds.has(d.id) && Boolean(d.phoneSanitized))
+      .map((d) => {
+        const effSolde = getEffectiveSolde(d);
+        const arrearsAmt = effSolde < 0 ? Math.abs(effSolde) : d.currentArrearsMAD || 0;
+        return {
+          phoneNumber: d.phoneSanitized,
+          contactName: d.fullName,
+          contactType: "DRIVER" as const,
+          plateNumber: d.vehicle?.plate_number,
+          arrearsMAD: arrearsAmt,
+          unpaidDays: d.consecutiveUnpaidDays,
+        };
+      });
+  }, [drivers, selectedDriverIds]);
 
   const isAzizSelected = selectedManager.toLowerCase().includes("aziz");
   const isMehdiSelected = selectedManager.toLowerCase().includes("mehdi");
@@ -1992,6 +2066,44 @@ export default function FleetPerformanceView() {
           >
             Hebdo (1800 DH)
           </button>
+
+          {/* Solde Filter */}
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1">
+            <span className="text-2xs font-extrabold text-gray-500 uppercase">Solde:</span>
+            <select
+              value={soldeFilter}
+              onChange={(e) => setSoldeFilter(e.target.value as typeof soldeFilter)}
+              className="bg-transparent text-xs font-bold text-navy focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">Tous les soldes</option>
+              <option value="NEGATIVE">Solde négatif (&lt; 0 DH)</option>
+              <option value="LE_NEG_500">Impayé ≥ 500 DH (≤ -500)</option>
+              <option value="LE_NEG_1000">Impayé ≥ 1 000 DH (≤ -1000)</option>
+              <option value="LE_NEG_2000">Impayé ≥ 2 000 DH (≤ -2000)</option>
+              <option value="POSITIVE_OR_ZERO">À jour / Avance (≥ 0 DH)</option>
+              <option value="CUSTOM">Plage personnalisée...</option>
+            </select>
+          </div>
+          {soldeFilter === "CUSTOM" && (
+            <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2 py-1">
+              <input
+                type="number"
+                value={soldeMinInput}
+                onChange={(e) => setSoldeMinInput(e.target.value)}
+                placeholder="Min (ex: -3000)"
+                className="w-24 text-xs font-semibold text-navy focus:outline-none bg-transparent"
+              />
+              <span className="text-gray-400 text-xs">à</span>
+              <input
+                type="number"
+                value={soldeMaxInput}
+                onChange={(e) => setSoldeMaxInput(e.target.value)}
+                placeholder="Max (ex: -500)"
+                className="w-24 text-xs font-semibold text-navy focus:outline-none bg-transparent"
+              />
+            </div>
+          )}
+
           <button
             onClick={fetchDriverCollections}
             className="p-2 text-gray-400 hover:text-navy rounded-xl hover:bg-gray-100 transition-colors"
@@ -2017,14 +2129,63 @@ export default function FleetPerformanceView() {
             {filteredDrivers.length} {filteredDrivers.length === 1 ? "chauffeur" : "chauffeurs"}
           </span>
         </div>
-        <p className="text-2xs text-gray-500">
-          {selectedManager.toLowerCase().includes("aziz")
-            ? `Affichage des ${portfolios?.aziz?.vehicleCount || 62} véhicules d'Aziz sous gestion directe`
-            : selectedManager.toLowerCase().includes("mehdi")
-            ? `Affichage des ${portfolios?.mehdi?.vehicleCount || 40} véhicules de Mehdi sous gestion directe`
-            : "Affichage global de tous les chauffeurs de la flotte"}
-        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {sortedDrivers.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleSelectAllVisible}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                allVisibleSelected
+                  ? "bg-emerald-700 text-white border-emerald-700 shadow-2xs"
+                  : "bg-white text-navy border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {allVisibleSelected
+                ? `✓ Tout désélectionner (${sortedDrivers.length})`
+                : `☐ Tout sélectionner (${sortedDrivers.length})`}
+            </button>
+          )}
+          <p className="text-2xs text-gray-500">
+            {selectedManager.toLowerCase().includes("aziz")
+              ? `Affichage des ${portfolios?.aziz?.vehicleCount || 62} véhicules d'Aziz sous gestion directe`
+              : selectedManager.toLowerCase().includes("mehdi")
+              ? `Affichage des ${portfolios?.mehdi?.vehicleCount || 40} véhicules de Mehdi sous gestion directe`
+              : "Affichage global de tous les chauffeurs de la flotte"}
+          </p>
+        </div>
       </div>
+
+      {/* Bulk Selection Action Bar */}
+      {selectedDriverIds.size > 0 && (
+        <div className="bg-emerald-900 text-white rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="px-2.5 py-1 rounded-full bg-emerald-700 font-black">
+              {selectedDriverIds.size} sélectionné(s)
+            </span>
+            <span className="text-emerald-100 font-medium">
+              Prêt pour l&apos;envoi groupé du modèle WhatsApp 360dialog
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsBulkWhatsAppModalOpen(true)}
+              disabled={selectedWhatsAppTargets.length === 0}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Envoyer WhatsApp ({selectedWhatsAppTargets.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDriverIds(new Set())}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer"
+            >
+              Désélectionner
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Driver Daily Collections Table */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
@@ -2032,6 +2193,15 @@ export default function FleetPerformanceView() {
           <table className="w-full text-left text-xs text-gray-600">
             <thead className="bg-gray-50/90 uppercase text-2xs tracking-wider text-gray-500 border-b border-gray-100 font-bold">
               <tr>
+                <th className="py-4 pl-5 pr-2 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    title="Tout sélectionner / désélectionner"
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 cursor-pointer"
+                  />
+                </th>
                 <th
                   onClick={() => {
                     if (sortField === "name") {
@@ -2144,7 +2314,7 @@ export default function FleetPerformanceView() {
             <tbody className="divide-y divide-gray-100">
               {sortedDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     Aucun chauffeur trouvé pour ces critères.
                   </td>
                 </tr>
@@ -2152,6 +2322,7 @@ export default function FleetPerformanceView() {
                 sortedDrivers.map((driver) => {
                   const isRed = driver.isCriticalRed;
                   const isSaving = savingDriverId === driver.id;
+                  const isSelected = selectedDriverIds.has(driver.id);
                   const currentInputValue =
                     paymentInputs[driver.id] !== undefined
                       ? paymentInputs[driver.id]
@@ -2163,7 +2334,9 @@ export default function FleetPerformanceView() {
                     <tr
                       key={driver.id}
                       className={`transition-colors ${
-                        isRed
+                        isSelected
+                          ? "bg-emerald-50/70 hover:bg-emerald-100/70 border-l-4 border-l-emerald-600"
+                          : isRed
                           ? "bg-red-50/90 hover:bg-red-100/90 border-l-4 border-l-red-600"
                           : driver.isRedFlagged
                           ? "bg-red-50/40 hover:bg-red-100/50 border-l-4 border-l-red-500"
@@ -2172,6 +2345,16 @@ export default function FleetPerformanceView() {
                           : "hover:bg-gray-50"
                       }`}
                     >
+                      {/* Row Checkbox */}
+                      <td className="py-4 pl-5 pr-2 w-10">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectDriver(driver.id)}
+                          aria-label={`Sélectionner ${driver.fullName}`}
+                          className="w-4 h-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 cursor-pointer"
+                        />
+                      </td>
                       {/* Driver Info */}
                       <td className="py-4 px-6 font-semibold">
                         <div className="space-y-0.5">
@@ -2604,6 +2787,14 @@ export default function FleetPerformanceView() {
            } catch (e) {}
            window.dispatchEvent(new CustomEvent("gocab_navigate_tab", { detail: "whatsapp" }));
          }}
+       />
+
+       {/* Bulk WhatsApp Template Sending Modal */}
+       <BulkWhatsAppModal
+         isOpen={isBulkWhatsAppModalOpen}
+         onClose={() => setIsBulkWhatsAppModalOpen(false)}
+         targets={selectedWhatsAppTargets}
+         onSentComplete={() => setSelectedDriverIds(new Set())}
        />
 
        {/* Driver Daily Comment & History Modal */}
