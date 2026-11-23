@@ -166,7 +166,7 @@ Whenever this skill is triggered, execute the following steps in order:
 - **Verification Engine**: `node --import tsx scripts/executive-watchdog.ts`
   - Checks **Vehicles Fleet Auto-Sync** (`0 */3 * * *`, freshness SLA $\le 4.0\text{h}$).
   - Checks **Morning Collection Sync** (`0 9 * * 1-6`, `PaymentLedger.morningBalance` entries for Morocco workday).
-  - Checks **Evening Collection Sync** (`0 23 * * 1-6`, `PaymentLedger.eveningBalance` entries for Morocco workday).
+  - Checks **Evening Collection Sync** (`0 18,23 * * 1-6`, `PaymentLedger.eveningBalance` entries for Morocco workday).
   - Checks **Cloud WAL & LiveSync State** (`data_sync_state` integrity).
   - Persists JSON SLA report to `Setting` (`key = "executive_watchdog_last_report"`).
 - **Auto-Recovery**: If any task is `OVERDUE` or `ERROR`, the watchdog checks `manage_task(Action: "list")` to re-arm any dropped daemon schedule and triggers `browser` export + `sync-fleet-xlsx.ts` / `sync-collection-xlsx.ts` recovery immediately (or alerts the user if Google login is required).

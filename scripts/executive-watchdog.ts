@@ -80,7 +80,7 @@ async function main() {
     });
     results.push({
       task: "Evening Collection Sync",
-      schedule: "11:00 PM Mon-Sat",
+      schedule: "18:00 & 23:00 Mon-Sat",
       status: "PENDING_WINDOW",
       metric: "Sunday (off-day)",
       detail: "No collection sync scheduled on Sunday.",
@@ -105,23 +105,26 @@ async function main() {
           : "Waiting for 09:00 AM window.",
     });
 
-    const pastEveningWindow = hour > 23 || (hour === 23 && minute >= 15);
+    const pastFirstEveningWindow = hour > 18 || (hour === 18 && minute >= 15);
+    const pastFinalEveningWindow = hour > 23 || (hour === 23 && minute >= 15);
     results.push({
       task: "Evening Collection Sync",
-      schedule: "11:00 PM Mon-Sat",
+      schedule: "18:00 & 23:00 Mon-Sat",
       status:
         eveningEntries.length > 0
           ? "ON_TIME"
-          : pastEveningWindow
+          : pastFirstEveningWindow
           ? "OVERDUE"
           : "PENDING_WINDOW",
       metric: `${eveningEntries.length} evening records today`,
       detail:
         eveningEntries.length > 0
           ? `Evening collections computed (${eveningEntries.length} drivers).`
-          : pastEveningWindow
-          ? "Evening 11:00 PM sync missed for today — recovery required."
-          : "Waiting for 11:00 PM window.",
+          : pastFinalEveningWindow
+          ? "Evening 18:00 & 23:00 syncs missed for today — recovery required."
+          : pastFirstEveningWindow
+          ? "Evening 18:00 sync missed for today (next window 23:00) — recovery required."
+          : "Waiting for 18:00 / 23:00 window.",
     });
   }
 
