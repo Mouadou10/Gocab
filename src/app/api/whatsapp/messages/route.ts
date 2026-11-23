@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma, flushDatabaseSync } from "@/lib/prisma";
 import {
   sendOutboundWhatsAppMessage,
@@ -113,7 +113,10 @@ export async function POST(request: NextRequest) {
       templateParams: Array.isArray(templateParams) ? templateParams : undefined,
     });
 
-    await flushDatabaseSync().catch(() => {});
+    // Flush Cloud WAL asynchronously after returning the HTTP response so sending is instant (~1s)
+    after(async () => {
+      await flushDatabaseSync().catch(() => {});
+    });
 
     return NextResponse.json({
       success: result.success,

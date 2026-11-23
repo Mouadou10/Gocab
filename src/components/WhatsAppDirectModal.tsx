@@ -88,6 +88,21 @@ export default function WhatsAppDirectModal({
 
   if (!isOpen || !target) return null;
 
+  const getRelanceImpayeParams = (): [string, string, string] => {
+    const plate = target.plateNumber || "Véhicule GoCab";
+    const driverName = target.contactName || "Chauffeur";
+    const arrears = String(Math.round(Math.abs(target.arrearsMAD || 0)));
+    return [plate, driverName, arrears];
+  };
+
+  const formatRelanceImpayeText = (templateText: string): string => {
+    const [plate, driverName, arrears] = getRelanceImpayeParams();
+    return templateText
+      .replace(/\{\{1\}\}/g, plate)
+      .replace(/\{\{2\}\}/g, driverName)
+      .replace(/\{\{3\}\}/g, arrears);
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!messageText.trim() || isSending) return;
@@ -96,15 +111,23 @@ export default function WhatsAppDirectModal({
     try {
       const matchedTpl =
         selected360Template || detectApproved360Template(messageText, live360Templates);
+      const isRelanceImpaye = matchedTpl?.name.toLowerCase() === "relance_impaye";
+      const templateParams = isRelanceImpaye ? getRelanceImpayeParams() : undefined;
+      const finalText = matchedTpl
+        ? isRelanceImpaye
+          ? formatRelanceImpayeText(matchedTpl.template)
+          : matchedTpl.template
+        : messageText.trim();
 
       const res = await fetch("/api/whatsapp/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: target.phoneNumber,
-          text: matchedTpl ? matchedTpl.template : messageText.trim(),
+          text: finalText,
           templateName: matchedTpl ? matchedTpl.name : undefined,
           templateLanguage: matchedTpl ? matchedTpl.language : undefined,
+          templateParams,
           senderName: "GoCab Operations",
         }),
       });
@@ -138,24 +161,29 @@ export default function WhatsAppDirectModal({
     }
   };
 
+  const LEAD_ONLY_TPLS = new Set(["formation", "vendredi", "rabat"]);
+  const SUPPORT_ONLY_TPLS = new Set(["relance_impaye"]);
+
   const quickTemplates: Array<{
     title: string;
     text: string;
     tpl360?: Approved360TemplateDef;
   }> =
     target.contactType === "LEAD"
-      ? live360Templates.map((tmpl) => ({
-          title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
-          text:
-            (tmpl.bodyParamCount ?? 0) > 0
-              ? formatLeadWhatsAppMessage(tmpl.template, {
-                  name: target.contactName,
-                  city: "Casablanca",
-                  templateId: tmpl.id,
-                })
-              : tmpl.template,
-          tpl360: tmpl,
-        }))
+      ? live360Templates
+          .filter((tmpl) => !SUPPORT_ONLY_TPLS.has((tmpl.name || tmpl.id || "").toLowerCase()))
+          .map((tmpl) => ({
+            title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
+            text:
+              (tmpl.bodyParamCount ?? 0) > 0
+                ? formatLeadWhatsAppMessage(tmpl.template, {
+                    name: target.contactName,
+                    city: "Casablanca",
+                    templateId: tmpl.id,
+                  })
+                : tmpl.template,
+            tpl360: tmpl,
+          }))
       : [
           {
             title: "💰 Relance Impayé",
@@ -165,11 +193,16 @@ export default function WhatsAppDirectModal({
             title: "🚨 Alerte 3e Jour",
             text: `Bonjour ${target.contactName},\n\nURGENT : Nous constatons 3 jours consécutifs sans versement pour votre véhicule ${target.plateNumber || ""}.\nSolde dû : ${target.arrearsMAD || 0} MAD.\nSans versement immédiat avant 18h, le protocole d'immobilisation et de récupération du véhicule sera automatiquement enclenché.\n\nL'équipe GoCab Contentieux.`,
           },
-          ...live360Templates.map((tmpl) => ({
-            title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
-            text: tmpl.template,
-            tpl360: tmpl,
-          })),
+          ...live360Templates
+            .filter((tmpl) => !LEAD_ONLY_TPLS.has((tmpl.name || tmpl.id || "").toLowerCase()))
+            .map((tmpl) => ({
+              title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
+              text:
+                tmpl.name.toLowerCase() === "relance_impaye"
+                  ? formatRelanceImpayeText(tmpl.template)
+                  : tmpl.template,
+              tpl360: tmpl,
+            })),
         ];
 
   return (
@@ -323,7 +356,9 @@ export default function WhatsAppDirectModal({
             <div className="flex items-center justify-between text-[11px] text-gray-400">
               <span>
                 {selected360Template
-                  ? "✅ Ce modèle officiel contourne la fenêtre Meta 24h et inclut l'en-tête GPS Maârif."
+                  ? selected360Template.headerFormat === "LOCATION"
+                    ? "✅ Ce modèle officiel contourne la fenêtre Meta 24h et inclut l'en-tête GPS."
+                    : "✅ Ce modèle officiel contourne la fenêtre Meta 24h avec remplissage automatique."
                   : "Le texte libre requiert une fenêtre 24h ouverte. Sinon choisissez un modèle 360dialog ci-dessus."}
               </span>
               <span>{messageText.length} caractères</span>
