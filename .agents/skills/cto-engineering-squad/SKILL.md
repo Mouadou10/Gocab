@@ -158,3 +158,15 @@ Whenever this skill is triggered, execute the following steps in order:
   - TypeScript / unit test regressions → **Senior QA / Test Engineer**
   - `DEVOPS_SYNC` / Docker / Kubernetes / Backup → **Senior DevOps / Docker / K8s Engineer**
 - Any technical, schema, or sync bug detected during the weekly audit is fixed automatically (strictly respecting the Core Business Logic Guardrail), logged in `MEMORY.md`, and auto-deployed.
+
+## 7. Executive Operations Watchdog (`executive-watchdog`)
+
+- **Role**: Autonomous Operations & SLA Supervisor ensuring all repetitive GoCab CRM workflows execute on time and at full efficiency.
+- **Schedule**: Automatically runs **every 3 hours at `:30`** (`30 */3 * * *`, 30 minutes after each sync window) via `IsDaemon: true` schedule and `executive-watchdog` subagent.
+- **Verification Engine**: `node --import tsx scripts/executive-watchdog.ts`
+  - Checks **Vehicles Fleet Auto-Sync** (`0 */3 * * *`, freshness SLA $\le 4.0\text{h}$).
+  - Checks **Morning Collection Sync** (`0 9 * * 1-6`, `PaymentLedger.morningBalance` entries for Morocco workday).
+  - Checks **Evening Collection Sync** (`0 23 * * 1-6`, `PaymentLedger.eveningBalance` entries for Morocco workday).
+  - Checks **Cloud WAL & LiveSync State** (`data_sync_state` integrity).
+  - Persists JSON SLA report to `Setting` (`key = "executive_watchdog_last_report"`).
+- **Auto-Recovery**: If any task is `OVERDUE` or `ERROR`, the watchdog checks `manage_task(Action: "list")` to re-arm any dropped daemon schedule and triggers `browser` export + `sync-fleet-xlsx.ts` / `sync-collection-xlsx.ts` recovery immediately (or alerts the user if Google login is required).

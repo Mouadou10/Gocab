@@ -22,6 +22,7 @@
 - [`MEM-2026-11-17-017`](#mem-2026-11-17-017-partner-lead-submission-duplicate-check-cancellation--onboarding-deferred-validation): Partner Lead Submission Duplicate Check Cancellation & Onboarding Deferred Validation
 - [`MEM-2026-11-17-018`](#mem-2026-11-17-018-lead-deletion-capability-in-partner-portal--onboarding-view): Lead Deletion Capability in Partner Portal & Onboarding View
 - [`MEM-2026-11-20-019`](#mem-2026-11-20-019-driverprofile-createmany-created_at-schema-mismatch--weekly-autonomous-cto-audit): DriverProfile createMany `created_at` Schema Mismatch & Weekly Autonomous CTO Audit
+- [`MEM-2026-11-23-020`](#mem-2026-11-23-020-autonomous-executive-operations-watchdog-agent--3h-sla-schedule): Autonomous Executive Operations Watchdog Agent & 3h SLA Schedule
 
 ---
 
@@ -420,6 +421,19 @@
 - **Anti-Regression Guardrail**:
   - Never type Prisma bulk insert arrays as `any[]`; always use `Prisma.<Model>CreateManyInput[]`.
   - Weekly CTO Squad audit runs `tsc --noEmit` + `audit-crm-workflows.ts` automatically every Monday.
+
+### `MEM-2026-11-23-020` Autonomous Executive Operations Watchdog Agent & 3h SLA Schedule
+- **Date**: 2026-11-23
+- **Department / Module**: `Operations`, `Flotte`, `Collection`, `DevOps`
+- **Owner**: CTO Engineering Squad (`executive-watchdog`)
+- **Summary**: Added an autonomous Executive Operations Watchdog (`scripts/executive-watchdog.ts`, subagent `executive-watchdog`, and `IsDaemon: true` cron `30 */3 * * *`) to monitor SLA timeliness and execution efficiency across all repetitive GoCab CRM tasks (Vehicles 3h sync, Morning 9AM & Evening 11PM Mon-Sat collections, Cloud WAL/LiveSync, and Weekly CTO Audit).
+- **Files Changed**:
+  - `scripts/executive-watchdog.ts`
+  - `.agents/skills/cto-engineering-squad/SKILL.md`
+  - `.agents/skills/cto-engineering-squad/MEMORY.md`
+- **Verification**:
+  - `node --import tsx scripts/executive-watchdog.ts`: Passed (`HEALTHY`, 0 overdue/error; Vehicles `102 vehicles · 0.6h ago`, Morning `83 morning records today`, Cloud WAL `ACTIVE`).
+  - `npx tsc --noEmit`: 0 errors.
 
 ---
 
