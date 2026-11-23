@@ -30,7 +30,12 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "impounded";
   }
 
-  // 3. Accident
+  // 3. Total Loss / Épave
+  if (s.includes("total_loss") || s.includes("total loss") || s.includes("perte totale") || s.includes("epave") || s.includes("épave")) {
+    return "total_loss";
+  }
+
+  // 4. Accident
   if (s.includes("accident") || s.includes("sinistre")) {
     return "Accident";
   }
@@ -83,9 +88,9 @@ function mapStatus(rawStatus: string | undefined, hasDriver: boolean): string {
     return "Actif";
   }
 
-  // 8. Available
+  // 8. Available (Explicitly available in fleet source of truth, even if a legacy driver name appears)
   if (s.includes("avail") || s.includes("dispo") || s.includes("libre") || s.includes("parc")) {
-    return hasDriver ? "Actif" : "Available";
+    return "Available";
   }
 
   return hasDriver ? "Actif" : "Available";
@@ -499,10 +504,7 @@ export async function ingestVehiclesFile(file: File): Promise<{ status: number; 
             ticketPlateUpdates.push({ vehicleId: existing.id, newPlate: item.plate_number });
           }
 
-          const newStatus =
-            item.status === "Available"
-              ? (item.driverName ? "Actif" : "Available")
-              : item.status;
+          const newStatus = item.status;
           const newAssignedDriverName =
             item.status === "Available" && !item.driverName
               ? null
