@@ -16,6 +16,27 @@ function ensureCacheDir() {
   }
 }
 
+function getExtensionForMime(mimeType: string): string {
+  const m = (mimeType || "").toLowerCase();
+  if (m.includes("png")) return ".png";
+  if (m.includes("webp")) return ".webp";
+  if (m.includes("gif")) return ".gif";
+  if (m.includes("pdf")) return ".pdf";
+  return ".jpg";
+}
+
+function buildMediaResponse(buffer: Buffer, mimeType: string, id: string, isDownload: boolean) {
+  const ext = getExtensionForMime(mimeType);
+  const headers: Record<string, string> = {
+    "Content-Type": mimeType,
+    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+  };
+  if (isDownload) {
+    headers["Content-Disposition"] = `attachment; filename="photo-whatsapp-${id}${ext}"`;
+  }
+  return new NextResponse(new Uint8Array(buffer), { headers });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,27 +47,24 @@ export async function GET(
       return NextResponse.json({ error: "Media ID manquant" }, { status: 400 });
     }
 
+    const isDownload = request.nextUrl.searchParams.get("download") === "1";
+
     ensureCacheDir();
 
     // 1. Check local cache first
-    const possibleExts = [".jpg", ".png", ".webp", ".jpeg", ".bin"];
+    const possibleExts = [".jpg", ".png", ".webp", ".jpeg", ".pdf", ".bin"];
     for (const ext of possibleExts) {
       const cachedFile = path.join(CACHE_DIR, `${id}${ext}`);
       const metaFile = path.join(CACHE_DIR, `${id}.meta.json`);
       if (fs.existsSync(cachedFile)) {
         try {
           const buffer = fs.readFileSync(cachedFile);
-          let mimeType = "image/jpeg";
+          let mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".pdf" ? "application/pdf" : "image/jpeg";
           if (fs.existsSync(metaFile)) {
             const meta = JSON.parse(fs.readFileSync(metaFile, "utf-8"));
             if (meta.mime_type) mimeType = meta.mime_type;
           }
-          return new NextResponse(buffer, {
-            headers: {
-              "Content-Type": mimeType,
-              "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-            },
-          });
+          return buildMediaResponse(buffer, mimeType, id, isDownload);
         } catch (_) {}
       }
     }
@@ -67,12 +85,20 @@ export async function GET(
     if (config.provider === "360dialog" && config.d360ApiKey) {
       const d360Base = config.d360ApiUrl.replace(/\/$/, "");
       
-      // Step A: Request media metadata
-      const metaRes = await fetch(`${d360Base}/${id}`, {
+      // Step A: Request media metadata (360dialog Cloud v2: /{id}, fallback v1: /v1/media/{id})
+      let metaRes = await fetch(`${d360Base}/${id}`, {
         headers: {
           "D360-API-KEY": config.d360ApiKey,
         },
       });
+      if (!metaRes.ok && !d360Base.endsWith("/v1/media")) {
+        const fallbackRes = await fetch(`${d360Base}/v1/media/${id}`, {
+          headers: {
+            "D360-API-KEY": config.d360ApiKey,
+          },
+        });
+        if (fallbackRes.ok) metaRes = fallbackRes;
+      }
 
       if (!metaRes.ok) {
         console.warn(`360dialog get media metadata failed for ID ${id}:`, metaRes.status);
@@ -108,7 +134,7 @@ export async function GET(
 
       // Cache file locally
       try {
-        const ext = mimeType.includes("png") ? ".png" : mimeType.includes("webp") ? ".webp" : ".jpg";
+        const ext = getExtensionForMime(mimeType);
         fs.writeFileSync(path.join(CACHE_DIR, `${id}${ext}`), buffer);
         fs.writeFileSync(
           path.join(CACHE_DIR, `${id}.meta.json`),
@@ -118,12 +144,7 @@ export async function GET(
         console.warn("Failed to write media cache:", cacheErr);
       }
 
-      return new NextResponse(buffer, {
-        headers: {
-          "Content-Type": mimeType,
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-        },
-      });
+      return buildMediaResponse(buffer, mimeType, id, isDownload);
     } else if (config.accessToken) {
       // Direct Meta Graph API
       const metaRes = await fetch(`https://graph.facebook.com/v21.0/${id}`, {
@@ -156,16 +177,15 @@ export async function GET(
       const mimeType = metaData.mime_type || "image/jpeg";
 
       try {
-        const ext = mimeType.includes("png") ? ".png" : ".jpg";
+        const ext = getExtensionForMime(mimeType);
         fs.writeFileSync(path.join(CACHE_DIR, `${id}${ext}`), buffer);
+        fs.writeFileSync(
+          path.join(CACHE_DIR, `${id}.meta.json`),
+          JSON.stringify({ mime_type: mimeType, downloaded_at: new Date().toISOString() })
+        );
       } catch (_) {}
 
-      return new NextResponse(buffer, {
-        headers: {
-          "Content-Type": mimeType,
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-        },
-      });
+      return buildMediaResponse(buffer, mimeType, id, isDownload);
     }
 
     return generatePlaceholderSvg("Service média non configuré", id);

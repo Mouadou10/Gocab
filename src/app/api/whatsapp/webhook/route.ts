@@ -61,9 +61,10 @@ export async function POST(req: NextRequest) {
 
     const extractMediaUrl = (msg: any): string | undefined => {
       const mediaObj = msg.image || msg.document || msg.video || msg.audio || msg.voice;
+      // Always prioritize media ID so our authenticated /api/whatsapp/media/[id] proxy fetches & caches it
+      if (mediaObj?.id) return `/api/whatsapp/media/${mediaObj.id}`;
       if (mediaObj?.link) return mediaObj.link;
       if (mediaObj?.url) return mediaObj.url;
-      if (mediaObj?.id) return `/api/whatsapp/media/${mediaObj.id}`;
       return undefined;
     };
 

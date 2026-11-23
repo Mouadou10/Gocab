@@ -123,6 +123,15 @@ function resolveMediaUrl(url: string | null | undefined): string {
   return `/api/whatsapp/media/${encodeURIComponent(trimmed)}`;
 }
 
+function getDownloadMediaUrl(url: string | null | undefined): string {
+  const resolved = resolveMediaUrl(url);
+  if (!resolved) return "";
+  if (resolved.startsWith("/api/whatsapp/media/")) {
+    return `${resolved}${resolved.includes("?") ? "&" : "?"}download=1`;
+  }
+  return resolved;
+}
+
 export default function WhatsAppCrmView() {
   const { data: session } = useSession();
   const userRole = ((session?.user as any)?.role || "").toUpperCase();
@@ -1392,8 +1401,8 @@ export default function WhatsAppCrmView() {
                               <span className="text-[9px] text-gray-400 mt-0.5">Média non disponible ou expiré sur WhatsApp</span>
                             </div>
 
-                            {/* Hover Action Overlay */}
-                            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-xs rounded-lg p-1 shadow-md">
+                            {/* Action Overlay (always visible for instant view & download) */}
+                            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity bg-black/65 backdrop-blur-xs rounded-lg p-1 shadow-md">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1405,21 +1414,20 @@ export default function WhatsAppCrmView() {
                                     caption: msg.text && msg.text !== "📷 Photo reçue" ? msg.text : undefined,
                                   });
                                 }}
-                                className="p-1 rounded text-white/90 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                className="p-1.5 rounded text-white/95 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
                                 title="Agrandir en plein écran"
                               >
                                 <Maximize2 className="w-3.5 h-3.5" />
                               </button>
                               <a
-                                href={resolveMediaUrl(msg.media_url)}
+                                href={getDownloadMediaUrl(msg.media_url)}
                                 download={`photo-whatsapp-${msg.id}.jpg`}
-                                target="_blank"
-                                rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="p-1 rounded text-white/90 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                className="p-1.5 rounded bg-emerald-600/90 hover:bg-emerald-500 text-white transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-bold px-2"
                                 title="Télécharger l'image"
                               >
                                 <Download className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Télécharger</span>
                               </a>
                             </div>
                           </div>
@@ -2367,14 +2375,13 @@ export default function WhatsAppCrmView() {
                 <RotateCw className="w-4 h-4" />
               </button>
               <a
-                href={lightboxImage.url}
+                href={getDownloadMediaUrl(lightboxImage.url)}
                 download="photo-whatsapp.jpg"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer flex items-center justify-center"
+                className="p-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold"
                 title="Télécharger l'image"
               >
                 <Download className="w-4 h-4" />
+                <span>Télécharger</span>
               </a>
               <button
                 type="button"
