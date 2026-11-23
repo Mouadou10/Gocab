@@ -219,7 +219,7 @@ export function resolvePublicAppOrigin(requestUrl?: string | null): string {
       }
     } catch {}
   }
-  return "https://gocab-iota.vercel.app";
+  return "https://gocab-psi.vercel.app";
 }
 
 /**

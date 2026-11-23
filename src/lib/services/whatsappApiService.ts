@@ -809,7 +809,7 @@ export async function sendOutboundWhatsAppMessage(opts: SendMessageOptions) {
             image: {
               link: opts.mediaUrl.startsWith("http")
                 ? opts.mediaUrl
-                : `https://${process.env.VERCEL_URL || "gocab-iota.vercel.app"}${opts.mediaUrl}`,
+                : `https://${process.env.VERCEL_URL || "gocab-psi.vercel.app"}${opts.mediaUrl}`,
             },
           },
         ],

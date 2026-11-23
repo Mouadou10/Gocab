@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const config = await getWhatsAppApiConfig();
-    const host = req.headers.get("host") || "gocab-iota.vercel.app";
+    const host = req.headers.get("host") || "gocab-psi.vercel.app";
     const protocol = host.includes("localhost") ? "http" : "https";
     const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       const config = await getWhatsAppApiConfig();
       const apiKey = d360ApiKey || config.d360ApiKey;
       const baseUrl = d360ApiUrl || config.d360ApiUrl || "https://waba-v2.360dialog.io";
-      const host = req.headers.get("host") || "gocab-iota.vercel.app";
+      const host = req.headers.get("host") || "gocab-psi.vercel.app";
       const protocol = host.includes("localhost") ? "http" : "https";
       const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
 
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     // Automatically register Webhook with 360dialog if a new key is provided
     let webhookRegistered = false;
     if (d360ApiKey && d360ApiKey.trim().length > 10 && !d360ApiKey.includes("...")) {
-      const host = req.headers.get("host") || "gocab-iota.vercel.app";
+      const host = req.headers.get("host") || "gocab-psi.vercel.app";
       const protocol = host.includes("localhost") ? "http" : "https";
       const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook`;
       const baseUrl = d360ApiUrl || "https://waba-v2.360dialog.io";

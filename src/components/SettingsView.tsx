@@ -197,7 +197,7 @@ export default function SettingsView() {
   const [waAccessToken, setWaAccessToken] = useState("");
   const [waVerifyToken, setWaVerifyToken] = useState("gocab_whatsapp_crm_token_2026");
   const [waWabaId, setWaWabaId] = useState("2092399898064944");
-  const [waWebhookUrl, setWaWebhookUrl] = useState("https://gocab-iota.vercel.app/api/whatsapp/webhook");
+  const [waWebhookUrl, setWaWebhookUrl] = useState("https://gocab-psi.vercel.app/api/whatsapp/webhook");
   const [waIsLiveConfigured, setWaIsLiveConfigured] = useState(true);
   const [isSavingWaConfig, setIsSavingWaConfig] = useState(false);
   const [showWaToken, setShowWaToken] = useState(false);
@@ -320,7 +320,7 @@ export default function SettingsView() {
               setWaPhoneNumberId(data.config.phoneNumberId || "");
               setWaVerifyToken(data.config.verifyToken || "gocab_whatsapp_crm_token_2026");
               setWaWabaId(data.config.wabaId || "2092399898064944");
-              setWaWebhookUrl(data.config.webhookUrl || "https://gocab-iota.vercel.app/api/whatsapp/webhook");
+              setWaWebhookUrl(data.config.webhookUrl || "https://gocab-psi.vercel.app/api/whatsapp/webhook");
               setWaIsLiveConfigured(data.config.isLiveConfigured !== false);
               if (data.config.hasAccessToken) {
                 setWaAccessToken(data.config.accessTokenMasked || "");
