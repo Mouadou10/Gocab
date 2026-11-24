@@ -483,13 +483,15 @@ function createWindow() {
     width: initW,
     height: initH,
     x: Math.round((screenW - initW) / 2),
-    y: 10,
+    y: 12,
     frame: false,
-    transparent: true,
+    transparent: false,
+    backgroundColor: "#0e1614",
+    roundedCorners: true,
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: false,
-    hasShadow: false,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -500,6 +502,10 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+    mainWindow.moveTop();
+  });
 }
 
 app.whenReady().then(() => {
