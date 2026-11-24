@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("museAPI", {
   clearMemory: () => ipcRenderer.invoke("agent:clear"),
   getContextStats: () => ipcRenderer.invoke("agent:stats"),
   resizePill: (expanded) => ipcRenderer.send("pill:resize", expanded),
+  toggleFollowClicks: (enabled) => ipcRenderer.invoke("agent:follow-clicks", enabled),
   closeApp: () => ipcRenderer.send("pill:close"),
   onStatus: (cb) => {
     const handler = (_event, payload) => cb(payload);

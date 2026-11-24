@@ -145,6 +145,7 @@
         <div id="statusText" class="sub">Alt+M or click mic to speak</div>
       </div>
       <div class="actions no-drag">
+        <button id="watchBtn" class="btn" title="Follow my clicks & screen">👁️</button>
         <button id="micBtn" class="btn" title="Voice Input (Alt+M)">🎙️</button>
         <button id="expandBtn" class="btn" title="Expand / Collapse">▾</button>
         <button id="closeBtn" class="btn" title="Quit">✕</button>
@@ -169,11 +170,13 @@
     let avatarIdx = 0;
     let expanded = false;
     let listening = false;
+    let followClicks = false;
     let recognition = null;
 
     const avatarBtn = document.getElementById("avatarBtn");
     const stateTag = document.getElementById("stateTag");
     const statusText = document.getElementById("statusText");
+    const watchBtn = document.getElementById("watchBtn");
     const micBtn = document.getElementById("micBtn");
     const expandBtn = document.getElementById("expandBtn");
     const closeBtn = document.getElementById("closeBtn");
@@ -292,6 +295,12 @@
     avatarBtn.addEventListener("click", () => {
       avatarIdx = (avatarIdx + 1) % AVATARS.length;
       setVisualState("idle");
+    });
+    watchBtn.addEventListener("click", async () => {
+      followClicks = !followClicks;
+      await window.museAPI.toggleFollowClicks(followClicks);
+      watchBtn.classList.toggle("mic-on", followClicks);
+      setVisualState("idle", followClicks ? "Following your clicks & screen" : "Click tracking paused");
     });
     micBtn.addEventListener("click", toggleMic);
     expandBtn.addEventListener("click", () => toggleExpand());

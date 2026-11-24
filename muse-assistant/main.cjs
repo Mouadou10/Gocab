@@ -1,15 +1,18 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell, desktopCapturer } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
-const { exec } = require("node:child_process");
+const { exec, spawn } = require("node:child_process");
 
 const GOCAB_ROOT = path.resolve(__dirname, "..");
 const MAX_HISTORY_MESSAGES = 12; // 6 rolling turns max to keep context window tiny
 const MAX_TOOL_OUTPUT_CHARS = 2200;
+const MAX_CLICK_LOG = 5;
 
 let mainWindow = null;
 let rollingHistory = [];
 let totalTokensUsed = 0;
+let clickBreadcrumbs = [];
+let clickWatcherProc = null;
 
 function loadEnvKey(keyName) {
   if (process.env[keyName]) return process.env[keyName];
@@ -54,17 +57,154 @@ function execCommand(cmd, timeoutMs = 20000) {
   });
 }
 
+function getScreenMetrics() {
+  const primary = screen.getPrimaryDisplay();
+  const scale = primary.scaleFactor || 1;
+  return {
+    logicalWidth: primary.size.width,
+    logicalHeight: primary.size.height,
+    physicalWidth: Math.round(primary.size.width * scale),
+    physicalHeight: Math.round(primary.size.height * scale),
+    scaleFactor: scale,
+  };
+}
+
+async function captureScreenDataUrl() {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen"],
+    thumbnailSize: { width: 1280, height: 720 },
+  });
+  const primary = sources[0];
+  if (!primary) return null;
+  const jpg = primary.thumbnail.toJPEG(68);
+  return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+}
+
+function startClickWatcher() {
+  if (clickWatcherProc) return;
+  const psScript = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class MuseWatch {
+  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  public struct POINT { public int X; public int Y; }
+}
+"@
+$wasDown = $false
+while ($true) {
+  Start-Sleep -Milliseconds 120
+  $state = [MuseWatch]::GetAsyncKeyState(0x01)
+  $isDown = ($state -band 0x8000) -ne 0
+  if ($isDown -and -not $wasDown) {
+    $pt = New-Object MuseWatch+POINT
+    [MuseWatch]::GetCursorPos([ref]$pt) | Out-Null
+    $sb = New-Object System.Text.StringBuilder 256
+    $h = [MuseWatch]::GetForegroundWindow()
+    [MuseWatch]::GetWindowText($h, $sb, 256) | Out-Null
+    $title = $sb.ToString()
+    if ($title) { Write-Output ("CLICK|" + $pt.X + "," + $pt.Y + "|" + $title) }
+  }
+  $wasDown = $isDown
+}
+`;
+  clickWatcherProc = spawn("powershell.exe", ["-NoProfile", "-Command", psScript], {
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  clickWatcherProc.stdout.on("data", (chunk) => {
+    const lines = chunk.toString().split(/\r?\n/).filter(Boolean);
+    for (const line of lines) {
+      if (line.startsWith("CLICK|")) {
+        const [, coords, title] = line.split("|");
+        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        clickBreadcrumbs.push(`${time} Click (${coords}) in "${(title || "").slice(0, 60)}"`);
+        if (clickBreadcrumbs.length > MAX_CLICK_LOG) {
+          clickBreadcrumbs = clickBreadcrumbs.slice(-MAX_CLICK_LOG);
+        }
+      }
+    }
+  });
+}
+
+function stopClickWatcher() {
+  if (clickWatcherProc) {
+    try {
+      clickWatcherProc.kill();
+    } catch {}
+    clickWatcherProc = null;
+  }
+}
+
 const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "see_screen",
+      description:
+        "Capture the user's current screen (1280x720) and recent click breadcrumbs to see what is on screen right now.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "mouse_click",
+      description:
+        "Move cursor to (x, y) in 1280x720 screenshot coordinates (automatically scaled to physical screen pixels) and click.",
+      parameters: {
+        type: "object",
+        properties: {
+          x: { type: "number", description: "X coordinate in 0..1280 screenshot space" },
+          y: { type: "number", description: "Y coordinate in 0..720 screenshot space" },
+          button: { type: "string", enum: ["left", "right", "double"], description: "Click type" },
+        },
+        required: ["x", "y"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "type_text",
+      description: "Type text into the currently focused window on the user's PC.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          pressEnter: { type: "boolean", description: "Press Enter after typing" },
+        },
+        required: ["text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "press_key",
+      description: "Send a keyboard shortcut or key (SendKeys syntax, e.g. '{ENTER}', '^c', '%{TAB}').",
+      parameters: {
+        type: "object",
+        properties: {
+          keys: { type: "string" },
+        },
+        required: ["keys"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
       name: "run_command",
       description:
-        "Execute a short, non-destructive PowerShell command in the GoCab workspace (e.g., check git status, run node scripts, list files). Avoid destructive commands.",
+        "Execute a short, non-destructive PowerShell command in the GoCab workspace.",
       parameters: {
         type: "object",
         properties: {
-          command: { type: "string", description: "PowerShell command to execute" },
+          command: { type: "string" },
         },
         required: ["command"],
       },
@@ -74,14 +214,13 @@ const TOOLS = [
     type: "function",
     function: {
       name: "read_file_lines",
-      description:
-        "Read a specific line range (max 80 lines) of a file in the GoCab workspace to save context.",
+      description: "Read a specific line range (max 80 lines) of a file in the GoCab workspace.",
       parameters: {
         type: "object",
         properties: {
-          relativePath: { type: "string", description: "Path relative to workspace root" },
-          startLine: { type: "integer", description: "1-based start line" },
-          endLine: { type: "integer", description: "1-based end line (max startLine + 79)" },
+          relativePath: { type: "string" },
+          startLine: { type: "integer" },
+          endLine: { type: "integer" },
         },
         required: ["relativePath", "startLine", "endLine"],
       },
@@ -99,7 +238,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "open_url",
-      description: "Open a URL in the user's default browser (e.g., https://gocab-psi.vercel.app).",
+      description: "Open a URL in the user's default browser.",
       parameters: {
         type: "object",
         properties: {
@@ -112,43 +251,94 @@ const TOOLS = [
 ];
 
 async function executeTool(name, args) {
+  if (name === "see_screen") {
+    sendStatus("working", "Looking at screen...");
+    const dataUrl = await captureScreenDataUrl();
+    const metrics = getScreenMetrics();
+    return {
+      text: `Screen ${metrics.physicalWidth}x${metrics.physicalHeight} (coords in 1280x720). Recent clicks: ${
+        clickBreadcrumbs.length ? clickBreadcrumbs.join(" | ") : "none recorded"
+      }`,
+      imageDataUrl: dataUrl,
+    };
+  }
+  if (name === "mouse_click") {
+    const metrics = getScreenMetrics();
+    const targetX = Math.round(((Number(args.x) || 0) / 1280) * metrics.physicalWidth);
+    const targetY = Math.round(((Number(args.y) || 0) / 720) * metrics.physicalHeight);
+    const btn = args.button || "left";
+    sendStatus("working", `Clicking (${targetX}, ${targetY})...`);
+    const clickCmd =
+      btn === "right"
+        ? "[MuseInput]::mouse_event(0x08,0,0,0,0); Start-Sleep -Milliseconds 40; [MuseInput]::mouse_event(0x10,0,0,0,0)"
+        : btn === "double"
+        ? "[MuseInput]::mouse_event(0x02,0,0,0,0); [MuseInput]::mouse_event(0x04,0,0,0,0); Start-Sleep -Milliseconds 60; [MuseInput]::mouse_event(0x02,0,0,0,0); [MuseInput]::mouse_event(0x04,0,0,0,0)"
+        : "[MuseInput]::mouse_event(0x02,0,0,0,0); Start-Sleep -Milliseconds 40; [MuseInput]::mouse_event(0x04,0,0,0,0)";
+    const ps = `
+Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class MuseInput { [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y); [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo); }'
+[MuseInput]::SetCursorPos(${targetX}, ${targetY}) | Out-Null
+Start-Sleep -Milliseconds 60
+${clickCmd}
+`;
+    const out = await execCommand(ps, 8000);
+    return { text: `Clicked ${btn} at (${targetX}, ${targetY}). ${out}` };
+  }
+  if (name === "type_text") {
+    sendStatus("working", "Typing...");
+    const escaped = String(args.text || "")
+      .replace(/'/g, "''")
+      .replace(/([+^%~(){}[\]])/g, "{$1}");
+    const enterSuffix = args.pressEnter ? "{ENTER}" : "";
+    const ps = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}${enterSuffix}')`;
+    const out = await execCommand(ps, 8000);
+    return { text: `Typed text. ${out}` };
+  }
+  if (name === "press_key") {
+    sendStatus("working", `Pressing ${args.keys || ""}...`);
+    const escaped = String(args.keys || "").replace(/'/g, "''");
+    const ps = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`;
+    const out = await execCommand(ps, 8000);
+    return { text: `Sent key ${args.keys}. ${out}` };
+  }
   if (name === "check_gocab_sla") {
     sendStatus("working", "Checking GoCab SLA...");
-    return await execCommand("node --import tsx scripts/executive-watchdog.ts", 25000);
+    return { text: await execCommand("node --import tsx scripts/executive-watchdog.ts", 25000) };
   }
   if (name === "run_command") {
     sendStatus("working", `Running: ${(args.command || "").slice(0, 32)}...`);
-    return await execCommand(args.command || "");
+    return { text: await execCommand(args.command || "") };
   }
   if (name === "read_file_lines") {
     const safePath = path.resolve(GOCAB_ROOT, args.relativePath || "");
     if (!safePath.startsWith(GOCAB_ROOT) || !fs.existsSync(safePath)) {
-      return "File not found or outside workspace.";
+      return { text: "File not found or outside workspace." };
     }
     const start = Math.max(1, Number(args.startLine) || 1);
     const end = Math.min(start + 79, Number(args.endLine) || start + 40);
     const lines = fs.readFileSync(safePath, "utf8").split(/\r?\n/);
-    return lines
-      .slice(start - 1, end)
-      .map((l, idx) => `${start + idx}: ${l}`)
-      .join("\n")
-      .slice(0, MAX_TOOL_OUTPUT_CHARS);
+    return {
+      text: lines
+        .slice(start - 1, end)
+        .map((l, idx) => `${start + idx}: ${l}`)
+        .join("\n")
+        .slice(0, MAX_TOOL_OUTPUT_CHARS),
+    };
   }
   if (name === "open_url") {
     if (args.url && /^https?:\/\//i.test(args.url)) {
       await shell.openExternal(args.url);
-      return `Opened ${args.url}`;
+      return { text: `Opened ${args.url}` };
     }
-    return "Invalid URL.";
+    return { text: "Invalid URL." };
   }
-  return "Unknown tool.";
+  return { text: "Unknown tool." };
 }
 
-const SYSTEM_PROMPT = `You are Muse, a fast, ultra-concise personal voice AI assistant running as a floating pill on the user's Windows PC (GoCab workspace: ${GOCAB_ROOT}).
+const SYSTEM_PROMPT = `You are Muse, a fast personal voice AI assistant running as a floating pill on the user's Windows PC (GoCab workspace: ${GOCAB_ROOT}).
 Rules:
 - Reply in 1-3 short, spoken-friendly sentences (the UI reads your reply aloud).
-- Use tools immediately when asked to check GoCab CRM, run scripts, inspect files, or open URLs.
-- Keep context minimal: never ask to read whole files; read only exact line ranges.`;
+- When the user asks about what is on screen, or asks you to click/type/do something on their PC, call see_screen first so you see the exact UI in 1280x720 coordinates, then use mouse_click / type_text / press_key.
+- Keep context minimal: screenshots are ephemeral (current turn only) and never read whole files.`;
 
 async function callGateway(messages) {
   const apiKey = loadEnvKey("AI_GATEWAY_API_KEY");
@@ -165,7 +355,7 @@ async function callGateway(messages) {
       model: "google/gemini-2.5-flash",
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
       tools: TOOLS,
-      temperature: 0.3,
+      temperature: 0.25,
       max_tokens: 450,
     }),
   });
@@ -190,10 +380,11 @@ ipcMain.handle("agent:ask", async (_event, userPrompt) => {
     let loopMessages = [...rollingHistory];
     let finalReply = "";
 
-    for (let step = 0; step < 4; step++) {
+    for (let step = 0; step < 6; step++) {
       const msg = await callGateway(loopMessages);
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         loopMessages.push(msg);
+        let pendingImageUrl = null;
         for (const tc of msg.tool_calls) {
           let parsedArgs = {};
           try {
@@ -203,7 +394,20 @@ ipcMain.handle("agent:ask", async (_event, userPrompt) => {
           loopMessages.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: String(result),
+            content: String(result.text || ""),
+          });
+          if (result.imageDataUrl) {
+            pendingImageUrl = result.imageDataUrl;
+          }
+        }
+        // Inject ephemeral screenshot only into loopMessages (never stored in rollingHistory!)
+        if (pendingImageUrl) {
+          loopMessages.push({
+            role: "user",
+            content: [
+              { type: "text", text: "Current 1280x720 screenshot:" },
+              { type: "image_url", image_url: { url: pendingImageUrl } },
+            ],
           });
         }
       } else {
@@ -232,8 +436,15 @@ ipcMain.handle("agent:ask", async (_event, userPrompt) => {
   }
 });
 
+ipcMain.handle("agent:follow-clicks", (_event, enabled) => {
+  if (enabled) startClickWatcher();
+  else stopClickWatcher();
+  return { ok: true, enabled: Boolean(enabled) };
+});
+
 ipcMain.handle("agent:clear", () => {
   rollingHistory = [];
+  clickBreadcrumbs = [];
   totalTokensUsed = 0;
   return { ok: true };
 });
@@ -255,17 +466,18 @@ ipcMain.on("pill:resize", (_e, expanded) => {
   if (expanded) {
     positionTopCenter(460, 440);
   } else {
-    positionTopCenter(340, 66);
+    positionTopCenter(360, 66);
   }
 });
 
 ipcMain.on("pill:close", () => {
+  stopClickWatcher();
   app.quit();
 });
 
 function createWindow() {
   const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
-  const initW = 340;
+  const initW = 360;
   const initH = 66;
   mainWindow = new BrowserWindow({
     width: initW,
@@ -300,5 +512,6 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  stopClickWatcher();
   globalShortcut.unregisterAll();
 });
