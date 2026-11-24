@@ -464,9 +464,9 @@ function positionTopCenter(width, height) {
 
 ipcMain.on("pill:resize", (_e, expanded) => {
   if (expanded) {
-    positionTopCenter(460, 440);
+    positionTopCenter(440, 440);
   } else {
-    positionTopCenter(360, 66);
+    positionTopCenter(440, 148);
   }
 });
 
@@ -477,8 +477,8 @@ ipcMain.on("pill:close", () => {
 
 function createWindow() {
   const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
-  const initW = 360;
-  const initH = 66;
+  const initW = 440;
+  const initH = 148;
   mainWindow = new BrowserWindow({
     width: initW,
     height: initH,
@@ -486,7 +486,7 @@ function createWindow() {
     y: 12,
     frame: false,
     transparent: false,
-    backgroundColor: "#0e1614",
+    backgroundColor: "#0d2830",
     roundedCorners: true,
     alwaysOnTop: true,
     skipTaskbar: false,
