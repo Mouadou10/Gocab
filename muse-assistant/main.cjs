@@ -509,6 +509,24 @@ function createWindow() {
     mainWindow.moveTop();
   });
 
+  mainWindow.webContents.on("did-finish-load", async () => {
+    try {
+      const img = await mainWindow.webContents.capturePage();
+      fs.writeFileSync(path.join(__dirname, "window_preview.png"), img.toPNG());
+      fs.writeFileSync(
+        path.join(__dirname, "debug.log"),
+        JSON.stringify({
+          bounds: mainWindow.getBounds(),
+          isVisible: mainWindow.isVisible(),
+          isAlwaysOnTop: mainWindow.isAlwaysOnTop(),
+          displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, workArea: d.workArea, scaleFactor: d.scaleFactor })),
+        }, null, 2)
+      );
+    } catch (e) {
+      fs.writeFileSync(path.join(__dirname, "debug.log"), String(e));
+    }
+  });
+
   setInterval(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (!mainWindow.isVisible()) mainWindow.show();

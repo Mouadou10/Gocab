@@ -321,7 +321,12 @@
       if (!prompt.trim()) return;
       appendMsg("user", prompt);
       setVisualState("working", "Running: " + prompt);
-      const res = await window.museAPI.ask(prompt);
+      const r = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const res = await r.json();
       if (res.ok) {
         appendMsg("ai", res.reply);
         ctxBadge.textContent = `Context: ${res.turns}/${res.maxTurns} turns · ${res.totalTokensUsed} tok`;
@@ -374,7 +379,9 @@
       expanded = typeof forceState === "boolean" ? forceState : !expanded;
       drawer.classList.toggle("open", expanded);
       expandBtn.classList.toggle("active", expanded);
-      window.museAPI.resizePill(expanded);
+      try {
+        window.resizeTo(456, expanded ? 460 : 195);
+      } catch {}
     }
 
     avatarBtn.addEventListener("click", () => {
@@ -383,7 +390,11 @@
     });
     watchBtn.addEventListener("click", async () => {
       followClicks = !followClicks;
-      await window.museAPI.toggleFollowClicks(followClicks);
+      await fetch("/api/follow-clicks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: followClicks }),
+      });
       watchBtn.classList.toggle("active", followClicks);
       setVisualState("idle", followClicks ? "Tracking your clicks and active windows." : "Click tracking paused.");
     });
@@ -392,9 +403,9 @@
     });
     micBtn.addEventListener("click", toggleMic);
     expandBtn.addEventListener("click", () => toggleExpand());
-    closeBtn.addEventListener("click", () => window.museAPI.closeApp());
+    closeBtn.addEventListener("click", () => window.close());
     clearBtn.addEventListener("click", async () => {
-      await window.museAPI.clearMemory();
+      await fetch("/api/clear", { method: "POST" });
       logEl.innerHTML = "";
       ctxBadge.textContent = "Context: 0/6 turns · 0 tok";
       setVisualState("idle", "Memory cleared.");
@@ -407,8 +418,14 @@
       runPrompt(val);
     });
 
-    window.museAPI.onStatus(({ state, detail }) => setVisualState(state, detail));
-    window.museAPI.onHotkeyToggle(toggleMic);
+    setInterval(async () => {
+      if (listening) return;
+      try {
+        const r = await fetch("/api/status");
+        const s = await r.json();
+        if (s.state === "working") setVisualState("working", s.detail);
+      } catch {}
+    }, 1200);
   </script>
 </body>
 </html>

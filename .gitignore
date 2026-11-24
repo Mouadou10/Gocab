@@ -3,6 +3,10 @@
 # dependencies
 /node_modules
 muse-assistant/node_modules/
+muse-assistant/.edge-profile/
+muse-assistant/.last_screen.jpg
+muse-assistant/window_preview.png
+muse-assistant/debug.log
 /.pnp
 .pnp.*
 .yarn/*
