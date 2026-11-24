@@ -464,9 +464,9 @@ function positionTopCenter(width, height) {
 
 ipcMain.on("pill:resize", (_e, expanded) => {
   if (expanded) {
-    positionTopCenter(440, 440);
+    positionTopCenter(456, 456);
   } else {
-    positionTopCenter(440, 148);
+    positionTopCenter(456, 164);
   }
 });
 
@@ -477,21 +477,21 @@ ipcMain.on("pill:close", () => {
 
 function createWindow() {
   const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
-  const initW = 440;
-  const initH = 148;
+  const initW = 456;
+  const initH = 164;
   mainWindow = new BrowserWindow({
     width: initW,
     height: initH,
     x: Math.round((screenW - initW) / 2),
-    y: 12,
+    y: 8,
     frame: false,
-    transparent: false,
-    backgroundColor: "#0d2830",
-    roundedCorners: true,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false,
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: false,
-    show: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -499,10 +499,9 @@ function createWindow() {
     },
   });
 
-  mainWindow.setAlwaysOnTop(true, "screen-saver");
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, "index.html"));
   mainWindow.once("ready-to-show", () => {
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
     mainWindow.show();
     mainWindow.moveTop();
   });
