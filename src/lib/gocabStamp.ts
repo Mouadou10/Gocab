@@ -1,11 +1,13 @@
 /**
- * Official GoCab Rent Blue Ink Rubber Stamp (Vector SVG)
+ * Official GoCab Rent Blue Ink Rubber Stamp (Vector SVG) + Mouad Koudia Signature
  * Matches the physical stamp:
  *   [G Logo] GOCAB / RENT
  *   84, Rue Ibnou Mounir, N° 38 Centre
  *   Andaloucia, Maârif - Casablanca
  *   R.C: 707687 - ICE: 003833456000053
  */
+
+import { MOUAD_SIGNATURE_DATA_URI } from "./mouadSignature";
 
 export function getGocabStampSvg(widthPx = 220): string {
   const heightPx = Math.round(widthPx * 0.45);
@@ -42,7 +44,11 @@ export function getGocabStampSvg(widthPx = 220): string {
 }
 
 export function getGocabStampHtml(widthPx = 205, rotateDeg = -2.5): string {
-  return `<div style="display:inline-block;transform:rotate(${rotateDeg}deg);mix-blend-mode:multiply;pointer-events:none;user-select:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-    ${getGocabStampSvg(widthPx)}
+  const sigWidth = Math.round(widthPx * 0.56);
+  return `<div style="display:inline-flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+    <img src="${MOUAD_SIGNATURE_DATA_URI}" alt="Signature" style="width:${sigWidth}px;height:auto;margin-bottom:-14px;transform:rotate(-1.5deg);mix-blend-mode:multiply;position:relative;z-index:2;-webkit-print-color-adjust:exact;print-color-adjust:exact;" />
+    <div style="transform:rotate(${rotateDeg}deg);mix-blend-mode:multiply;position:relative;z-index:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+      ${getGocabStampSvg(widthPx)}
+    </div>
   </div>`;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { MOUAD_SIGNATURE_DATA_URI } from "@/lib/mouadSignature";
 
 interface GocabStampProps {
   width?: number;
@@ -14,17 +15,42 @@ export default function GocabStamp({
   className = "",
 }: GocabStampProps) {
   const height = Math.round(width * 0.45);
+  const sigWidth = Math.round(width * 0.56);
   return (
     <div
-      className={`inline-block pointer-events-none select-none ${className}`}
+      className={`inline-flex flex-col items-center pointer-events-none select-none ${className}`}
       style={{
-        transform: `rotate(${rotateDeg}deg)`,
-        mixBlendMode: "multiply",
         WebkitPrintColorAdjust: "exact",
         printColorAdjust: "exact",
       }}
-      aria-label="Cachet officiel GoCab Rent"
+      aria-label="Signature et Cachet officiel GoCab Rent"
     >
+      {/* Handwritten Signature above the stamp */}
+      <img
+        src={MOUAD_SIGNATURE_DATA_URI}
+        alt="Signature Mouad Koudia"
+        style={{
+          width: `${sigWidth}px`,
+          height: "auto",
+          marginBottom: "-14px",
+          transform: "rotate(-1.5deg)",
+          mixBlendMode: "multiply",
+          position: "relative",
+          zIndex: 2,
+          WebkitPrintColorAdjust: "exact",
+          printColorAdjust: "exact",
+        }}
+      />
+      <div
+        style={{
+          transform: `rotate(${rotateDeg}deg)`,
+          mixBlendMode: "multiply",
+          position: "relative",
+          zIndex: 1,
+          WebkitPrintColorAdjust: "exact",
+          printColorAdjust: "exact",
+        }}
+      >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 440 198"
@@ -120,6 +146,7 @@ export default function GocabStamp({
           </text>
         </g>
       </svg>
+      </div>
     </div>
   );
 }
