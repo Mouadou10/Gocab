@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Muse Personal Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+    .shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: rgba(14, 22, 20, 0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 28px;
+      color: #f3f7f5;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+    .pill {
+      height: 58px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      -webkit-app-region: drag;
+      shrink: 0;
+    }
+    .no-drag { -webkit-app-region: no-drag; }
+    .avatar-wrap {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      border: 2px solid rgba(16, 185, 129, 0.45);
+    }
+    .avatar-wrap:hover { transform: scale(1.06); }
+    .avatar-wrap.listening { border-color: #10b981; animation: pulseGreen 1.2s infinite; }
+    .avatar-wrap.working { border-color: #f59e0b; animation: pulseAmber 0.9s infinite; }
+    .avatar-wrap.error { border-color: #ef4444; }
+    @keyframes pulseGreen {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+      50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+    }
+    @keyframes pulseAmber {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.65); }
+      50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+    }
+    .status-col { flex: 1; min-width: 0; }
+    .title { font-size: 12px; font-weight: 700; letter-spacing: 0.2px; display: flex; align-items: center; gap: 6px; }
+    .sub { font-size: 11px; color: #9db2a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .actions { display: flex; align-items: center; gap: 6px; }
+    .btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover { background: rgba(255, 255, 255, 0.2); }
+    .btn:active { transform: scale(0.92); }
+    .btn.mic-on { background: #10b981; color: #052e16; font-weight: 800; }
+    .drawer {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 10px 14px 12px;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .drawer.open { display: flex; }
+    .meta-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #8fa69b;
+    }
+    .badge { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+    .clear-btn { background: none; border: none; color: #9db2a8; font-size: 10px; cursor: pointer; text-decoration: underline; }
+    .log {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+      user-select: text;
+    }
+    .msg { padding: 8px 11px; border-radius: 14px; font-size: 12px; line-height: 1.4; max-width: 90%; }
+    .msg.user { align-self: flex-end; background: #0e382b; color: #ecfdf5; }
+    .msg.ai { align-self: flex-start; background: rgba(255, 255, 255, 0.08); color: #f3f7f5; }
+    .input-row { display: flex; gap: 6px; }
+    .input-row input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+    }
+    .input-row input:focus { border-color: #10b981; }
+    .send-btn {
+      padding: 0 14px;
+      border-radius: 14px;
+      border: none;
+      background: #10b981;
+      color: #052e16;
+      font-weight: 800;
+      font-size: 12px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="pill">
+      <div id="avatarBtn" class="avatar-wrap no-drag" title="Click to cycle avatar emoji">🤖</div>
+      <div class="status-col">
+        <div class="title">
+          <span>Muse</span>
+          <span id="stateTag" style="font-size:10px;color:#6ee7b7;font-weight:600;">• Ready</span>
+        </div>
+        <div id="statusText" class="sub">Alt+M or click mic to speak</div>
+      </div>
+      <div class="actions no-drag">
+        <button id="micBtn" class="btn" title="Voice Input (Alt+M)">🎙️</button>
+        <button id="expandBtn" class="btn" title="Expand / Collapse">▾</button>
+        <button id="closeBtn" class="btn" title="Quit">✕</button>
+      </div>
+    </div>
+
+    <div id="drawer" class="drawer no-drag">
+      <div class="meta-bar">
+        <span id="ctxBadge" class="badge">Context: 0/6 turns · 0 tok</span>
+        <button id="clearBtn" class="clear-btn">Reset memory</button>
+      </div>
+      <div id="log" class="log"></div>
+      <form id="askForm" class="input-row">
+        <input id="askInput" type="text" placeholder="Type or speak a task for Muse..." />
+        <button type="submit" class="send-btn">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const AVATARS = ["🤖", "🦊", "⚡", "🧠", "🦁", "🚀"];
+    let avatarIdx = 0;
+    let expanded = false;
+    let listening = false;
+    let recognition = null;
+
+    const avatarBtn = document.getElementById("avatarBtn");
+    const stateTag = document.getElementById("stateTag");
+    const statusText = document.getElementById("statusText");
+    const micBtn = document.getElementById("micBtn");
+    const expandBtn = document.getElementById("expandBtn");
+    const closeBtn = document.getElementById("closeBtn");
+    const drawer = document.getElementById("drawer");
+    const ctxBadge = document.getElementById("ctxBadge");
+    const clearBtn = document.getElementById("clearBtn");
+    const logEl = document.getElementById("log");
+    const askForm = document.getElementById("askForm");
+    const askInput = document.getElementById("askInput");
+
+    function setVisualState(state, detail) {
+      avatarBtn.classList.remove("listening", "working", "error");
+      if (state === "listening") {
+        avatarBtn.classList.add("listening");
+        avatarBtn.textContent = "🎙️";
+        stateTag.textContent = "• Listening";
+        stateTag.style.color = "#6ee7b7";
+      } else if (state === "working") {
+        avatarBtn.classList.add("working");
+        avatarBtn.textContent = "⚡";
+        stateTag.textContent = "• Working";
+        stateTag.style.color = "#fcd34d";
+      } else if (state === "error") {
+        avatarBtn.classList.add("error");
+        avatarBtn.textContent = "⚠️";
+        stateTag.textContent = "• Error";
+        stateTag.style.color = "#fca5a5";
+      } else {
+        avatarBtn.textContent = AVATARS[avatarIdx];
+        stateTag.textContent = "• Ready";
+        stateTag.style.color = "#6ee7b7";
+      }
+      if (detail) statusText.textContent = detail;
+    }
+
+    function appendMsg(role, text) {
+      const div = document.createElement("div");
+      div.className = "msg " + role;
+      div.textContent = text;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function speak(text) {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05;
+      window.speechSynthesis.speak(u);
+    }
+
+    async function runPrompt(prompt) {
+      if (!prompt.trim()) return;
+      appendMsg("user", prompt);
+      setVisualState("working", "Working on: " + prompt);
+      const res = await window.museAPI.ask(prompt);
+      if (res.ok) {
+        appendMsg("ai", res.reply);
+        ctxBadge.textContent = `Context: ${res.turns}/${res.maxTurns} turns · ${res.totalTokensUsed} tok`;
+        setVisualState("idle", res.reply);
+        speak(res.reply);
+      } else {
+        appendMsg("ai", "Error: " + res.error);
+        setVisualState("error", res.error);
+      }
+    }
+
+    function toggleMic() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        setVisualState("error", "SpeechRecognition unavailable; type below");
+        if (!expanded) toggleExpand(true);
+        return;
+      }
+      if (listening && recognition) {
+        recognition.stop();
+        listening = false;
+        micBtn.classList.remove("mic-on");
+        setVisualState("idle", "Alt+M or click mic to speak");
+        return;
+      }
+      recognition = new SR();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      listening = true;
+      micBtn.classList.add("mic-on");
+      setVisualState("listening", "Listening to your command...");
+      recognition.onresult = (e) => {
+        const transcript = e.results?.[0]?.[0]?.transcript || "";
+        listening = false;
+        micBtn.classList.remove("mic-on");
+        if (transcript) runPrompt(transcript);
+      };
+      recognition.onerror = () => {
+        listening = false;
+        micBtn.classList.remove("mic-on");
+        setVisualState("idle", "Didn't catch that — try again");
+      };
+      recognition.onend = () => {
+        if (listening) {
+          listening = false;
+          micBtn.classList.remove("mic-on");
+        }
+      };
+      recognition.start();
+    }
+
+    function toggleExpand(forceState) {
+      expanded = typeof forceState === "boolean" ? forceState : !expanded;
+      drawer.classList.toggle("open", expanded);
+      expandBtn.textContent = expanded ? "▴" : "▾";
+      window.museAPI.resizePill(expanded);
+    }
+
+    avatarBtn.addEventListener("click", () => {
+      avatarIdx = (avatarIdx + 1) % AVATARS.length;
+      setVisualState("idle");
+    });
+    micBtn.addEventListener("click", toggleMic);
+    expandBtn.addEventListener("click", () => toggleExpand());
+    closeBtn.addEventListener("click", () => window.museAPI.closeApp());
+    clearBtn.addEventListener("click", async () => {
+      await window.museAPI.clearMemory();
+      logEl.innerHTML = "";
+      ctxBadge.textContent = "Context: 0/6 turns · 0 tok";
+      setVisualState("idle", "Memory cleared");
+    });
+    askForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = askInput.value.trim();
+      if (!val) return;
+      askInput.value = "";
+      runPrompt(val);
+    });
+
+    window.museAPI.onStatus(({ state, detail }) => setVisualState(state, detail));
+    window.museAPI.onHotkeyToggle(toggleMic);
+  </script>
+</body>
+</html>

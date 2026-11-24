@@ -40,6 +40,7 @@
     "node_modules",
     "scratch",
     "docs",
-    ".gemini"
+    ".gemini",
+    "muse-assistant"
   ]
 }

@@ -1,0 +1,12 @@
+{
+  "name": "gocab-muse-assistant",
+  "version": "1.0.0",
+  "description": "Standalone Muse-style floating voice AI assistant for Windows with low context window usage",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^35.1.5"
+  }
+}
