@@ -3,6 +3,9 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { exec, spawn } = require("node:child_process");
 
+// Prevent Windows laptop GPU compositing black/blank window issues
+app.disableHardwareAcceleration();
+
 const GOCAB_ROOT = path.resolve(__dirname, "..");
 const MAX_HISTORY_MESSAGES = 12; // 6 rolling turns max to keep context window tiny
 const MAX_TOOL_OUTPUT_CHARS = 2200;
@@ -477,21 +480,21 @@ ipcMain.on("pill:close", () => {
 
 function createWindow() {
   const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
-  const initW = 456;
-  const initH = 164;
+  const initW = 440;
+  const initH = 148;
   mainWindow = new BrowserWindow({
     width: initW,
     height: initH,
     x: Math.round((screenW - initW) / 2),
-    y: 8,
+    y: 12,
     frame: false,
-    transparent: true,
-    backgroundColor: "#00000000",
-    hasShadow: false,
+    transparent: false,
+    backgroundColor: "#0d2830",
+    roundedCorners: true,
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: false,
-    show: false,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -505,6 +508,13 @@ function createWindow() {
     mainWindow.show();
     mainWindow.moveTop();
   });
+
+  setInterval(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.setAlwaysOnTop(true, "screen-saver");
+    }
+  }, 5000);
 }
 
 app.whenReady().then(() => {
