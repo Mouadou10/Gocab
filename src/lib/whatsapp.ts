@@ -124,14 +124,46 @@ export const APPROVED_360_TEMPLATES: Approved360TemplateDef[] = [
     badge: "Approuvé 360dialog",
     icon: "💰",
     description:
-      "Relance officielle des impayés Support Flotte (immatriculation, nom du chauffeur, solde impayé en MAD)",
+      "Relance officielle des impayés Support Flotte (immatriculation, nom du chauffeur, solde impayé en MAD, téléphone gestionnaire)",
     headerFormat: "TEXT",
-    bodyParamCount: 3,
+    bodyParamCount: 4,
     hasDynamicButtonUrl: false,
     template:
-      "مرحباً {{2}}،\n\nنتواصل معك بخصوص دفعتك المستحقة لـ GoCab (المركبة رقم {{1}}).\nيبلغ رصيد المبالغ غير المسددة حالياً: {{3}} درهم مغربي\nيرجى تسوية المبلغ اليوم لتجنب تعليق العقد\nفريق العمليات في GoCab.",
+      "مرحباً {{2}}،\n\nنتواصل معك بخصوص دفعتك المستحقة لـ GoCab (المركبة رقم {{1}}).\nيبلغ رصيد المبالغ غير المسددة حالياً: {{3}} درهم مغربي\nيرجى تسوية المبلغ اليوم لتجنب تعليق العقد\nالمرجو الإتصال بالرقم: {{4}}\n\nفريق العمليات في GoCab.",
   },
 ];
+
+import { getFleetManagerPhone } from "./fleet-managers";
+
+export function buildRelanceImpayeParams(input: {
+  plateNumber?: string | null;
+  contactName?: string | null;
+  arrearsMAD?: number | null;
+  managerName?: string | null;
+  managerPhone?: string | null;
+}): [string, string, string, string] {
+  const plate = input.plateNumber || "Véhicule GoCab";
+  const driverName = input.contactName || "Chauffeur";
+  const arrears = String(Math.round(Math.abs(input.arrearsMAD || 0)));
+  const managerPhone =
+    input.managerPhone ||
+    getFleetManagerPhone({
+      manager: input.managerName,
+      plate_number: input.plateNumber,
+    });
+  return [plate, driverName, arrears, managerPhone];
+}
+
+export function formatRelanceImpayeText(
+  templateText: string,
+  params: [string, string, string, string]
+): string {
+  return templateText
+    .replace(/\{\{1\}\}/g, params[0])
+    .replace(/\{\{2\}\}/g, params[1])
+    .replace(/\{\{3\}\}/g, params[2])
+    .replace(/\{\{4\}\}/g, params[3]);
+}
 
 /**
  * Returns the approved 360dialog template by ID/name from an optional dynamic list, falling back to "formation"

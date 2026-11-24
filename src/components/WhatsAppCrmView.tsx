@@ -49,6 +49,8 @@ import {
   formatLeadWhatsAppMessage,
   formatDisplayPhone,
   normalizeWhatsAppPhone,
+  buildRelanceImpayeParams,
+  formatRelanceImpayeText,
 } from "@/lib/whatsapp";
 
 interface DriverSummary {
@@ -206,19 +208,12 @@ export default function WhatsAppCrmView() {
     return true;
   });
 
-  const getRelanceImpayeParams = (conv: ConversationItem): [string, string, string] => {
-    const plate = conv.driver?.plateNumber || conv.matchedPlate || "Véhicule GoCab";
-    const driverName = conv.driver?.fullName || conv.contactName || "Chauffeur";
-    const arrears = String(Math.round(Math.abs(conv.driver?.currentArrearsMAD ?? 0)));
-    return [plate, driverName, arrears];
-  };
-
-  const formatRelanceImpayeText = (templateText: string, params: [string, string, string]): string => {
-    return templateText
-      .replace(/\{\{1\}\}/g, params[0])
-      .replace(/\{\{2\}\}/g, params[1])
-      .replace(/\{\{3\}\}/g, params[2]);
-  };
+  const getRelanceImpayeParams = (conv: ConversationItem): [string, string, string, string] =>
+    buildRelanceImpayeParams({
+      plateNumber: conv.driver?.plateNumber || conv.matchedPlate,
+      contactName: conv.driver?.fullName || conv.contactName,
+      arrearsMAD: conv.driver?.currentArrearsMAD ?? 0,
+    });
 
   // 24-hour Meta Customer Service Window evaluation
   const lastInboundMsg = [...messages].reverse().find((m) => m.direction === "INBOUND");

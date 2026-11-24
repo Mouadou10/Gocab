@@ -130,3 +130,20 @@ export function resolveDriverFleetManager(driver: {
   }
   return "mohamed aziz";
 }
+
+export const FLEET_MANAGER_PHONES: Record<"mohamed aziz" | "mehdi elyattouti", string> = {
+  "mohamed aziz": "+212 666-563066",
+  "mehdi elyattouti": "+212 667-960025",
+};
+
+/**
+ * Returns the assigned fleet manager's phone number based on plate portfolio or manager name.
+ */
+export function getFleetManagerPhone(input: {
+  manager?: string | null;
+  vehicle?: { plate_number?: string | null } | null;
+  plate_number?: string | null;
+}): string {
+  const manager = resolveDriverFleetManager(input);
+  return FLEET_MANAGER_PHONES[manager];
+}

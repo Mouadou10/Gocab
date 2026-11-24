@@ -22,6 +22,8 @@ import {
   detectApproved360Template,
   formatTemplateForWhatsAppWeb,
   formatLeadWhatsAppMessage,
+  buildRelanceImpayeParams,
+  formatRelanceImpayeText,
 } from "@/lib/whatsapp";
 
 export interface WhatsAppDirectTarget {
@@ -31,6 +33,8 @@ export interface WhatsAppDirectTarget {
   plateNumber?: string;
   arrearsMAD?: number;
   unpaidDays?: number;
+  managerName?: string;
+  managerPhone?: string;
   defaultMessage?: string;
 }
 
@@ -88,20 +92,17 @@ export default function WhatsAppDirectModal({
 
   if (!isOpen || !target) return null;
 
-  const getRelanceImpayeParams = (): [string, string, string] => {
-    const plate = target.plateNumber || "Véhicule GoCab";
-    const driverName = target.contactName || "Chauffeur";
-    const arrears = String(Math.round(Math.abs(target.arrearsMAD || 0)));
-    return [plate, driverName, arrears];
-  };
+  const getRelanceImpayeParams = (): [string, string, string, string] =>
+    buildRelanceImpayeParams({
+      plateNumber: target.plateNumber,
+      contactName: target.contactName,
+      arrearsMAD: target.arrearsMAD,
+      managerName: target.managerName,
+      managerPhone: target.managerPhone,
+    });
 
-  const formatRelanceImpayeText = (templateText: string): string => {
-    const [plate, driverName, arrears] = getRelanceImpayeParams();
-    return templateText
-      .replace(/\{\{1\}\}/g, plate)
-      .replace(/\{\{2\}\}/g, driverName)
-      .replace(/\{\{3\}\}/g, arrears);
-  };
+  const formatRelanceText = (templateText: string): string =>
+    formatRelanceImpayeText(templateText, getRelanceImpayeParams());
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -115,7 +116,7 @@ export default function WhatsAppDirectModal({
       const templateParams = isRelanceImpaye ? getRelanceImpayeParams() : undefined;
       const finalText = matchedTpl
         ? isRelanceImpaye
-          ? formatRelanceImpayeText(matchedTpl.template)
+          ? formatRelanceText(matchedTpl.template)
           : matchedTpl.template
         : messageText.trim();
 
@@ -199,7 +200,7 @@ export default function WhatsAppDirectModal({
               title: `${tmpl.icon} ${tmpl.title} (360dialog ${tmpl.language})`,
               text:
                 tmpl.name.toLowerCase() === "relance_impaye"
-                  ? formatRelanceImpayeText(tmpl.template)
+                  ? formatRelanceText(tmpl.template)
                   : tmpl.template,
               tpl360: tmpl,
             })),

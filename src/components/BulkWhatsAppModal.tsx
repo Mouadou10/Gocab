@@ -7,6 +7,8 @@ import {
   APPROVED_360_TEMPLATES,
   Approved360TemplateDef,
   formatDisplayPhone,
+  buildRelanceImpayeParams,
+  formatRelanceImpayeText,
 } from "@/lib/whatsapp";
 import type { WhatsAppDirectTarget } from "./WhatsAppDirectModal";
 
@@ -65,16 +67,19 @@ export default function BulkWhatsAppModal({
   const isRelanceImpaye = activeTemplate?.name.toLowerCase() === "relance_impaye";
 
   const buildPayloadForTarget = (target: WhatsAppDirectTarget) => {
-    const plate = target.plateNumber || "Véhicule GoCab";
-    const driverName = target.contactName || "Chauffeur";
-    const arrears = String(Math.round(Math.abs(target.arrearsMAD || 0)));
-    const templateParams = isRelanceImpaye ? [plate, driverName, arrears] : undefined;
-    const finalText = isRelanceImpaye
-      ? activeTemplate.template
-          .replace(/\{\{1\}\}/g, plate)
-          .replace(/\{\{2\}\}/g, driverName)
-          .replace(/\{\{3\}\}/g, arrears)
-      : activeTemplate.template;
+    const templateParams = isRelanceImpaye
+      ? buildRelanceImpayeParams({
+          plateNumber: target.plateNumber,
+          contactName: target.contactName,
+          arrearsMAD: target.arrearsMAD,
+          managerName: target.managerName,
+          managerPhone: target.managerPhone,
+        })
+      : undefined;
+    const finalText =
+      isRelanceImpaye && templateParams
+        ? formatRelanceImpayeText(activeTemplate.template, templateParams)
+        : activeTemplate.template;
 
     return {
       phoneNumber: target.phoneNumber,

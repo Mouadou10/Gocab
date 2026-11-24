@@ -965,6 +965,7 @@ export default function FleetPerformanceView() {
           plateNumber: d.vehicle?.plate_number,
           arrearsMAD: arrearsAmt,
           unpaidDays: d.consecutiveUnpaidDays,
+          managerName: d.manager || undefined,
         };
       });
   }, [drivers, selectedDriverIds]);
@@ -2709,6 +2710,7 @@ export default function FleetPerformanceView() {
                                        plateNumber: driver.vehicle?.plate_number,
                                        arrearsMAD: driver.currentArrearsMAD,
                                        unpaidDays: driver.consecutiveUnpaidDays,
+                                       managerName: driver.manager || undefined,
                                        defaultMessage: defaultMsg,
                                      });
                                      setIsWhatsAppModalOpen(true);
