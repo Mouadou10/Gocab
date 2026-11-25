@@ -170,3 +170,18 @@ Whenever this skill is triggered, execute the following steps in order:
   - Checks **Cloud WAL & LiveSync State** (`data_sync_state` integrity).
   - Persists JSON SLA report to `Setting` (`key = "executive_watchdog_last_report"`).
 - **Auto-Recovery**: If any task is `OVERDUE` or `ERROR`, the watchdog checks `manage_task(Action: "list")` to re-arm any dropped daemon schedule and triggers `browser` export + `sync-fleet-xlsx.ts` / `sync-collection-xlsx.ts` recovery immediately (or alerts the user if Google login is required).
+
+## 8. Missed Collection Recovery SOP (`sync-transactions-recovery.ts`)
+
+Whenever a past workday (`Mon–Sat`) missed its 18:00 / 23:00 Evening Collection upload (detected automatically by `executive-watchdog.ts` under **Past Collection Uploads (5d)**), recover that exact date without overwriting today's live balances:
+1. **Export Filtered Transactions**:
+   - Navigate via `browser` subagent to:
+     `https://fleet.gocab.io/finances/transactions?filters[transaction][created_at][start_date]=<YYYY-MM-DD>&filters[transaction][created_at][end_date]=<YYYY-MM-DD>`
+   - Click **Export** to download the `.xlsx` file for that exact date (`<YYYY-MM-DD>`).
+2. **Run Recovery Script (Strict Active-Fleet Filter)**:
+   - Execute:
+     `node --import tsx scripts/sync-transactions-recovery.ts "<downloaded_xlsx>" <YYYY-MM-DD> --apply`
+   - **Built-in Guardrails**:
+     - Matches `Type === "credit"` and `Category === "cashin"` only (excludes `bail`, `adjustment`, `bonus`).
+     - Filters strictly against drivers who were already in `<YYYY-MM-DD>`'s `PaymentLedger` morning roster, excluding new drivers' onboarding/security deposits (`1,000 MAD` / `1,800 MAD` / `3,000 MAD`).
+     - Updates `clearedMAD`, `eveningBalance`, `calculatedDelta`, and triggers `touchSyncState("collections")` + `flushDatabaseSync()`.

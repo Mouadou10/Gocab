@@ -128,6 +128,48 @@ async function main() {
     });
   }
 
+  // 2b. Past Missed Collection Uploads Check (Last 5 Workdays)
+  const missedDates: string[] = [];
+  for (let offset = 1; offset <= 5; offset++) {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - offset);
+    const dIso = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Casablanca",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+    const dDow = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Casablanca",
+      weekday: "short",
+    }).format(d);
+    if (dDow === "Sun" || dIso === todayIso) continue;
+    const dayRows = await prisma.paymentLedger.findMany({
+      where: {
+        paymentDate: {
+          gte: new Date(`${dIso}T00:00:00.000Z`),
+          lte: new Date(`${dIso}T23:59:59.999Z`),
+        },
+      },
+      select: { morningBalance: true, eveningBalance: true },
+    });
+    const mCount = dayRows.filter((r) => r.morningBalance !== null).length;
+    const eCount = dayRows.filter((r) => r.eveningBalance !== null).length;
+    if (mCount > 0 && eCount === 0) {
+      missedDates.push(dIso);
+    }
+  }
+  results.push({
+    task: "Past Collection Uploads (5d)",
+    schedule: "Mon-Sat Backfill Check",
+    status: missedDates.length === 0 ? "ON_TIME" : "OVERDUE",
+    metric: missedDates.length === 0 ? "0 missed days (5d)" : `Missed: ${missedDates.join(", ")}`,
+    detail:
+      missedDates.length === 0
+        ? "All recent workdays have completed evening collection uploads."
+        : `Missing evening uploads for [${missedDates.join(", ")}] — run sync-transactions-recovery.ts from /finances/transactions.`,
+  });
+
   // 3. Cloud WAL & Sync State Check
   const syncSetting = await prisma.setting.findUnique({
     where: { key: "data_sync_state" },

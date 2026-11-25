@@ -23,6 +23,7 @@
 - [`MEM-2026-11-17-018`](#mem-2026-11-17-018-lead-deletion-capability-in-partner-portal--onboarding-view): Lead Deletion Capability in Partner Portal & Onboarding View
 - [`MEM-2026-11-20-019`](#mem-2026-11-20-019-driverprofile-createmany-created_at-schema-mismatch--weekly-autonomous-cto-audit): DriverProfile createMany `created_at` Schema Mismatch & Weekly Autonomous CTO Audit
 - [`MEM-2026-11-23-020`](#mem-2026-11-23-020-autonomous-executive-operations-watchdog-agent--3h-sla-schedule): Autonomous Executive Operations Watchdog Agent & 3h SLA Schedule
+- [`MEM-2026-11-25-021`](#mem-2026-11-25-021-missed-collection-recovery-sop-via-fleet-transactions): Missed Collection Recovery SOP via Fleet Transactions
 
 ---
 
@@ -433,6 +434,21 @@
   - `.agents/skills/cto-engineering-squad/MEMORY.md`
 - **Verification**:
   - `node --import tsx scripts/executive-watchdog.ts`: Passed (`HEALTHY`, 0 overdue/error; Vehicles `102 vehicles · 0.6h ago`, Morning `83 morning records today`, Cloud WAL `ACTIVE`).
+  - `npx tsc --noEmit`: 0 errors.
+
+### `MEM-2026-11-25-021` Missed Collection Recovery SOP via Fleet Transactions
+- **Date**: 2026-11-25
+- **Department / Module**: `Collection`, `Operations`, `Executive Watchdog`
+- **Owner**: CTO Engineering Squad (`executive-watchdog`)
+- **Summary**: Added `scripts/sync-transactions-recovery.ts` and upgraded `scripts/executive-watchdog.ts` to automatically detect any missed past workday (5-day lookback) where `morningBalance` exists without `eveningBalance`, and recover that exact date from `https://fleet.gocab.io/finances/transactions` (`cashin` only, strictly matched to that date's active fleet roster, excluding new-driver bail/onboarding deposits and P2P adjustments).
+- **Files Changed**:
+  - `scripts/sync-transactions-recovery.ts`
+  - `scripts/executive-watchdog.ts`
+  - `.agents/skills/cto-engineering-squad/SKILL.md`
+  - `.agents/skills/cto-engineering-squad/MEMORY.md`
+- **Verification**:
+  - Backfilled `2026-11-24`: `82` active fleet drivers, `26` paid, `17,650 MAD` collected (`8,600 MAD` new-driver deposits & `1,037 MAD` P2P adjustments excluded).
+  - `node --import tsx scripts/executive-watchdog.ts`: `HEALTHY` (`0` missed days in 5d).
   - `npx tsc --noEmit`: 0 errors.
 
 ---
