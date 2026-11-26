@@ -63,10 +63,38 @@ export async function GET(request: Request) {
       ];
     }
 
-    const [vehicles, expenseSums, redFlagsLookup] = await Promise.all([
+    const [vehicles, expenseSums, docCountsRaw, redFlagsLookup] = await Promise.all([
       prisma.vehicle.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          plate_number: true,
+          make_model: true,
+          year: true,
+          vin: true,
+          current_mileage: true,
+          hub_city: true,
+          status: true,
+          insurance_expiry_date: true,
+          insurance_policy_number: true,
+          vignette_expiry_date: true,
+          autorisation_expiry_date: true,
+          technical_inspection_expiry: true,
+          assigned_driver_name: true,
+          assigned_driver_phone: true,
+          historical_driver_name: true,
+          historical_driver_phone: true,
+          assigned_collector: true,
+          assigned_supervisor: true,
+          total_downtime_days: true,
+          isInsuranceActive: true,
+          lastVidangeOdoKM: true,
+          adBlueLevelPct: true,
+          isGpsConnected: true,
+          lastGpsPing: true,
+          notes: true,
+          created_at: true,
+          updated_at: true,
           driverProfile: {
             select: {
               id: true,
@@ -85,6 +113,11 @@ export async function GET(request: Request) {
         where: { is_archived: false },
         _sum: { amount_mad: true },
       }),
+      prisma
+        .$queryRawUnsafe<{ id: string; doc_count: number | bigint }[]>(
+          `SELECT id, CASE WHEN json_valid(documents) THEN json_array_length(documents) ELSE 0 END AS doc_count FROM Vehicle WHERE is_archived = 0 AND documents IS NOT NULL AND documents != ''`
+        )
+        .catch(() => []),
       getActiveRedFlagsLookup(),
     ]);
 
@@ -95,8 +128,16 @@ export async function GET(request: Request) {
       }
     }
 
+    const docCountByVehicle = new Map<string, number>();
+    for (const row of docCountsRaw) {
+      if (row.id) {
+        docCountByVehicle.set(row.id, Number(row.doc_count || 0));
+      }
+    }
+
     const enrichedVehicles = vehicles.map((v: any) => {
       const totalExpenseMad = expenseByVehicle.get(v.id) || 0;
+      const docCount = docCountByVehicle.get(v.id) || 0;
       const isWorkingCar = Boolean(
         v.assigned_driver_name &&
         ((v.status || "").toLowerCase().includes("actif") ||
@@ -116,6 +157,7 @@ export async function GET(request: Request) {
 
       return {
         ...v,
+        doc_count: docCount,
         is_current_working_car: isWorkingCar,
         total_expenses_mad: totalExpenseMad,
         is_driver_red_flagged: isDriverRedFlagged,

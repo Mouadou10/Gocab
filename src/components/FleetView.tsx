@@ -189,6 +189,7 @@ export default function FleetView() {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   const getVehicleDocCount = (v: Vehicle) => {
+    if (typeof (v as any).doc_count === "number") return (v as any).doc_count;
     if (!v.documents) return 0;
     try {
       const parsed = JSON.parse(v.documents);
@@ -204,7 +205,7 @@ export default function FleetView() {
     setVehicles((prev) =>
       prev.map((v) =>
         v.id === docModalVehicle.id
-          ? { ...v, documents: serialized }
+          ? { ...v, documents: serialized, doc_count: updatedDocs.length }
           : v
       )
     );
