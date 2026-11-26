@@ -94,6 +94,44 @@ function LeadsScorecardComponent({
   const isYesterday = dateFilter === yesterdayStr;
   const isAllTime = !dateFilter || dateFilter === "ALL";
 
+  const [historicalStats, setHistoricalStats] = useState<{
+    date: string;
+    city: string;
+    totalCalled: number;
+    trainingFixed: number;
+    statusCounts: Record<string, number>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (isAllTime || isToday || !/^\d{4}-\d{2}-\d{2}$/.test(dateFilter)) {
+      setHistoricalStats(null);
+      return;
+    }
+
+    let cancelled = false;
+    const params = new URLSearchParams({ date: dateFilter });
+    if (cityFilter) params.set('city', cityFilter);
+
+    fetch(`/api/leads/scorecard-history?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.totalCalled === 'number') {
+          setHistoricalStats({
+            date: dateFilter,
+            city: cityFilter || '',
+            totalCalled: data.totalCalled,
+            trainingFixed: data.trainingFixed,
+            statusCounts: data.statusCounts || {},
+          });
+        }
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dateFilter, cityFilter, isAllTime, isToday]);
+
   // Filter called leads by the date they were actually called (status_changed_at)
   // Unified counter strictly aligned with KanbanBoard metrics
   const isMatchForFilter = (dateVal: any): boolean => {
@@ -137,16 +175,23 @@ function LeadsScorecardComponent({
     return isMatchForFilter(l.status_changed_at);
   });
 
-  const totalCalled = calledLeads.length;
+  const useHistorical = Boolean(
+    historicalStats &&
+      historicalStats.date === dateFilter &&
+      historicalStats.city === (cityFilter || '')
+  );
+
+  const totalCalled = useHistorical ? historicalStats!.totalCalled : calledLeads.length;
 
   // Training conversions for filtered set (marked "Training fixed", graduated to training, or assigned vehicle on this date)
-  const trainingFixed = calledLeads.filter(
+  const liveTrainingFixed = calledLeads.filter(
     l =>
       (l.brand_status || '').toLowerCase() === 'training fixed' ||
       l.board_column === 'TRAINING_PIPELINE' ||
       l.board_column === 'VEHICLE_ASSIGNMENT' ||
       Boolean(l.training_status)
   ).length;
+  const trainingFixed = useHistorical ? historicalStats!.trainingFixed : liveTrainingFixed;
 
   const displayDate = isToday
     ? "Aujourd'hui"
@@ -210,11 +255,12 @@ function LeadsScorecardComponent({
   const conversionRate = conversionRateNum.toFixed(1);
 
   // Status breakdown
-  const statusCounts: Record<string, number> = {};
+  const liveStatusCounts: Record<string, number> = {};
   calledLeads.forEach(lead => {
     const status = lead.brand_status || lead.board_column;
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
+    liveStatusCounts[status] = (liveStatusCounts[status] || 0) + 1;
   });
+  const statusCounts = useHistorical ? historicalStats!.statusCounts : liveStatusCounts;
 
   const statusConfig: {
     key: string;
