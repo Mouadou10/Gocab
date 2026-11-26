@@ -261,7 +261,7 @@ function removeLocalLeadOverride(leadId: string) {
 
 export default function KanbanBoard() {
   const { language, setLanguage, t, dir } = useLanguage();
-  const { data: session, update: updateSession } = useSession() || {};
+  const { data: session, status: sessionStatus, update: updateSession } = useSession() || {};
   const userRole = session?.user?.role || "ADMIN";
   const userName = session?.user?.name || "";
 
@@ -348,7 +348,7 @@ export default function KanbanBoard() {
     }
     return [];
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => leads.length === 0 && userRole !== "ASSURANCE");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeColumnDragId, setActiveColumnDragId] = useState<string | null>(null);
 
@@ -376,10 +376,11 @@ export default function KanbanBoard() {
   }, []);
 
   useEffect(() => {
+    if (sessionStatus === "loading" || userRole === "ASSURANCE") return;
     fetchWhatsAppUnread();
     const interval = setInterval(fetchWhatsAppUnread, 12000);
     return () => clearInterval(interval);
-  }, [fetchWhatsAppUnread]);
+  }, [fetchWhatsAppUnread, sessionStatus, userRole]);
 
   // Filters
   const [filterCity, setFilterCity] = useState("");
@@ -709,9 +710,14 @@ export default function KanbanBoard() {
   useLiveSync("settings", fetchSettings);
 
   useEffect(() => {
+    if (sessionStatus === "loading") return;
+    if (userRole === "ASSURANCE") {
+      setIsLoading(false);
+      return;
+    }
     fetchLeads();
     fetchSettings();
-  }, [fetchLeads, fetchSettings]);
+  }, [fetchLeads, fetchSettings, sessionStatus, userRole]);
 
   // Automated background lead recycling check (No response 1/2 after 24h & To Recall on due day)
   useEffect(() => {

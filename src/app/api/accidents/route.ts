@@ -13,7 +13,21 @@ export async function GET() {
     const [allClaims, fieldTasks, redFlagsLookup] = await Promise.all([
       prisma.accidentClaim.findMany({
         include: {
-          vehicle: true,
+          vehicle: {
+            select: {
+              id: true,
+              plate_number: true,
+              make_model: true,
+              year: true,
+              vin: true,
+              hub_city: true,
+              status: true,
+              insurance_expiry_date: true,
+              insurance_policy_number: true,
+              assigned_driver_name: true,
+              assigned_driver_phone: true,
+            },
+          },
           driver: {
             select: {
               id: true,
