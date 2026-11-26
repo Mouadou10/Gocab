@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/services/auditLogger";
 import { getActiveRedFlagsLookup } from "@/lib/services/redFlagService";
 import { isMehdiPlate } from "@/lib/fleet-managers";
 import { touchSyncState } from "@/lib/sync";
+import { getCachedVehicles, setCachedVehicles, invalidateVehiclesCache } from "@/lib/vehicles-cache";
 
 /**
  * GET /api/vehicles
@@ -17,6 +18,14 @@ export async function GET(request: Request) {
     const hub = searchParams.get("hub") || "";
     const status = searchParams.get("status") || "";
     const manager = searchParams.get("manager") || "";
+
+    const isUnfiltered = !search && !hub && !status && (!manager || manager === "ALL");
+    if (isUnfiltered) {
+      const cached = getCachedVehicles();
+      if (cached) {
+        return NextResponse.json({ vehicles: cached });
+      }
+    }
 
     const where: any = { is_archived: false };
 
@@ -54,7 +63,7 @@ export async function GET(request: Request) {
       ];
     }
 
-    const [vehicles, redFlagsLookup] = await Promise.all([
+    const [vehicles, expenseSums, redFlagsLookup] = await Promise.all([
       prisma.vehicle.findMany({
         where,
         include: {
@@ -68,18 +77,26 @@ export async function GET(request: Request) {
               redFlagReason: true,
             },
           },
-          expenses: {
-            where: { is_archived: false },
-            select: { amount_mad: true, category: true },
-          },
         },
         orderBy: { created_at: "desc" },
+      }),
+      prisma.vehicleExpense.groupBy({
+        by: ["vehicle_id"],
+        where: { is_archived: false },
+        _sum: { amount_mad: true },
       }),
       getActiveRedFlagsLookup(),
     ]);
 
+    const expenseByVehicle = new Map<string, number>();
+    for (const row of expenseSums) {
+      if (row.vehicle_id) {
+        expenseByVehicle.set(row.vehicle_id, Number(row._sum.amount_mad || 0));
+      }
+    }
+
     const enrichedVehicles = vehicles.map((v: any) => {
-      const totalExpenseMad = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount_mad || 0), 0);
+      const totalExpenseMad = expenseByVehicle.get(v.id) || 0;
       const isWorkingCar = Boolean(
         v.assigned_driver_name &&
         ((v.status || "").toLowerCase().includes("actif") ||
@@ -112,6 +129,10 @@ export async function GET(request: Request) {
         if (!a.is_current_working_car && b.is_current_working_car) return 1;
         return 0;
       });
+    }
+
+    if (isUnfiltered) {
+      setCachedVehicles(enrichedVehicles);
     }
 
     return NextResponse.json({ vehicles: enrichedVehicles });
@@ -206,6 +227,7 @@ export async function POST(request: Request) {
       console.error("Failed to write audit log:", auditErr);
     }
 
+    invalidateVehiclesCache();
     await touchSyncState("all");
 
     return NextResponse.json({ vehicle }, { status: 201 });

@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { prisma, ensureDatabaseSynced } from "@/lib/prisma";
 import { touchSyncState } from "@/lib/sync";
-import { getCachedLeads, setCachedLeads, invalidateLeadsCache } from "@/lib/leads-cache";
+import { getCachedLeads, setCachedLeads, invalidateLeadsCache, shouldRunRecallCheck } from "@/lib/leads-cache";
 import { requireAuth } from "@/lib/api-auth";
 import { matchNationalBlacklist } from "@/lib/services/nationalBlacklistMatcher";
 import { sendAutomatedTrainingInvitationWhatsApp } from "@/lib/services/whatsappApiService";
@@ -26,26 +26,7 @@ export async function GET() {
     if ("error" in authResult) {
       return authResult.error;
     }
-    // Sync cross-container WAL before reading cache (non-blocking fallback so GET /api/leads never blocks or fails)
-    try {
-      await Promise.race([
-        ensureDatabaseSynced(false),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("WAL sync timeout")), 1200)
-        ),
-      ]);
-    } catch (syncErr: any) {
-      console.warn("Non-blocking WAL sync skipped on GET /api/leads:", syncErr?.message);
-    }
-
-    // Automated lead recycling (No response 1/2 after 24h & To Recall on scheduled day)
-    try {
-      await autoRecycleDueLeads(false);
-    } catch (recycleErr: any) {
-      console.warn("Auto-recycle non-blocking check skipped:", recycleErr?.message);
-    }
-
-    // Return cached leads if fresh (3s TTL)
+    // Return cached leads immediately if fresh (15s TTL)
     const cached = getCachedLeads();
     if (cached) {
       return NextResponse.json(
@@ -56,6 +37,25 @@ export async function GET() {
           },
         }
       );
+    }
+
+    // Sync cross-container WAL before reading DB (tight 350ms non-blocking cap)
+    try {
+      await Promise.race([
+        ensureDatabaseSynced(false),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("WAL sync timeout")), 350)
+        ),
+      ]);
+    } catch (syncErr: any) {
+      console.warn("Non-blocking WAL sync skipped on GET /api/leads:", syncErr?.message);
+    }
+
+    // Automated lead recycling runs non-blocking in the background (throttled every 5m)
+    if (shouldRunRecallCheck()) {
+      void autoRecycleDueLeads(false).catch((recycleErr: any) => {
+        console.warn("Auto-recycle non-blocking check skipped:", recycleErr?.message);
+      });
     }
 
     const leads = await prisma.lead.findMany({

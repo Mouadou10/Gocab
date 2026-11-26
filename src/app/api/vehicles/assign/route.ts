@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { syncVehicleAssignmentToLead } from '@/lib/services/leadVehicleReconciliation';
 import { touchSyncState } from '@/lib/sync';
 import { invalidateDriverCache } from '@/lib/driverCache';
+import { invalidateVehiclesCache } from '@/lib/vehicles-cache';
 import { isMehdiPlate } from '@/lib/fleet-managers';
 
 export async function POST(req: Request) {
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
 
     await touchSyncState("leads").catch(() => {});
     invalidateDriverCache();
+    invalidateVehiclesCache();
 
     return NextResponse.json({ 
       success: true, 

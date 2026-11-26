@@ -10,7 +10,7 @@ const gLeads = globalThis as unknown as {
 
 export function getCachedLeads(): any[] | null {
   const cached = gLeads.__gocabLeadsCache;
-  if (cached && Date.now() - cached.timestamp < 3000) {
+  if (cached && Date.now() - cached.timestamp < 15000) {
     return cached.leads;
   }
   return null;

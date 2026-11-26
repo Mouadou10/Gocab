@@ -139,9 +139,25 @@ function MoroccanPlateBadge({ plate }: { plate: string | null | undefined }) {
 let globalCachedVehicles: Vehicle[] | null = null;
 
 export default function FleetView() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>(() => globalCachedVehicles || []);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
+    if (globalCachedVehicles && globalCachedVehicles.length > 0) return globalCachedVehicles;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("gocab_cached_vehicles");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            globalCachedVehicles = parsed;
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(!globalCachedVehicles || globalCachedVehicles.length === 0);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [selectedHub, setSelectedHub] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedManager, setSelectedManager] = useState("");
@@ -221,13 +237,20 @@ export default function FleetView() {
     setIsAttestationModalOpen(true);
   }
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const fetchVehicles = useCallback(async () => {
     if (!globalCachedVehicles || globalCachedVehicles.length === 0) {
       setIsLoading(true);
     }
     try {
       const params = new URLSearchParams();
-      if (searchTerm) params.set("search", searchTerm);
+      if (debouncedSearchTerm) params.set("search", debouncedSearchTerm);
       if (selectedHub) params.set("hub", selectedHub);
       if (selectedStatus) params.set("status", selectedStatus);
       if (selectedManager) params.set("manager", selectedManager);
@@ -235,8 +258,11 @@ export default function FleetView() {
       const res = await fetch(`/api/vehicles?${params.toString()}`);
       const data = await res.json();
       if (data.vehicles) {
-        if (!searchTerm && !selectedHub && !selectedStatus && !selectedManager) {
+        if (!debouncedSearchTerm && !selectedHub && !selectedStatus && !selectedManager) {
           globalCachedVehicles = data.vehicles;
+          try {
+            localStorage.setItem("gocab_cached_vehicles", JSON.stringify(data.vehicles));
+          } catch {}
         }
         setVehicles(data.vehicles);
       }
@@ -245,7 +271,7 @@ export default function FleetView() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, selectedHub, selectedStatus, selectedManager]);
+  }, [debouncedSearchTerm, selectedHub, selectedStatus, selectedManager]);
 
   useEffect(() => {
     fetchVehicles();
