@@ -2,17 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 const RELEVANT_ACTIONS = [
-  'CALL_INITIATED',
   'STATUS_CHANGED',
   'COLUMN_MOVED',
-  'TRAINING_DATE_SET',
-  'TRAINING_STATUS_CHANGED',
 ];
-
-const TRAINING_ACTIONS = new Set([
-  'TRAINING_DATE_SET',
-  'TRAINING_STATUS_CHANGED',
-]);
 
 /**
  * Extract the target status or column from a LeadActivityLog detail string.
@@ -146,11 +138,6 @@ export async function GET(request: NextRequest) {
             if (!resolvedStatus) {
               resolvedStatus = 'Training fixed';
             }
-          }
-        } else if (TRAINING_ACTIONS.has(log.action)) {
-          isTraining = true;
-          if (!resolvedStatus) {
-            resolvedStatus = 'Training fixed';
           }
         }
       }
