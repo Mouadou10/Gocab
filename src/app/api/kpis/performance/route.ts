@@ -758,8 +758,17 @@ export async function GET(request: NextRequest) {
         },
         include: {
           driver: {
-            include: {
-              assignedVehicle: true,
+            select: {
+              id: true,
+              fullName: true,
+              assignedVehicle: {
+                select: {
+                  id: true,
+                  plate_number: true,
+                  assigned_collector: true,
+                  status: true,
+                },
+              },
             },
           },
         },
@@ -774,7 +783,17 @@ export async function GET(request: NextRequest) {
       }),
       prisma.accidentClaim.findMany({
         where: { timeline_step: { not: "VEHICLE_BACK" } },
-        include: { vehicle: true },
+        include: {
+          vehicle: {
+            select: {
+              id: true,
+              plate_number: true,
+              assigned_collector: true,
+              status: true,
+              hub_city: true,
+            },
+          },
+        },
       }),
       prisma.vehicle.findMany({
         where: {
