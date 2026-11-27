@@ -161,15 +161,22 @@ export async function PATCH(
     }
 
     // Pipeline Stage Invariance Guardrails:
-    // 1. If brand_status is "Training fixed", board_column MUST be TRAINING_PIPELINE (or VEHICLE_ASSIGNMENT)
+    // Use effective (post-update) values so moving a lead OUT of Training fixed / TRAINING_PIPELINE
+    // back to BRAND_PRE_FILTER or NEW_LEADS is always allowed.
     const effectiveBrandStatus = updateData.brand_status !== undefined ? updateData.brand_status : existingLead.brand_status;
     const effectiveBoardColumn = updateData.board_column !== undefined ? updateData.board_column : existingLead.board_column;
 
+    const isExplicitlyMovingOutOfTraining =
+      updateData.board_column === "NEW_LEADS" ||
+      updateData.board_column === "BRAND_PRE_FILTER" ||
+      (body.brand_status !== undefined && body.brand_status !== "Training fixed");
+
     if (
-      effectiveBrandStatus === "Training fixed" ||
-      body.brand_status === "Training fixed" ||
-      existingLead.board_column === "TRAINING_PIPELINE" ||
-      existingLead.board_column === "VEHICLE_ASSIGNMENT"
+      !isExplicitlyMovingOutOfTraining &&
+      (effectiveBrandStatus === "Training fixed" ||
+        body.brand_status === "Training fixed" ||
+        effectiveBoardColumn === "TRAINING_PIPELINE" ||
+        effectiveBoardColumn === "VEHICLE_ASSIGNMENT")
     ) {
       if (effectiveBoardColumn !== "VEHICLE_ASSIGNMENT" && updateData.board_column !== "VEHICLE_ASSIGNMENT") {
         updateData.board_column = "TRAINING_PIPELINE";
@@ -180,21 +187,22 @@ export async function PATCH(
       if (!updateData.brand_status && existingLead.brand_status === "Training fixed") {
         updateData.brand_status = "Training fixed";
       }
-    } else if (
-      effectiveBrandStatus &&
-      effectiveBrandStatus !== "NEW_LEADS" &&
-      effectiveBoardColumn === "NEW_LEADS" &&
-      body.board_column === undefined
-    ) {
-      // Any qualification brand status cannot remain in NEW_LEADS
-      updateData.board_column = "BRAND_PRE_FILTER";
-    }
-
-    // 2. If board_column is explicitly set to NEW_LEADS without brand_status, clear status flags
-    if (updateData.board_column === "NEW_LEADS" && body.brand_status === undefined) {
+    } else if (updateData.board_column === "NEW_LEADS") {
       updateData.brand_status = null;
       updateData.training_status = null;
       updateData.reminder_date = null;
+    } else if (
+      effectiveBrandStatus &&
+      effectiveBrandStatus !== "NEW_LEADS" &&
+      effectiveBrandStatus !== "Training fixed"
+    ) {
+      // Moving back to a Leads pre-filter status: ensure board_column is BRAND_PRE_FILTER and clear training_status
+      if (updateData.board_column === undefined || effectiveBoardColumn === "NEW_LEADS" || effectiveBoardColumn === "TRAINING_PIPELINE" || effectiveBoardColumn === "VEHICLE_ASSIGNMENT") {
+        updateData.board_column = "BRAND_PRE_FILTER";
+      }
+      if (updateData.training_status === undefined) {
+        updateData.training_status = null;
+      }
     }
 
     // Check if phone number is being changed to one that already belongs to another lead

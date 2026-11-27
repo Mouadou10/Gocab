@@ -1555,6 +1555,7 @@ export default function KanbanBoard() {
           ...lead,
           board_column: "NEW_LEADS",
           brand_status: null,
+          training_status: null,
           reminder_date: null,
           status_changed_at: null,
           updated_at: nowIso,
@@ -1567,7 +1568,7 @@ export default function KanbanBoard() {
           const res = await fetch(`/api/leads/${leadId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null, reminder_date: null }),
+            body: JSON.stringify({ board_column: "NEW_LEADS", brand_status: null, training_status: null, reminder_date: null }),
           });
           if (res.ok) {
             const data = await res.json();
@@ -1647,6 +1648,7 @@ export default function KanbanBoard() {
             body: JSON.stringify({
               board_column: "BRAND_PRE_FILTER",
               brand_status: targetColumn,
+              training_status: null,
               reminder_date: isRecall ? lead.reminder_date : null,
               mark_as_called: true,
               is_recalled: true,

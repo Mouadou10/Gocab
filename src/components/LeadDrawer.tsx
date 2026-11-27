@@ -347,6 +347,7 @@ export default function LeadDrawer({
         if (brandStatus === "NEW_LEADS" || !brandStatus) {
           payload.board_column = "NEW_LEADS";
           payload.brand_status = null;
+          payload.training_status = null;
           payload.reminder_date = null;
         } else if (brandStatus === "Training fixed") {
           // Move from leads page to training page (preserve existing training status if already progressed)
