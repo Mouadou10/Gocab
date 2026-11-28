@@ -215,7 +215,17 @@ export async function POST(request: NextRequest) {
     const [allDrivers, allVehicles, priorLedgers] = await Promise.all([
       prisma.driverProfile.findMany({
         include: {
-          assignedVehicle: true,
+          assignedVehicle: {
+            select: {
+              id: true,
+              plate_number: true,
+              status: true,
+              assigned_collector: true,
+              assigned_driver_name: true,
+              assigned_driver_phone: true,
+              notes: true,
+            },
+          },
           payments: {
             where: {
               paymentDate: {
@@ -226,7 +236,17 @@ export async function POST(request: NextRequest) {
           },
         },
       }),
-      prisma.vehicle.findMany(),
+      prisma.vehicle.findMany({
+        select: {
+          id: true,
+          plate_number: true,
+          status: true,
+          assigned_collector: true,
+          assigned_driver_name: true,
+          assigned_driver_phone: true,
+          notes: true,
+        },
+      }),
       dayOfWeek === 1
         ? prisma.paymentLedger.findMany({
             where: {
@@ -454,7 +474,17 @@ export async function POST(request: NextRequest) {
               isKycVerified: true,
             },
             include: {
-              assignedVehicle: true,
+              assignedVehicle: {
+                select: {
+                  id: true,
+                  plate_number: true,
+                  status: true,
+                  assigned_collector: true,
+                  assigned_driver_name: true,
+                  assigned_driver_phone: true,
+                  notes: true,
+                },
+              },
               payments: true,
             },
           });
